@@ -12,6 +12,9 @@ env/
 *.egg-info/
 .ipynb_checkpoints/
 
+# intermediate dataset generation output
+notes_raw.jsonl
+
 # models and data (large / private)
 models/
 *.gguf
