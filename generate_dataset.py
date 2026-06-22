@@ -38,17 +38,35 @@ def build_instruction(glossary):
 def build_teacher_prompt(glossary):
     shorthand = ", ".join(glossary.keys())
     return (
-        "Invent ONE realistic messy English dental clinic note, one or two lines, "
-        "written in dentist shorthand. Use a fake Italian patient name and a fake "
-        "codice fiscale. Use some of these shorthand tokens: " + shorthand + ".\n"
-        "Then give the matching clean data.\n"
+        "You write training data for a dental notes reader.\n"
+        "Invent ONE short, realistic, messy note that a dentist would jot about a "
+        "SINGLE patient's visit. Write it naturally in shorthand - do NOT list every "
+        "abbreviation. Use only 1 to 3 shorthand tokens that fit the visit, from: "
+        + shorthand + ".\n"
+        "Use a fake Italian name and a realistic codice fiscale (16 letters and "
+        "digits, like RSSMRA80A01H501U). Vary the patient and visit each time. "
+        "Sometimes include a phone, a date, or a charge; often leave them out.\n\n"
         "Return ONLY a JSON object with two keys:\n"
         '  "note": the messy note text (string)\n'
-        '  "data": an object with these keys: ' + ", ".join(FIELDS) + "\n"
-        "data rules: phone and visit_date may be null if the note has none. "
-        "procedures is a list of strings. invoices is a list of objects with "
-        "description (string) and amount (number). notes_text is the free text. "
-        "Only include values the note actually mentions."
+        '  "data": an object with keys: ' + ", ".join(FIELDS) + "\n"
+        "Rules for data:\n"
+        "- copy patient_name and codice_fiscale from the note\n"
+        "- phone and visit_date are null unless the note states them\n"
+        "- procedures: list of the treatments mentioned (short strings)\n"
+        "- invoices: list of {description, amount} ONLY if the note states a price; "
+        "else an empty list\n"
+        "- notes_text: a single plain string of the free-text remarks (never a list)\n"
+        "- never invent values the note does not contain\n\n"
+        "Two examples of the exact format:\n"
+        '{"note": "anna bianchi RSSBNC85M41F205K, ext 38, scaling, abx given, fu 1wk", '
+        '"data": {"patient_name": "anna bianchi", "codice_fiscale": "RSSBNC85M41F205K", '
+        '"phone": null, "visit_date": null, "procedures": ["ext 38", "scaling"], '
+        '"invoices": [], "notes_text": "abx given, follow up in 1 week"}}\n'
+        '{"note": "Mario Rossi MRARSS80A01H501U tel 333 1234567, rct 26 done, comp 27, paid 150 eur", '
+        '"data": {"patient_name": "Mario Rossi", "codice_fiscale": "MRARSS80A01H501U", '
+        '"phone": "333 1234567", "visit_date": null, "procedures": ["rct 26", "comp 27"], '
+        '"invoices": [{"description": "rct 26", "amount": 150}], "notes_text": "rct 26 done, composite filling 27"}}\n\n'
+        "Now invent a new, different one."
     )
 
 
