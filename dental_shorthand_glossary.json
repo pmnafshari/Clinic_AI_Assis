@@ -1,0 +1,16 @@
+{
+  "rct": "root canal treatment",
+  "ext": "extraction",
+  "comp": "composite filling",
+  "filling": "filling",
+  "perio": "periodontal",
+  "opg": "panoramic x-ray",
+  "x-ray": "x-ray",
+  "caries": "tooth decay",
+  "crown": "crown",
+  "prophy": "professional cleaning",
+  "scaling": "scaling",
+  "restoration": "restoration",
+  "abx": "antibiotics",
+  "fu": "follow up"
+}
