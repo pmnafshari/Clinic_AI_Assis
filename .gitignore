@@ -1,0 +1,25 @@
+# planning and local tooling (never pushed)
+.planning/
+CLAUDE.md
+.claude/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.ipynb_checkpoints/
+
+# models and data (large / private)
+models/
+*.gguf
+*.bin
+*.safetensors
+data/raw/
+
+# os / editor
+.DS_Store
+.vscode/
+.idea/
