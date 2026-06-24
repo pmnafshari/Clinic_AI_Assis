@@ -20,6 +20,8 @@ models/
 *.gguf
 *.bin
 *.safetensors
+*.zip
+notes_merged/
 data/raw/
 
 # os / editor
