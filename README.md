@@ -32,6 +32,18 @@ Training runs on the free Colab GPU.
 Note: torch is pre-installed on the Colab GPU runtime, so it is intentionally not in
 `requirements.txt`. The Mac does not need torch.
 
+## Run the notes model (Mac)
+
+After training in Colab (`notebooks/train_notes_lora.ipynb`), download `dental_notes.gguf`
+and put it in the repo root next to `Modelfile`. Then register and run it with Ollama:
+
+```
+ollama create dental-notes -f Modelfile
+ollama run dental-notes "pt mario rossi, rct on 26 done, mild caries on 27, fu in 2 weeks"
+```
+
+The model returns a JSON object using the DentalNote fields.
+
 ## Phases
 
 See `Dental_AI_Roadmap.md` for the full plan. Phase 1 sets up the environment, the
