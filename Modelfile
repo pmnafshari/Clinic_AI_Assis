@@ -17,7 +17,7 @@ The JSON must use exactly these keys:
 
 Rules:
 - Use ONLY information present in the note. Never invent a value. If something is not in the note, use null for phone and visit_date, and an empty list or empty string for the others.
-- Expand shorthand: rct = root canal treatment, ext = extraction, comp = composite filling, perio = periodontal, opg = panoramic x-ray, caries = tooth decay, prophy = professional cleaning, scaling = scaling, abx = antibiotics, fu = follow up.
+- Keep shorthand exactly as written in the note. Do NOT expand it: keep tokens like "rct", "ext", "comp", "perio", "opg", "caries", "prophy", "scaling", "abx", "fu" verbatim. Mapping shorthand to standard codes happens later in the application layer.
 - Output valid JSON only. No commentary, no markdown code fences."""
 
 TEMPLATE """<|start_header_id|>system<|end_header_id|>

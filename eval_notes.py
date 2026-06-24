@@ -40,11 +40,33 @@ def norm_invoices(items):
     return out
 
 
+NOTES_TEXT_THRESHOLD = 0.6
+
+
+def token_overlap(pred, gold):
+    # F1 over word tokens. notes_text is a free-form summary, so exact match is
+    # too strict - we accept a prediction that shares most words with the gold.
+    p = set(norm_str(pred).split())
+    g = set(norm_str(gold).split())
+    if not p and not g:
+        return 1.0
+    if not p or not g:
+        return 0.0
+    inter = len(p & g)
+    if inter == 0:
+        return 0.0
+    precision = inter / len(p)
+    recall = inter / len(g)
+    return 2 * precision * recall / (precision + recall)
+
+
 def field_match(name, pred, gold):
     if name == "procedures":
         return {norm_str(x) for x in pred or []} == {norm_str(x) for x in gold or []}
     if name == "invoices":
         return norm_invoices(pred) == norm_invoices(gold)
+    if name == "notes_text":
+        return token_overlap(pred, gold) >= NOTES_TEXT_THRESHOLD
     return norm_str(pred) == norm_str(gold)
 
 
