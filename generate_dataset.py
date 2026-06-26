@@ -1,23 +1,37 @@
 import json
+import random
 import sys
 import urllib.error
 import urllib.request
 
+from cf_generator import make_cf, seed_cf
+from validate_dataset import validate_sample
+
 GLOSSARY_FILE = "dental_shorthand_glossary.json"
-RAW_FILE = "notes_raw.jsonl"
+OUT_FILE = "notes_raw_v2.jsonl"
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "llama3.2"
 TARGET = 180
+SEED = 42
 
-FIELDS = [
-    "patient_name",
-    "codice_fiscale",
-    "phone",
-    "visit_date",
-    "procedures",
-    "invoices",
-    "notes_text",
+FIRST_NAMES = [
+    "Marco", "Luca", "Matteo", "Andrea", "Lorenzo", "Alessandro", "Davide",
+    "Giulia", "Chiara", "Sara", "Martina", "Federica", "Valentina", "Alessia",
+    "Mario", "Gianni", "Stefano", "Roberto", "Antonio", "Giovanni",
+    "Laura", "Elena", "Monica", "Paola", "Silvia", "Cristina", "Anna",
+    "Paolo", "Claudio", "Francesco",
 ]
+
+LAST_NAMES = [
+    "Rossi", "Ferrari", "Esposito", "Bianchi", "Romano", "Ricci", "Marino",
+    "Greco", "Bruno", "Gallo", "Conti", "Mancini", "Costa", "Giordano",
+    "Rizzo", "Lombardi", "Moretti", "Barbieri", "Fontana", "Santoro",
+]
+
+TOOTH_NUMS = list(range(11, 29)) + list(range(31, 49))
+PHONE_PREFIXES = ["333", "347", "366", "338", "345", "380", "340", "328"]
+NEXT_APPT_OPTIONS = ["7d", "14d", "21d", "30d"]
+NEXT_APPT_RAW = {"7d": "1wk", "14d": "2wk", "21d": "3wk", "30d": "1mo"}
 
 
 def load_glossary():
@@ -25,49 +39,101 @@ def load_glossary():
         return json.load(f)
 
 
-def build_instruction(glossary):
-    lines = ["Read a messy English dental note and return clean JSON."]
-    lines.append("Use only what the note says. Do not invent missing data.")
-    lines.append("JSON keys: " + ", ".join(FIELDS) + ".")
-    lines.append("Shorthand:")
-    for token, meaning in glossary.items():
-        lines.append("  " + token + " = " + meaning)
+def pick_profile(rng):
+    p = {}
+    p["empty_proc"] = rng.random() < 0.22
+    p["multi_proc"] = (not p["empty_proc"]) and rng.random() < 0.40
+    p["empty_inv"] = rng.random() < 0.28
+    p["multi_inv"] = (not p["empty_inv"]) and rng.random() < 0.20
+    p["null_next"] = rng.random() < 0.32
+    p["null_phone"] = rng.random() < 0.40
+    p["empty_notes"] = rng.random() < 0.25
+    p["messy_case"] = rng.random() < 0.25
+    p["include_date"] = rng.random() < 0.50
+    return p
+
+
+def build_structured(rng, glossary, profile):
+    # phone - always consume same rng calls for determinism
+    prefix = rng.choice(PHONE_PREFIXES)
+    num = rng.randint(1000000, 9999999)
+    phone = f"{prefix} {num}" if not profile["null_phone"] else None
+
+    # date - always consume same rng calls
+    year = rng.randint(2022, 2024)
+    month = rng.randint(1, 12)
+    day = rng.randint(1, 28)
+    visit_date = f"{year}-{month:02d}-{day:02d}" if profile["include_date"] else None
+
+    # procedure tokens - exclude "fu" (follow-up, not a procedure)
+    tokens = [k for k in glossary.keys() if k != "fu"]
+    selected = rng.sample(tokens, min(3, len(tokens)))
+    tooth1 = rng.choice(TOOTH_NUMS)
+    tooth2 = rng.choice(TOOTH_NUMS)
+
+    if profile["empty_proc"]:
+        procedures = []
+    elif profile["multi_proc"]:
+        procedures = [f"{selected[0]} {tooth1}", f"{selected[1]} {tooth2}"]
+    else:
+        procedures = [f"{selected[0]} {tooth1}"]
+
+    # invoice amounts - always consume same rng calls
+    amount1 = rng.randint(3, 20) * 10
+    amount2 = rng.randint(3, 20) * 10
+
+    if profile["empty_inv"] or not procedures:
+        invoices = []
+    elif profile["multi_inv"] and len(procedures) >= 2:
+        invoices = [
+            {"amount": float(amount1), "description": procedures[0]},
+            {"amount": float(amount2), "description": procedures[1]},
+        ]
+    else:
+        invoices = [{"amount": float(amount1), "description": procedures[0]}]
+
+    # next appointment - always consume same rng calls
+    appt_choice = rng.choice(NEXT_APPT_OPTIONS)
+    next_appt = appt_choice if not profile["null_next"] else None
+
+    return phone, visit_date, procedures, invoices, next_appt
+
+
+def build_template(name, cf, phone, visit_date, procedures, invoices, next_appt):
+    parts = [f"{name} {cf}"]
+    if phone:
+        parts.append(f"tel {phone}")
+    if visit_date:
+        parts.append(visit_date)
+    if procedures:
+        parts.append(", ".join(procedures))
+    if invoices:
+        for inv in invoices:
+            parts.append(f"paid {int(inv['amount'])} for {inv['description']}")
+    if next_appt:
+        parts.append(f"fu {NEXT_APPT_RAW[next_appt]}")
+    return ", ".join(parts)
+
+
+def build_messify_prompt(template, profile):
+    lines = [
+        "Rewrite this dental note as a natural, messy handwritten note.",
+        "You MUST keep ALL specific values EXACTLY as they appear:",
+        "patient name, CF code, phone number, tooth numbers, treatment codes, prices.",
+        "You may add brief clinical observations (1 sentence) or reorder items.",
+    ]
+    if profile["messy_case"]:
+        lines.append("Write in lowercase or mixed case.")
+    if profile["empty_notes"]:
+        lines.append("Keep it brief - no extra remarks.")
+    lines.extend([
+        "",
+        f"Input: {template}",
+        "",
+        'Return ONLY JSON: {"note": "...", "clinical_notes": "..."}',
+        "clinical_notes: a short clinical remark if you added one, else empty string.",
+    ])
     return "\n".join(lines)
-
-
-def build_teacher_prompt(glossary):
-    shorthand = ", ".join(glossary.keys())
-    return (
-        "You write training data for a dental notes reader.\n"
-        "Invent ONE short, realistic, messy note that a dentist would jot about a "
-        "SINGLE patient's visit. Write it naturally in shorthand - do NOT list every "
-        "abbreviation. Use only 1 to 3 shorthand tokens that fit the visit, from: "
-        + shorthand + ".\n"
-        "Use a fake Italian name and a realistic codice fiscale (16 letters and "
-        "digits, like RSSMRA80A01H501U). Vary the patient and visit each time. "
-        "Sometimes include a phone, a date, or a charge; often leave them out.\n\n"
-        "Return ONLY a JSON object with two keys:\n"
-        '  "note": the messy note text (string)\n'
-        '  "data": an object with keys: ' + ", ".join(FIELDS) + "\n"
-        "Rules for data:\n"
-        "- copy patient_name and codice_fiscale from the note\n"
-        "- phone and visit_date are null unless the note states them\n"
-        "- procedures: list of the treatments mentioned (short strings)\n"
-        "- invoices: list of {description, amount} ONLY if the note states a price; "
-        "else an empty list\n"
-        "- notes_text: a single plain string of the free-text remarks (never a list)\n"
-        "- never invent values the note does not contain\n\n"
-        "Two examples of the exact format:\n"
-        '{"note": "anna bianchi RSSBNC85M41F205K, ext 38, scaling, abx given, fu 1wk", '
-        '"data": {"patient_name": "anna bianchi", "codice_fiscale": "RSSBNC85M41F205K", '
-        '"phone": null, "visit_date": null, "procedures": ["ext 38", "scaling"], '
-        '"invoices": [], "notes_text": "abx given, follow up in 1 week"}}\n'
-        '{"note": "Mario Rossi MRARSS80A01H501U tel 333 1234567, rct 26 done, comp 27, paid 150 eur", '
-        '"data": {"patient_name": "Mario Rossi", "codice_fiscale": "MRARSS80A01H501U", '
-        '"phone": "333 1234567", "visit_date": null, "procedures": ["rct 26", "comp 27"], '
-        '"invoices": [{"description": "rct 26", "amount": 150}], "notes_text": "rct 26 done, composite filling 27"}}\n\n'
-        "Now invent a new, different one."
-    )
 
 
 def call_ollama(prompt):
@@ -75,61 +141,105 @@ def call_ollama(prompt):
         "model": MODEL,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": 0.8},
+        "options": {"temperature": 0.9},
     }
     data = json.dumps(payload).encode()
-    req = urllib.request.Request(OLLAMA_URL, data=data, headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(
+        OLLAMA_URL, data=data, headers={"Content-Type": "application/json"}
+    )
     try:
         with urllib.request.urlopen(req, timeout=120) as resp:
             body = json.load(resp)
         return body.get("response", "")
     except urllib.error.URLError:
-        print("Ollama not reachable at localhost:11434 - start it with: ollama run llama3.2")
+        print("Ollama not reachable - start with: ollama run llama3.2")
         sys.exit(1)
 
 
 def extract_json(text):
     start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end < start:
+    if start == -1:
         return None
-    try:
-        return json.loads(text[start : end + 1])
-    except json.JSONDecodeError:
-        return None
-
-
-def count_lines(path):
-    try:
-        with open(path) as f:
-            return sum(1 for line in f if line.strip())
-    except FileNotFoundError:
-        return 0
+    # try from last } backwards to handle double-closing braces
+    for end in range(len(text) - 1, start - 1, -1):
+        if text[end] == "}":
+            try:
+                return json.loads(text[start: end + 1])
+            except json.JSONDecodeError:
+                pass
+    return None
 
 
 def main():
     target = int(sys.argv[1]) if len(sys.argv) > 1 else TARGET
     glossary = load_glossary()
-    instruction = build_instruction(glossary)
-    teacher_prompt = build_teacher_prompt(glossary)
 
-    done = count_lines(RAW_FILE)
-    print("already have", done, "examples, target", target)
+    rng = random.Random(SEED)
+    seed_cf(SEED)
 
-    with open(RAW_FILE, "a") as out:
+    done = 0
+    print(f"generating {target} samples fresh (seed={SEED})")
+
+    with open(OUT_FILE, "w") as out:
         while done < target:
-            reply = call_ollama(teacher_prompt)
+            first = rng.choice(FIRST_NAMES)
+            last = rng.choice(LAST_NAMES)
+            name = first + " " + last
+            cf = make_cf(first, last)
+            profile = pick_profile(rng)
+
+            phone, visit_date, procedures, invoices, next_appt = build_structured(
+                rng, glossary, profile
+            )
+
+            template = build_template(name, cf, phone, visit_date, procedures, invoices, next_appt)
+
+            prompt = build_messify_prompt(template, profile)
+            reply = call_ollama(prompt)
             obj = extract_json(reply)
-            if obj is None or "note" not in obj or "data" not in obj:
-                print("skipped a bad reply")
-                continue
-            line = {"instruction": instruction, "input": obj["note"], "output": obj["data"]}
-            out.write(json.dumps(line) + "\n")
+
+            if obj and "note" in obj and isinstance(obj["note"], str):
+                raw = obj["note"]
+                clinical_notes = obj.get("clinical_notes") or ""
+                if not isinstance(clinical_notes, str):
+                    clinical_notes = ""
+            else:
+                raw = template
+                clinical_notes = ""
+
+            # ensure CF is in raw
+            if cf not in raw:
+                raw = template
+                clinical_notes = ""
+
+            gold = {
+                "patient_name": name,
+                "codice_fiscale": cf,
+                "phone": phone,
+                "visit_date": visit_date,
+                "procedures": procedures,
+                "invoices": invoices,
+                "clinical_notes": clinical_notes,
+                "next_appointment": next_appt,
+            }
+
+            ok, reason = validate_sample(raw, gold)
+            if not ok:
+                # LLM broke grounding - fall back to template
+                raw = template
+                gold["clinical_notes"] = ""
+                ok, reason = validate_sample(raw, gold)
+                if not ok:
+                    print(f"  template failed: {reason}, skipping")
+                    continue
+
+            row = {"input": raw, "output": gold}
+            out.write(json.dumps(row) + "\n")
             out.flush()
             done += 1
-            print("generated", done, "/", target)
+            print(f"generated {done}/{target}")
 
-    print("done -", done, "examples in", RAW_FILE)
+    print(f"done - {done} examples in {OUT_FILE}")
 
 
 if __name__ == "__main__":
