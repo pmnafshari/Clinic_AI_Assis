@@ -60,12 +60,14 @@ def extract_note(note):
 
 def selftest():
     # 1. valid output validates
-    good = ('{"patient_name": "mario rossi", "codice_fiscale": "MRARSS80A01H501U", '
+    good = ('{"patient_name": "mario rossi", "codice_fiscale": "MRRS800010150100", '
             '"phone": null, "visit_date": null, "procedures": ["rct 26"], '
-            '"invoices": [], "notes_text": "rct done"}')
+            '"invoices": [], "clinical_notes": "rct done", "next_appointment": "14d"}')
     note = parse_reply(good)
     assert note.patient_name == "mario rossi"
     assert note.phone is None
+    assert note.clinical_notes == "rct done"
+    assert note.next_appointment == "14d"
 
     # 2. malformed (non-JSON) output is rejected
     try:
@@ -81,15 +83,23 @@ def selftest():
     except ValueError:
         pass
 
+    # 3b. a codice_fiscale that fails the v2 regex (^[A-Z]{4}[0-9]{12}$) is flagged,
+    # not silently accepted - structural guard for a malformed key field.
+    try:
+        parse_reply('{"patient_name": "anna bianchi", "codice_fiscale": "not-a-cf"}')
+        raise AssertionError("invalid codice_fiscale should have been flagged")
+    except ValueError:
+        pass
+
     # 4. semantic hallucination: the note has no phone but the output invents one.
     # Pydantic CANNOT catch this - the value has the right type, so it validates.
     # This is intentional and out of scope per 02-CONTEXT.md: the defenses are the
     # prompt-level guard (Modelfile SYSTEM) plus the aggregate 85% eval gate, NOT
     # per-call rejection. Asserting it validates documents the limitation so no one
     # assumes this self-test catches semantic hallucination.
-    hallucinated = ('{"patient_name": "luca verdi", "codice_fiscale": "VRDLCU90A01H501U", '
+    hallucinated = ('{"patient_name": "luca verdi", "codice_fiscale": "VRDL900010150100", '
                     '"phone": "333 0000000", "visit_date": null, "procedures": [], '
-                    '"invoices": [], "notes_text": ""}')
+                    '"invoices": [], "clinical_notes": "", "next_appointment": null}')
     note = parse_reply(hallucinated)
     assert note.phone == "333 0000000"  # passes validation despite being invented
 
