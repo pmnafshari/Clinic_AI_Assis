@@ -111,6 +111,42 @@ def selftest():
             if p.is_file() and not p.is_symlink():
                 assert str(p.resolve()).startswith(sorted_abs + os.sep), f"6: {p} escaped root"
 
+        # 7. find_cf_in_name — hit: CF embedded in filename
+        assert find_cf_in_name(f"fattura_{VALID_CF}_2026.xlsx") == VALID_CF, "7: CF not found in name"
+
+        # 8. find_cf_in_name — miss: no CF token in filename
+        assert find_cf_in_name("fattura_generica.xlsx") is None, "8: unexpected CF found"
+
+        # 9. xlsx with CF in filename → sorted/<CF>/records/
+        f9 = root / f"fattura_{VALID_CF}_2026.xlsx"
+        f9.write_bytes(b"PK")
+        route_file(f9, sorted_, log_path)
+        assert (sorted_ / VALID_CF / "records" / f9.name).exists(), "9: xlsx+CF not in patient records"
+
+        # 10. xlsx without CF → sorted/records/
+        f10 = root / "fattura_generica.xlsx"
+        f10.write_bytes(b"PK")
+        route_file(f10, sorted_, log_path)
+        assert (sorted_ / "records" / "fattura_generica.xlsx").exists(), "10: xlsx no-cf not in top-level records"
+
+        # 11. jpg with CF in filename → sorted/<CF>/images/
+        f11 = root / f"rx_{VALID_CF}.jpg"
+        f11.write_bytes(b"\xff\xd8\xff")
+        route_file(f11, sorted_, log_path)
+        assert (sorted_ / VALID_CF / "images" / f11.name).exists(), "11: jpg+CF not in patient images"
+
+        # 12. png without CF → sorted/images/
+        f12 = root / "rx_generica.png"
+        f12.write_bytes(b"\x89PNG")
+        route_file(f12, sorted_, log_path)
+        assert (sorted_ / "images" / "rx_generica.png").exists(), "12: png no-cf not in top-level images"
+
+        # 13. unknown extension → sorted/needs_review/
+        f13 = root / "unknown_file.dat"
+        f13.write_bytes(b"data")
+        route_file(f13, sorted_, log_path)
+        assert (sorted_ / "needs_review" / "unknown_file.dat").exists(), "13: unknown ext not in needs_review"
+
     print("selftest ok")
 
 
