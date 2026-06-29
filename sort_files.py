@@ -25,6 +25,13 @@ def _move(src, dest_dir, reason, sorted_root, log_path=None):
     log_action(src, dest, reason, log_path)
 
 
+def find_cf_in_name(filename):
+    for token in re.split(r'[\W_]+', filename.upper()):
+        if CF_PATTERN.match(token):
+            return token
+    return None
+
+
 def route_note(src, sorted_root, log_path=None, extract=extract_note):
     # symlink guard — never follow
     if src.is_symlink():
@@ -38,6 +45,28 @@ def route_note(src, sorted_root, log_path=None, extract=extract_note):
         _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
     except ValueError as e:
         _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
+
+
+def route_file(src, sorted_root, log_path=None):
+    ext = src.suffix.lower()
+    if ext == ".txt":
+        route_note(src, sorted_root, log_path)
+        return
+    cf = find_cf_in_name(src.name)
+    if ext == ".xlsx":
+        sub = "records"
+    elif ext in (".jpg", ".jpeg", ".png"):
+        sub = "images"
+    else:
+        _move(src, sorted_root / "needs_review", "unknown type", sorted_root, log_path)
+        return
+    if cf:
+        dest_dir = sorted_root / cf / sub
+        reason = f"type:{ext.lstrip('.')} cf:{cf}"
+    else:
+        dest_dir = sorted_root / sub
+        reason = f"type:{ext.lstrip('.')} no-cf"
+    _move(src, dest_dir, reason, sorted_root, log_path)
 
 
 def selftest():
@@ -155,11 +184,16 @@ def main():
         selftest()
         return
     if len(sys.argv) < 2:
-        print("usage: python sort_files.py <note.txt> [sorted_root]  |  python sort_files.py --selftest")
+        print("usage: python sort_files.py <file|dir> [sorted_root]  |  python sort_files.py --selftest")
         sys.exit(1)
     src = Path(sys.argv[1])
     sorted_root = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("sorted")
-    route_note(src, sorted_root)
+    if src.is_dir():
+        for f in src.rglob("*"):
+            if f.is_file():
+                route_file(f, sorted_root)
+    else:
+        route_file(src, sorted_root)
 
 
 if __name__ == "__main__":
