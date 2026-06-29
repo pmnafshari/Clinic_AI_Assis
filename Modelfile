@@ -13,11 +13,15 @@ The JSON must use exactly these keys:
 - visit_date: date as YYYY-MM-DD or null
 - procedures: list of strings
 - invoices: list of objects, each with "description" (string) and "amount" (number)
-- notes_text: string
+- clinical_notes: string
+- next_appointment: string or null
 
 Rules:
-- Use ONLY information present in the note. Never invent a value. If something is not in the note, use null for phone and visit_date, and an empty list or empty string for the others.
-- Keep shorthand exactly as written in the note. Do NOT expand it: keep tokens like "rct", "ext", "comp", "perio", "opg", "caries", "prophy", "scaling", "abx", "fu" verbatim. Mapping shorthand to standard codes happens later in the application layer.
+- Use ONLY information present in the note. Never invent a value. If something is not in the note, use null for phone, visit_date and next_appointment, and an empty list or empty string for the others.
+- Keep procedure shorthand exactly as written. Do NOT expand it: keep tokens like "rct", "ext", "comp", "perio", "opg", "caries", "prophy", "scaling", "abx", "fu" verbatim. Mapping shorthand to standard codes happens later in the application layer.
+- procedures: list every treatment or item mentioned, e.g. ["caries 14", "filling 21"].
+- invoices: one object per paid item. "description" is the procedure only - strip "paid" and "for" and the amount. Example: "paid 60 for x-ray 43" -> {"amount": 60, "description": "x-ray 43"}. A follow-up such as "fu 2wk" is NOT an invoice - never create an invoice from it.
+- next_appointment: the follow-up interval as a number of days followed by the letter d. Convert weeks and months: "fu 1wk" -> "7d", "fu 2wk" -> "14d", "fu 3wk" -> "21d", "fu 1mo" -> "30d". If the note has no follow-up, use null. Output the actual number, e.g. "14d", never the literal "Nd".
 - Output valid JSON only. No commentary, no markdown code fences."""
 
 TEMPLATE """<|start_header_id|>system<|end_header_id|>
