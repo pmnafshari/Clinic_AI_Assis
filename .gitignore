@@ -17,6 +17,7 @@ notes_raw.jsonl
 
 # models and data (large / private)
 models/
+db/
 *.gguf
 *.bin
 *.safetensors

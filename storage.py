@@ -138,6 +138,18 @@ def upsert_note_chroma(note, source_path, collection):
     )
 
 
+def load_note(note, source_path, conn, collection):
+    upsert_note_sql(note, source_path, conn)
+    upsert_note_chroma(note, source_path, collection)
+
+
+def load_from_sorted(sorted_root, conn, collection):
+    for json_path in sorted(Path(sorted_root).glob("*/notes/*.json")):
+        note = DentalNote.model_validate_json(json_path.read_text())
+        source_path = str(json_path.relative_to(sorted_root))
+        load_note(note, source_path, conn, collection)
+
+
 def selftest():
     import tempfile
     from dental_notes_schema import Invoice
@@ -225,6 +237,56 @@ def selftest():
         assert len(chunks["embeddings"][0]) == 384, \
             f"5: expected 384-dim embedding, got {len(chunks['embeddings'][0])}"
 
+        # 6. load_from_sorted walks a real json tree for 2 patients, is idempotent,
+        # and every loaded CF matches across sqlite and chroma (success criterion 4)
+        sorted_root = Path(tmp) / "sorted"
+        cf2 = "VRDL850315150200"
+        note_a = DentalNote(
+            patient_name="mario rossi",
+            codice_fiscale=cf,
+            phone="333123456",
+            visit_date=date(2026, 6, 1),
+            procedures=["rct 26"],
+            invoices=[Invoice(amount=50.0, description="rct")],
+            clinical_notes="rct done",
+        )
+        note_b = DentalNote(
+            patient_name="luigi verdi",
+            codice_fiscale=cf2,
+            phone="333222222",
+            visit_date=date(2026, 6, 2),
+            clinical_notes="cleaning done",
+        )
+        for cf_, n in [(cf, note_a), (cf2, note_b)]:
+            notes_dir = sorted_root / cf_ / "notes"
+            notes_dir.mkdir(parents=True, exist_ok=True)
+            (notes_dir / "n1.json").write_text(n.model_dump_json())
+
+        db2_path = str(Path(tmp) / "clinic2.sqlite")
+        conn2 = init_db(db2_path)
+        collection2 = get_collection(str(Path(tmp) / "chroma2"))
+
+        load_from_sorted(sorted_root, conn2, collection2)
+        load_from_sorted(sorted_root, conn2, collection2)
+
+        p_count = conn2.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
+        v_count = conn2.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"]
+        i_count = conn2.execute("SELECT COUNT(*) c FROM invoices").fetchone()["c"]
+        assert p_count == 2, f"6: expected 2 patients after 2 runs, got {p_count}"
+        assert v_count == 2, f"6: expected 2 visits after 2 runs, got {v_count}"
+        assert i_count == 1, f"6: expected 1 invoice after 2 runs, got {i_count}"
+        assert collection2.count() == 2, f"6: expected 2 chunks after 2 runs, got {collection2.count()}"
+
+        for cf_ in [cf, cf2]:
+            row = conn2.execute(
+                "SELECT codice_fiscale FROM patients WHERE codice_fiscale = ?", (cf_,)
+            ).fetchone()
+            hits = collection2.get(where={"codice_fiscale": cf_})
+            assert row is not None, f"6: sqlite missing patient {cf_}"
+            assert len(hits["ids"]) == 1, f"6: chroma missing chunk for {cf_}"
+            assert hits["metadatas"][0]["codice_fiscale"] == cf_, \
+                f"6: chroma metadata CF mismatch for {cf_}"
+
     print("selftest ok")
 
 
@@ -232,8 +294,14 @@ def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
         selftest()
         return
-    print("usage: python storage.py --selftest")
-    sys.exit(1)
+
+    Path("db").mkdir(exist_ok=True)
+    conn = init_db("db/clinic.sqlite")
+    collection = get_collection("db/chroma")
+    load_from_sorted(Path("sorted"), conn, collection)
+
+    patients = conn.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
+    print(f"loaded {patients} patients, {collection.count()} chroma chunks")
 
 
 if __name__ == "__main__":
