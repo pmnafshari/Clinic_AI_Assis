@@ -70,14 +70,15 @@ def upsert_note_sql(note, source_path, conn):
         "SELECT id FROM visits WHERE source_path = ?", (source_path,)
     ).fetchone()["id"]
 
+    # invoices are positional; wipe and re-insert so the set stays authoritative
+    # when a re-imported note has fewer lines than before
+    conn.execute("DELETE FROM invoices WHERE visit_id = ?", (visit_id,))
     for i, inv in enumerate(note.invoices):
-        conn.execute("""
-            INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(visit_id, line_index) DO UPDATE SET
-                amount = excluded.amount,
-                description = excluded.description
-        """, (note.codice_fiscale, visit_id, i, inv.amount, inv.description))
+        conn.execute(
+            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (note.codice_fiscale, visit_id, i, inv.amount, inv.description),
+        )
 
     conn.commit()
 
@@ -286,6 +287,37 @@ def selftest():
             assert len(hits["ids"]) == 1, f"6: chroma missing chunk for {cf_}"
             assert hits["metadatas"][0]["codice_fiscale"] == cf_, \
                 f"6: chroma metadata CF mismatch for {cf_}"
+
+        # 7. re-importing a note whose invoice list shrank drops the stale rows,
+        # so lookup never returns invoice amounts that no longer exist
+        cf3 = "BNCS900010150300"
+        note3 = DentalNote(
+            patient_name="stefano bianchi",
+            codice_fiscale=cf3,
+            invoices=[
+                Invoice(amount=10.0, description="a"),
+                Invoice(amount=20.0, description="b"),
+                Invoice(amount=30.0, description="c"),
+            ],
+        )
+        upsert_note_sql(note3, "BNCS900010150300/notes/n1.json", conn)
+        first_count = conn.execute(
+            "SELECT COUNT(*) c FROM invoices WHERE codice_fiscale = ?", (cf3,)
+        ).fetchone()["c"]
+        assert first_count == 3, f"7: expected 3 invoices on first import, got {first_count}"
+
+        note3_shrunk = DentalNote(
+            patient_name="stefano bianchi",
+            codice_fiscale=cf3,
+            invoices=[Invoice(amount=10.0, description="a")],
+        )
+        upsert_note_sql(note3_shrunk, "BNCS900010150300/notes/n1.json", conn)
+        after_count = conn.execute(
+            "SELECT COUNT(*) c FROM invoices WHERE codice_fiscale = ?", (cf3,)
+        ).fetchone()["c"]
+        assert after_count == 1, f"7: expected 1 invoice after shrink re-import, got {after_count}"
+        assert lookup_patient(cf3, conn)["invoices"] == [{"amount": 10.0, "description": "a"}], \
+            "7: lookup returned phantom invoices after shrink re-import"
 
     print("selftest ok")
 
