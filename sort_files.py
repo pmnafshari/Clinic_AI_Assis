@@ -50,6 +50,10 @@ def route_note(src, sorted_root, log_path=None, extract=extract_note):
 
 
 def route_file(src, sorted_root, log_path=None):
+    # symlink guard — never follow, for any file type
+    if src.is_symlink():
+        _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        return
     ext = src.suffix.lower()
     if ext == ".txt":
         route_note(src, sorted_root, log_path)
@@ -187,6 +191,16 @@ def selftest():
         f13.write_bytes(b"data")
         route_file(f13, sorted_, log_path)
         assert (sorted_ / "needs_review" / "unknown_file.dat").exists(), "13: unknown ext not in needs_review"
+
+        # 14. a symlinked non-note input is skipped, not followed and filed by type/CF
+        real_x = root / "real.xlsx"
+        real_x.write_bytes(b"PK")
+        link_x = root / f"fattura_{VALID_CF}_2026_link.xlsx"
+        link_x.symlink_to(real_x)
+        route_file(link_x, sorted_, log_path)
+        assert (sorted_ / "needs_review" / link_x.name).exists(), "14: symlinked xlsx not in needs_review"
+        assert not (sorted_ / VALID_CF / "records" / link_x.name).exists(), \
+            "14: symlinked xlsx wrongly filed into patient records"
 
     print("selftest ok")
 
