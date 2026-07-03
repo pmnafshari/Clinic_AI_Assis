@@ -23,6 +23,7 @@ def _move(src, dest_dir, reason, sorted_root, log_path=None):
         raise ValueError("path escape: destination is outside sorted root")
     shutil.move(str(src), str(dest))
     log_action(src, dest, reason, log_path)
+    return dest
 
 
 def find_cf_in_name(filename):
@@ -40,7 +41,8 @@ def route_note(src, sorted_root, log_path=None, extract=extract_note):
     try:
         note = extract(src.read_text())
         cf = note.codice_fiscale  # already validated by DentalNote
-        _move(src, sorted_root / cf / "notes", "matched CF", sorted_root, log_path)
+        dest = _move(src, sorted_root / cf / "notes", "matched CF", sorted_root, log_path)
+        dest.with_suffix(".json").write_text(note.model_dump_json())
     except OllamaUnreachable as e:
         _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
     except ValueError as e:
@@ -96,6 +98,12 @@ def selftest():
             lines = f.readlines()
         assert any("matched CF" in l for l in lines), "1: 'matched CF' not in log"
 
+        # 1b. matched CF also leaves a sibling .json that round-trips
+        note1_json = sorted_ / VALID_CF / "notes" / "note1.json"
+        assert note1_json.exists(), "1b: sibling json not written for matched CF"
+        reloaded = DentalNote.model_validate_json(note1_json.read_text())
+        assert reloaded.codice_fiscale == VALID_CF, "1b: reloaded json has wrong codice_fiscale"
+
         # 2. ValueError → needs_review, reason in log
         f2 = root / "note2.txt"
         f2.write_text("bad note")
@@ -104,6 +112,7 @@ def selftest():
         with open(log_path) as f:
             lines = f.readlines()
         assert any("bad json" in l for l in lines), "2: ValueError reason not logged"
+        assert not (sorted_ / "needs_review" / "note2.json").exists(), "2: needs_review note must not get a json"
 
         # 3. OllamaUnreachable → needs_review, reason in log
         f3 = root / "note3.txt"
@@ -122,6 +131,9 @@ def selftest():
         fb.write_text("second")
         route_note(fb, sorted_, log_path=log_path, extract=make_extractor(cf=VALID_CF))
         assert (sorted_ / VALID_CF / "notes" / "collision_1.txt").exists(), "4: collision not renamed to _1"
+
+        # 4b. collision-renamed note's json follows the renamed stem
+        assert (sorted_ / VALID_CF / "notes" / "collision_1.json").exists(), "4b: collision json not renamed to _1"
 
         # 5. symlink source → needs_review with "symlink skipped" in log
         real = root / "real.txt"
