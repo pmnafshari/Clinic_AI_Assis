@@ -4,6 +4,9 @@ import sys
 from datetime import date
 from pathlib import Path
 
+import chromadb
+from chromadb.config import Settings
+
 from dental_notes_schema import DentalNote
 
 
@@ -102,6 +105,39 @@ def lookup_patient(cf, conn):
     }
 
 
+def get_collection(chroma_path):
+    # first run downloads the ~83MB all-MiniLM-L6-v2 ONNX model once, then it's cached
+    client = chromadb.PersistentClient(
+        path=chroma_path,
+        settings=Settings(anonymized_telemetry=False),
+    )
+    return client.get_or_create_collection(name="patient_notes")
+
+
+def upsert_note_chroma(note, source_path, collection):
+    stem = Path(source_path).stem
+    chunk_id = f"{note.codice_fiscale}:{stem}"
+
+    proc_text = ", ".join(note.procedures)
+    if proc_text:
+        text = f"Procedures: {proc_text}. {note.clinical_notes}"
+    else:
+        text = note.clinical_notes
+
+    visit_date = note.visit_date.isoformat() if note.visit_date else ""
+
+    collection.upsert(
+        ids=[chunk_id],
+        documents=[text],
+        metadatas=[{
+            "codice_fiscale": note.codice_fiscale,
+            "patient_name": note.patient_name,
+            "visit_date": visit_date,
+            "source_path": source_path,
+        }],
+    )
+
+
 def selftest():
     import tempfile
     from dental_notes_schema import Invoice
@@ -174,6 +210,20 @@ def selftest():
 
         result2 = lookup_patient(cf, conn)
         assert result2["phone"] == "333999999", "4: patient phone not updated in place"
+
+        # 5. chroma chunk is CF-tagged, 384-dim, and idempotent on re-upsert
+        collection = get_collection(str(Path(tmp) / "chroma"))
+        upsert_note_chroma(note, "MRRS800010150100/notes/n1.json", collection)
+        upsert_note_chroma(note, "MRRS800010150100/notes/n1.json", collection)
+
+        chunk_count = collection.count()
+        assert chunk_count == 1, f"5: expected 1 chunk after 2 upserts, got {chunk_count}"
+
+        chunks = collection.get(include=["embeddings", "metadatas"])
+        assert chunks["ids"] == ["MRRS800010150100:n1"], f"5: wrong chunk id, got {chunks['ids']}"
+        assert chunks["metadatas"][0]["codice_fiscale"] == cf, "5: chunk metadata CF mismatch"
+        assert len(chunks["embeddings"][0]) == 384, \
+            f"5: expected 384-dim embedding, got {len(chunks['embeddings'][0])}"
 
     print("selftest ok")
 
