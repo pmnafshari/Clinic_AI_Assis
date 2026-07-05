@@ -1,7 +1,14 @@
+import json
 import sys
+import urllib.error
+import urllib.request
 
 from dental_notes_schema import CF_PATTERN
-from storage import init_db, lookup_patient
+from extract_note import OllamaUnreachable
+from storage import get_collection, init_db, lookup_patient
+
+OLLAMA_URL = "http://localhost:11434/api/generate"
+SYNTHESIS_MODEL = "llama3.2:3b"
 
 FIELD_CUES = {
     "phone": "phone",
@@ -106,13 +113,50 @@ def answer_exact(cf, field, conn):
     return answer + f" [source: {last_visit['source_path']}, visit date: {last_visit['visit_date']}]"
 
 
+def call_model(prompt, model, urlopen=urllib.request.urlopen):
+    payload = {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0}}
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(OLLAMA_URL, data=data, headers={"Content-Type": "application/json"})
+    try:
+        with urlopen(req, timeout=120) as resp:
+            body = json.load(resp)
+    except urllib.error.URLError:
+        raise OllamaUnreachable(f"Ollama not reachable - run: ollama run {model}")
+    return body.get("response", "")
+
+
+def answer_meaning(question, collection, urlopen=urllib.request.urlopen, k=4):
+    result = collection.query(query_texts=[question], n_results=k)
+    documents = result.get("documents", [[]])[0]
+    metadatas = result.get("metadatas", [[]])[0]
+
+    if not documents:
+        return "not in records"
+
+    context = "\n".join(documents)
+    prompt = (
+        "Answer ONLY from the context below.\n"
+        "If not present, say 'not in records'.\n"
+        "Context:\n"
+        f"{context}\n"
+        f"Question: {question}"
+    )
+    answer = call_model(prompt, SYNTHESIS_MODEL, urlopen=urlopen)
+
+    citations = [
+        f"[source: {meta['source_path']}, visit date: {meta['visit_date']}, patient: {meta['patient_name']}]"
+        for meta in metadatas
+    ]
+    return answer + " " + " ".join(citations)
+
+
 def selftest():
     import tempfile
     from datetime import date
     from pathlib import Path
 
     from dental_notes_schema import DentalNote, Invoice
-    from storage import upsert_note_sql
+    from storage import upsert_note_chroma, upsert_note_sql
 
     with tempfile.TemporaryDirectory() as tmp:
         conn = init_db(str(Path(tmp) / "clinic.sqlite"))
@@ -167,6 +211,52 @@ def selftest():
         full_answer = answer_exact(resolved_cf, "phone", conn)
         assert "333123456" in full_answer, "full pipeline did not return the seeded phone"
 
+        # 6. meaning path: chroma retrieval + grounded synthesis, fully offline
+        collection = get_collection(str(Path(tmp) / "chroma"))
+        chroma_note = DentalNote(
+            patient_name="Rossi",
+            codice_fiscale=cf,
+            visit_date=date(2026, 6, 1),
+            procedures=["root canal"],
+            clinical_notes="root canal treatment on tooth 26",
+        )
+        upsert_note_chroma(chroma_note, "RSSM800010150100/notes/n1.json", collection)
+
+        def fake_urlopen(req, timeout=120):
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc_info):
+                    return False
+
+                def read(self):
+                    return json.dumps({"response": "Rossi had a root canal."}).encode()
+
+            return FakeResponse()
+
+        meaning_answer = answer_meaning(
+            "which patients had a root canal?", collection, urlopen=fake_urlopen
+        )
+        assert "root canal" in meaning_answer, "synthesized answer missing"
+        assert "n1.json" in meaning_answer, "citation source_path missing from meaning answer"
+        assert "2026-06-01" in meaning_answer, "citation visit_date missing from meaning answer"
+
+        # empty retrieval -> explicit not-in-records, no model call needed
+        empty_collection = get_collection(str(Path(tmp) / "chroma_empty"))
+        empty_answer = answer_meaning("anything at all?", empty_collection, urlopen=fake_urlopen)
+        assert empty_answer == "not in records"
+
+        # unreachable Ollama gives a clear error naming the synthesis model
+        def boom(*a, **k):
+            raise urllib.error.URLError("connection refused")
+
+        try:
+            call_model("any prompt", SYNTHESIS_MODEL, urlopen=boom)
+            raise AssertionError("unreachable Ollama should raise OllamaUnreachable")
+        except OllamaUnreachable as e:
+            assert SYNTHESIS_MODEL in str(e)
+
     print("selftest ok")
 
 
@@ -182,7 +272,8 @@ def main():
     conn = init_db("db/clinic.sqlite")
 
     if classify_question(question) == "meaning":
-        print("meaning questions land in plan 05-02")
+        collection = get_collection("db/chroma")
+        print(answer_meaning(question, collection))
         return
 
     name = extract_name(question)
