@@ -1,15 +1,22 @@
 import json
 import urllib.error
 import urllib.request
+from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
+from ask import resolve_cf
 from dental_notes_schema import CF_PATTERN
 from extract_note import OllamaUnreachable, extract_json
+from storage import init_db, lookup_patient
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_ID = "llama3.2:3b"  # general model prompted to emit tool JSON, not dental-notes
+
+DB_PATH = "db/clinic.sqlite"
+UNDO_LOG = "db/undo_log.jsonl"
 
 EDITABLE_FIELDS = {"phone"}
 
@@ -94,3 +101,40 @@ def call_model(command, urlopen=urllib.request.urlopen):
     except urllib.error.URLError:
         raise OllamaUnreachable("Ollama not reachable - run: ollama run llama3.2:3b")
     return body.get("response", "")
+
+
+def write_undo_entry(entry, log_path=UNDO_LOG):
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def resolve_patient(name, conn):
+    cf = resolve_cf(name, conn)
+    if cf is None:
+        print(f"no patient named {name} on record")
+        return None
+    if isinstance(cf, list):
+        print(f"multiple patients named {name} found, candidates: {', '.join(cf)}")
+        typed = input("type the codice fiscale to use: ").strip().upper()
+        if not CF_PATTERN.match(typed):
+            print("invalid codice fiscale")
+            return None
+        cf = typed
+    return cf
+
+
+def build_diff_line(field, current, new, name, cf):
+    return f"{field}: {current} -> {new} ({name}, {cf})"
+
+
+def confirm(input_fn=input):
+    answer = input_fn("proceed? [y/N]: ").strip().lower()
+    return answer in ("y", "yes")
+
+
+def update_field(cf, field, value, conn):
+    # field is always "phone" - whitelisted at the schema layer, never
+    # interpolated from a model-supplied column name.
+    conn.execute("UPDATE patients SET phone = ? WHERE codice_fiscale = ?", (value, cf))
+    conn.commit()
