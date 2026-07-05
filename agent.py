@@ -1,4 +1,5 @@
 import json
+import sys
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -138,3 +139,145 @@ def update_field(cf, field, value, conn):
     # interpolated from a model-supplied column name.
     conn.execute("UPDATE patients SET phone = ? WHERE codice_fiscale = ?", (value, cf))
     conn.commit()
+
+
+def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_LOG):
+    reply = call_model(command, urlopen)
+    call = parse_tool_call(reply)
+    args = call.parsed_args()
+
+    cf = resolve_patient(args.patient, conn)
+    if cf is None:
+        return
+
+    if call.tool == "update_field":
+        data = lookup_patient(cf, conn)
+        current = data["phone"]
+        name = data["patient_name"]
+        print(build_diff_line("phone", current, args.value, name, cf))
+
+        if dry_run:
+            return
+
+        if not confirm(input_fn):
+            print("no changes made")
+            return
+
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "update_field",
+            "codice_fiscale": cf,
+            "target": "sqlite:patients.phone",
+            "before": current,
+        }, log_path)
+        update_field(cf, "phone", args.value, conn)
+
+
+def undo_last(conn, log_path=UNDO_LOG):
+    lines = Path(log_path).read_text().strip().splitlines()
+    entry = json.loads(lines[-1])
+    if entry["target"] == "sqlite:patients.phone":
+        update_field(entry["codice_fiscale"], "phone", entry["before"], conn)
+        print(f"restored phone to {entry['before']} for {entry['codice_fiscale']}")
+
+
+def selftest():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = str(Path(tmp) / "clinic.sqlite")
+        log_path = str(Path(tmp) / "undo_log.jsonl")
+
+        conn = init_db(db_path)
+        cf = "RSSM800010150100"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            (cf, "mario rossi", "333 9999999"),
+        )
+        conn.commit()
+
+        def fake_urlopen(req, timeout=120):
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc_info):
+                    return False
+
+                def read(self):
+                    tool_call = {
+                        "tool": "update_field",
+                        "args": {"patient": "rossi", "field": "phone", "value": "333-1234"},
+                    }
+                    return json.dumps({"response": json.dumps(tool_call)}).encode()
+
+            return FakeResponse()
+
+        # a. --dry-run leaves the phone unchanged and writes no log line
+        run_command("update rossi's phone to 333-1234", conn, True, fake_urlopen,
+                    input_fn=lambda p: "y", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "333 9999999", "dry-run must not write"
+        assert not Path(log_path).exists(), "dry-run must not touch the undo log"
+
+        # b. a declined confirm writes nothing
+        run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+                     input_fn=lambda p: "n", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "333 9999999", "declined confirm must not write"
+        assert not Path(log_path).exists(), "declined confirm must not write the undo log"
+
+        # c. a confirmed run writes the new phone and exactly one undo-log line
+        run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+                    input_fn=lambda p: "y", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "333-1234", "confirmed run must write the new value"
+        lines = Path(log_path).read_text().strip().splitlines()
+        assert len(lines) == 1, f"expected 1 undo-log line, got {len(lines)}"
+
+        # d. undo restores the before-image
+        undo_last(conn, log_path)
+        assert lookup_patient(cf, conn)["phone"] == "333 9999999", "undo must restore the original phone"
+
+        # e. invalid tool JSON and unreachable Ollama are rejected cleanly
+        try:
+            parse_tool_call("not json")
+            raise AssertionError("non-JSON reply should have been rejected")
+        except ValueError:
+            pass
+
+        def boom(*a, **k):
+            raise urllib.error.URLError("connection refused")
+
+        try:
+            call_model("anything", urlopen=boom)
+            raise AssertionError("unreachable Ollama should raise OllamaUnreachable")
+        except OllamaUnreachable:
+            pass
+
+    print("selftest passed")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+        selftest()
+        return
+    if len(sys.argv) > 1 and sys.argv[1] == "undo":
+        conn = init_db(DB_PATH)
+        undo_last(conn)
+        return
+    if len(sys.argv) < 2:
+        print('usage: python agent.py "<command>" [--dry-run]  |  python agent.py undo  |  python agent.py --selftest')
+        sys.exit(1)
+
+    dry_run = "--dry-run" in sys.argv
+    conn = init_db(DB_PATH)
+    try:
+        run_command(sys.argv[1], conn, dry_run, urllib.request.urlopen)
+    except OllamaUnreachable as e:
+        print(e)
+        sys.exit(1)
+    except ValueError as e:
+        print("rejected:", e)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
