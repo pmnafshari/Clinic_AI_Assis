@@ -6,12 +6,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+import openpyxl
 from pydantic import BaseModel, field_validator
 
 from ask import resolve_cf
-from dental_notes_schema import CF_PATTERN
+from dental_notes_schema import CF_PATTERN, DentalNote
 from extract_note import OllamaUnreachable, extract_json
-from storage import init_db, lookup_patient
+from storage import init_db, lookup_patient, upsert_note_chroma, upsert_note_sql
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL_ID = "llama3.2:3b"  # general model prompted to emit tool JSON, not dental-notes
@@ -20,6 +21,7 @@ DB_PATH = "db/clinic.sqlite"
 UNDO_LOG = "db/undo_log.jsonl"
 
 EDITABLE_FIELDS = {"phone"}
+INVOICE_HEADER = ["date", "amount", "description"]
 
 INTERPRETER_PROMPT = (
     "You are a clinic assistant that turns a command into ONE tool call.\n"
@@ -139,6 +141,31 @@ def update_field(cf, field, value, conn):
     # interpolated from a model-supplied column name.
     conn.execute("UPDATE patients SET phone = ? WHERE codice_fiscale = ?", (value, cf))
     conn.commit()
+
+
+def add_invoice(cf, amount, description, visit_date, sorted_root=Path("sorted")):
+    # cf must be validated before any path is built - a model-supplied value
+    # containing "../" must never reach the filesystem (T-06-02).
+    if not CF_PATTERN.match(cf):
+        raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
+
+    xlsx_dir = sorted_root / cf / "records"
+    xlsx_dir.mkdir(parents=True, exist_ok=True)
+    xlsx_path = xlsx_dir / "invoices.xlsx"
+
+    if xlsx_path.exists():
+        wb = openpyxl.load_workbook(xlsx_path)
+        ws = wb.active
+        row_count = ws.max_row - 1  # rows before this append, excluding header
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(INVOICE_HEADER)
+        row_count = 0
+
+    ws.append([visit_date, amount, description])
+    wb.save(xlsx_path)
+    return row_count
 
 
 def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_LOG):
