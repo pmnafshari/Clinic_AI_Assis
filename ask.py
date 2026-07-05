@@ -43,6 +43,14 @@ def resolve_cf(name, conn):
         (name,),
     ).fetchall()
     if len(rows) == 0:
+        # questions usually name the surname only ("patient Rossi"), stored
+        # names are full ("mario rossi") - fall back to a whole-word match
+        rows = conn.execute(
+            "SELECT codice_fiscale FROM patients"
+            " WHERE ' ' || lower(patient_name) || ' ' LIKE '% ' || lower(?) || ' %'",
+            (name,),
+        ).fetchall()
+    if len(rows) == 0:
         return None
     if len(rows) > 1:
         return [r["codice_fiscale"] for r in rows if CF_PATTERN.match(r["codice_fiscale"])]
@@ -133,9 +141,14 @@ def answer_meaning(question, collection, urlopen=urllib.request.urlopen, k=4):
     if not documents:
         return "not in records"
 
-    context = "\n".join(documents)
+    # pair each chunk with its patient so the model can (and must) attribute
+    # facts by name - the note text alone never contains the patient's name
+    lines = []
+    for doc, meta in zip(documents, metadatas):
+        lines.append(f"patient {meta['patient_name']}: {doc}")
+    context = "\n".join(lines)
     prompt = (
-        "Answer ONLY from the context below.\n"
+        "Answer ONLY from the context below, naming the relevant patients.\n"
         "If not present, say 'not in records'.\n"
         "Context:\n"
         f"{context}\n"
@@ -143,9 +156,25 @@ def answer_meaning(question, collection, urlopen=urllib.request.urlopen, k=4):
     )
     answer = call_model(prompt, SYNTHESIS_MODEL, urlopen=urlopen)
 
+    # a not-in-records answer cites nothing - there is no record behind it
+    if "not in records" in answer.lower():
+        return "not in records"
+
+    # cite only the retrieved records the answer actually names; if the answer
+    # names nobody specific, keep every retrieved source (conservative)
+    answer_lower = answer.lower()
+    cited = []
+    for meta in metadatas:
+        for token in meta["patient_name"].lower().split():
+            if len(token) > 2 and token in answer_lower:
+                cited.append(meta)
+                break
+    if not cited:
+        cited = metadatas
+
     citations = [
         f"[source: {meta['source_path']}, visit date: {meta['visit_date']}, patient: {meta['patient_name']}]"
-        for meta in metadatas
+        for meta in cited
     ]
     return answer + " " + " ".join(citations)
 
@@ -161,9 +190,11 @@ def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         conn = init_db(str(Path(tmp) / "clinic.sqlite"))
 
+        # full names as stored by the real loader - questions say "patient Rossi",
+        # the db says "mario rossi", so these fixtures must not be surname-only
         cf = "RSSM800010150100"
         note = DentalNote(
-            patient_name="Rossi",
+            patient_name="mario rossi",
             codice_fiscale=cf,
             phone="333123456",
             visit_date=date(2026, 6, 1),
@@ -174,11 +205,19 @@ def selftest():
 
         cf2 = "VRDL850315150200"
         note2 = DentalNote(
-            patient_name="Verdi",
+            patient_name="luigi verdi",
             codice_fiscale=cf2,
             clinical_notes="cleaning done",
         )
         upsert_note_sql(note2, "VRDL850315150200/notes/n1.json", conn)
+
+        # two patients sharing a surname, for the multi-match prompt path
+        cf3 = "BNCP900010150300"
+        cf4 = "BNCC910010150400"
+        upsert_note_sql(DentalNote(patient_name="paola bianchi", codice_fiscale=cf3),
+                        "BNCP900010150300/notes/n1.json", conn)
+        upsert_note_sql(DentalNote(patient_name="carlo bianchi", codice_fiscale=cf4),
+                        "BNCC910010150400/notes/n1.json", conn)
 
         # 1. router keys on cue presence alone
         assert classify_question("what is patient rossi's phone number?") == "exact"
@@ -190,9 +229,13 @@ def selftest():
         assert extract_name("what is patient Mario Rossi's next appointment?") == "Mario Rossi"
         assert extract_name("what is the phone number on file?") is None
 
-        # 3. resolve_cf
-        assert resolve_cf("rossi", conn) == cf
+        # 3. resolve_cf: exact full name, surname fallback, no match, multi-match
+        assert resolve_cf("mario rossi", conn) == cf
+        assert resolve_cf("rossi", conn) == cf, "surname alone must resolve against a full name"
+        assert resolve_cf("Rossi", conn) == cf
         assert resolve_cf("nobody", conn) is None
+        assert sorted(resolve_cf("bianchi", conn)) == sorted([cf3, cf4]), \
+            "shared surname must return the candidate list for the cf prompt"
 
         # 4. answer_exact behaviors
         answer = answer_exact(cf, "phone", conn)
@@ -214,13 +257,21 @@ def selftest():
         # 6. meaning path: chroma retrieval + grounded synthesis, fully offline
         collection = get_collection(str(Path(tmp) / "chroma"))
         chroma_note = DentalNote(
-            patient_name="Rossi",
+            patient_name="mario rossi",
             codice_fiscale=cf,
             visit_date=date(2026, 6, 1),
             procedures=["root canal"],
             clinical_notes="root canal treatment on tooth 26",
         )
         upsert_note_chroma(chroma_note, "RSSM800010150100/notes/n1.json", collection)
+        chroma_note2 = DentalNote(
+            patient_name="luigi verdi",
+            codice_fiscale=cf2,
+            visit_date=date(2026, 6, 3),
+            procedures=["cleaning"],
+            clinical_notes="routine cleaning, no issues",
+        )
+        upsert_note_chroma(chroma_note2, "VRDL850315150200/notes/n1.json", collection)
 
         def fake_urlopen(req, timeout=120):
             class FakeResponse:
@@ -241,6 +292,27 @@ def selftest():
         assert "root canal" in meaning_answer, "synthesized answer missing"
         assert "n1.json" in meaning_answer, "citation source_path missing from meaning answer"
         assert "2026-06-01" in meaning_answer, "citation visit_date missing from meaning answer"
+        # the answer names rossi only - verdi's retrieved chunk must not be cited
+        assert "verdi" not in meaning_answer, "cited a retrieved patient the answer does not name"
+
+        # a not-in-records answer from the model carries no citations
+        def fake_urlopen_miss(req, timeout=120):
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc_info):
+                    return False
+
+                def read(self):
+                    return json.dumps({"response": "Not in records."}).encode()
+
+            return FakeResponse()
+
+        miss_answer = answer_meaning(
+            "which patients had implants?", collection, urlopen=fake_urlopen_miss
+        )
+        assert miss_answer == "not in records", "not-in-records answer must carry no citations"
 
         # empty retrieval -> explicit not-in-records, no model call needed
         empty_collection = get_collection(str(Path(tmp) / "chroma_empty"))
