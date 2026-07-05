@@ -31,6 +31,14 @@ INTERPRETER_PROMPT = (
     '- update_field: args {"patient": str, "field": str, "value": str}\n'
     '- append_note: args {"patient": str, "text": str}\n'
     '- add_invoice: args {"patient": str, "amount": float, "description": str}\n'
+    "Rules:\n"
+    "- use add_invoice whenever the command mentions an invoice or an amount of money\n"
+    "- use append_note whenever the command says to append or add to a note\n"
+    "- use update_field only when the command sets a field like phone to a new value\n"
+    "- patient is always the person's name, never a treatment\n"
+    "- text is the exact words after the colon, copied verbatim\n"
+    "- description is the treatment or service, never a name\n"
+    "- take every value from the command itself, never invent one\n"
     "Command: "
 )
 
