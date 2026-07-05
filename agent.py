@@ -168,6 +168,36 @@ def add_invoice(cf, amount, description, visit_date, sorted_root=Path("sorted"))
     return row_count
 
 
+def pick_target_visit(cf, conn):
+    # most recent visit for the CF (D-11 discretion); also returns the total
+    # visit count so the confirm diff can say "most recent of N"
+    row = conn.execute(
+        "SELECT source_path, clinical_notes, visit_date FROM visits"
+        " WHERE codice_fiscale = ? ORDER BY id DESC LIMIT 1",
+        (cf,),
+    ).fetchone()
+    if row is None:
+        return None
+    count = conn.execute(
+        "SELECT COUNT(*) c FROM visits WHERE codice_fiscale = ?", (cf,)
+    ).fetchone()["c"]
+    return row["source_path"], row["clinical_notes"], row["visit_date"], count
+
+
+def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorted")):
+    # cf must be validated before any path is built (T-06-02)
+    if not CF_PATTERN.match(cf):
+        raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
+
+    json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+    note = DentalNote.model_validate_json(json_path.read_text())
+    note.clinical_notes = (note.clinical_notes + "\n" + text) if note.clinical_notes else text
+    json_path.write_text(note.model_dump_json())
+
+    upsert_note_sql(note, source_path, conn)
+    upsert_note_chroma(note, source_path, collection)
+
+
 def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_LOG):
     reply = call_model(command, urlopen)
     call = parse_tool_call(reply)
@@ -200,12 +230,27 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
         update_field(cf, "phone", args.value, conn)
 
 
-def undo_last(conn, log_path=UNDO_LOG):
+def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted")):
     lines = Path(log_path).read_text().strip().splitlines()
     entry = json.loads(lines[-1])
-    if entry["target"] == "sqlite:patients.phone":
+    target = entry["target"]
+
+    if target == "sqlite:patients.phone":
         update_field(entry["codice_fiscale"], "phone", entry["before"], conn)
         print(f"restored phone to {entry['before']} for {entry['codice_fiscale']}")
+    elif target.startswith("visit:"):
+        source_path = target[len("visit:"):]
+        cf = entry["codice_fiscale"]
+        json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+        note = DentalNote.model_validate_json(json_path.read_text())
+        note.clinical_notes = entry["before"]
+        json_path.write_text(note.model_dump_json())
+        upsert_note_sql(note, source_path, conn)
+        upsert_note_chroma(note, source_path, collection)
+        print(f"restored clinical note text for {cf}")
+    elif target.startswith("xlsx:"):
+        path = target[len("xlsx:"):]
+        print(f"cannot auto-undo an invoice row append at {path} - restore manually")
 
 
 def selftest():
