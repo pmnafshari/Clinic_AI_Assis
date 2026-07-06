@@ -514,23 +514,26 @@ def selftest():
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+    flags = [a for a in sys.argv[1:] if a.startswith("--")]
+    positional = [a for a in sys.argv[1:] if not a.startswith("--")]
+
+    if "--selftest" in flags:
         selftest()
         return
-    if len(sys.argv) > 1 and sys.argv[1] == "undo":
+    if positional and positional[0] == "undo":
         conn = init_db(DB_PATH)
         collection = get_collection("db/chroma")
         undo_last(conn, collection=collection, sorted_root=Path("sorted"))
         return
-    if len(sys.argv) < 2:
+    if not positional:
         print('usage: python agent.py "<command>" [--dry-run]  |  python agent.py undo  |  python agent.py --selftest')
         sys.exit(1)
 
-    dry_run = "--dry-run" in sys.argv
+    dry_run = "--dry-run" in flags
     conn = init_db(DB_PATH)
     collection = get_collection("db/chroma")
     try:
-        run_command(sys.argv[1], conn, dry_run, urllib.request.urlopen,
+        run_command(positional[0], conn, dry_run, urllib.request.urlopen,
                      collection=collection, sorted_root=Path("sorted"))
     except OllamaUnreachable as e:
         print(e)
