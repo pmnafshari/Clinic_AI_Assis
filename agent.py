@@ -20,7 +20,9 @@ MODEL_ID = "llama3.2:3b"  # general model prompted to emit tool JSON, not dental
 DB_PATH = "db/clinic.sqlite"
 UNDO_LOG = "db/undo_log.jsonl"
 
-EDITABLE_FIELDS = {"phone"}
+# editable field -> sqlite column; the column is always taken from here,
+# never from model output
+EDITABLE_FIELDS = {"phone": "phone"}
 INVOICE_HEADER = ["date", "amount", "description"]
 
 INTERPRETER_PROMPT = (
@@ -147,9 +149,8 @@ def confirm(input_fn=input):
 
 
 def update_field(cf, field, value, conn):
-    # field is always "phone" - whitelisted at the schema layer, never
-    # interpolated from a model-supplied column name.
-    conn.execute("UPDATE patients SET phone = ? WHERE codice_fiscale = ?", (value, cf))
+    column = EDITABLE_FIELDS[field]
+    conn.execute(f"UPDATE patients SET {column} = ? WHERE codice_fiscale = ?", (value, cf))
     conn.commit()
 
 
@@ -220,9 +221,9 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
 
     if call.tool == "update_field":
         data = lookup_patient(cf, conn)
-        current = data["phone"]
+        current = data[EDITABLE_FIELDS[args.field]]
         name = data["patient_name"]
-        print(build_diff_line("phone", current, args.value, name, cf))
+        print(build_diff_line(args.field, current, args.value, name, cf))
 
         if dry_run:
             return
@@ -235,10 +236,10 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
             "ts": datetime.now().isoformat(),
             "tool": "update_field",
             "codice_fiscale": cf,
-            "target": "sqlite:patients.phone",
+            "target": f"sqlite:patients.{args.field}",
             "before": current,
         }, log_path)
-        update_field(cf, "phone", args.value, conn)
+        update_field(cf, args.field, args.value, conn)
 
     elif call.tool == "append_note":
         target = pick_target_visit(cf, conn)
@@ -302,9 +303,13 @@ def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted
     entry = json.loads(lines[-1])
     target = entry["target"]
 
-    if target == "sqlite:patients.phone":
-        update_field(entry["codice_fiscale"], "phone", entry["before"], conn)
-        print(f"restored phone to {entry['before']} for {entry['codice_fiscale']}")
+    if target.startswith("sqlite:patients."):
+        field = target[len("sqlite:patients."):]
+        if field not in EDITABLE_FIELDS:
+            print(f"don't know how to undo target {target!r}")
+            return
+        update_field(entry["codice_fiscale"], field, entry["before"], conn)
+        print(f"restored {field} to {entry['before']} for {entry['codice_fiscale']}")
     elif target.startswith("visit:"):
         source_path = target[len("visit:"):]
         cf = entry["codice_fiscale"]
