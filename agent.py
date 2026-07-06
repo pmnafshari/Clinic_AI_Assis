@@ -316,10 +316,16 @@ def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted
         upsert_note_chroma(note, source_path, collection)
         print(f"restored clinical note text for {cf}")
     elif target.startswith("xlsx:"):
+        # D-09: invoice rows are restored by hand - print the pointer once,
+        # then drop the entry so the edits beneath it stay reachable
         xlsx_path = target[len("xlsx:"):]
         print(f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually")
     else:
         print(f"don't know how to undo target {target!r}")
+        return
+
+    rest = lines[:-1]
+    log_file.write_text("\n".join(rest) + ("\n" if rest else ""))
 
 
 def selftest():
