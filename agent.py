@@ -272,8 +272,10 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
         append_note(cf, args.text, source_path, conn, collection, sorted_root)
 
     elif call.tool == "add_invoice":
+        data = lookup_patient(cf, conn)
         visit_date = datetime.now().date().isoformat()
-        print(f"add invoice row: {visit_date} | {args.amount} | {args.description}")
+        print(f"add invoice row for {data['patient_name']} ({cf}): "
+              f"{visit_date} | {args.amount} | {args.description}")
 
         if dry_run:
             return
