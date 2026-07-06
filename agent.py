@@ -247,6 +247,12 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
             print(f"no visit on record for {cf}")
             return
         source_path, current_notes, visit_date, count = target
+        # the sqlite row and the json sibling are separately mutable - bail
+        # before the undo entry is written for an edit that can't happen
+        json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+        if not json_path.exists():
+            print(f"note file missing for this visit: {json_path} - fix the sorted tree first")
+            return
         print(f"appending to visit from {visit_date} (most recent of {count})")
 
         if dry_run:
