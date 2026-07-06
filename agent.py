@@ -291,7 +291,14 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
 
 
 def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted")):
-    lines = Path(log_path).read_text().strip().splitlines()
+    log_file = Path(log_path)
+    if not log_file.exists():
+        print("nothing to undo")
+        return
+    lines = log_file.read_text().strip().splitlines()
+    if not lines:
+        print("nothing to undo")
+        return
     entry = json.loads(lines[-1])
     target = entry["target"]
 
@@ -309,8 +316,10 @@ def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted
         upsert_note_chroma(note, source_path, collection)
         print(f"restored clinical note text for {cf}")
     elif target.startswith("xlsx:"):
-        path = target[len("xlsx:"):]
-        print(f"cannot auto-undo an invoice row append at {path} - restore manually")
+        xlsx_path = target[len("xlsx:"):]
+        print(f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually")
+    else:
+        print(f"don't know how to undo target {target!r}")
 
 
 def selftest():
