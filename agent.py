@@ -128,8 +128,10 @@ def resolve_patient(name, conn):
     if isinstance(cf, list):
         print(f"multiple patients named {name} found, candidates: {', '.join(cf)}")
         typed = input("type the codice fiscale to use: ").strip().upper()
-        if not CF_PATTERN.match(typed):
-            print("invalid codice fiscale")
+        # candidates are already CF_PATTERN-filtered in resolve_cf, so
+        # membership also guarantees a pattern-valid cf
+        if typed not in cf:
+            print("that codice fiscale is not one of the candidates")
             return None
         cf = typed
     return cf
