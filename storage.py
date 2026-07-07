@@ -7,6 +7,7 @@ from pathlib import Path
 import chromadb
 from chromadb.config import Settings
 
+from auth import authorize, log_audit
 from dental_notes_schema import DentalNote
 
 
@@ -155,16 +156,24 @@ def upsert_note_chroma(note, source_path, collection):
     )
 
 
-def load_note(note, source_path, conn, collection):
+def load_note(note, source_path, conn, collection, role, username):
+    # loading a note into sqlite/chroma is appending clinical content -
+    # gate it the same way agent.py gates a live append_note command
+    if not authorize(role, "append_note"):
+        log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=0)
+        print(f"not permitted: {role} may not load notes")
+        return
+    log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=1)
+
     upsert_note_sql(note, source_path, conn)
     upsert_note_chroma(note, source_path, collection)
 
 
-def load_from_sorted(sorted_root, conn, collection):
+def load_from_sorted(sorted_root, conn, collection, role, username):
     for json_path in sorted(Path(sorted_root).glob("*/notes/*.json")):
         note = DentalNote.model_validate_json(json_path.read_text())
         source_path = str(json_path.relative_to(sorted_root))
-        load_note(note, source_path, conn, collection)
+        load_note(note, source_path, conn, collection, role, username)
 
 
 def selftest():
@@ -295,8 +304,8 @@ def selftest():
         conn2 = init_db(db2_path)
         collection2 = get_collection(str(Path(tmp) / "chroma2"))
 
-        load_from_sorted(sorted_root, conn2, collection2)
-        load_from_sorted(sorted_root, conn2, collection2)
+        load_from_sorted(sorted_root, conn2, collection2, role="dentist", username="test-dentist")
+        load_from_sorted(sorted_root, conn2, collection2, role="dentist", username="test-dentist")
 
         p_count = conn2.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
         v_count = conn2.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"]
@@ -315,6 +324,25 @@ def selftest():
             assert len(hits["ids"]) == 1, f"6: chroma missing chunk for {cf_}"
             assert hits["metadatas"][0]["codice_fiscale"] == cf_, \
                 f"6: chroma metadata CF mismatch for {cf_}"
+
+        # 6b. a role without append_note (admin, D-01) writes nothing when
+        # loading the same tree, and every attempted note is denied + audited
+        db3_path = str(Path(tmp) / "clinic3.sqlite")
+        conn3 = init_db(db3_path)
+        collection3 = get_collection(str(Path(tmp) / "chroma3"))
+
+        load_from_sorted(sorted_root, conn3, collection3, role="admin", username="test-admin")
+
+        p_count3 = conn3.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
+        v_count3 = conn3.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"]
+        assert p_count3 == 0, f"6b: expected 0 patients loaded as admin, got {p_count3}"
+        assert v_count3 == 0, f"6b: expected 0 visits loaded as admin, got {v_count3}"
+        assert collection3.count() == 0, f"6b: expected 0 chroma chunks loaded as admin, got {collection3.count()}"
+
+        denied_rows = conn3.execute(
+            "SELECT * FROM audit_log WHERE action = 'append_note' AND allowed = 0"
+        ).fetchall()
+        assert len(denied_rows) == 2, f"6b: expected 2 denied append_note rows, got {len(denied_rows)}"
 
         # 7. re-importing a note whose invoice list shrank drops the stale rows,
         # so lookup never returns invoice amounts that no longer exist
@@ -355,10 +383,17 @@ def main():
         selftest()
         return
 
+    from cli_session import read_session
+
+    session = read_session()
+    if session is None:
+        print("not logged in - run: python cli_session.py login")
+        return
+
     Path("db").mkdir(exist_ok=True)
     conn = init_db("db/clinic.sqlite")
     collection = get_collection("db/chroma")
-    load_from_sorted(Path("sorted"), conn, collection)
+    load_from_sorted(Path("sorted"), conn, collection, session["role"], session["username"])
 
     patients = conn.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
     print(f"loaded {patients} patients, {collection.count()} chroma chunks")
