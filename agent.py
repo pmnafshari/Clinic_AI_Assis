@@ -10,6 +10,8 @@ import openpyxl
 from pydantic import BaseModel, field_validator
 
 from ask import resolve_cf
+from auth import authorize, log_audit
+from cli_session import read_session
 from dental_notes_schema import CF_PATTERN, DentalNote
 from extract_note import OllamaUnreachable, extract_json
 from storage import get_collection, init_db, lookup_patient, upsert_note_chroma, upsert_note_sql
@@ -209,11 +211,16 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
     upsert_note_chroma(note, source_path, collection)
 
 
-def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_LOG,
+def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input, log_path=UNDO_LOG,
                  collection=None, sorted_root=Path("sorted")):
     reply = call_model(command, urlopen)
     call = parse_tool_call(reply)
     args = call.parsed_args()
+
+    if not authorize(role, call.tool):
+        log_audit(conn, username, role, call.tool, target=args.patient, allowed=0)
+        print(f"not permitted: {role} may not {call.tool}")
+        return
 
     cf = resolve_patient(args.patient, conn)
     if cf is None:
@@ -239,6 +246,7 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
             "target": f"sqlite:patients.{args.field}",
             "before": current,
         }, log_path)
+        log_audit(conn, username, role, call.tool, target=cf, allowed=1)
         update_field(cf, args.field, args.value, conn)
 
     elif call.tool == "append_note":
@@ -269,6 +277,7 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
             "target": f"visit:{source_path}",
             "before": current_notes,
         }, log_path)
+        log_audit(conn, username, role, call.tool, target=cf, allowed=1)
         append_note(cf, args.text, source_path, conn, collection, sorted_root)
 
     elif call.tool == "add_invoice":
@@ -296,6 +305,7 @@ def run_command(command, conn, dry_run, urlopen, input_fn=input, log_path=UNDO_L
             "target": f"xlsx:{xlsx_path}",
             "before": before,
         }, log_path)
+        log_audit(conn, username, role, call.tool, target=cf, allowed=1)
         add_invoice(cf, args.amount, args.description, visit_date, sorted_root)
 
 
@@ -376,22 +386,54 @@ def selftest():
 
         # a. --dry-run leaves the phone unchanged and writes no log line
         run_command("update rossi's phone to 333-1234", conn, True, fake_urlopen,
+                    role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "dry-run must not write"
         assert not Path(log_path).exists(), "dry-run must not touch the undo log"
 
         # b. a declined confirm writes nothing
         run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+                     role="dentist", username="test-dentist",
                      input_fn=lambda p: "n", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "declined confirm must not write"
         assert not Path(log_path).exists(), "declined confirm must not write the undo log"
 
         # c. a confirmed run writes the new phone and exactly one undo-log line
         run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+                    role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333-1234", "confirmed run must write the new value"
         lines = Path(log_path).read_text().strip().splitlines()
         assert len(lines) == 1, f"expected 1 undo-log line, got {len(lines)}"
+
+        allowed_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'update_field' AND allowed = 1"
+        ).fetchall()
+        assert len(allowed_rows) == 1, \
+            f"confirmed dentist write should log exactly 1 allowed row, got {len(allowed_rows)}"
+        assert allowed_rows[0]["username"] == "test-dentist", "allowed row should carry the acting username"
+        assert allowed_rows[0]["target"] == cf, "allowed row target should be the cf"
+
+        # c2. an unauthorized role is denied: phone stays unchanged, no new undo
+        # line, and exactly one denied audit_log row is recorded (RBAC-05, AUDIT-01)
+        lines_before_denial = len(Path(log_path).read_text().strip().splitlines())
+        run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+                    role="assistant", username="test-assistant",
+                    input_fn=lambda p: "y", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "333-1234", "denied role must not change the phone"
+        assert len(Path(log_path).read_text().strip().splitlines()) == lines_before_denial, \
+            "denied role must not add an undo-log line"
+        denied_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'update_field' AND allowed = 0"
+        ).fetchall()
+        assert len(denied_rows) == 1, f"denied update_field should log exactly 1 row, got {len(denied_rows)}"
+
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE allowed = 1"
+        ).fetchone()["c"] >= 1, "expected at least one allowed=1 audit row"
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE allowed = 0"
+        ).fetchone()["c"] >= 1, "expected at least one allowed=0 audit row"
 
         # d. undo restores the before-image
         undo_last(conn, log_path)
@@ -452,6 +494,7 @@ def selftest():
         # f. append_note dry-run leaves sqlite/json/chroma unchanged and adds no undo line
         lines_before = len(Path(log_path).read_text().strip().splitlines())
         run_command("add a note that follow-up done for rossi", conn, True, fake_urlopen_append,
+                    role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path,
                     collection=collection, sorted_root=sorted_root)
         row = conn.execute(
@@ -465,6 +508,7 @@ def selftest():
 
         # g. a confirmed append updates sqlite + json + chroma and adds one undo line
         run_command("add a note that follow-up done for rossi", conn, False, fake_urlopen_append,
+                    role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path,
                     collection=collection, sorted_root=sorted_root)
         row = conn.execute(
@@ -507,6 +551,7 @@ def selftest():
 
         # i. add_invoice dry-run creates no xlsx file
         run_command("add an invoice for rossi for cleaning 80", conn, True, fake_urlopen_invoice,
+                    role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path,
                     collection=collection, sorted_root=sorted_root)
         assert not xlsx_path.exists(), "add_invoice dry-run must not create the xlsx file"
@@ -514,6 +559,7 @@ def selftest():
         # j. a confirmed add_invoice creates invoices.xlsx with a header row and one data row
         lines_before = len(Path(log_path).read_text().strip().splitlines())
         run_command("add an invoice for rossi for cleaning 80", conn, False, fake_urlopen_invoice,
+                    role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path,
                     collection=collection, sorted_root=sorted_root)
         assert xlsx_path.exists(), "confirmed add_invoice must create the xlsx file"
@@ -542,11 +588,17 @@ def main():
         print('usage: python agent.py "<command>" [--dry-run]  |  python agent.py undo  |  python agent.py --selftest')
         sys.exit(1)
 
+    session = read_session()
+    if session is None:
+        print("not logged in - run: python cli_session.py login")
+        sys.exit(1)
+
     dry_run = "--dry-run" in flags
     conn = init_db(DB_PATH)
     collection = get_collection("db/chroma")
     try:
         run_command(positional[0], conn, dry_run, urllib.request.urlopen,
+                     session["role"], session["username"],
                      collection=collection, sorted_root=Path("sorted"))
     except OllamaUnreachable as e:
         print(e)
