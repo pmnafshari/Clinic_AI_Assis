@@ -38,6 +38,22 @@ def init_db(db_path):
             description TEXT,
             UNIQUE(visit_id, line_index)
         );
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL CHECK(role IN ('dentist', 'assistant', 'admin')),
+            active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts TEXT NOT NULL,
+            username TEXT NOT NULL,
+            role TEXT NOT NULL,
+            action TEXT NOT NULL,
+            target TEXT,
+            allowed INTEGER NOT NULL
+        );
     """)
     conn.commit()
     return conn
@@ -164,6 +180,8 @@ def selftest():
         assert "patients" in tables, "1: patients table missing"
         assert "visits" in tables, "1: visits table missing"
         assert "invoices" in tables, "1: invoices table missing"
+        assert "users" in tables, "1: users table missing"
+        assert "audit_log" in tables, "1: audit_log table missing"
 
         fk_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
         assert fk_on == 1, "1: foreign_keys pragma not ON"
@@ -174,6 +192,16 @@ def selftest():
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
         assert tables2 == tables, "1: re-init changed table set"
+
+        # users.role is DB-enforced to exactly the three fixed roles
+        try:
+            conn.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+                ("nurse_joe", "hash", "nurse"),
+            )
+            raise AssertionError("1: users.role accepted a role outside the fixed set")
+        except sqlite3.IntegrityError:
+            pass
 
         # 2. loading a note twice with the same source_path is idempotent
         cf = "MRRS800010150100"
