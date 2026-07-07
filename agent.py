@@ -309,7 +309,7 @@ def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input,
         add_invoice(cf, args.amount, args.description, visit_date, sorted_root)
 
 
-def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted")):
+def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted")):
     log_file = Path(log_path)
     if not log_file.exists():
         print("nothing to undo")
@@ -320,17 +320,37 @@ def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted
         return
     entry = json.loads(lines[-1])
     target = entry["target"]
+    cf = entry["codice_fiscale"]
 
+    # figure out which action this restore needs before touching anything -
+    # an unknown or invalid target is a graceful no-op, never authorized
     if target.startswith("sqlite:patients."):
         field = target[len("sqlite:patients."):]
         if field not in EDITABLE_FIELDS:
             print(f"don't know how to undo target {target!r}")
             return
-        update_field(entry["codice_fiscale"], field, entry["before"], conn)
-        print(f"restored {field} to {entry['before']} for {entry['codice_fiscale']}")
+        action = "update_field"
     elif target.startswith("visit:"):
+        # undoing an append rewrites existing note content - that's an edit,
+        # not a fresh append, so an assistant (append-only, D-04) can't do it
+        action = "edit_note"
+    elif target.startswith("xlsx:"):
+        action = "add_invoice"
+    else:
+        print(f"don't know how to undo target {target!r}")
+        return
+
+    if not authorize(role, action):
+        log_audit(conn, username, role, action, target=cf, allowed=0)
+        print(f"not permitted: {role} may not undo {action}")
+        return
+    log_audit(conn, username, role, action, target=cf, allowed=1)
+
+    if action == "update_field":
+        update_field(cf, field, entry["before"], conn)
+        print(f"restored {field} to {entry['before']} for {cf}")
+    elif action == "edit_note":
         source_path = target[len("visit:"):]
-        cf = entry["codice_fiscale"]
         json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
         note = DentalNote.model_validate_json(json_path.read_text())
         note.clinical_notes = entry["before"]
@@ -338,14 +358,11 @@ def undo_last(conn, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted
         upsert_note_sql(note, source_path, conn)
         upsert_note_chroma(note, source_path, collection)
         print(f"restored clinical note text for {cf}")
-    elif target.startswith("xlsx:"):
+    elif action == "add_invoice":
         # D-09: invoice rows are restored by hand - print the pointer once,
         # then drop the entry so the edits beneath it stay reachable
         xlsx_path = target[len("xlsx:"):]
         print(f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually")
-    else:
-        print(f"don't know how to undo target {target!r}")
-        return
 
     rest = lines[:-1]
     log_file.write_text("\n".join(rest) + ("\n" if rest else ""))
@@ -436,8 +453,47 @@ def selftest():
         ).fetchone()["c"] >= 1, "expected at least one allowed=0 audit row"
 
         # d. undo restores the before-image
-        undo_last(conn, log_path)
+        undo_last(conn, role="dentist", username="test-dentist", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "undo must restore the original phone"
+
+        # d2. the undo command is itself a gated write path: an unauthorized
+        # role is denied (no mutation, entry not consumed) and an authorized
+        # role restores the value and consumes the entry (T-07-14)
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "update_field",
+            "codice_fiscale": cf,
+            "target": "sqlite:patients.phone",
+            "before": "555-0000",
+        }, log_path)
+
+        denied_before = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 0"
+        ).fetchone()["c"]
+        undo_last(conn, role="admin", username="test-admin", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "333 9999999", "denied undo must not restore the phone"
+        assert len(Path(log_path).read_text().strip().splitlines()) == 1, \
+            "denied undo must leave the undo-log entry intact"
+        denied_after = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 0"
+        ).fetchone()["c"]
+        assert denied_after == denied_before + 1, "denied undo should add exactly one denied audit row"
+
+        allowed_before = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 1"
+        ).fetchone()["c"]
+        undo_last(conn, role="dentist", username="test-dentist", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "555-0000", "allowed undo must restore the before-value"
+        assert Path(log_path).read_text().strip() == "", "allowed undo must consume the undo-log entry"
+        last_allowed = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'update_field' AND allowed = 1 ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        allowed_after = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 1"
+        ).fetchone()["c"]
+        assert allowed_after == allowed_before + 1, "allowed undo should add exactly one allowed audit row"
+        assert last_allowed["username"] == "test-dentist", "allowed undo row should carry the acting username"
+        assert last_allowed["target"] == cf, "allowed undo row target should be the cf"
 
         # e. invalid tool JSON and unreachable Ollama are rejected cleanly
         try:
@@ -522,13 +578,52 @@ def selftest():
             "confirmed append must add exactly one undo line"
 
         # h. undo restores the original clinical note text through the same sync
-        undo_last(conn, log_path, collection=collection, sorted_root=sorted_root)
+        undo_last(conn, role="dentist", username="test-dentist", log_path=log_path,
+                  collection=collection, sorted_root=sorted_root)
         row = conn.execute(
             "SELECT clinical_notes FROM visits WHERE source_path = ?", (source_path,)
         ).fetchone()
         assert row["clinical_notes"] == "initial note", "undo must restore the sqlite note text"
         jf = DentalNote.model_validate_json((notes_dir / "n1.json").read_text())
         assert jf.clinical_notes == "initial note", "undo must restore the json note text"
+
+        # h2. a visit undo is gated on edit_note, not append_note - an
+        # assistant (append-only, D-04) is denied; a dentist is allowed
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "append_note",
+            "codice_fiscale": cf,
+            "target": f"visit:{source_path}",
+            "before": "placeholder before-text",
+        }, log_path)
+
+        undo_last(conn, role="assistant", username="test-assistant", log_path=log_path,
+                  collection=collection, sorted_root=sorted_root)
+        row = conn.execute(
+            "SELECT clinical_notes FROM visits WHERE source_path = ?", (source_path,)
+        ).fetchone()
+        assert row["clinical_notes"] == "initial note", "assistant undo must not touch the note text"
+        assert len(Path(log_path).read_text().strip().splitlines()) == 1, \
+            "denied visit undo must leave the undo-log entry intact"
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'edit_note' AND allowed = 0"
+        ).fetchone()["c"] == 1, "denied visit undo should log exactly 1 denied edit_note row"
+
+        allowed_edit_before = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'edit_note' AND allowed = 1"
+        ).fetchone()["c"]
+        undo_last(conn, role="dentist", username="test-dentist", log_path=log_path,
+                  collection=collection, sorted_root=sorted_root)
+        row = conn.execute(
+            "SELECT clinical_notes FROM visits WHERE source_path = ?", (source_path,)
+        ).fetchone()
+        assert row["clinical_notes"] == "placeholder before-text", "dentist undo must restore the note text"
+        assert Path(log_path).read_text().strip() == "", "allowed visit undo must consume the undo-log entry"
+        allowed_edit_after = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'edit_note' AND allowed = 1"
+        ).fetchone()["c"]
+        assert allowed_edit_after == allowed_edit_before + 1, \
+            "allowed visit undo should add exactly one allowed edit_note row"
 
         def fake_urlopen_invoice(req, timeout=120):
             class FakeResponse:
@@ -580,9 +675,14 @@ def main():
         selftest()
         return
     if positional and positional[0] == "undo":
+        session = read_session()
+        if session is None:
+            print("not logged in - run: python cli_session.py login")
+            sys.exit(1)
         conn = init_db(DB_PATH)
         collection = get_collection("db/chroma")
-        undo_last(conn, collection=collection, sorted_root=Path("sorted"))
+        undo_last(conn, session["role"], session["username"],
+                   collection=collection, sorted_root=Path("sorted"))
         return
     if not positional:
         print('usage: python agent.py "<command>" [--dry-run]  |  python agent.py undo  |  python agent.py --selftest')
