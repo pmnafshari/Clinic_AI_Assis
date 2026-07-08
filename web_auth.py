@@ -32,13 +32,15 @@ def attempt_login(username, password, conn, now=None):
     role = verify_credentials(username, password, conn)
     if role is None:
         if row is not None:
-            attempts = row["failed_attempts"] + 1
-            locked_until = row["locked_until"]
-            if attempts >= LOCKOUT_THRESHOLD:
-                locked_until = (now + timedelta(minutes=LOCKOUT_COOLDOWN_MINUTES)).isoformat()
+            # increment in SQL, not python - concurrent failed logins run on
+            # separate connections under threaded=True and must not lose counts
+            lock_ts = (now + timedelta(minutes=LOCKOUT_COOLDOWN_MINUTES)).isoformat()
             conn.execute(
-                "UPDATE users SET failed_attempts = ?, locked_until = ? WHERE username = ?",
-                (attempts, locked_until, username),
+                "UPDATE users SET failed_attempts = failed_attempts + 1,"
+                " locked_until = CASE WHEN failed_attempts + 1 >= ?"
+                " THEN ? ELSE locked_until END"
+                " WHERE username = ?",
+                (LOCKOUT_THRESHOLD, lock_ts, username),
             )
             conn.commit()
         log_audit(conn, username, "unknown", "login", None, allowed=0)
@@ -117,6 +119,29 @@ def selftest():
         allowed_flags = [r["allowed"] for r in rows]
         assert allowed_flags == [1, 0, 0, 0, 0, 0, 0, 1], \
             f"6: unexpected audit allowed sequence {allowed_flags}"
+
+        # 7. the increment is atomic in SQL - a concurrent failed login landing
+        # between attempt_login's read and its write must not be lost
+        real_verify = globals()["verify_credentials"]
+
+        def racing_verify(u, p, c):
+            # simulate a parallel request failing mid-flight
+            c.execute(
+                "UPDATE users SET failed_attempts = failed_attempts + 1 WHERE username = ?", (u,)
+            )
+            c.commit()
+            return real_verify(u, p, c)
+
+        globals()["verify_credentials"] = racing_verify
+        try:
+            attempt_login("drossi", "wrongpass", conn)
+        finally:
+            globals()["verify_credentials"] = real_verify
+        attempts = conn.execute(
+            "SELECT failed_attempts FROM users WHERE username = ?", ("drossi",)
+        ).fetchone()["failed_attempts"]
+        assert attempts == 2, \
+            f"7: expected both increments to count (2), got {attempts} - lost update"
 
     print("selftest ok")
 
