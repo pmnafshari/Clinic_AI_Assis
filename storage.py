@@ -55,9 +55,26 @@ def init_db(db_path):
             target TEXT,
             allowed INTEGER NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            role TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
+        );
     """)
+    _ensure_lockout_columns(conn)
     conn.commit()
     return conn
+
+
+def _ensure_lockout_columns(conn):
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(users)").fetchall()}
+    if "failed_attempts" not in existing:
+        conn.execute("ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0")
+    if "locked_until" not in existing:
+        conn.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
 
 
 def upsert_note_sql(note, source_path, conn):
@@ -191,6 +208,7 @@ def selftest():
         assert "invoices" in tables, "1: invoices table missing"
         assert "users" in tables, "1: users table missing"
         assert "audit_log" in tables, "1: audit_log table missing"
+        assert "sessions" in tables, "1: sessions table missing"
 
         fk_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
         assert fk_on == 1, "1: foreign_keys pragma not ON"
@@ -201,6 +219,15 @@ def selftest():
             "SELECT name FROM sqlite_master WHERE type='table'"
         )}
         assert tables2 == tables, "1: re-init changed table set"
+
+        # users table gained the lockout columns, and the migration is idempotent
+        user_columns = {row["name"] for row in conn2.execute("PRAGMA table_info(users)")}
+        assert "failed_attempts" in user_columns, "1: failed_attempts column missing"
+        assert "locked_until" in user_columns, "1: locked_until column missing"
+
+        _ensure_lockout_columns(conn2)
+        user_columns_again = {row["name"] for row in conn2.execute("PRAGMA table_info(users)")}
+        assert user_columns_again == user_columns, "1: re-running lockout migration changed columns"
 
         # users.role is DB-enforced to exactly the three fixed roles
         try:
