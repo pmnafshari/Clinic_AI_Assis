@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <h1>Dashboard</h1>
+  <p>Logged in as <strong>{{ user.username }}</strong> ({{ user.role }})</p>
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit">log out</button>
+  </form>
+</div>
+{% endblock %}
