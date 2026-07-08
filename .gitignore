@@ -2,6 +2,7 @@
 .planning/
 CLAUDE.md
 .claude/
+.env
 
 # python
 __pycache__/
