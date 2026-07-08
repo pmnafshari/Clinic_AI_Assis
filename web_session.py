@@ -34,8 +34,11 @@ def load_session(conn, token, now=None):
         now = datetime.now()
 
     token_hash = _hash_token(token)
+    # join users so deactivating an account also kills its live sessions
     row = conn.execute(
-        "SELECT username, role, last_seen_at FROM sessions WHERE token_hash = ?",
+        "SELECT s.username, s.role, s.last_seen_at FROM sessions s"
+        " JOIN users u ON u.username = s.username"
+        " WHERE s.token_hash = ? AND u.active = 1",
         (token_hash,),
     ).fetchone()
     if row is None:
@@ -66,6 +69,17 @@ def selftest():
 
     with tempfile.TemporaryDirectory() as tmp:
         conn = init_db(str(Path(tmp) / "clinic.sqlite"))
+
+        # load_session joins users, so the accounts must exist and be active
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, active) VALUES (?, ?, ?, ?)",
+            ("drossi", "x", "dentist", 1),
+        )
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, active) VALUES (?, ?, ?, ?)",
+            ("aassist", "x", "assistant", 1),
+        )
+        conn.commit()
 
         # 1. create_session returns a raw token that is not stored literally
         token = create_session(conn, "drossi", "dentist")
@@ -105,6 +119,14 @@ def selftest():
         destroy_session(conn, token2)
         assert load_session(conn, token2) is None, \
             "6: destroyed session should not be loadable"
+
+        # 7. deactivating a user rejects their live session immediately
+        token3 = create_session(conn, "drossi", "dentist")
+        assert load_session(conn, token3) is not None, "7: fresh session should load"
+        conn.execute("UPDATE users SET active = 0 WHERE username = ?", ("drossi",))
+        conn.commit()
+        assert load_session(conn, token3) is None, \
+            "7: session for a deactivated user must be rejected"
 
     print("selftest ok")
 
