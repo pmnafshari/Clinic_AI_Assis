@@ -10,6 +10,10 @@ def load_secret_key(env_path=Path(".env")):
         env_path.parent.mkdir(parents=True, exist_ok=True)
         env_path.write_text(f"SECRET_KEY={key}\n")
 
+    # owner-only - the key signs session cookies, keep it off other accounts.
+    # applied on every load so a pre-existing loose file gets tightened too.
+    env_path.chmod(0o600)
+
     for line in env_path.read_text().splitlines():
         if line.startswith("SECRET_KEY="):
             return line.split("=", 1)[1].strip()
@@ -28,10 +32,16 @@ def selftest():
         assert env_path.exists(), "1: load_secret_key did not create the env file"
         assert len(key) == 64, f"1: expected a 64-hex-char key, got length {len(key)}"
         int(key, 16)  # raises ValueError if not hex
+        mode = env_path.stat().st_mode & 0o777
+        assert mode == 0o600, f"1: expected 0600 permissions on .env, got {oct(mode)}"
 
-        # 2. second call returns the identical key - stable across restarts
+        # 2. second call returns the identical key - stable across restarts -
+        # and tightens a loosened file back to owner-only
+        env_path.chmod(0o644)
         key_again = load_secret_key(env_path)
         assert key_again == key, "2: second call returned a different key"
+        mode = env_path.stat().st_mode & 0o777
+        assert mode == 0o600, f"2: loose permissions should be tightened, got {oct(mode)}"
 
         # 3. a file with no SECRET_KEY line raises RuntimeError
         bad_path = Path(tmp) / "bad.env"
