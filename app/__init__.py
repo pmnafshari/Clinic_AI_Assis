@@ -7,7 +7,7 @@ import web_session
 from env_config import load_secret_key
 from storage import init_db
 
-from .db import DB_PATH, close_db, get_db
+from . import db
 
 WHITELIST_ENDPOINTS = {"static", "auth.login"}
 
@@ -20,10 +20,12 @@ def create_app():
 
     CSRFProtect(app)
 
-    Path("db").mkdir(exist_ok=True)
-    conn = init_db(DB_PATH)
+    # read db.DB_PATH at call time (not imported by value) so a selftest
+    # can point create_app() at a temp db by patching app.db.DB_PATH
+    Path(db.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    conn = init_db(db.DB_PATH)
     conn.close()
-    close_db(app)
+    db.close_db(app)
 
     from .auth_routes import auth_bp
     from .dashboard_routes import dashboard_bp
@@ -37,7 +39,7 @@ def create_app():
         if request.endpoint in WHITELIST_ENDPOINTS:
             return
         token = request.cookies.get(web_session.COOKIE_NAME)
-        user = web_session.load_session(get_db(), token) if token else None
+        user = web_session.load_session(db.get_db(), token) if token else None
         if user is None:
             return redirect(url_for("auth.login"))
         g.user = user
