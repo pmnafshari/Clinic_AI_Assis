@@ -16,6 +16,10 @@ env/
 # intermediate dataset generation output
 notes_raw.jsonl
 
+# runtime output
+log.txt
+sorted/
+
 # models and data (large / private)
 models/
 db/
