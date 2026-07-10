@@ -24,12 +24,12 @@ def check_glossary_loads():
 def check_schema_instantiates():
     note = DentalNote(
         patient_name="mario rossi",
-        codice_fiscale="RSSMRA80A01H501U",
+        codice_fiscale="RSSM800010150100",
         phone="333 1234567",
         visit_date="2026-06-22",
         procedures=["rct 26"],
         invoices=[{"description": "scaling", "amount": 50.0}],
-        notes_text="mild caries on 27, follow up in 2 weeks",
+        clinical_notes="mild caries on 27",
     )
     print("ok - valid note instantiated for", note.patient_name)
 
