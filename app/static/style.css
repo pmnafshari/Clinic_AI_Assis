@@ -57,3 +57,29 @@ button:hover {
   color: #c53030;
   font-size: 0.9rem;
 }
+
+.answer {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #1a1a1a;
+}
+
+.hint {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666;
+}
+
+.candidates {
+  margin-top: 16px;
+}
+
+.candidates label {
+  display: block;
+  margin-top: 8px;
+  font-size: 14px;
+}
