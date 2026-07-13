@@ -52,12 +52,21 @@ def new_note():
     # step 2: confirm POST - re-validate the (possibly staff-corrected) fields,
     # never re-call extract_note (D-04's "no re-derivation" applies here too)
     try:
+        invoices = [
+            {"amount": amount, "description": description}
+            for amount, description in zip(
+                request.form.getlist("invoice_amount"),
+                request.form.getlist("invoice_description"),
+            )
+        ]
         note = DentalNote(
             patient_name=request.form["patient_name"],
             codice_fiscale=request.form["codice_fiscale"],
             phone=request.form.get("phone") or None,
+            visit_date=request.form.get("visit_date") or None,
             clinical_notes=request.form.get("clinical_notes", ""),
             procedures=[p.strip() for p in request.form.get("procedures", "").split(",") if p.strip()],
+            invoices=invoices,
             next_appointment=request.form.get("next_appointment") or None,
         )
     except Exception as e:

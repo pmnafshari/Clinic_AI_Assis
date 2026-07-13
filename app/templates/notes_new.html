@@ -21,12 +21,25 @@
     <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}">
     <label for="phone">phone</label>
     <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}">
+    <label for="visit_date">visit date</label>
+    <input type="text" id="visit_date" name="visit_date" value="{{ preview.visit_date or '' }}">
     <label for="clinical_notes">clinical notes</label>
     <input type="text" id="clinical_notes" name="clinical_notes" value="{{ preview.clinical_notes }}">
     <label for="procedures">procedures</label>
     <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}">
     <label for="next_appointment">next appointment</label>
     <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}">
+    {% if preview.invoices %}
+    <p>invoices</p>
+    <ul class="invoice-list">
+      {% for inv in preview.invoices %}
+      <li>{{ inv.amount }} - {{ inv.description }}
+        <input type="hidden" name="invoice_amount" value="{{ inv.amount }}">
+        <input type="hidden" name="invoice_description" value="{{ inv.description }}">
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     <button type="submit">Save note</button>
   </form>
   {% endif %}

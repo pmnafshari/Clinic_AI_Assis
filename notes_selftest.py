@@ -47,9 +47,9 @@ def fake_urlopen(req, timeout=120):
                 "patient_name": "paolo lilli",
                 "codice_fiscale": FAKE_CF,
                 "phone": "333123456",
-                "visit_date": None,
+                "visit_date": "2026-06-01",
                 "procedures": ["cleaning"],
-                "invoices": [],
+                "invoices": [{"amount": 250.0, "description": "rct 26"}],
                 "clinical_notes": "routine checkup",
                 "next_appointment": "6m",
             }
@@ -102,6 +102,9 @@ def selftest():
         assert 'value="paolo lilli"' in paste_resp.text, "preview should show extracted patient name"
         assert f'value="{FAKE_CF}"' in paste_resp.text, "preview should show extracted codice fiscale"
         assert 'name="patient_name"' in paste_resp.text, "preview form fields should be editable inputs"
+        assert 'value="2026-06-01"' in paste_resp.text, "preview should show the extracted visit date"
+        assert 'name="invoice_amount"' in paste_resp.text, "preview should carry the extracted invoice"
+        assert "rct 26" in paste_resp.text, "preview should show the invoice description"
 
         assert not (Path(tmp) / "sorted" / FAKE_CF).exists(), "no write should happen before confirm"
 
@@ -112,8 +115,11 @@ def selftest():
                 "patient_name": "paolo lilli",
                 "codice_fiscale": FAKE_CF,
                 "phone": "333999999",  # staff-corrected phone
+                "visit_date": "2026-06-01",
                 "clinical_notes": "routine checkup",
                 "procedures": "cleaning",
+                "invoice_amount": "250.0",
+                "invoice_description": "rct 26",
                 "next_appointment": "6m",
                 "csrf_token": csrf_preview,
             },
@@ -123,6 +129,11 @@ def selftest():
 
         note_files = list((Path(tmp) / "sorted" / FAKE_CF / "notes").glob("web-*.json"))
         assert len(note_files) == 1, f"expected 1 web-*.json file, got {len(note_files)}"
+
+        stored = json.loads(note_files[0].read_text())
+        assert stored["visit_date"] == "2026-06-01", "saved json should keep the extracted visit date"
+        assert stored["invoices"] == [{"amount": 250.0, "description": "rct 26"}], \
+            "saved json should keep the extracted invoice"
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
