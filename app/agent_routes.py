@@ -119,10 +119,17 @@ def confirm_change():
     # security boundary is the independent check inside apply_pending_action
     # itself (SC4), which runs either way and is what audits the denial
     allowed = authorize(g.user["role"], pending["tool"])
-    agent.apply_pending_action(
-        pending, get_db(), g.user["role"], g.user["username"],
-        log_path=UNDO_LOG, collection=_collection(),
-    )
+    try:
+        agent.apply_pending_action(
+            pending, get_db(), g.user["role"], g.user["username"],
+            log_path=UNDO_LOG, collection=_collection(),
+        )
+    except (OSError, ValueError):
+        # e.g. the note file vanished during the confirm window
+        return render_template(
+            "agent_confirm.html",
+            error="This change can no longer be applied. Review and rebuild it.",
+        )
 
     if not allowed:
         return render_template(

@@ -301,6 +301,18 @@ def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
         print(f"not permitted: {role} may not {pending['tool']}")
         return
 
+    # mutate first - if the apply blows up (e.g. the note file vanished
+    # during the confirm window) there must be no phantom undo entry or
+    # audit row claiming a change that never happened
+    args = pending["args"]
+    if pending["tool"] == "update_field":
+        update_field(pending["cf"], args["field"], args["value"], conn)
+    elif pending["tool"] == "append_note":
+        source_path = pending["target"][len("visit:"):]
+        append_note(pending["cf"], args["text"], source_path, conn, collection, sorted_root)
+    elif pending["tool"] == "add_invoice":
+        add_invoice(pending["cf"], args["amount"], args["description"], args["visit_date"], sorted_root)
+
     write_undo_entry({
         "ts": datetime.now().isoformat(),
         "tool": pending["tool"],
@@ -310,15 +322,6 @@ def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
         "username": username,
     }, log_path)
     log_audit(conn, username, role, pending["tool"], target=pending["cf"], allowed=1)
-
-    args = pending["args"]
-    if pending["tool"] == "update_field":
-        update_field(pending["cf"], args["field"], args["value"], conn)
-    elif pending["tool"] == "append_note":
-        source_path = pending["target"][len("visit:"):]
-        append_note(pending["cf"], args["text"], source_path, conn, collection, sorted_root)
-    elif pending["tool"] == "add_invoice":
-        add_invoice(pending["cf"], args["amount"], args["description"], args["visit_date"], sorted_root)
 
 
 def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input, log_path=UNDO_LOG,
