@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card-wide">
+  <h1>Edit a record</h1>
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('agent.edit_page') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="patient">patient</label>
+    <input type="text" id="patient" name="patient" value="{{ patient or '' }}" autofocus>
+    <label for="field">field</label>
+    <select id="field" name="field">
+      {% for f in fields %}
+      <option value="{{ f }}" {% if f == field %}selected{% endif %}>{{ f }}</option>
+      {% endfor %}
+    </select>
+    <label for="value">new value</label>
+    <input type="text" id="value" name="value" value="{{ value or '' }}">
+    <button type="submit">Preview change</button>
+  </form>
+</div>
+{% endblock %}

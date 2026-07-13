@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card-wide">
+  <h1>Confirm change</h1>
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  <p><a href="{{ url_for('dashboard.index') }}">Back to dashboard</a></p>
+  {% else %}
+  <p class="diff-line"><strong>{{ diff_line }}</strong></p>
+  <form method="post" action="{{ url_for('agent.confirm_change') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <button type="submit">Confirm change</button>
+  </form>
+  <p><a href="{{ url_for('dashboard.index') }}">Discard change</a></p>
+  {% endif %}
+</div>
+{% endblock %}
