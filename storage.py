@@ -1,7 +1,7 @@
 import json
 import sqlite3
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import chromadb
@@ -190,6 +190,27 @@ def load_note(note, source_path, conn, collection, role, username):
         return
     log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=1)
 
+    upsert_note_sql(note, source_path, conn)
+    upsert_note_chroma(note, source_path, collection)
+
+
+def save_new_note(note, conn, collection, role, username, sorted_root=Path("sorted")):
+    # web-entered note, gated the same way a watcher-loaded note is
+    if not authorize(role, "append_note"):
+        log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=0)
+        print(f"not permitted: {role} may not add notes")
+        return
+    log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=1)
+
+    # write the json file first - load_note/load_from_sorted assume it already
+    # exists on disk, and this keeps a web-entered note indistinguishable from
+    # a watcher-sorted one (same sorted/{cf}/notes tree, same file shape)
+    filename = "web-" + datetime.now().isoformat().replace(":", "") + ".json"
+    json_path = Path(sorted_root) / note.codice_fiscale / "notes" / filename
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(note.model_dump_json())
+
+    source_path = str(json_path.relative_to(sorted_root))
     upsert_note_sql(note, source_path, conn)
     upsert_note_chroma(note, source_path, collection)
 
@@ -410,6 +431,40 @@ def selftest():
         assert after_count == 1, f"7: expected 1 invoice after shrink re-import, got {after_count}"
         assert lookup_patient(cf3, conn)["invoices"] == [{"amount": 10.0, "description": "a"}], \
             "7: lookup returned phantom invoices after shrink re-import"
+
+        # 8. save_new_note: authorized role writes a web-*.json file under
+        # sorted/{cf}/notes/ AND a queryable sqlite row
+        cf4 = "PLLM900010150400"
+        note4 = DentalNote(
+            patient_name="paolo lilli",
+            codice_fiscale=cf4,
+            visit_date=date(2026, 7, 1),
+            clinical_notes="checkup done",
+        )
+        save_new_note(note4, conn, collection, "dentist", "test-dentist", sorted_root=sorted_root)
+
+        note4_files = list((sorted_root / cf4 / "notes").glob("web-*.json"))
+        assert len(note4_files) == 1, f"8: expected 1 web-*.json file, got {len(note4_files)}"
+        assert lookup_patient(cf4, conn) is not None, "8: save_new_note left no sqlite row"
+
+        # 8b. a denied role writes no file and logs an allowed=0 audit row
+        cf5 = "BNCH900010150500"
+        note5 = DentalNote(
+            patient_name="bianca chen",
+            codice_fiscale=cf5,
+            clinical_notes="checkup done",
+        )
+        save_new_note(note5, conn, collection, "admin", "test-admin", sorted_root=sorted_root)
+
+        assert not (sorted_root / cf5 / "notes").exists(), \
+            "8b: admin should not be able to write a note file"
+        assert lookup_patient(cf5, conn) is None, "8b: admin's denied note should not appear in sqlite"
+        denied_note_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE username = ? AND action = 'append_note' AND allowed = 0",
+            ("test-admin",),
+        ).fetchall()
+        assert len(denied_note_rows) == 1, \
+            f"8b: expected 1 denied append_note row for test-admin, got {len(denied_note_rows)}"
 
     print("selftest ok")
 
