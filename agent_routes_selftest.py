@@ -180,6 +180,15 @@ def selftest():
         conn.commit()
         conn.close()
 
+        # 4b. the denied confirm consumed the token: replaying it with the
+        # role restored must render expired and still apply nothing
+        replay_denied = client.post("/agent/confirm", data={"token": token2, "csrf_token": csrf_confirm2})
+        assert replay_denied.status_code == 200, "replay of a denied token should re-render"
+        assert "expired" in replay_denied.text.lower(), \
+            "a denied confirm must consume the token - replay should show expired"
+        assert _phone(db_path, cf) == "333-1234", \
+            "a consumed denied token must not apply after a role restore"
+
         # 5. D-05 - an expired pending action re-renders with the expiry
         # message and applies nothing
         edit_get3 = client.get("/agent/edit")

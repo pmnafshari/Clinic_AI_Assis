@@ -106,6 +106,15 @@ def confirm_change():
             error="This change has expired. Review and confirm again.",
         )
 
+    # burn the token before applying - the atomic delete makes the token
+    # single-use even for concurrent double-submits, and a denied apply
+    # below still leaves it consumed
+    if not pending_actions.consume_pending_action(get_db(), token, g.user["username"]):
+        return render_template(
+            "agent_confirm.html",
+            error="This change has expired. Review and confirm again.",
+        )
+
     # peek at authorize() here only to pick the right response - the actual
     # security boundary is the independent check inside apply_pending_action
     # itself (SC4), which runs either way and is what audits the denial
@@ -120,7 +129,6 @@ def confirm_change():
             "agent_confirm.html", error="You don't have permission to make this change."
         )
 
-    pending_actions.consume_pending_action(get_db(), token)
     flash("Change saved.")
     return redirect(url_for("dashboard.index"))
 

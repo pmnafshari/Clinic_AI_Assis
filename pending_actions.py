@@ -49,9 +49,15 @@ def load_pending_action(conn, token, username, now=None):
     return json.loads(row["payload"])
 
 
-def consume_pending_action(conn, token):
-    conn.execute("DELETE FROM pending_actions WHERE token_hash = ?", (_hash_token(token),))
+def consume_pending_action(conn, token, username):
+    # single-use gate: the delete happens before the caller applies anything,
+    # and only a rowcount of 1 means this request won the token
+    cur = conn.execute(
+        "DELETE FROM pending_actions WHERE token_hash = ? AND username = ?",
+        (_hash_token(token), username),
+    )
     conn.commit()
+    return cur.rowcount == 1
 
 
 def selftest():
@@ -90,8 +96,14 @@ def selftest():
         assert load_pending_action(conn, token2, "drossi") is None, \
             "5: token created by one user should not load for another"
 
-        # 6. consume deletes the row so a second load returns None
-        consume_pending_action(conn, token2)
+        # 6. consume is username-scoped and single-use: the wrong user deletes
+        # nothing, the owner wins exactly once, and a second consume loses
+        assert consume_pending_action(conn, token2, "drossi") is False, \
+            "6: consume by a different user should delete nothing"
+        assert consume_pending_action(conn, token2, "aassist") is True, \
+            "6: first consume by the owner should win the token"
+        assert consume_pending_action(conn, token2, "aassist") is False, \
+            "6: a second consume of the same token should lose"
         assert load_pending_action(conn, token2, "aassist") is None, \
             "6: consumed pending action should not be loadable"
 
