@@ -28,13 +28,24 @@ def _collection():
 
 
 def _build_and_render(call, template, **template_args):
-    pending = agent.build_pending_action(call, get_db(), g.user["role"], g.user["username"])
+    # the web never prompts for a codice fiscale - the chooser just records
+    # that the name was ambiguous so the page can say so instead of hanging
+    # on input() or showing the generic error
+    ambiguous = []
+
+    def never_pick(candidates):
+        ambiguous.append(candidates)
+        return ""
+
+    pending = agent.build_pending_action(
+        call, get_db(), g.user["role"], g.user["username"], choose_cf=never_pick
+    )
     if pending is None:
-        return render_template(
-            template,
-            error="Couldn't build that change - check the patient name and your permissions.",
-            **template_args,
-        )
+        if ambiguous:
+            error = "Multiple patients match that name - be more specific."
+        else:
+            error = "Couldn't build that change - check the patient name and your permissions."
+        return render_template(template, error=error, **template_args)
     token = pending_actions.create_pending_action(
         get_db(), g.user["username"], g.user["role"], pending
     )

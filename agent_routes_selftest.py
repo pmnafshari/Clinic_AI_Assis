@@ -239,6 +239,28 @@ def selftest():
         assert "drossi2" not in remaining_usernames, "GUI-05: the acting user's entry must be removed"
         assert "drossi" in remaining_usernames, "GUI-05: another user's entry must remain untouched"
 
+        # 7. an ambiguous patient name never reaches input() - the page
+        # re-renders with a clear message and no confirm token
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            ("RSSA850010150200", "anna rossi", "333 8888888"),
+        )
+        conn.commit()
+        conn.close()
+
+        edit_get4 = client.get("/agent/edit")
+        csrf_edit4 = _csrf_from(edit_get4.text)
+        ambiguous_resp = client.post(
+            "/agent/edit",
+            data={"patient": "rossi", "field": "phone", "value": "777-7777", "csrf_token": csrf_edit4},
+        )
+        assert ambiguous_resp.status_code == 200, "ambiguous name should re-render, not hang or 500"
+        assert "Multiple patients match" in ambiguous_resp.text, \
+            "ambiguous name should show the be-more-specific message"
+        assert 'name="token"' not in ambiguous_resp.text, "ambiguous name must not produce a confirm token"
+        assert _phone(db_path, cf) == "222-2222", "ambiguous name must not change any patient"
+
     print("selftest ok")
 
 

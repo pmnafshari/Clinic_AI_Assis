@@ -124,14 +124,24 @@ def write_undo_entry(entry, log_path=UNDO_LOG):
         f.write(json.dumps(entry) + "\n")
 
 
-def resolve_patient(name, conn):
+def ask_cf(candidates):
+    # cli-only chooser - never reachable from the web routes, which pass
+    # their own choose_cf into build_pending_action
+    print("candidates: " + ", ".join(candidates))
+    return input("type the codice fiscale to use: ").strip().upper()
+
+
+def resolve_patient(name, conn, choose_cf=None):
     cf = resolve_cf(name, conn)
     if cf is None:
         print(f"no patient named {name} on record")
         return None
     if isinstance(cf, list):
-        print(f"multiple patients named {name} found, candidates: {', '.join(cf)}")
-        typed = input("type the codice fiscale to use: ").strip().upper()
+        print(f"multiple patients named {name} found")
+        if choose_cf is None:
+            # non-interactive caller - refuse rather than prompt
+            return None
+        typed = choose_cf(cf)
         # candidates are already CF_PATTERN-filtered in resolve_cf, so
         # membership also guarantees a pattern-valid cf
         if typed not in cf:
@@ -211,7 +221,7 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
     upsert_note_chroma(note, source_path, collection)
 
 
-def build_pending_action(call, conn, role, username, sorted_root=Path("sorted")):
+def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"), choose_cf=None):
     # authorize check #1 - early UX denial. apply_pending_action re-checks
     # this independently with the live role at apply time (SC4).
     args = call.parsed_args()
@@ -221,7 +231,7 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"))
         print(f"not permitted: {role} may not {call.tool}")
         return None
 
-    cf = resolve_patient(args.patient, conn)
+    cf = resolve_patient(args.patient, conn, choose_cf)
     if cf is None:
         return None
 
@@ -312,11 +322,12 @@ def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
 
 
 def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input, log_path=UNDO_LOG,
-                 collection=None, sorted_root=Path("sorted")):
+                 collection=None, sorted_root=Path("sorted"), choose_cf=ask_cf):
     reply = call_model(command, urlopen)
     call = parse_tool_call(reply)
 
-    pending = build_pending_action(call, conn, role, username, sorted_root=sorted_root)
+    pending = build_pending_action(call, conn, role, username, sorted_root=sorted_root,
+                                    choose_cf=choose_cf)
     if pending is None:
         return  # denied or unresolvable patient - build_pending_action already printed/logged
 
