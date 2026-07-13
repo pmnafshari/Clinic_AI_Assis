@@ -24,7 +24,7 @@ UNDO_LOG = "db/undo_log.jsonl"
 
 # editable field -> sqlite column; the column is always taken from here,
 # never from model output
-EDITABLE_FIELDS = {"phone": "phone"}
+EDITABLE_FIELDS = {"phone": "phone", "patient_name": "patient_name"}
 INVOICE_HEADER = ["date", "amount", "description"]
 
 INTERPRETER_PROMPT = (
@@ -211,102 +211,125 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
     upsert_note_chroma(note, source_path, collection)
 
 
-def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input, log_path=UNDO_LOG,
-                 collection=None, sorted_root=Path("sorted")):
-    reply = call_model(command, urlopen)
-    call = parse_tool_call(reply)
+def build_pending_action(call, conn, role, username, sorted_root=Path("sorted")):
+    # authorize check #1 - early UX denial. apply_pending_action re-checks
+    # this independently with the live role at apply time (SC4).
     args = call.parsed_args()
 
     if not authorize(role, call.tool):
         log_audit(conn, username, role, call.tool, target=args.patient, allowed=0)
         print(f"not permitted: {role} may not {call.tool}")
-        return
+        return None
 
     cf = resolve_patient(args.patient, conn)
     if cf is None:
-        return
+        return None
 
     if call.tool == "update_field":
         data = lookup_patient(cf, conn)
         current = data[EDITABLE_FIELDS[args.field]]
         name = data["patient_name"]
-        print(build_diff_line(args.field, current, args.value, name, cf))
-
-        if dry_run:
-            return
-
-        if not confirm(input_fn):
-            print("no changes made")
-            return
-
-        write_undo_entry({
-            "ts": datetime.now().isoformat(),
-            "tool": "update_field",
-            "codice_fiscale": cf,
-            "target": f"sqlite:patients.{args.field}",
+        diff_line = build_diff_line(args.field, current, args.value, name, cf)
+        return {
+            "tool": call.tool,
+            "args": {"field": args.field, "value": args.value},
+            "cf": cf,
+            "diff_line": diff_line,
             "before": current,
-        }, log_path)
-        log_audit(conn, username, role, call.tool, target=cf, allowed=1)
-        update_field(cf, args.field, args.value, conn)
+            "target": f"sqlite:patients.{args.field}",
+        }
 
     elif call.tool == "append_note":
         target = pick_target_visit(cf, conn)
         if target is None:
             print(f"no visit on record for {cf}")
-            return
+            return None
         source_path, current_notes, visit_date, count = target
         # the sqlite row and the json sibling are separately mutable - bail
-        # before the undo entry is written for an edit that can't happen
+        # before the pending action is built for an edit that can't happen
         json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
         if not json_path.exists():
             print(f"note file missing for this visit: {json_path} - fix the sorted tree first")
-            return
-        print(f"appending to visit from {visit_date} (most recent of {count})")
-
-        if dry_run:
-            return
-
-        if not confirm(input_fn):
-            print("no changes made")
-            return
-
-        write_undo_entry({
-            "ts": datetime.now().isoformat(),
-            "tool": "append_note",
-            "codice_fiscale": cf,
-            "target": f"visit:{source_path}",
+            return None
+        diff_line = f"appending to visit from {visit_date} (most recent of {count})"
+        return {
+            "tool": call.tool,
+            "args": {"text": args.text},
+            "cf": cf,
+            "diff_line": diff_line,
             "before": current_notes,
-        }, log_path)
-        log_audit(conn, username, role, call.tool, target=cf, allowed=1)
-        append_note(cf, args.text, source_path, conn, collection, sorted_root)
+            "target": f"visit:{source_path}",
+        }
 
     elif call.tool == "add_invoice":
         data = lookup_patient(cf, conn)
         visit_date = datetime.now().date().isoformat()
-        print(f"add invoice row for {data['patient_name']} ({cf}): "
-              f"{visit_date} | {args.amount} | {args.description}")
-
-        if dry_run:
-            return
-
-        if not confirm(input_fn):
-            print("no changes made")
-            return
-
+        diff_line = (f"add invoice row for {data['patient_name']} ({cf}): "
+                     f"{visit_date} | {args.amount} | {args.description}")
         xlsx_path = sorted_root / cf / "records" / "invoices.xlsx"
         before = 0
         if xlsx_path.exists():
             before = openpyxl.load_workbook(xlsx_path).active.max_row - 1
-
-        write_undo_entry({
-            "ts": datetime.now().isoformat(),
-            "tool": "add_invoice",
-            "codice_fiscale": cf,
-            "target": f"xlsx:{xlsx_path}",
+        return {
+            "tool": call.tool,
+            "args": {"amount": args.amount, "description": args.description, "visit_date": visit_date},
+            "cf": cf,
+            "diff_line": diff_line,
             "before": before,
-        }, log_path)
-        log_audit(conn, username, role, call.tool, target=cf, allowed=1)
-        add_invoice(cf, args.amount, args.description, visit_date, sorted_root)
+            "target": f"xlsx:{xlsx_path}",
+        }
+
+
+def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
+                          collection=None, sorted_root=Path("sorted")):
+    # authorize check #2 - SC4's actual security boundary. Uses the live role
+    # passed in from the current request, never pending['role'] (there is no
+    # such key) - a forged/replayed apply call must still be denied here,
+    # independent of whatever build_pending_action already checked.
+    if not authorize(role, pending["tool"]):
+        log_audit(conn, username, role, pending["tool"], target=pending["cf"], allowed=0)
+        print(f"not permitted: {role} may not {pending['tool']}")
+        return
+
+    write_undo_entry({
+        "ts": datetime.now().isoformat(),
+        "tool": pending["tool"],
+        "codice_fiscale": pending["cf"],
+        "target": pending["target"],
+        "before": pending["before"],
+        "username": username,
+    }, log_path)
+    log_audit(conn, username, role, pending["tool"], target=pending["cf"], allowed=1)
+
+    args = pending["args"]
+    if pending["tool"] == "update_field":
+        update_field(pending["cf"], args["field"], args["value"], conn)
+    elif pending["tool"] == "append_note":
+        source_path = pending["target"][len("visit:"):]
+        append_note(pending["cf"], args["text"], source_path, conn, collection, sorted_root)
+    elif pending["tool"] == "add_invoice":
+        add_invoice(pending["cf"], args["amount"], args["description"], args["visit_date"], sorted_root)
+
+
+def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input, log_path=UNDO_LOG,
+                 collection=None, sorted_root=Path("sorted")):
+    reply = call_model(command, urlopen)
+    call = parse_tool_call(reply)
+
+    pending = build_pending_action(call, conn, role, username, sorted_root=sorted_root)
+    if pending is None:
+        return  # denied or unresolvable patient - build_pending_action already printed/logged
+
+    print(pending["diff_line"])
+    if dry_run:
+        return
+
+    if not confirm(input_fn):
+        print("no changes made")
+        return
+
+    apply_pending_action(pending, conn, role, username, log_path=log_path,
+                          collection=collection, sorted_root=sorted_root)
 
 
 def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted")):
@@ -318,7 +341,21 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
     if not lines:
         print("nothing to undo")
         return
-    entry = json.loads(lines[-1])
+
+    # scan backward for the most recent entry this user made - entries
+    # written before the username migration have no "username" key and are
+    # skipped, never attributed to whoever happens to call undo next (D-06)
+    match_index = None
+    for i in range(len(lines) - 1, -1, -1):
+        candidate = json.loads(lines[i])
+        if candidate.get("username") == username:
+            match_index = i
+            entry = candidate
+            break
+    if match_index is None:
+        print("nothing to undo")
+        return
+
     target = entry["target"]
     cf = entry["codice_fiscale"]
 
@@ -364,7 +401,9 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
         xlsx_path = target[len("xlsx:"):]
         print(f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually")
 
-    rest = lines[:-1]
+    # remove only this entry, keep every other line (including other users'
+    # more-recent entries) in place and in order
+    rest = lines[:match_index] + lines[match_index + 1:]
     log_file.write_text("\n".join(rest) + ("\n" if rest else ""))
 
 
@@ -458,19 +497,22 @@ def selftest():
 
         # d2. the undo command is itself a gated write path: an unauthorized
         # role is denied (no mutation, entry not consumed) and an authorized
-        # role restores the value and consumes the entry (T-07-14)
+        # role restores the value and consumes the entry (T-07-14). Same
+        # acting user throughout - this checks the authorize gate, not the
+        # username-scoped lookup (that's covered separately below).
         write_undo_entry({
             "ts": datetime.now().isoformat(),
             "tool": "update_field",
             "codice_fiscale": cf,
             "target": "sqlite:patients.phone",
             "before": "555-0000",
+            "username": "test-dentist",
         }, log_path)
 
         denied_before = conn.execute(
             "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 0"
         ).fetchone()["c"]
-        undo_last(conn, role="admin", username="test-admin", log_path=log_path)
+        undo_last(conn, role="admin", username="test-dentist", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "denied undo must not restore the phone"
         assert len(Path(log_path).read_text().strip().splitlines()) == 1, \
             "denied undo must leave the undo-log entry intact"
@@ -588,16 +630,19 @@ def selftest():
         assert jf.clinical_notes == "initial note", "undo must restore the json note text"
 
         # h2. a visit undo is gated on edit_note, not append_note - an
-        # assistant (append-only, D-04) is denied; a dentist is allowed
+        # assistant (append-only, D-04) is denied; a dentist is allowed.
+        # Same acting user throughout - this checks the authorize gate, not
+        # the username-scoped lookup (that's covered separately below).
         write_undo_entry({
             "ts": datetime.now().isoformat(),
             "tool": "append_note",
             "codice_fiscale": cf,
             "target": f"visit:{source_path}",
             "before": "placeholder before-text",
+            "username": "test-dentist",
         }, log_path)
 
-        undo_last(conn, role="assistant", username="test-assistant", log_path=log_path,
+        undo_last(conn, role="assistant", username="test-dentist", log_path=log_path,
                   collection=collection, sorted_root=sorted_root)
         row = conn.execute(
             "SELECT clinical_notes FROM visits WHERE source_path = ?", (source_path,)
@@ -663,6 +708,37 @@ def selftest():
         assert len(rows) == 2, f"expected 1 data row, got {len(rows) - 1}"
         assert len(Path(log_path).read_text().strip().splitlines()) == lines_before + 1, \
             "confirmed add_invoice must add exactly one undo line"
+
+        # k. undo is scoped to the acting user (D-06): entries from two
+        # different users coexist in the log; undoing as one user removes
+        # only that user's entry and leaves the other user's entry in place
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "update_field",
+            "codice_fiscale": cf,
+            "target": "sqlite:patients.phone",
+            "before": "111-1111",
+            "username": "user-a",
+        }, log_path)
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "update_field",
+            "codice_fiscale": cf,
+            "target": "sqlite:patients.phone",
+            "before": "222-2222",
+            "username": "user-b",
+        }, log_path)
+
+        undo_last(conn, role="dentist", username="user-b", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "222-2222", \
+            "user-scoped undo must restore the acting user's own before-value"
+
+        remaining_entries = [json.loads(l) for l in Path(log_path).read_text().strip().splitlines()]
+        remaining_usernames = [e.get("username") for e in remaining_entries]
+        assert "user-b" not in remaining_usernames, \
+            "the acting user's entry must be removed after undo"
+        assert "user-a" in remaining_usernames, \
+            "another user's entry must remain in the log after a user-scoped undo"
 
     print("selftest passed")
 
