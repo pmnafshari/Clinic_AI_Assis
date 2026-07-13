@@ -7,6 +7,8 @@ from pathlib import Path
 
 from werkzeug.security import generate_password_hash
 
+import agent
+import app.dashboard_routes as dashboard_routes
 import app.db as app_db
 from app import create_app
 from web_session import SESSION_IDLE_MINUTES, _hash_token
@@ -143,6 +145,47 @@ def selftest():
         assert after_logout_resp.status_code == 302, "8: a request after logout should redirect"
         assert "/login" in after_logout_resp.headers["Location"], \
             "8: post-logout redirect target should be /login"
+
+        # 9. GUI-05/D-07 - dashboard shows only the acting user's own undo history
+        _seed_user(db_path, "drossi2", "goodpass", "dentist")
+        dashboard_routes.UNDO_LOG = str(Path(tmp) / "undo_log.jsonl")
+        agent.write_undo_entry(
+            {
+                "ts": "2026-01-01T00:00:00",
+                "tool": "update_field",
+                "codice_fiscale": "RSSM800010150100",
+                "target": "sqlite:patients.phone",
+                "before": "111-1111",
+                "username": "drossi",
+            },
+            dashboard_routes.UNDO_LOG,
+        )
+        agent.write_undo_entry(
+            {
+                "ts": "2026-01-01T00:00:01",
+                "tool": "update_field",
+                "codice_fiscale": "MRTLGU900010150100",
+                "target": "sqlite:patients.phone",
+                "before": "222-2222",
+                "username": "drossi2",
+            },
+            dashboard_routes.UNDO_LOG,
+        )
+
+        client_g = app.test_client()
+        get_resp_g = client_g.get("/login")
+        csrf_g = _csrf_from(get_resp_g.text)
+        client_g.post(
+            "/login",
+            data={"username": "drossi", "password": "goodpass", "csrf_token": csrf_g},
+        )
+        dash_resp_g = client_g.get("/")
+        assert b"RSSM800010150100" in dash_resp_g.data, \
+            "9: dashboard should show the acting user's own change"
+        assert b"Undo change" in dash_resp_g.data, \
+            "9: the most-recent row should carry an Undo change link"
+        assert b"MRTLGU900010150100" not in dash_resp_g.data, \
+            "9: another user's entry must not be shown"
 
     print("selftest ok")
 
