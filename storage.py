@@ -63,6 +63,14 @@ def init_db(db_path):
             created_at TEXT NOT NULL,
             last_seen_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS pending_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token_hash TEXT UNIQUE NOT NULL,
+            username TEXT NOT NULL,
+            role TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        );
     """)
     _ensure_lockout_columns(conn)
     conn.commit()
@@ -209,6 +217,7 @@ def selftest():
         assert "users" in tables, "1: users table missing"
         assert "audit_log" in tables, "1: audit_log table missing"
         assert "sessions" in tables, "1: sessions table missing"
+        assert "pending_actions" in tables, "1: pending_actions table missing"
 
         fk_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
         assert fk_on == 1, "1: foreign_keys pragma not ON"
