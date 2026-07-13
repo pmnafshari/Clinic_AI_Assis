@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card-wide">
+  <h1>Add a note</h1>
+  {% if error %}
+  <p class="error">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="{{ url_for('notes.new_note') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="raw_note">paste note</label>
+    <textarea id="raw_note" name="raw_note" rows="6" autofocus></textarea>
+    <button type="submit">Extract note</button>
+  </form>
+
+  {% if preview %}
+  <form method="post" action="{{ url_for('notes.new_note') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label for="patient_name">patient name</label>
+    <input type="text" id="patient_name" name="patient_name" value="{{ preview.patient_name }}">
+    <label for="codice_fiscale">codice fiscale</label>
+    <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}">
+    <label for="phone">phone</label>
+    <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}">
+    <label for="clinical_notes">clinical notes</label>
+    <input type="text" id="clinical_notes" name="clinical_notes" value="{{ preview.clinical_notes }}">
+    <label for="procedures">procedures</label>
+    <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}">
+    <label for="next_appointment">next appointment</label>
+    <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}">
+    <button type="submit">Save note</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
