@@ -24,7 +24,7 @@ UNDO_LOG = "db/undo_log.jsonl"
 
 # editable field -> sqlite column; the column is always taken from here,
 # never from model output
-EDITABLE_FIELDS = {"phone": "phone"}
+EDITABLE_FIELDS = {"phone": "phone", "patient_name": "patient_name"}
 INVOICE_HEADER = ["date", "amount", "description"]
 
 INTERPRETER_PROMPT = (
@@ -341,7 +341,21 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
     if not lines:
         print("nothing to undo")
         return
-    entry = json.loads(lines[-1])
+
+    # scan backward for the most recent entry this user made - entries
+    # written before the username migration have no "username" key and are
+    # skipped, never attributed to whoever happens to call undo next (D-06)
+    match_index = None
+    for i in range(len(lines) - 1, -1, -1):
+        candidate = json.loads(lines[i])
+        if candidate.get("username") == username:
+            match_index = i
+            entry = candidate
+            break
+    if match_index is None:
+        print("nothing to undo")
+        return
+
     target = entry["target"]
     cf = entry["codice_fiscale"]
 
@@ -387,7 +401,9 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
         xlsx_path = target[len("xlsx:"):]
         print(f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually")
 
-    rest = lines[:-1]
+    # remove only this entry, keep every other line (including other users'
+    # more-recent entries) in place and in order
+    rest = lines[:match_index] + lines[match_index + 1:]
     log_file.write_text("\n".join(rest) + ("\n" if rest else ""))
 
 
@@ -481,19 +497,22 @@ def selftest():
 
         # d2. the undo command is itself a gated write path: an unauthorized
         # role is denied (no mutation, entry not consumed) and an authorized
-        # role restores the value and consumes the entry (T-07-14)
+        # role restores the value and consumes the entry (T-07-14). Same
+        # acting user throughout - this checks the authorize gate, not the
+        # username-scoped lookup (that's covered separately below).
         write_undo_entry({
             "ts": datetime.now().isoformat(),
             "tool": "update_field",
             "codice_fiscale": cf,
             "target": "sqlite:patients.phone",
             "before": "555-0000",
+            "username": "test-dentist",
         }, log_path)
 
         denied_before = conn.execute(
             "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 0"
         ).fetchone()["c"]
-        undo_last(conn, role="admin", username="test-admin", log_path=log_path)
+        undo_last(conn, role="admin", username="test-dentist", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "denied undo must not restore the phone"
         assert len(Path(log_path).read_text().strip().splitlines()) == 1, \
             "denied undo must leave the undo-log entry intact"
@@ -611,16 +630,19 @@ def selftest():
         assert jf.clinical_notes == "initial note", "undo must restore the json note text"
 
         # h2. a visit undo is gated on edit_note, not append_note - an
-        # assistant (append-only, D-04) is denied; a dentist is allowed
+        # assistant (append-only, D-04) is denied; a dentist is allowed.
+        # Same acting user throughout - this checks the authorize gate, not
+        # the username-scoped lookup (that's covered separately below).
         write_undo_entry({
             "ts": datetime.now().isoformat(),
             "tool": "append_note",
             "codice_fiscale": cf,
             "target": f"visit:{source_path}",
             "before": "placeholder before-text",
+            "username": "test-dentist",
         }, log_path)
 
-        undo_last(conn, role="assistant", username="test-assistant", log_path=log_path,
+        undo_last(conn, role="assistant", username="test-dentist", log_path=log_path,
                   collection=collection, sorted_root=sorted_root)
         row = conn.execute(
             "SELECT clinical_notes FROM visits WHERE source_path = ?", (source_path,)
@@ -686,6 +708,37 @@ def selftest():
         assert len(rows) == 2, f"expected 1 data row, got {len(rows) - 1}"
         assert len(Path(log_path).read_text().strip().splitlines()) == lines_before + 1, \
             "confirmed add_invoice must add exactly one undo line"
+
+        # k. undo is scoped to the acting user (D-06): entries from two
+        # different users coexist in the log; undoing as one user removes
+        # only that user's entry and leaves the other user's entry in place
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "update_field",
+            "codice_fiscale": cf,
+            "target": "sqlite:patients.phone",
+            "before": "111-1111",
+            "username": "user-a",
+        }, log_path)
+        write_undo_entry({
+            "ts": datetime.now().isoformat(),
+            "tool": "update_field",
+            "codice_fiscale": cf,
+            "target": "sqlite:patients.phone",
+            "before": "222-2222",
+            "username": "user-b",
+        }, log_path)
+
+        undo_last(conn, role="dentist", username="user-b", log_path=log_path)
+        assert lookup_patient(cf, conn)["phone"] == "222-2222", \
+            "user-scoped undo must restore the acting user's own before-value"
+
+        remaining_entries = [json.loads(l) for l in Path(log_path).read_text().strip().splitlines()]
+        remaining_usernames = [e.get("username") for e in remaining_entries]
+        assert "user-b" not in remaining_usernames, \
+            "the acting user's entry must be removed after undo"
+        assert "user-a" in remaining_usernames, \
+            "another user's entry must remain in the log after a user-scoped undo"
 
     print("selftest passed")
 
