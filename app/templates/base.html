@@ -6,6 +6,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="toast">{{ messages[0] }}</div>
+    {% endif %}
+  {% endwith %}
   {% block content %}{% endblock %}
 </body>
 </html>
