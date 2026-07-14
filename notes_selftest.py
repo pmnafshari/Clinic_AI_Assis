@@ -66,7 +66,8 @@ def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
         app_db.DB_PATH = db_path
-        notes_routes.CHROMA_PATH = str(Path(tmp) / "chroma")
+        app_db.CHROMA_PATH = str(Path(tmp) / "chroma")
+        app_db._collection_cache = None
         notes_routes.SORTED_ROOT = Path(tmp) / "sorted"
 
         app = create_app()

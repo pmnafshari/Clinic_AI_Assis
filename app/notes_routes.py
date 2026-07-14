@@ -6,31 +6,20 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 from auth import authorize, log_audit
 from dental_notes_schema import DentalNote
 from extract_note import OllamaUnreachable, call_model, parse_reply
-from storage import get_collection, save_new_note
+from storage import save_new_note
 
-from .db import get_db
+from .db import get_chroma, get_db
 
 notes_bp = Blueprint("notes", __name__)
 
-CHROMA_PATH = "db/chroma"
 SORTED_ROOT = Path("sorted")
 _urlopen = urllib.request.urlopen
-
-_collection_cache = None
-
-
-def _collection():
-    # app-lifetime cache, not per-request g - chroma client is thread-safe
-    global _collection_cache
-    if _collection_cache is None:
-        _collection_cache = get_collection(CHROMA_PATH)
-    return _collection_cache
 
 
 def extract_note(raw_note):
     # composes extract_note.py's call_model + parse_reply with the local
-    # _urlopen seam (same shape as qa_routes.CHROMA_PATH/_urlopen), since
-    # extract_note.py's own extract_note() has no urlopen override point
+    # _urlopen seam (same shape as qa_routes._urlopen), since extract_note.py's
+    # own extract_note() has no urlopen override point
     return parse_reply(call_model(raw_note, urlopen=_urlopen))
 
 
@@ -77,6 +66,6 @@ def new_note():
                    target=note.codice_fiscale, allowed=0)
         return render_template("notes_new.html", error="You don't have permission to add notes.")
 
-    save_new_note(note, get_db(), _collection(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT)
+    save_new_note(note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT)
     flash("Note saved.")
     return redirect(url_for("dashboard.index"))

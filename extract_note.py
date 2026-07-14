@@ -49,7 +49,9 @@ def call_model(note, urlopen=urllib.request.urlopen):
     try:
         with urlopen(req, timeout=120) as resp:
             body = json.load(resp)
-    except urllib.error.URLError:
+    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        # refused connection, a 200 with a non-JSON body, or a read timeout all
+        # mean Ollama isn't usable right now - never let it 500 a route
         raise OllamaUnreachable("Ollama not reachable - run: ollama run dental-notes")
     return body.get("response", "")
 

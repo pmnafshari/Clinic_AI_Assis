@@ -1,5 +1,7 @@
 import json
+import os
 import sys
+import threading
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -21,6 +23,11 @@ MODEL_ID = "llama3.2:3b"  # general model prompted to emit tool JSON, not dental
 
 DB_PATH = "db/clinic.sqlite"
 UNDO_LOG = "db/undo_log.jsonl"
+
+# serialize every read-modify-write of the undo log - the web app serves
+# threaded, so an append landing between undo_last's read and its rewrite
+# would otherwise be silently dropped
+_undo_lock = threading.Lock()
 
 # editable field -> sqlite column; the column is always taken from here,
 # never from model output
@@ -113,15 +120,27 @@ def call_model(command, urlopen=urllib.request.urlopen):
     try:
         with urlopen(req, timeout=120) as resp:
             body = json.load(resp)
-    except urllib.error.URLError:
+    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError):
+        # a refused connection, a 200 with a non-JSON body (mid-restart, proxy
+        # page), or a read timeout all mean "Ollama isn't usable right now"
         raise OllamaUnreachable("Ollama not reachable - run: ollama run llama3.2:3b")
     return body.get("response", "")
 
 
 def write_undo_entry(entry, log_path=UNDO_LOG):
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a") as f:
-        f.write(json.dumps(entry) + "\n")
+    with _undo_lock:
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+
+def _rewrite_log(log_file, lines):
+    # crash-safe replace: write the surviving lines to a sibling temp file and
+    # os.replace it over the log, so a crash mid-write can't truncate history
+    text = "\n".join(lines) + ("\n" if lines else "")
+    tmp = log_file.with_suffix(log_file.suffix + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, log_file)
 
 
 def ask_cf(candidates):
@@ -132,23 +151,22 @@ def ask_cf(candidates):
 
 
 def resolve_patient(name, conn, choose_cf=None):
+    # returns (cf, reason): reason is None on success, else a specific message
+    # the web can show instead of a generic "check the name / permissions"
     cf = resolve_cf(name, conn)
     if cf is None:
-        print(f"no patient named {name} on record")
-        return None
+        return None, f"no patient named {name} on record"
     if isinstance(cf, list):
-        print(f"multiple patients named {name} found")
         if choose_cf is None:
-            # non-interactive caller - refuse rather than prompt
-            return None
+            # non-interactive caller (web) - refuse rather than prompt
+            return None, f"multiple patients named {name} found - be more specific"
         typed = choose_cf(cf)
         # candidates are already CF_PATTERN-filtered in resolve_cf, so
         # membership also guarantees a pattern-valid cf
         if typed not in cf:
-            print("that codice fiscale is not one of the candidates")
-            return None
+            return None, "that codice fiscale is not one of the candidates"
         cf = typed
-    return cf
+    return cf, None
 
 
 def build_diff_line(field, current, new, name, cf):
@@ -194,9 +212,12 @@ def add_invoice(cf, amount, description, visit_date, sorted_root=Path("sorted"))
 def pick_target_visit(cf, conn):
     # most recent visit for the CF (D-11 discretion); also returns the total
     # visit count so the confirm diff can say "most recent of N"
+    # newest by visit_date, not by insert order - a bulk load_from_sorted
+    # re-import assigns ids by filename, so the highest id is not the latest
+    # visit; nulls sort last so a dated visit always wins over an undated one
     row = conn.execute(
         "SELECT source_path, clinical_notes, visit_date FROM visits"
-        " WHERE codice_fiscale = ? ORDER BY id DESC LIMIT 1",
+        " WHERE codice_fiscale = ? ORDER BY visit_date IS NULL, visit_date DESC, id DESC LIMIT 1",
         (cf,),
     ).fetchone()
     if row is None:
@@ -222,18 +243,19 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
 
 
 def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"), choose_cf=None):
-    # authorize check #1 - early UX denial. apply_pending_action re-checks
-    # this independently with the live role at apply time (SC4).
+    # returns (pending, reason): pending is the frozen-payload dict on success,
+    # else (None, reason) with a specific message. authorize check #1 here is
+    # an early UX denial - apply_pending_action re-checks it independently with
+    # the live role at apply time (SC4).
     args = call.parsed_args()
 
     if not authorize(role, call.tool):
         log_audit(conn, username, role, call.tool, target=args.patient, allowed=0)
-        print(f"not permitted: {role} may not {call.tool}")
-        return None
+        return None, f"not permitted: {role} may not {call.tool}"
 
-    cf = resolve_patient(args.patient, conn, choose_cf)
+    cf, reason = resolve_patient(args.patient, conn, choose_cf)
     if cf is None:
-        return None
+        return None, reason
 
     if call.tool == "update_field":
         data = lookup_patient(cf, conn)
@@ -247,20 +269,18 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
             "diff_line": diff_line,
             "before": current,
             "target": f"sqlite:patients.{args.field}",
-        }
+        }, None
 
     elif call.tool == "append_note":
         target = pick_target_visit(cf, conn)
         if target is None:
-            print(f"no visit on record for {cf}")
-            return None
+            return None, f"no visit on record for {cf}"
         source_path, current_notes, visit_date, count = target
         # the sqlite row and the json sibling are separately mutable - bail
         # before the pending action is built for an edit that can't happen
         json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
         if not json_path.exists():
-            print(f"note file missing for this visit: {json_path} - fix the sorted tree first")
-            return None
+            return None, f"note file missing for this visit ({json_path}) - fix the sorted tree first"
         diff_line = f"appending to visit from {visit_date} (most recent of {count})"
         return {
             "tool": call.tool,
@@ -269,7 +289,7 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
             "diff_line": diff_line,
             "before": current_notes,
             "target": f"visit:{source_path}",
-        }
+        }, None
 
     elif call.tool == "add_invoice":
         data = lookup_patient(cf, conn)
@@ -287,7 +307,7 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
             "diff_line": diff_line,
             "before": before,
             "target": f"xlsx:{xlsx_path}",
-        }
+        }, None
 
 
 def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
@@ -329,10 +349,11 @@ def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input,
     reply = call_model(command, urlopen)
     call = parse_tool_call(reply)
 
-    pending = build_pending_action(call, conn, role, username, sorted_root=sorted_root,
-                                    choose_cf=choose_cf)
+    pending, reason = build_pending_action(call, conn, role, username, sorted_root=sorted_root,
+                                            choose_cf=choose_cf)
     if pending is None:
-        return  # denied or unresolvable patient - build_pending_action already printed/logged
+        print(reason)  # denied or unresolvable patient - the denial is already audited
+        return
 
     print(pending["diff_line"])
     if dry_run:
@@ -347,78 +368,85 @@ def run_command(command, conn, dry_run, urlopen, role, username, input_fn=input,
 
 
 def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_root=Path("sorted")):
+    # returns (status, message): status is one of "empty", "error", "denied",
+    # "restored", "manual" so callers can flash/print without re-deciding -
+    # "manual" in particular means the entry was consumed but nothing was
+    # actually reverted, so the web must not report it as a success
     log_file = Path(log_path)
-    if not log_file.exists():
-        print("nothing to undo")
-        return
-    lines = log_file.read_text().strip().splitlines()
-    if not lines:
-        print("nothing to undo")
-        return
+    with _undo_lock:
+        if not log_file.exists():
+            return "empty", "nothing to undo"
+        lines = log_file.read_text().strip().splitlines()
+        if not lines:
+            return "empty", "nothing to undo"
 
-    # scan backward for the most recent entry this user made - entries
-    # written before the username migration have no "username" key and are
-    # skipped, never attributed to whoever happens to call undo next (D-06)
-    match_index = None
-    for i in range(len(lines) - 1, -1, -1):
-        candidate = json.loads(lines[i])
-        if candidate.get("username") == username:
-            match_index = i
-            entry = candidate
-            break
-    if match_index is None:
-        print("nothing to undo")
-        return
+        # scan backward for the most recent entry this user made - entries
+        # written before the username migration have no "username" key and are
+        # skipped, never attributed to whoever happens to call undo next (D-06);
+        # a corrupt/truncated line (crash mid-append) is skipped, not fatal
+        match_index = None
+        for i in range(len(lines) - 1, -1, -1):
+            try:
+                candidate = json.loads(lines[i])
+            except json.JSONDecodeError:
+                continue
+            if candidate.get("username") == username:
+                match_index = i
+                entry = candidate
+                break
+        if match_index is None:
+            return "empty", "nothing to undo"
 
-    target = entry["target"]
-    cf = entry["codice_fiscale"]
+        target = entry["target"]
+        cf = entry["codice_fiscale"]
 
-    # figure out which action this restore needs before touching anything -
-    # an unknown or invalid target is a graceful no-op, never authorized
-    if target.startswith("sqlite:patients."):
-        field = target[len("sqlite:patients."):]
-        if field not in EDITABLE_FIELDS:
-            print(f"don't know how to undo target {target!r}")
-            return
-        action = "update_field"
-    elif target.startswith("visit:"):
-        # undoing an append rewrites existing note content - that's an edit,
-        # not a fresh append, so an assistant (append-only, D-04) can't do it
-        action = "edit_note"
-    elif target.startswith("xlsx:"):
-        action = "add_invoice"
-    else:
-        print(f"don't know how to undo target {target!r}")
-        return
+        # figure out which action this restore needs before touching anything -
+        # an unknown or invalid target is a graceful no-op, never authorized
+        if target.startswith("sqlite:patients."):
+            field = target[len("sqlite:patients."):]
+            if field not in EDITABLE_FIELDS:
+                return "error", f"don't know how to undo target {target!r}"
+            action = "update_field"
+        elif target.startswith("visit:"):
+            # undoing an append rewrites existing note content - that's an edit,
+            # not a fresh append, so an assistant (append-only, D-04) can't do it
+            action = "edit_note"
+        elif target.startswith("xlsx:"):
+            action = "add_invoice"
+        else:
+            return "error", f"don't know how to undo target {target!r}"
 
-    if not authorize(role, action):
-        log_audit(conn, username, role, action, target=cf, allowed=0)
-        print(f"not permitted: {role} may not undo {action}")
-        return
-    log_audit(conn, username, role, action, target=cf, allowed=1)
+        if not authorize(role, action):
+            log_audit(conn, username, role, action, target=cf, allowed=0)
+            return "denied", f"not permitted: {role} may not undo {action}"
+        log_audit(conn, username, role, action, target=cf, allowed=1)
 
-    if action == "update_field":
-        update_field(cf, field, entry["before"], conn)
-        print(f"restored {field} to {entry['before']} for {cf}")
-    elif action == "edit_note":
-        source_path = target[len("visit:"):]
-        json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
-        note = DentalNote.model_validate_json(json_path.read_text())
-        note.clinical_notes = entry["before"]
-        json_path.write_text(note.model_dump_json())
-        upsert_note_sql(note, source_path, conn)
-        upsert_note_chroma(note, source_path, collection)
-        print(f"restored clinical note text for {cf}")
-    elif action == "add_invoice":
-        # D-09: invoice rows are restored by hand - print the pointer once,
-        # then drop the entry so the edits beneath it stay reachable
-        xlsx_path = target[len("xlsx:"):]
-        print(f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually")
+        if action == "update_field":
+            update_field(cf, field, entry["before"], conn)
+            status, message = "restored", f"restored {field} to {entry['before']} for {cf}"
+        elif action == "edit_note":
+            source_path = target[len("visit:"):]
+            json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+            note = DentalNote.model_validate_json(json_path.read_text())
+            note.clinical_notes = entry["before"]
+            json_path.write_text(note.model_dump_json())
+            upsert_note_sql(note, source_path, conn)
+            upsert_note_chroma(note, source_path, collection)
+            status, message = "restored", f"restored clinical note text for {cf}"
+        elif action == "add_invoice":
+            # D-09: invoice rows are restored by hand - drop the entry so the
+            # edits beneath it stay reachable, but report "manual" so no caller
+            # claims the row was reverted
+            xlsx_path = target[len("xlsx:"):]
+            status = "manual"
+            message = f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually"
 
-    # remove only this entry, keep every other line (including other users'
-    # more-recent entries) in place and in order
-    rest = lines[:match_index] + lines[match_index + 1:]
-    log_file.write_text("\n".join(rest) + ("\n" if rest else ""))
+        # remove only this entry, keep every other line (including other users'
+        # more-recent entries) in place and in order
+        rest = lines[:match_index] + lines[match_index + 1:]
+        _rewrite_log(log_file, rest)
+
+    return status, message
 
 
 def selftest():
@@ -771,8 +799,9 @@ def main():
             sys.exit(1)
         conn = init_db(DB_PATH)
         collection = get_collection("db/chroma")
-        undo_last(conn, session["role"], session["username"],
-                   collection=collection, sorted_root=Path("sorted"))
+        status, message = undo_last(conn, session["role"], session["username"],
+                                    collection=collection, sorted_root=Path("sorted"))
+        print(message)
         return
     if not positional:
         print('usage: python agent.py "<command>" [--dry-run]  |  python agent.py undo  |  python agent.py --selftest')

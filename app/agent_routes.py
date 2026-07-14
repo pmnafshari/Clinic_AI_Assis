@@ -6,46 +6,25 @@ import agent
 import pending_actions
 from auth import authorize
 from extract_note import OllamaUnreachable
-from storage import get_collection
 
-from .db import get_db
+from .db import get_chroma, get_db
 
 agent_bp = Blueprint("agent", __name__)
 
-CHROMA_PATH = "db/chroma"
 UNDO_LOG = agent.UNDO_LOG
 _urlopen = urllib.request.urlopen
 
-_collection_cache = None
-
-
-def _collection():
-    # app-lifetime cache, not per-request g - chroma client is thread-safe
-    global _collection_cache
-    if _collection_cache is None:
-        _collection_cache = get_collection(CHROMA_PATH)
-    return _collection_cache
-
 
 def _build_and_render(call, template, **template_args):
-    # the web never prompts for a codice fiscale - the chooser just records
-    # that the name was ambiguous so the page can say so instead of hanging
-    # on input() or showing the generic error
-    ambiguous = []
-
-    def never_pick(candidates):
-        ambiguous.append(candidates)
-        return ""
-
-    pending = agent.build_pending_action(
-        call, get_db(), g.user["role"], g.user["username"], choose_cf=never_pick
+    # no choose_cf passed - the web never prompts, so an ambiguous name comes
+    # back as (None, reason) instead of reaching input(). reason is specific
+    # (unknown name vs ambiguous vs permissions vs broken tree) so staff see
+    # what actually went wrong, not one generic message
+    pending, reason = agent.build_pending_action(
+        call, get_db(), g.user["role"], g.user["username"]
     )
     if pending is None:
-        if ambiguous:
-            error = "Multiple patients match that name - be more specific."
-        else:
-            error = "Couldn't build that change - check the patient name and your permissions."
-        return render_template(template, error=error, **template_args)
+        return render_template(template, error=reason, **template_args)
     token = pending_actions.create_pending_action(
         get_db(), g.user["username"], g.user["role"], pending
     )
@@ -122,7 +101,7 @@ def confirm_change():
     try:
         agent.apply_pending_action(
             pending, get_db(), g.user["role"], g.user["username"],
-            log_path=UNDO_LOG, collection=_collection(),
+            log_path=UNDO_LOG, collection=get_chroma(),
         )
     except (OSError, ValueError):
         # e.g. the note file vanished during the confirm window
@@ -142,9 +121,11 @@ def confirm_change():
 
 @agent_bp.route("/agent/undo", methods=["POST"])
 def undo_change():
-    agent.undo_last(
+    # flash whatever undo_last actually did - a denied undo or an invoice
+    # "restore manually" must not read as a completed revert (WR-02)
+    status, message = agent.undo_last(
         get_db(), g.user["role"], g.user["username"],
-        log_path=UNDO_LOG, collection=_collection(),
+        log_path=UNDO_LOG, collection=get_chroma(),
     )
-    flash("Undo processed.")
+    flash(message)
     return redirect(url_for("dashboard.index"))

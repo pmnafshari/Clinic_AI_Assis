@@ -6,24 +6,12 @@ import ask
 from auth import authorize, log_audit
 from dental_notes_schema import CF_PATTERN
 from extract_note import OllamaUnreachable
-from storage import get_collection
 
-from .db import get_db
+from .db import get_chroma, get_db
 
 qa_bp = Blueprint("qa", __name__)
 
-CHROMA_PATH = "db/chroma"
 _urlopen = urllib.request.urlopen
-
-_collection_cache = None
-
-
-def _collection():
-    # app-lifetime cache, not per-request g - chroma client is thread-safe
-    global _collection_cache
-    if _collection_cache is None:
-        _collection_cache = get_collection(CHROMA_PATH)
-    return _collection_cache
 
 
 def answer_question(question, conn, collection, chosen_cf=None):
@@ -64,7 +52,7 @@ def qa_page():
     chosen_cf = request.form.get("cf")
 
     try:
-        result = answer_question(question, get_db(), _collection(), chosen_cf=chosen_cf)
+        result = answer_question(question, get_db(), get_chroma(), chosen_cf=chosen_cf)
     except OllamaUnreachable as e:
         return render_template("qa.html", question=question, error=str(e))
 

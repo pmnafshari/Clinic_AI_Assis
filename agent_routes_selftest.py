@@ -76,7 +76,8 @@ def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
         app_db.DB_PATH = db_path
-        agent_routes.CHROMA_PATH = str(Path(tmp) / "chroma")
+        app_db.CHROMA_PATH = str(Path(tmp) / "chroma")
+        app_db._collection_cache = None
         agent_routes.UNDO_LOG = str(Path(tmp) / "undo_log.jsonl")
 
         app = create_app()
@@ -265,8 +266,8 @@ def selftest():
             data={"patient": "rossi", "field": "phone", "value": "777-7777", "csrf_token": csrf_edit4},
         )
         assert ambiguous_resp.status_code == 200, "ambiguous name should re-render, not hang or 500"
-        assert "Multiple patients match" in ambiguous_resp.text, \
-            "ambiguous name should show the be-more-specific message"
+        assert "multiple patients named rossi found" in ambiguous_resp.text, \
+            "ambiguous name should show the specific be-more-specific message"
         assert 'name="token"' not in ambiguous_resp.text, "ambiguous name must not produce a confirm token"
         assert _phone(db_path, cf) == "222-2222", "ambiguous name must not change any patient"
 
