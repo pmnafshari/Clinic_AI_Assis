@@ -15,6 +15,13 @@ def create_pending_action(conn, username, role, payload, now=None):
     if now is None:
         now = datetime.now()
 
+    # sweep abandoned rows on every create - "Discard change" is just a link
+    # and expired rows are only pruned when their exact token is loaded again,
+    # so without this the frozen patient payloads accumulate forever (GDPR
+    # data-minimisation)
+    cutoff = (now - timedelta(minutes=PENDING_ACTION_EXPIRY_MINUTES)).isoformat()
+    conn.execute("DELETE FROM pending_actions WHERE created_at < ?", (cutoff,))
+
     token = secrets.token_urlsafe(32)
     conn.execute(
         "INSERT INTO pending_actions (token_hash, username, role, payload, created_at)"
@@ -41,8 +48,12 @@ def load_pending_action(conn, token, username, now=None):
 
     created_at = datetime.fromisoformat(row["created_at"])
     if now - created_at > timedelta(minutes=PENDING_ACTION_EXPIRY_MINUTES):
-        # expired - fixed window, never slides on read (unlike sessions)
-        conn.execute("DELETE FROM pending_actions WHERE token_hash = ?", (token_hash,))
+        # expired - fixed window, never slides on read (unlike sessions).
+        # username-scoped like the load and consume, so the delete stays uniform
+        conn.execute(
+            "DELETE FROM pending_actions WHERE token_hash = ? AND username = ?",
+            (token_hash, username),
+        )
         conn.commit()
         return None
 
