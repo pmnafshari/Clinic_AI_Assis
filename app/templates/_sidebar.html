@@ -1,0 +1,33 @@
+<aside class="app-sidebar d-flex flex-column p-3">
+  <div class="app-sidebar-brand">
+    <span class="h5 mb-0">Dental AI</span>
+  </div>
+
+  <nav class="nav flex-column mt-6">
+    <a class="nav-link{{ ' active' if request.endpoint == 'dashboard.index' else '' }}"
+       href="{{ url_for('dashboard.index') }}">
+      <i class="bi bi-speedometer2"></i> Dashboard
+    </a>
+    {% if authorize(g.user.role, 'read_notes') %}
+    <a class="nav-link{{ ' active' if request.endpoint == 'patients.list_view' else '' }}"
+       href="/patients">
+      <i class="bi bi-people"></i> Patients
+    </a>
+    <a class="nav-link{{ ' active' if request.endpoint == 'qa.qa_page' else '' }}"
+       href="{{ url_for('qa.qa_page') }}">
+      <i class="bi bi-chat-dots"></i> Q&amp;A
+    </a>
+    <a class="nav-link{{ ' active' if request.endpoint == 'notes.new_note' else '' }}"
+       href="{{ url_for('notes.new_note') }}">
+      <i class="bi bi-journal-plus"></i> Add note
+    </a>
+    {% endif %}
+  </nav>
+
+  <form method="post" action="{{ url_for('auth.logout') }}" class="mt-6">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="nav-link border-0 bg-transparent w-100 text-start p-0">
+      <i class="bi bi-box-arrow-right"></i> Logout
+    </button>
+  </form>
+</aside>

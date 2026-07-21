@@ -1,0 +1,63 @@
+/* design-token overrides layered on top of vendored bootstrap.min.css.
+   loaded last in base.html so these rules win. */
+
+:root {
+  --bs-primary: #2b6cb0;
+  --bs-primary-rgb: 43, 108, 176;
+  --bs-danger: #c53030;
+  --bs-danger-rgb: 197, 48, 48;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+}
+
+.page-title {
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+/* xl (32px / 2rem) spacing step - bootstrap's stock scale stops at
+   .p-5/.gap-5 (3rem), extending the same naming convention */
+.p-6 { padding: 2rem; }
+.mt-6 { margin-top: 2rem; }
+.gap-6 { gap: 2rem; }
+
+/* app shell layout */
+.app-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 240px;
+  background: #fff;
+  border-right: 1px solid #dee2e6;
+}
+
+.app-sidebar .nav-link {
+  color: #6c757d;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid transparent;
+}
+
+.app-sidebar .nav-link.active {
+  color: var(--bs-primary);
+  font-weight: 600;
+  border-left-color: var(--bs-primary);
+}
+
+.content {
+  min-height: 100vh;
+  background: var(--bs-tertiary-bg, #f8f9fa);
+  padding: 3rem 2rem;
+}
+
+.content-shifted {
+  margin-left: 240px;
+}
+
+/* 44px minimum patient-table row height - touch-target-friendly action column */
+.table > tbody > tr {
+  height: 44px;
+}
