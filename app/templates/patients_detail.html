@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title mb-4">{{ patient.patient_name }}</h1>
+
+<div class="card p-4 mb-4">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h2 class="fs-5 mb-0">Demographics</h2>
+    <button type="button" class="btn btn-outline-secondary btn-sm">Edit</button>
+  </div>
+  <dl class="row mb-0">
+    <dt class="col-sm-3">Codice Fiscale</dt>
+    <dd class="col-sm-9">{{ cf }}</dd>
+    <dt class="col-sm-3">Phone</dt>
+    <dd class="col-sm-9">{{ patient.phone or "-" }}</dd>
+  </dl>
+
+  <h3 class="fs-6 mt-4 mb-2">Visit dates</h3>
+  {% if patient.visit_dates %}
+  <ul class="mb-0">
+    {% for d in patient.visit_dates %}
+    <li>{{ d }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-secondary mb-0">No visits on record.</p>
+  {% endif %}
+
+  <h3 class="fs-6 mt-4 mb-2">Invoices</h3>
+  {% if patient.invoices %}
+  <ul class="mb-0">
+    {% for inv in patient.invoices %}
+    <li>{{ inv.amount }} - {{ inv.description }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-secondary mb-0">No invoices on record.</p>
+  {% endif %}
+
+  <h3 class="fs-6 mt-4 mb-2">Files</h3>
+  {% if files %}
+  <ul class="mb-0">
+    {% for f in files %}
+    <li>{{ f }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-secondary mb-0">No files on record.</p>
+  {% endif %}
+</div>
+
+{% if show_clinical %}
+<div class="card p-4">
+  <div class="d-flex justify-content-between align-items-start mb-3">
+    <h2 class="fs-5 mb-0">Clinical history</h2>
+    <button type="button" class="btn btn-outline-secondary btn-sm">Edit</button>
+  </div>
+  {% if clinical %}
+  <div class="list-group">
+    {% for visit in clinical %}
+    <div class="list-group-item">
+      <small class="text-secondary d-block">{{ visit.visit_date or "no date" }}</small>
+      <p class="mb-1">{{ visit.clinical_notes }}</p>
+      {% if visit.procedures %}
+      <p class="mb-1">Procedures: {{ visit.procedures | join(", ") }}</p>
+      {% endif %}
+      {% if visit.next_appointment %}
+      <p class="mb-0">Next appointment: {{ visit.next_appointment }}</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-secondary mb-0">No clinical visits on record.</p>
+  {% endif %}
+</div>
+{% endif %}
+{% endblock %}

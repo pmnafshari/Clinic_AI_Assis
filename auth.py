@@ -5,7 +5,7 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "add_invoice"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "add_invoice", "read_clinical"},
     "assistant": {"read_notes", "append_note", "add_invoice"},
     "admin": {"manage_users"},
 }
@@ -39,12 +39,14 @@ def selftest():
         assert authorize("dentist", "add_invoice"), "1: dentist should allow add_invoice"
         assert authorize("dentist", "append_note"), "1: dentist should allow append_note"
         assert authorize("dentist", "edit_note"), "1: dentist should allow edit_note"
+        assert authorize("dentist", "read_clinical"), "1: dentist should allow read_clinical"
         assert not authorize("dentist", "manage_users"), "1: dentist should deny manage_users"
 
         assert authorize("assistant", "append_note"), "2: assistant should allow append_note"
         assert authorize("assistant", "add_invoice"), "2: assistant should allow add_invoice"
         assert not authorize("assistant", "edit_note"), "2: assistant should deny edit_note"
         assert not authorize("assistant", "update_field"), "2: assistant should deny update_field"
+        assert not authorize("assistant", "read_clinical"), "2: assistant should deny read_clinical"
         assert not authorize("assistant", "manage_users"), "2: assistant should deny manage_users"
 
         assert authorize("admin", "manage_users"), "3: admin should allow manage_users"
@@ -52,6 +54,7 @@ def selftest():
         assert not authorize("admin", "append_note"), "3: admin should deny append_note"
         assert not authorize("admin", "add_invoice"), "3: admin should deny add_invoice"
         assert not authorize("admin", "read_notes"), "3: admin should deny read_notes"
+        assert not authorize("admin", "read_clinical"), "3: admin should deny read_clinical"
 
         assert not authorize("nobody", "read_notes"), "4: unknown role should deny everything"
 

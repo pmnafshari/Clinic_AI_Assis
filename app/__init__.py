@@ -35,11 +35,13 @@ def create_app():
     from .auth_routes import auth_bp
     from .dashboard_routes import dashboard_bp
     from .notes_routes import notes_bp
+    from .patients_routes import patients_bp
     from .qa_routes import qa_bp
     app.register_blueprint(agent_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(notes_bp)
+    app.register_blueprint(patients_bp)
     app.register_blueprint(qa_bp)
 
     @app.before_request
