@@ -1,46 +1,66 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card-wide">
-  <h1>Add a note</h1>
+<h1 class="page-title mb-4">Add a note</h1>
+<div class="card p-4">
   {% if error %}
-  <p class="error">{{ error }}</p>
+  <p class="text-danger">{{ error }}</p>
   {% endif %}
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="raw_note">paste note</label>
-    <textarea id="raw_note" name="raw_note" rows="6" autofocus></textarea>
-    <button type="submit">Extract note</button>
+    <div class="mb-3">
+      <label for="raw_note" class="form-label">paste note</label>
+      <textarea id="raw_note" name="raw_note" rows="6" class="form-control" autofocus></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Extract note</button>
   </form>
 
   {% if preview %}
+  <hr class="my-4">
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="patient_name">patient name</label>
-    <input type="text" id="patient_name" name="patient_name" value="{{ preview.patient_name }}">
-    <label for="codice_fiscale">codice fiscale</label>
-    <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}">
-    <label for="phone">phone</label>
-    <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}">
-    <label for="visit_date">visit date</label>
-    <input type="text" id="visit_date" name="visit_date" value="{{ preview.visit_date or '' }}">
-    <label for="clinical_notes">clinical notes</label>
-    <input type="text" id="clinical_notes" name="clinical_notes" value="{{ preview.clinical_notes }}">
-    <label for="procedures">procedures</label>
-    <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}">
-    <label for="next_appointment">next appointment</label>
-    <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}">
+    <div class="mb-3">
+      <label for="patient_name" class="form-label">patient name</label>
+      <input type="text" id="patient_name" name="patient_name" value="{{ preview.patient_name }}" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="codice_fiscale" class="form-label">codice fiscale</label>
+      <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="phone" class="form-label">phone</label>
+      <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="visit_date" class="form-label">visit date</label>
+      <input type="text" id="visit_date" name="visit_date" value="{{ preview.visit_date or '' }}" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="clinical_notes" class="form-label">clinical notes</label>
+      <input type="text" id="clinical_notes" name="clinical_notes" value="{{ preview.clinical_notes }}" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="procedures" class="form-label">procedures</label>
+      <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}" class="form-control">
+    </div>
+    <div class="mb-3">
+      <label for="next_appointment" class="form-label">next appointment</label>
+      <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}" class="form-control">
+    </div>
     {% if preview.invoices %}
-    <p>invoices</p>
-    <ul class="invoice-list">
-      {% for inv in preview.invoices %}
-      <li>{{ inv.amount }} - {{ inv.description }}
-        <input type="hidden" name="invoice_amount" value="{{ inv.amount }}">
-        <input type="hidden" name="invoice_description" value="{{ inv.description }}">
-      </li>
-      {% endfor %}
-    </ul>
+    <div class="mb-3">
+      <p class="form-label mb-1">invoices</p>
+      <ul class="list-group">
+        {% for inv in preview.invoices %}
+        <li class="list-group-item">
+          {{ inv.amount }} - {{ inv.description }}
+          <input type="hidden" name="invoice_amount" value="{{ inv.amount }}">
+          <input type="hidden" name="invoice_description" value="{{ inv.description }}">
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
     {% endif %}
-    <button type="submit">Save note</button>
+    <button type="submit" class="btn btn-primary">Save note</button>
   </form>
   {% endif %}
 </div>

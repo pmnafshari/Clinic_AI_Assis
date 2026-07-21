@@ -1,28 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-  <h1>Ask a question</h1>
+<h1 class="page-title mb-4">Ask a question</h1>
+<div class="card p-4">
   {% if not question %}
-  <p>Ask about a patient's appointments, treatments, or contact details.</p>
+  <p class="text-secondary">Ask about a patient's appointments, treatments, or contact details.</p>
   {% endif %}
   {% if error %}
-  <p class="error">{{ error }}</p>
+  <p class="text-danger">{{ error }}</p>
   {% endif %}
   <form method="post" action="{{ url_for('qa.qa_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <label for="question">question</label>
-    <input type="text" id="question" name="question" value="{{ question or '' }}" autofocus>
+    <div class="mb-3">
+      <label for="question" class="form-label">question</label>
+      <input type="text" id="question" name="question" value="{{ question or '' }}" class="form-control" autofocus>
+    </div>
     {% if candidates %}
-      <div class="candidates">
-        <p>multiple patients named {{ name }} — pick one:</p>
+    <div class="mb-3">
+      <p class="mb-2">multiple patients named {{ name }} — pick one:</p>
+      <div class="list-group">
         {% for cf in candidates %}
-          <label><input type="radio" name="cf" value="{{ cf }}"> {{ cf }}</label>
+        <label class="list-group-item">
+          <input type="radio" name="cf" value="{{ cf }}"> {{ cf }}
+        </label>
         {% endfor %}
       </div>
+    </div>
     {% endif %}
-    <button type="submit">ask</button>
-    <p class="hint">Answers can take up to a minute — please wait after submitting.</p>
+    <button type="submit" class="btn btn-primary">ask</button>
+    <div class="form-text">Answers can take up to a minute — please wait after submitting.</div>
   </form>
-  {% if answer %}<p class="answer">{{ answer }}</p>{% endif %}
+  {% if answer %}
+  <div class="card bg-light mt-4 p-3">
+    <p class="mb-0">{{ answer }}</p>
+  </div>
+  {% endif %}
 </div>
 {% endblock %}
