@@ -187,6 +187,20 @@ def selftest():
         assert b"MRTLGU900010150100" not in dash_resp_g.data, \
             "9: another user's entry must not be shown"
 
+        # 10. GUI-06 SC1 - no-CDN: authenticated pages fetch every asset
+        # locally, no external http(s) reference in a <script>/<link> tag
+        no_cdn_resp = client_a.get("/")
+        assert not re.search(
+            r'<(?:script|link)[^>]+(?:src|href)="https?://', no_cdn_resp.text, re.IGNORECASE
+        ), "10: authenticated pages must not reference any external http(s) asset"
+
+        # 11. D-05 - login opts out of the sidebar; an authenticated screen
+        # keeps it
+        login_page = app.test_client().get("/login")
+        assert b"<aside" not in login_page.data, "11: login must render without the sidebar"
+        dash_with_shell = client_a.get("/")
+        assert b"<aside" in dash_with_shell.data, "11: an authenticated screen must render the sidebar"
+
     print("selftest ok")
 
 

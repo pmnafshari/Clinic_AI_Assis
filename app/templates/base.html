@@ -8,8 +8,10 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-  {% include "_sidebar.html" if request.endpoint != 'auth.login' %}
-  <main class="content">
+  {% if request.endpoint != 'auth.login' %}
+    {% include "_sidebar.html" %}
+  {% endif %}
+  <main class="content{{ ' content-shifted' if request.endpoint != 'auth.login' else '' }}">
     {% with messages = get_flashed_messages() %}
       {% if messages %}<div class="alert alert-primary">{{ messages[0] }}</div>{% endif %}
     {% endwith %}

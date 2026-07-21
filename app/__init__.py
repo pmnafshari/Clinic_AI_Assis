@@ -4,6 +4,7 @@ from flask import Flask, g, redirect, request, url_for
 from flask_wtf import CSRFProtect
 
 import web_session
+from auth import authorize
 from env_config import load_secret_key
 from storage import init_db
 
@@ -19,6 +20,9 @@ def create_app():
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
 
     CSRFProtect(app)
+
+    # exposed so _sidebar.html can role-filter nav items server-side
+    app.jinja_env.globals["authorize"] = authorize
 
     # read db.DB_PATH at call time (not imported by value) so a selftest
     # can point create_app() at a temp db by patching app.db.DB_PATH
