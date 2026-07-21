@@ -1,3 +1,4 @@
+import difflib
 import json
 import sys
 import urllib.error
@@ -58,6 +59,45 @@ def resolve_cf(name, conn):
     if not CF_PATTERN.match(cf):
         return None
     return cf
+
+
+def fuzzy_lookup(query, conn, limit=8):
+    # typo-tolerant patient search for the records screen - always returns a
+    # list of candidates for staff to pick from, never a single auto-picked cf
+    query_lower = query.lower().strip()
+    if not query_lower:
+        return []
+
+    tokens = query_lower.split()
+    # coarse SQL prefilter: every token must appear somewhere in the name -
+    # cheap at this data volume, narrows the set difflib has to score
+    clauses = " AND ".join("lower(patient_name) LIKE ?" for _ in tokens)
+    params = ["%" + token + "%" for token in tokens]
+    sql = "SELECT codice_fiscale, patient_name FROM patients WHERE " + clauses
+    rows = conn.execute(sql, params).fetchall()
+
+    if not rows:
+        # prefilter found no substring match - widen to a full fuzzy pass so
+        # a misspelled name still gets a chance to score
+        rows = conn.execute("SELECT codice_fiscale, patient_name FROM patients").fetchall()
+
+    candidates = []
+    for row in rows:
+        name = row["patient_name"]
+        name_tokens = name.split()
+        # match a short/partial query against individual name tokens first
+        # ("ros" vs "rossi" scores well; "ros" vs "mario rossi" as a whole
+        # would not) - fall back to comparing the full strings for a query
+        # that already reads like a full name
+        close = any(
+            difflib.get_close_matches(token, name_tokens, n=1, cutoff=0.6) for token in tokens
+        )
+        if not close:
+            close = bool(difflib.get_close_matches(query_lower, [name], n=1, cutoff=0.6))
+        if close:
+            candidates.append((row["codice_fiscale"], name))
+
+    return candidates[:limit]
 
 
 def extract_name(question):
@@ -236,6 +276,34 @@ def selftest():
         assert resolve_cf("nobody", conn) is None
         assert sorted(resolve_cf("bianchi", conn)) == sorted([cf3, cf4]), \
             "shared surname must return the candidate list for the cf prompt"
+
+        # 3b. fuzzy_lookup: typo-tolerant search, always a list, never a write
+        assert fuzzy_lookup("", conn) == [], "empty query must short-circuit to no candidates"
+        assert fuzzy_lookup("   ", conn) == [], "whitespace-only query must short-circuit too"
+
+        ros_hits = fuzzy_lookup("ros", conn)
+        rosi_hits = fuzzy_lookup("rosi", conn)
+        reordered_hits = fuzzy_lookup("rossi mario", conn)
+        partial_multi_hits = fuzzy_lookup("mario ro", conn)
+        bianchi_hits = fuzzy_lookup("bianchi", conn)
+
+        for hits in (ros_hits, rosi_hits, reordered_hits, partial_multi_hits, bianchi_hits):
+            assert isinstance(hits, list), "fuzzy_lookup must always return a list"
+            for item in hits:
+                assert isinstance(item, tuple) and len(item) == 2, \
+                    "every candidate must be a (cf, name) tuple"
+
+        assert (cf, "mario rossi") in ros_hits, "partial query 'ros' must surface mario rossi"
+        assert (cf, "mario rossi") in rosi_hits, "misspelled 'rosi' must still surface mario rossi"
+        assert fuzzy_lookup("zzzzzz", conn) == [], "no-match query must return [], never crash"
+        assert (cf, "mario rossi") in reordered_hits, \
+            "reordered tokens ('rossi mario') must still find mario rossi"
+        assert (cf, "mario rossi") in partial_multi_hits, \
+            "multi-token partial query ('mario ro') must still find mario rossi"
+
+        bianchi_cfs = {c for c, n in bianchi_hits}
+        assert cf3 in bianchi_cfs and cf4 in bianchi_cfs, \
+            "two similarly-named patients must both appear - no false-confident single pick"
 
         # 4. answer_exact behaviors
         answer = answer_exact(cf, "phone", conn)
