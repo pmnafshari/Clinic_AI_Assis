@@ -1,33 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
-  <h1>Dashboard</h1>
+<h1 class="page-title mb-4">Dashboard</h1>
+
+<div class="card p-4 mb-4">
   <p>Logged in as <strong>{{ user.username }}</strong> ({{ user.role }})</p>
-  <p><a href="{{ url_for('qa.qa_page') }}">ask a question</a></p>
-  <p><a href="{{ url_for('notes.new_note') }}">add a note</a></p>
-  <p><a href="{{ url_for('agent.edit_page') }}">edit a record</a></p>
-  <p><a href="{{ url_for('agent.command_page') }}">run a command</a></p>
-  <form method="post" action="{{ url_for('auth.logout') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button type="submit">log out</button>
-  </form>
+  <div class="d-flex gap-2 flex-wrap">
+    <a href="{{ url_for('qa.qa_page') }}" class="btn btn-outline-secondary btn-sm">Ask a question</a>
+    <a href="{{ url_for('notes.new_note') }}" class="btn btn-outline-secondary btn-sm">Add a note</a>
+    <a href="{{ url_for('agent.edit_page') }}" class="btn btn-outline-secondary btn-sm">Edit a record</a>
+    <a href="{{ url_for('agent.command_page') }}" class="btn btn-outline-secondary btn-sm">Run a command</a>
+  </div>
 </div>
-<div class="card-wide">
+
+<div class="card p-4">
+  <h2 class="fs-5 mb-3">Recent changes</h2>
   {% if history %}
-    <h1>Recent changes</h1>
+  <div class="list-group">
     {% for entry in history %}
-      <p class="hint">{{ entry.ts }}</p>
-      <p>{{ entry.tool }} - {{ entry.codice_fiscale }}</p>
+    <div class="list-group-item d-flex justify-content-between align-items-center">
+      <div>
+        <small class="text-secondary d-block">{{ entry.ts }}</small>
+        <span>{{ entry.tool }} - {{ entry.codice_fiscale }}</span>
+      </div>
       {% if loop.first %}
-        <form method="post" action="{{ url_for('agent.undo_change') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit">Undo change</button>
-        </form>
+      <form method="post" action="{{ url_for('agent.undo_change') }}" class="mb-0">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-sm">Undo change</button>
+      </form>
       {% endif %}
+    </div>
     {% endfor %}
+  </div>
   {% else %}
-    <h1>No changes yet</h1>
-    <p>Your edits will appear here after you save something.</p>
+  <p class="text-secondary mb-0">No changes yet. Your edits will appear here after you save something.</p>
   {% endif %}
 </div>
 {% endblock %}
