@@ -1,0 +1,11 @@
+{% if candidates %}
+<div class="list-group mt-2">
+  {% for cf, name in candidates %}
+  <a href="{{ url_for('patients.detail_view', cf=cf) }}" class="list-group-item list-group-item-action">
+    {{ name }} <span class="text-secondary">({{ cf }})</span>
+  </a>
+  {% endfor %}
+</div>
+{% elif query %}
+<p class="text-secondary mt-2 mb-0">No patients match '{{ query }}'.</p>
+{% endif %}
