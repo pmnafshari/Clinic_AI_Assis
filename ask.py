@@ -84,16 +84,23 @@ def fuzzy_lookup(query, conn, limit=8):
     candidates = []
     for row in rows:
         name = row["patient_name"]
-        name_tokens = name.split()
-        # match a short/partial query against individual name tokens first
+        # lowercase both sides - stored names keep the operator's capitalization
+        # and difflib is case-sensitive
+        name_lower = name.lower()
+        name_tokens = name_lower.split()
+        # a row the prefilter already matched contains every token as a
+        # substring - difflib must not veto it
+        close = all(token in name_lower for token in tokens)
+        # otherwise match a short/partial query against individual name tokens
         # ("ros" vs "rossi" scores well; "ros" vs "mario rossi" as a whole
         # would not) - fall back to comparing the full strings for a query
         # that already reads like a full name
-        close = any(
-            difflib.get_close_matches(token, name_tokens, n=1, cutoff=0.6) for token in tokens
-        )
         if not close:
-            close = bool(difflib.get_close_matches(query_lower, [name], n=1, cutoff=0.6))
+            close = any(
+                difflib.get_close_matches(token, name_tokens, n=1, cutoff=0.6) for token in tokens
+            )
+        if not close:
+            close = bool(difflib.get_close_matches(query_lower, [name_lower], n=1, cutoff=0.6))
         if close:
             candidates.append((row["codice_fiscale"], name))
 
@@ -259,6 +266,12 @@ def selftest():
         upsert_note_sql(DentalNote(patient_name="carlo bianchi", codice_fiscale=cf4),
                         "BNCC910010150400/notes/n1.json", conn)
 
+        # names typed through the web form keep their capitalization - search
+        # must find them too
+        cf5 = "GLLA920010150500"
+        upsert_note_sql(DentalNote(patient_name="Anna Gialli", codice_fiscale=cf5),
+                        "GLLA920010150500/notes/n1.json", conn)
+
         # 1. router keys on cue presence alone
         assert classify_question("what is patient rossi's phone number?") == "exact"
         assert classify_question("which patients had a root canal?") == "meaning"
@@ -304,6 +317,12 @@ def selftest():
         bianchi_cfs = {c for c, n in bianchi_hits}
         assert cf3 in bianchi_cfs and cf4 in bianchi_cfs, \
             "two similarly-named patients must both appear - no false-confident single pick"
+
+        # 3c. a capitalized stored name must be reachable whatever the query casing
+        for q in ("gia", "Gia", "GIA", "gialli", "anna gialli", "Anna Gia"):
+            hits = fuzzy_lookup(q, conn)
+            assert (cf5, "Anna Gialli") in hits, \
+                f"query {q!r} must surface the capitalized name 'Anna Gialli'"
 
         # 4. answer_exact behaviors
         answer = answer_exact(cf, "phone", conn)

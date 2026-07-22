@@ -121,6 +121,12 @@ def selftest():
             " VALUES (?, ?, ?, ?, ?, ?)",
             (cf, "2026-06-01", '["rct 26"]', "rct done on tooth 26", "2026-08-01", "n1.json"),
         )
+        # capitalized as the web form stores it - the search box must find it
+        cap_cf = "GLLA920010150500"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            (cap_cf, "Anna Gialli", "333999888"),
+        )
         conn.commit()
         conn.close()
 
@@ -187,6 +193,13 @@ def selftest():
         assert miss_resp.status_code == 200
         assert "No patients match" in miss_resp.text, \
             "a query with no matches should render the neutral no-match copy"
+
+        # 3b. CR-02 - a capitalized stored name is reachable from the search box
+        for q in ("gia", "Gia", "GIA"):
+            cap_resp = dentist_client.get(f"/patients/search?q={q}")
+            assert cap_resp.status_code == 200
+            assert "Anna Gialli" in cap_resp.text, \
+                f"search '{q}' should surface the capitalized patient name"
 
         assistant_typo_resp = assistant_client.get("/patients/search?q=rosi")
         assert assistant_typo_resp.status_code == 200
