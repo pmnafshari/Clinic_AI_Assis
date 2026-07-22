@@ -9,6 +9,7 @@ from werkzeug.security import generate_password_hash
 import app.agent_routes as agent_routes
 import app.db as app_db
 from app import create_app
+from web_session import _hash_token
 
 
 def _seed_user(db_path, username, password, role):
@@ -40,6 +41,14 @@ def _login(app, username, password):
     )
     assert login_resp.status_code == 302, f"login for {username} should redirect"
     return client
+
+
+def _phone(db_path, cf):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT phone FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone()
+    conn.close()
+    return row["phone"]
 
 
 def selftest():
@@ -167,6 +176,100 @@ def selftest():
         admin_search_resp = admin_client.get("/patients/search?q=rosi")
         assert admin_search_resp.status_code == 403, \
             "admin should get a bare 403 from the search fragment, not a redirect"
+
+        # 5. modal edit -> confirm-diff -> apply (GUI-06 SC3, D-07). The
+        # edit-form fragment is chrome-free - loads straight into the
+        # shared #modal-body-target, no page reload.
+        edit_form_resp = dentist_client.get(f"/patients/{cf}/edit-form?field=phone")
+        assert edit_form_resp.status_code == 200
+        assert 'name="value"' in edit_form_resp.text, \
+            "edit-form fragment should carry the value input"
+        assert "modal-dialog" not in edit_form_resp.text and "extends" not in edit_form_resp.text, \
+            "edit-form fragment must be chrome-free (no modal wrapper)"
+
+        # 6. CSRF is enforced on the edit POST, same as every other write
+        no_csrf_resp = dentist_client.post(
+            f"/patients/{cf}/edit", data={"field": "phone", "value": "333-1234"}
+        )
+        assert no_csrf_resp.status_code == 400, \
+            "edit POST without a csrf token should be rejected"
+        assert _phone(db_path, cf) == "333123456", \
+            "a rejected csrf edit must not touch the db"
+
+        # 7. build swaps the modal body to the confirm-diff fragment - the
+        # write is frozen but not yet applied (D-07's hard constraint)
+        edit_csrf = _csrf_from(edit_form_resp.text)
+        build_resp = dentist_client.post(
+            f"/patients/{cf}/edit",
+            data={"field": "phone", "value": "333-1234", "csrf_token": edit_csrf},
+        )
+        assert build_resp.status_code == 200
+        assert 'name="token"' in build_resp.text, \
+            "confirm-diff fragment should carry a hidden token"
+        assert "333123456" in build_resp.text and "333-1234" in build_resp.text, \
+            "confirm-diff fragment should show the old -> new diff"
+        assert _phone(db_path, cf) == "333123456", \
+            "building the diff must not write to the db until confirm"
+
+        token = _token_from(build_resp.text)
+        confirm_csrf = _csrf_from(build_resp.text)
+
+        # 8. confirming posts to the reused agent.confirm_change endpoint -
+        # the modal path never reimplements apply/write/audit
+        confirm_resp = dentist_client.post(
+            "/agent/confirm", data={"token": token, "csrf_token": confirm_csrf}
+        )
+        assert confirm_resp.status_code == 302, "confirm should redirect on success"
+        assert _phone(db_path, cf) == "333-1234", \
+            "confirming should apply the frozen new value"
+
+        # 9. RBAC re-check (SC4) - build as dentist (authorized), then
+        # downgrade the live session's role before confirming. The denial
+        # must come from the independent check inside apply, not the UI.
+        edit_form_resp2 = dentist_client.get(f"/patients/{cf}/edit-form?field=phone")
+        edit_csrf2 = _csrf_from(edit_form_resp2.text)
+        build_resp2 = dentist_client.post(
+            f"/patients/{cf}/edit",
+            data={"field": "phone", "value": "555-0000", "csrf_token": edit_csrf2},
+        )
+        token2 = _token_from(build_resp2.text)
+        confirm_csrf2 = _csrf_from(build_resp2.text)
+
+        raw_session_token = dentist_client.get_cookie("session_token").value
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE sessions SET role = 'assistant' WHERE token_hash = ?",
+            (_hash_token(raw_session_token),),
+        )
+        conn.commit()
+        conn.close()
+
+        denied_resp = dentist_client.post(
+            "/agent/confirm", data={"token": token2, "csrf_token": confirm_csrf2}
+        )
+        assert denied_resp.status_code == 200, "a denied confirm should re-render, not redirect"
+        assert "permission" in denied_resp.text.lower(), \
+            "a denied confirm should show a permission message"
+        assert _phone(db_path, cf) == "333-1234", \
+            "RBAC re-check: a denied confirm must not change the phone"
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        denied_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'update_field' AND allowed = 0"
+        ).fetchall()
+        conn.close()
+        assert len(denied_rows) == 1, \
+            f"RBAC re-check: expected 1 denied update_field row, got {len(denied_rows)}"
+
+        # restore the live session's role for any assertions added later
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE sessions SET role = 'dentist' WHERE token_hash = ?",
+            (_hash_token(raw_session_token),),
+        )
+        conn.commit()
+        conn.close()
 
     print("selftest ok")
 
