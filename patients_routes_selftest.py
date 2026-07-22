@@ -305,6 +305,45 @@ def selftest():
         conn.commit()
         conn.close()
 
+        # 10. CR-03 - the modal confirm goes through htmx, which follows a 302
+        # on its xhr and would swap the whole dashboard document into the modal
+        # body. an HX-Request must get a fragment plus HX-Redirect instead.
+        edit_form_resp3 = dentist_client.get(f"/patients/{cf}/edit-form?field=phone")
+        build_resp3 = dentist_client.post(
+            f"/patients/{cf}/edit",
+            data={
+                "field": "phone",
+                "value": "333-5678",
+                "csrf_token": _csrf_from(edit_form_resp3.text),
+            },
+        )
+        confirm_csrf3 = _csrf_from(build_resp3.text)
+        htmx_confirm_resp = dentist_client.post(
+            "/agent/confirm",
+            data={"token": _token_from(build_resp3.text), "csrf_token": confirm_csrf3},
+            headers={"HX-Request": "true"},
+        )
+        assert htmx_confirm_resp.status_code == 200, \
+            "an htmx confirm must not answer 302 - the xhr follows it silently"
+        assert "<html" not in htmx_confirm_resp.text.lower(), \
+            "an htmx confirm must not swap a full page into the modal body"
+        assert cf in htmx_confirm_resp.headers.get("HX-Redirect", ""), \
+            "an htmx confirm should send the browser back to the patient page"
+        assert _phone(db_path, cf) == "333-5678", \
+            "the htmx confirm should still apply the frozen value"
+
+        # the error branches are fragments too, not agent_confirm.html
+        stale_confirm_resp = dentist_client.post(
+            "/agent/confirm",
+            data={"token": "nosuchtoken", "csrf_token": confirm_csrf3},
+            headers={"HX-Request": "true"},
+        )
+        assert stale_confirm_resp.status_code == 200
+        assert "<html" not in stale_confirm_resp.text.lower(), \
+            "an htmx confirm error must stay a fragment too"
+        assert "expired" in stale_confirm_resp.text.lower(), \
+            "a stale token should say so inside the modal"
+
     print("selftest ok")
 
 

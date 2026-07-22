@@ -1,6 +1,6 @@
 import urllib.request
 
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+from flask import Blueprint, flash, g, make_response, redirect, render_template, request, url_for
 
 import agent
 import pending_actions
@@ -13,6 +13,15 @@ agent_bp = Blueprint("agent", __name__)
 
 UNDO_LOG = agent.UNDO_LOG
 _urlopen = urllib.request.urlopen
+
+
+def _confirm_error(message):
+    # htmx swaps whatever comes back straight into the modal body, so a
+    # fragment caller must get a fragment - agent_confirm.html extends
+    # base.html and would nest a whole page inside the modal
+    if request.headers.get("HX-Request"):
+        return render_template("_confirm_diff.html", error=message)
+    return render_template("agent_confirm.html", error=message)
 
 
 def _build_and_render(call, template, **template_args):
@@ -80,19 +89,13 @@ def confirm_change():
     token = request.form.get("token", "")
     pending = pending_actions.load_pending_action(get_db(), token, g.user["username"])
     if pending is None:
-        return render_template(
-            "agent_confirm.html",
-            error="This change has expired. Review and confirm again.",
-        )
+        return _confirm_error("This change has expired. Review and confirm again.")
 
     # burn the token before applying - the atomic delete makes the token
     # single-use even for concurrent double-submits, and a denied apply
     # below still leaves it consumed
     if not pending_actions.consume_pending_action(get_db(), token, g.user["username"]):
-        return render_template(
-            "agent_confirm.html",
-            error="This change has expired. Review and confirm again.",
-        )
+        return _confirm_error("This change has expired. Review and confirm again.")
 
     # peek at authorize() here only to pick the right response - the actual
     # security boundary is the independent check inside apply_pending_action
@@ -105,17 +108,19 @@ def confirm_change():
         )
     except (OSError, ValueError):
         # e.g. the note file vanished during the confirm window
-        return render_template(
-            "agent_confirm.html",
-            error="This change can no longer be applied. Review and rebuild it.",
-        )
+        return _confirm_error("This change can no longer be applied. Review and rebuild it.")
 
     if not allowed:
-        return render_template(
-            "agent_confirm.html", error="You don't have permission to make this change."
-        )
+        return _confirm_error("You don't have permission to make this change.")
 
     flash("Change saved.")
+    if request.headers.get("HX-Request"):
+        # htmx's xhr follows a 302 transparently and would swap the redirect
+        # target's whole document into the modal - hand it a client-side
+        # redirect back to the patient instead
+        resp = make_response("")
+        resp.headers["HX-Redirect"] = url_for("patients.detail_view", cf=pending["cf"])
+        return resp
     return redirect(url_for("dashboard.index"))
 
 
