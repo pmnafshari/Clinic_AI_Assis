@@ -67,10 +67,15 @@ def detail_view(cf):
     show_clinical = authorize(g.user["role"], "read_clinical")
     clinical = lookup_clinical(cf, conn) if show_clinical else None
 
-    patient_dir = SORTED_ROOT / cf
+    # filenames are clinical data too (notes/, images/, records/) - same gate
+    # as the clinical card, so an unauthorized role never walks the tree
     files = []
-    if patient_dir.is_dir():
-        files = sorted(str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file())
+    if show_clinical:
+        patient_dir = SORTED_ROOT / cf
+        if patient_dir.is_dir():
+            files = sorted(
+                str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file()
+            )
 
     return render_template(
         "patients_detail.html",

@@ -8,6 +8,7 @@ from werkzeug.security import generate_password_hash
 
 import app.agent_routes as agent_routes
 import app.db as app_db
+import app.patients_routes as patients_routes
 from app import create_app
 from web_session import _hash_token
 
@@ -99,6 +100,11 @@ def selftest():
         app = create_app()
         app.config["TESTING"] = True
 
+        # point the file listing at a throwaway tree so the Files section has
+        # something real to leak
+        sorted_root = Path(tmp) / "sorted"
+        patients_routes.SORTED_ROOT = sorted_root
+
         _seed_user(db_path, "drossi", "goodpass", "dentist")
         _seed_user(db_path, "aassist", "goodpass", "assistant")
         _seed_user(db_path, "aadmin", "goodpass", "admin")
@@ -117,6 +123,11 @@ def selftest():
         )
         conn.commit()
         conn.close()
+
+        (sorted_root / cf / "notes").mkdir(parents=True)
+        (sorted_root / cf / "notes" / "n1.json").write_text("{}")
+        (sorted_root / cf / "images").mkdir(parents=True)
+        (sorted_root / cf / "images" / "xray-26-rct.jpg").write_text("x")
 
         # 1. RBAC-04 - admin gets no table, just the redirect + denied audit row
         admin_client = _login(app, "aadmin", "goodpass")
@@ -154,6 +165,16 @@ def selftest():
             "assistant should still see the CRM card"
         assert "rct done on tooth 26" not in assistant_detail_resp.text, \
             "assistant (read_notes but not read_clinical) must not see clinical text - RBAC-03"
+
+        # 2b. CR-01 - the file listing is clinical data too. the dentist sees
+        # it, the assistant must not get the document inventory at all.
+        assert "n1.json" in dentist_detail_resp.text, \
+            "dentist (read_clinical) should see the patient file listing"
+        assert "xray-26-rct.jpg" in dentist_detail_resp.text
+        assert "n1.json" not in assistant_detail_resp.text, \
+            "assistant must not see clinical filenames - RBAC-03"
+        assert "xray-26-rct.jpg" not in assistant_detail_resp.text, \
+            "assistant must not see clinical filenames - RBAC-03"
 
         # 3. SC2 - fuzzy search returns the seeded candidate for a typo,
         # and the neutral no-match copy for a miss

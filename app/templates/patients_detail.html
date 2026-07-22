@@ -39,6 +39,7 @@
   <p class="text-secondary mb-0">No invoices on record.</p>
   {% endif %}
 
+  {% if show_clinical %}
   <h3 class="fs-6 mt-4 mb-2">Files</h3>
   {% if files %}
   <ul class="mb-0">
@@ -48,6 +49,7 @@
   </ul>
   {% else %}
   <p class="text-secondary mb-0">No files on record.</p>
+  {% endif %}
   {% endif %}
 </div>
 
