@@ -1,0 +1,12 @@
+<h2 class="fs-5 mb-3">Confirm change</h2>
+{% if error %}
+<p class="text-danger">{{ error }}</p>
+{% else %}
+<p class="fs-5 mb-3">{{ diff_line }}</p>
+<form hx-post="{{ url_for('agent.confirm_change') }}" hx-target="#modal-body-target" hx-swap="innerHTML" class="d-inline">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="token" value="{{ token }}">
+  <button type="submit" class="btn btn-primary">Confirm change</button>
+</form>
+{% endif %}
+<button type="button" class="btn btn-link text-secondary" data-bs-dismiss="modal">Discard change</button>

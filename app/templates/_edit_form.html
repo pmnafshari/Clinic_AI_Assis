@@ -1,0 +1,13 @@
+<h2 class="fs-5 mb-3">Edit patient</h2>
+{% if error %}
+<p class="text-danger">{{ error }}</p>
+{% endif %}
+<form hx-post="{{ url_for('patients.edit_submit', cf=cf) }}" hx-target="#modal-body-target" hx-swap="innerHTML">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="field" value="{{ field }}">
+  <div class="mb-3">
+    <label for="value" class="form-label">{{ field.replace('_', ' ')|capitalize }}</label>
+    <input type="text" id="value" name="value" value="{{ value or '' }}" class="form-control" autofocus>
+  </div>
+  <button type="submit" class="btn btn-primary">Save changes</button>
+</form>
