@@ -2,7 +2,9 @@ from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import agent
 import ask
+import pending_actions
 from auth import authorize, log_audit
 from dental_notes_schema import CF_PATTERN
 from storage import lookup_clinical, lookup_patient
@@ -78,3 +80,65 @@ def detail_view(cf):
         show_clinical=show_clinical,
         files=files,
     )
+
+
+@patients_bp.route("/patients/<cf>/edit-form")
+def edit_form_fragment(cf):
+    # HTMX target - a denied fragment returns a bare status, not a redirect
+    if not authorize(g.user["role"], "read_notes"):
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    field = request.args.get("field", "")
+    if field not in agent.EDITABLE_FIELDS:
+        abort(400)
+
+    patient = lookup_patient(cf, get_db())
+    if patient is None:
+        abort(404)
+
+    value = patient[agent.EDITABLE_FIELDS[field]]
+    return render_template("_edit_form.html", cf=cf, field=field, value=value)
+
+
+@patients_bp.route("/patients/<cf>/edit", methods=["POST"])
+def edit_submit(cf):
+    if not authorize(g.user["role"], "read_notes"):
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    field = request.form.get("field", "")
+    value = request.form.get("value", "")
+
+    conn = get_db()
+    patient = lookup_patient(cf, conn)
+    if patient is None:
+        abort(404)
+
+    # build_pending_action resolves by name, not cf - choose_cf pins the
+    # resolution to the cf this route already validated, so a duplicate
+    # name elsewhere can never redirect the edit to the wrong patient
+    call = agent.ToolCall(
+        tool="update_field",
+        args={"patient": patient["patient_name"], "field": field, "value": value},
+    )
+    try:
+        call.parsed_args()
+    except Exception as e:
+        return render_template(
+            "_edit_form.html", cf=cf, field=field, value=value, error=f"invalid field: {e}"
+        )
+
+    pending, reason = agent.build_pending_action(
+        call, conn, g.user["role"], g.user["username"],
+        choose_cf=lambda candidates, cf=cf: cf if cf in candidates else None,
+    )
+    if pending is None:
+        return render_template("_edit_form.html", cf=cf, field=field, value=value, error=reason)
+
+    token = pending_actions.create_pending_action(conn, g.user["username"], g.user["role"], pending)
+    return render_template("_confirm_diff.html", diff_line=pending["diff_line"], token=token)
