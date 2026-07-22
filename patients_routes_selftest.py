@@ -121,6 +121,14 @@ def selftest():
             " VALUES (?, ?, ?, ?, ?, ?)",
             (cf, "2026-06-01", '["rct 26"]', "rct done on tooth 26", "2026-08-01", "n1.json"),
         )
+        # an older visit inserted later - a bulk re-import assigns ids by
+        # filename, so the highest id is not the latest visit
+        conn.execute(
+            "INSERT INTO visits"
+            " (codice_fiscale, visit_date, procedures, clinical_notes, next_appointment, source_path)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            (cf, "2026-03-15", "[]", "cleaning", None, "n10.json"),
+        )
         # capitalized as the web form stores it - the search box must find it
         cap_cf = "GLLA920010150500"
         conn.execute(
@@ -181,6 +189,17 @@ def selftest():
             "assistant must not see clinical filenames - RBAC-03"
         assert "xray-26-rct.jpg" not in assistant_detail_resp.text, \
             "assistant must not see clinical filenames - RBAC-03"
+
+        # 2c. CR-04 - the list picks next appointment / last visit by
+        # visit_date, not by insert order
+        dentist_list_resp = dentist_client.get("/patients")
+        assert dentist_list_resp.status_code == 200
+        assert "2026-08-01" in dentist_list_resp.text, \
+            "next appointment must come from the newest visit by date, not the highest id"
+        assert "2026-06-01" in dentist_list_resp.text, \
+            "last visit must be the newest visit by date"
+        assert "2026-03-15" not in dentist_list_resp.text, \
+            "the older visit must not be reported as the last visit"
 
         # 3. SC2 - fuzzy search returns the seeded candidate for a typo,
         # and the neutral no-match copy for a miss

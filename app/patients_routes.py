@@ -15,6 +15,11 @@ patients_bp = Blueprint("patients", __name__)
 
 SORTED_ROOT = Path("sorted")
 
+# newest by visit_date, not by insert order - a bulk load_from_sorted re-import
+# assigns visit ids by filename, so the highest id is not the latest visit.
+# same ordering as agent.pick_target_visit; nulls sort last.
+LATEST_VISIT = "ORDER BY v.visit_date IS NULL, v.visit_date DESC, v.id DESC LIMIT 1"
+
 
 @patients_bp.route("/patients")
 def list_view():
@@ -23,12 +28,12 @@ def list_view():
         flash("You don't have permission to view patient records.")
         return redirect(url_for("dashboard.index"))
 
-    patients = get_db().execute("""
+    patients = get_db().execute(f"""
         SELECT p.codice_fiscale, p.patient_name, p.phone,
             (SELECT next_appointment FROM visits v WHERE v.codice_fiscale = p.codice_fiscale
-             ORDER BY v.id DESC LIMIT 1) AS next_appointment,
+             {LATEST_VISIT}) AS next_appointment,
             (SELECT visit_date FROM visits v WHERE v.codice_fiscale = p.codice_fiscale
-             ORDER BY v.id DESC LIMIT 1) AS last_visit
+             {LATEST_VISIT}) AS last_visit
         FROM patients p
         ORDER BY p.patient_name
     """).fetchall()
