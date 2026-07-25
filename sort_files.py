@@ -36,43 +36,42 @@ def find_cf_in_name(filename):
 def route_note(src, sorted_root, log_path=None, extract=extract_note):
     # symlink guard — never follow
     if src.is_symlink():
-        _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
-        return
+        return _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
     try:
         note = extract(src.read_text())
         cf = note.codice_fiscale  # already validated by DentalNote
         dest = _move(src, sorted_root / cf / "notes", "matched CF", sorted_root, log_path)
         dest.with_suffix(".json").write_text(note.model_dump_json())
+        return dest
     except OllamaUnreachable as e:
-        _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
+        return _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
     except ValueError as e:
-        _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
+        return _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
 
 
 def route_file(src, sorted_root, log_path=None):
     # symlink guard — never follow, for any file type
     if src.is_symlink():
-        _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
-        return
+        return _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
     ext = src.suffix.lower()
     if ext == ".txt":
-        route_note(src, sorted_root, log_path)
-        return
+        return route_note(src, sorted_root, log_path)
     cf = find_cf_in_name(src.name)
     if ext == ".xlsx":
         sub = "records"
+    elif ext == ".pdf":
+        sub = "documents"
     elif ext in (".jpg", ".jpeg", ".png"):
         sub = "images"
     else:
-        _move(src, sorted_root / "needs_review", "unknown type", sorted_root, log_path)
-        return
+        return _move(src, sorted_root / "needs_review", "unknown type", sorted_root, log_path)
     if cf:
         dest_dir = sorted_root / cf / sub
         reason = f"type:{ext.lstrip('.')} cf:{cf}"
     else:
         dest_dir = sorted_root / sub
         reason = f"type:{ext.lstrip('.')} no-cf"
-    _move(src, dest_dir, reason, sorted_root, log_path)
+    return _move(src, dest_dir, reason, sorted_root, log_path)
 
 
 def selftest():
@@ -165,8 +164,9 @@ def selftest():
         # 9. xlsx with CF in filename → sorted/<CF>/records/
         f9 = root / f"fattura_{VALID_CF}_2026.xlsx"
         f9.write_bytes(b"PK")
-        route_file(f9, sorted_, log_path)
+        dest9 = route_file(f9, sorted_, log_path)
         assert (sorted_ / VALID_CF / "records" / f9.name).exists(), "9: xlsx+CF not in patient records"
+        assert dest9 == sorted_ / VALID_CF / "records" / f9.name, "9: route_file did not return xlsx+cf dest"
 
         # 10. xlsx without CF → sorted/records/
         f10 = root / "fattura_generica.xlsx"
@@ -201,6 +201,26 @@ def selftest():
         assert (sorted_ / "needs_review" / link_x.name).exists(), "14: symlinked xlsx not in needs_review"
         assert not (sorted_ / VALID_CF / "records" / link_x.name).exists(), \
             "14: symlinked xlsx wrongly filed into patient records"
+
+        # 15. pdf with CF in filename → sorted/<CF>/documents/
+        f15 = root / f"referto_{VALID_CF}.pdf"
+        f15.write_bytes(b"%PDF")
+        dest15 = route_file(f15, sorted_, log_path)
+        assert (sorted_ / VALID_CF / "documents" / f15.name).exists(), "15: pdf+CF not in patient documents"
+        assert dest15 == sorted_ / VALID_CF / "documents" / f15.name, "15: route_file did not return pdf+cf dest"
+
+        # 16. pdf without CF → sorted/documents/
+        f16 = root / "referto_generico.pdf"
+        f16.write_bytes(b"%PDF")
+        dest16 = route_file(f16, sorted_, log_path)
+        assert (sorted_ / "documents" / "referto_generico.pdf").exists(), "16: pdf no-cf not in top-level documents"
+        assert dest16 == sorted_ / "documents" / "referto_generico.pdf", "16: route_file did not return pdf no-cf dest"
+
+        # 17. route_note returns the matched-CF dest Path (return-value contract for the worker's extract= seam)
+        f17 = root / "note17.txt"
+        f17.write_text("patient note")
+        dest17 = route_note(f17, sorted_, log_path=log_path, extract=make_extractor(cf=VALID_CF))
+        assert dest17 == sorted_ / VALID_CF / "notes" / f17.name, "17: route_note did not return matched-CF dest"
 
     print("selftest ok")
 
