@@ -104,3 +104,26 @@ def submit_dashboard():
     if request.headers.get("HX-Request"):
         return render_template("_upload_results.html", results=results)
     return redirect(url_for("dashboard.index"))
+
+
+def _user_recent_intake(conn, username, limit=10):
+    # per-user scoping (D-19) - reads audit_log only, never the shared
+    # operational log, which has no user field and would leak clinic-wide
+    # filenames (D-02/CR-01)
+    rows = conn.execute(
+        "SELECT ts, target, allowed FROM audit_log"
+        " WHERE username = ? AND action = 'upload_file'"
+        " ORDER BY id DESC LIMIT ?",
+        (username, limit),
+    ).fetchall()
+    return rows
+
+
+@upload_bp.route("/upload/recent")
+def recent_intake():
+    # HTMX-polled fragment - a denied fragment returns a bare status
+    if not authorize(g.user["role"], "upload_file"):
+        return "", 403
+
+    rows = _user_recent_intake(get_db(), g.user["username"])
+    return render_template("_recent_intake.html", rows=rows)
