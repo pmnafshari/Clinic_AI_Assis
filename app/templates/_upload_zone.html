@@ -1,0 +1,13 @@
+{% set post_url = url_for('upload.submit_patient', cf=cf) if cf else url_for('upload.submit_dashboard') %}
+<form method="post" enctype="multipart/form-data" hx-post="{{ post_url }}" hx-target="#upload-toast-container" hx-swap="afterbegin" action="{{ post_url }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <label class="upload-zone d-flex flex-column align-items-center justify-content-center text-center p-4">
+    <input type="file" name="files" multiple accept=".pdf,.jpg,.jpeg,.png,.txt,.xlsx" class="visually-hidden">
+    <i class="bi bi-cloud-upload fs-2 mb-2"></i>
+    <span class="upload-zone-idle-heading fs-5 mb-1">Drag files here or click to browse</span>
+    <span class="upload-zone-dragover-heading fs-5 mb-1">Drop to upload</span>
+    <span class="text-secondary">PDF, JPG, PNG, TXT, XLSX — up to 25MB each.</span>
+  </label>
+  <div class="staged-files mt-3"></div>
+  <button type="submit" class="btn btn-primary mt-3" disabled>Upload files</button>
+</form>

@@ -61,3 +61,40 @@ h1, h2, h3, h4, h5, h6 {
 .table > tbody > tr {
   height: 44px;
 }
+
+/* toast title weight (14px/600) - reuses the existing 600 weight, no third weight added */
+strong {
+  font-weight: 600;
+}
+
+/* upload drop zone (Phase 11) */
+.upload-zone {
+  min-height: 160px;
+  border: 2px dashed #dee2e6;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  color: #6c757d;
+}
+
+.upload-zone .upload-zone-dragover-heading {
+  display: none;
+}
+
+.upload-zone.is-dragover {
+  border-color: var(--bs-primary);
+  background: rgba(43, 108, 176, 0.05);
+  color: var(--bs-primary);
+}
+
+.upload-zone.is-dragover .upload-zone-idle-heading {
+  display: none;
+}
+
+.upload-zone.is-dragover .upload-zone-dragover-heading {
+  display: inline;
+}
+
+.toast-container {
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
