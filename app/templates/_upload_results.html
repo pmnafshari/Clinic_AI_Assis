@@ -1,0 +1,20 @@
+{% for r in results %}
+{% if r.status == 'rejected' %}
+<div class="toast" role="alert" data-bs-autohide="false">
+{% else %}
+<div class="toast" role="status" data-bs-autohide="true" data-bs-delay="6000">
+{% endif %}
+  <div class="toast-header">
+    {% if r.status == 'sorted' %}
+    <i class="bi bi-check-circle-fill text-bg-primary badge me-2"></i>
+    {% elif r.status == 'queued' %}
+    <i class="bi bi-clock-history text-bg-secondary badge me-2"></i>
+    {% else %}
+    <i class="bi bi-x-circle-fill text-bg-danger badge me-2"></i>
+    {% endif %}
+    <strong class="me-auto">{{ r.filename }}</strong>
+    <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+  </div>
+  <div class="toast-body">{{ r.message }}</div>
+</div>
+{% endfor %}

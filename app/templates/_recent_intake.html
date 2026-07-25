@@ -1,0 +1,19 @@
+{% if rows %}
+<div class="list-group">
+  {% for row in rows %}
+  <div class="list-group-item d-flex justify-content-between align-items-center">
+    <div>
+      <small class="text-secondary d-block">{{ row.ts }}</small>
+      <span>{{ row.target }}</span>
+    </div>
+    {% if row.allowed %}
+    <span class="badge text-bg-primary">Sorted</span>
+    {% else %}
+    <span class="badge text-bg-danger">Rejected</span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-secondary mb-0">No recent uploads. Files you upload will appear here once they're processed.</p>
+{% endif %}
