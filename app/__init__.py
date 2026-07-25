@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from flask import Flask, g, redirect, request, url_for
+from flask import Flask, flash, g, redirect, request, url_for
 from flask_wtf import CSRFProtect
 
 import web_session
@@ -18,6 +18,7 @@ def create_app():
     app.config["SECRET_KEY"] = load_secret_key()
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+    app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
     CSRFProtect(app)
 
@@ -37,12 +38,22 @@ def create_app():
     from .notes_routes import notes_bp
     from .patients_routes import patients_bp
     from .qa_routes import qa_bp
+    from .upload_routes import upload_bp
     app.register_blueprint(agent_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(notes_bp)
     app.register_blueprint(patients_bp)
     app.register_blueprint(qa_bp)
+    app.register_blueprint(upload_bp)
+
+    @app.errorhandler(413)
+    def too_large(e):
+        # a plain 302 (no explicit 413 status) so the browser follows the
+        # redirect and renders the flashed banner instead of Werkzeug's raw
+        # error stub (D-12)
+        flash("One or more files exceed the 25MB limit. Try uploading fewer or smaller files at once.", "danger")
+        return redirect(url_for("dashboard.index"))
 
     @app.before_request
     def require_login():
