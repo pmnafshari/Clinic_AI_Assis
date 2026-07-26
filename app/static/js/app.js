@@ -8,8 +8,9 @@ function initToasts() {
 }
 
 function renderStagedFiles(zone, files) {
-  var container = zone.querySelector(".staged-files");
-  var submitBtn = zone.querySelector("button[type=submit]");
+  var scope = zone.closest("form") || zone;
+  var container = scope.querySelector(".staged-files");
+  var submitBtn = scope.querySelector("button[type=submit]");
   if (!container) return;
 
   container.textContent = "";
