@@ -47,8 +47,3 @@
     </div>
   </td>
 </tr>
-{% if toast_message %}
-<div hx-swap-oob="afterbegin:#admin-toast-container">
-  {% with message=toast_message, ok=toast_ok %}{% include "_user_toast.html" %}{% endwith %}
-</div>
-{% endif %}

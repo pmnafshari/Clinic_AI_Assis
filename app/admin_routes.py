@@ -1,4 +1,8 @@
-from flask import Blueprint, flash, g, redirect, render_template, request, url_for
+import json
+
+from flask import (
+    Blueprint, flash, g, make_response, redirect, render_template, request, url_for
+)
 
 import user_admin
 from auth import VALID_ROLES, authorize, log_audit
@@ -112,10 +116,17 @@ def apply(username):
     else:
         return "", 400
 
-    if not ok:
-        return render_template("_user_toast.html", username=username, message=message, ok=False)
-
     row = user_admin.get_user(conn, username)
-    return render_template(
-        "_user_row.html", row=row, me=actor, toast_message=message, toast_ok=True
-    )
+    if row is None:
+        return "", 404
+
+    # the toast rides a trigger header rather than an out-of-band swap: htmx
+    # parses a <tr> response inside a table context, and a sibling <div> gets
+    # foster-parented out of it, which kills the whole swap
+    resp = make_response(render_template("_user_row.html", row=row, me=actor))
+    resp.headers["HX-Trigger"] = json.dumps({
+        "adminToast": render_template(
+            "_user_toast.html", username=username, message=message, ok=ok
+        )
+    })
+    return resp

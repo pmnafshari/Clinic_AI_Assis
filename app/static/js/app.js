@@ -91,4 +91,13 @@ document.addEventListener("DOMContentLoaded", function () {
   wireDropZones();
 });
 document.body.addEventListener("htmx:afterSwap", initToasts);
+
+// admin row swaps return a <tr>, so their toast arrives as rendered html on a
+// trigger header instead of riding along in the response body
+document.body.addEventListener("adminToast", function (event) {
+  var container = document.getElementById("admin-toast-container");
+  if (!container) return;
+  container.insertAdjacentHTML("afterbegin", event.detail.value);
+  initToasts();
+});
 document.body.addEventListener("htmx:afterRequest", resetUploadForm);
