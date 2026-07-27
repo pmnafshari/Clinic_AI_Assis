@@ -4,7 +4,7 @@ from flask import Blueprint, flash, g, make_response, redirect, render_template,
 
 import agent
 import pending_actions
-from auth import authorize
+from auth import authorize, log_audit
 from extract_note import OllamaUnreachable
 
 from .db import get_chroma, get_db
@@ -13,6 +13,14 @@ agent_bp = Blueprint("agent", __name__)
 
 UNDO_LOG = agent.UNDO_LOG
 _urlopen = urllib.request.urlopen
+
+
+def _deny_page(message):
+    # the write was always gated at confirm time, but these pages used to
+    # render an empty form to anyone logged in. refuse up front instead.
+    log_audit(get_db(), g.user["username"], g.user["role"], "update_field", None, allowed=0)
+    flash(message, "danger")
+    return redirect(url_for("dashboard.index"))
 
 
 def _confirm_error(message):
@@ -42,6 +50,9 @@ def _build_and_render(call, template, **template_args):
 
 @agent_bp.route("/agent/command", methods=["GET", "POST"])
 def command_page():
+    if not authorize(g.user["role"], "update_field"):
+        return _deny_page("You don't have permission to edit records.")
+
     if request.method == "GET":
         return render_template("agent_command.html")
 
@@ -64,6 +75,9 @@ def command_page():
 
 @agent_bp.route("/agent/edit", methods=["GET", "POST"])
 def edit_page():
+    if not authorize(g.user["role"], "update_field"):
+        return _deny_page("You don't have permission to edit records.")
+
     fields = sorted(agent.EDITABLE_FIELDS)
     if request.method == "GET":
         return render_template("agent_edit.html", fields=fields)

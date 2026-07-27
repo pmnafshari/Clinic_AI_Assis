@@ -32,6 +32,7 @@ def create_app():
     conn.close()
     db.close_db(app)
 
+    from .admin_routes import admin_bp
     from .agent_routes import agent_bp
     from .auth_routes import auth_bp
     from .dashboard_routes import dashboard_bp
@@ -39,6 +40,7 @@ def create_app():
     from .patients_routes import patients_bp
     from .qa_routes import qa_bp
     from .upload_routes import upload_bp
+    app.register_blueprint(admin_bp)
     app.register_blueprint(agent_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)

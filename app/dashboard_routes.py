@@ -1,9 +1,10 @@
 import json
 from pathlib import Path
 
-from flask import Blueprint, g, render_template
+from flask import Blueprint, g, redirect, render_template, url_for
 
 import agent
+from auth import authorize
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -35,5 +36,11 @@ def _user_undo_history(username, log_path=None, limit=10):
 
 @dashboard_bp.route("/")
 def index():
+    # someone who manages users and has no clinical access gets their own
+    # landing page - the clinical dashboard is never rendered for them.
+    # phrased as a capability pair so it survives a role being renamed.
+    if authorize(g.user["role"], "manage_users") and not authorize(g.user["role"], "read_notes"):
+        return redirect(url_for("admin.users_view"))
+
     history = _user_undo_history(g.user["username"])
     return render_template("dashboard.html", user=g.user, history=history)
