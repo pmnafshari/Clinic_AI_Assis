@@ -53,6 +53,12 @@ def create_app():
         # redirect and renders the flashed banner instead of Werkzeug's raw
         # error stub (D-12)
         flash("One or more files exceed the 25MB limit. Try uploading fewer or smaller files at once.", "danger")
+        if request.headers.get("HX-Request"):
+            # the upload form swaps into the toast container, so a redirect
+            # here lands a whole page inside the toast stack. ask htmx for a
+            # real reload instead - the banner belongs at page level, and the
+            # user stays on whichever surface they uploaded from.
+            return "", 200, {"HX-Refresh": "true"}
         return redirect(url_for("dashboard.index"))
 
     @app.before_request
