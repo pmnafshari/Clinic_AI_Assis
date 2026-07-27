@@ -72,8 +72,23 @@ function wireDropZones() {
   });
 }
 
+// the upload form posts over htmx and only swaps the toast container, so
+// nothing clears the staged file afterwards - without this a second click
+// re-uploads the same file and the sorter files it again as name_1.
+function resetUploadForm(event) {
+  if (!event.detail || !event.detail.successful) return;
+  var form = event.target.closest ? event.target.closest("form") : null;
+  if (!form) return;
+  var zone = form.querySelector(".upload-zone");
+  if (!zone) return;
+
+  form.querySelector("input[type=file]").value = "";
+  renderStagedFiles(zone, []);
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   initToasts();
   wireDropZones();
 });
 document.body.addEventListener("htmx:afterSwap", initToasts);
+document.body.addEventListener("htmx:afterRequest", resetUploadForm);
