@@ -5,12 +5,13 @@
 <div class="toast" role="status" data-bs-autohide="true" data-bs-delay="6000">
 {% endif %}
   <div class="toast-header">
+    {# no .badge here: bootstrap hides .badge:empty, and the glyph is a ::before #}
     {% if r.status == 'sorted' %}
-    <i class="bi bi-check-circle-fill text-bg-primary badge me-2"></i>
+    <i class="bi bi-check-circle-fill text-primary me-2"></i>
     {% elif r.status == 'queued' %}
-    <i class="bi bi-clock-history text-bg-secondary badge me-2"></i>
+    <i class="bi bi-clock-history text-secondary me-2"></i>
     {% else %}
-    <i class="bi bi-x-circle-fill text-bg-danger badge me-2"></i>
+    <i class="bi bi-x-circle-fill text-danger me-2"></i>
     {% endif %}
     <strong class="me-auto">{{ r.filename }}</strong>
     <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
