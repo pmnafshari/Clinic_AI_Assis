@@ -112,7 +112,14 @@ def selftest():
         assert _user(db_path, "newstaff")["active"] == 0, "SC2: account still active"
         assert _session_count(db_path, "newstaff") == 0, \
             "SC2: disabling must destroy the user's live sessions"
-        assert live, "SC2: token fixture unused"
+
+        # the row count is not the guarantee - what matters is that the user
+        # holding that cookie is actually ejected on their next request
+        victim = app.test_client()
+        victim.set_cookie("session_token", live)
+        resp = victim.get("/")
+        assert resp.status_code == 302 and "/login" in resp.headers["Location"], \
+            f"SC2: a disabled user's live cookie must be ejected, got {resp.status_code}"
 
         # ---- SC3: change an account's role ---------------------------------
         admin.post("/admin/users/newstaff", data={"action": "active", "active": "1"})
@@ -121,6 +128,53 @@ def selftest():
         )
         assert resp.status_code == 200, "SC3: role change should return the swapped row"
         assert _user(db_path, "newstaff")["role"] == "dentist", "SC3: role not changed"
+
+        # ---- enable via the route, asserted (not just used as setup) -------
+        resp = admin.post("/admin/users/newstaff", data={"action": "active", "active": "1"})
+        assert resp.status_code == 200, "enable should return the swapped row"
+        assert _user(db_path, "newstaff")["active"] == 1, "enable did not reactivate"
+
+        # ---- lockout: the third dispatch branch, and its confirm fragment --
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE users SET failed_attempts = 5, locked_until = ? WHERE username = ?",
+            ("2099-01-01T00:00:00", "newstaff"),
+        )
+        conn.commit()
+        conn.close()
+
+        resp = admin.get("/admin/users/newstaff/confirm?action=lockout")
+        assert resp.status_code == 200, "lockout confirm fragment should render"
+        assert "Clear lockout" in resp.text, "lockout modal should name the action"
+
+        resp = admin.post("/admin/users/newstaff", data={"action": "lockout"})
+        assert resp.status_code == 200, "clear lockout should return the swapped row"
+        row = _user(db_path, "newstaff")
+        assert row["failed_attempts"] == 0 and row["locked_until"] is None, \
+            "clear lockout did not reset the counter and timestamp"
+
+        # a locked row must render the Locked badge and the clearing control
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE users SET failed_attempts = 3, locked_until = ? WHERE username = ?",
+            ("2099-01-01T00:00:00", "newstaff"),
+        )
+        conn.commit()
+        conn.close()
+        listing = admin.get("/admin/users").text
+        assert "Locked" in listing, "a locked account must show the Locked badge"
+        assert "Clear lockout" in listing, "a locked account must offer Clear lockout"
+        admin.post("/admin/users/newstaff", data={"action": "lockout"})
+
+        # ---- the confirm fragment rejects a bad action and a bad role ------
+        assert admin.get("/admin/users/newstaff/confirm?action=wat").status_code == 400, \
+            "an unknown confirm action should be refused"
+        assert admin.get(
+            "/admin/users/newstaff/confirm?action=role&new_role=wizard"
+        ).status_code == 400, "an invalid role should be refused at the fragment"
+        assert admin.post(
+            "/admin/users/newstaff", data={"action": "wat"}
+        ).status_code == 400, "an unknown apply action should be refused"
 
         # ---- SC4: a non-admin cannot reach the admin screens ---------------
         for username in ("drossi", "aassist"):
