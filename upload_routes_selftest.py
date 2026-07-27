@@ -196,7 +196,9 @@ def selftest():
 
         # 6. SC3 denial - admin is denied server-side and an allowed=0 audit
         # row is written; no file is ever sorted
-        admin_dashboard_resp = admin_client.get("/")
+        # an admin no longer renders the dashboard - "/" lands them on their
+        # own staff-accounts screen, so follow the redirect to get a token
+        admin_dashboard_resp = admin_client.get("/", follow_redirects=True)
         csrf6 = _csrf_from(admin_dashboard_resp.text)
         denial_resp = admin_client.post(
             "/upload",

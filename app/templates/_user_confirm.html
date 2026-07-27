@@ -1,0 +1,41 @@
+{% if action == 'role' %}
+  {% set title = 'Change role' %}
+  {% set body = username ~ ': ' ~ old ~ ' → ' ~ new ~ '.' %}
+  {% set confirm_class = 'btn-primary' %}
+{% elif action == 'active' and new == 'Disabled' %}
+  {% set title = 'Disable account' %}
+  {% set body = username ~ ': Active → Disabled. They will be signed out immediately.' %}
+  {% set confirm_class = 'btn-outline-danger' %}
+{% elif action == 'active' %}
+  {% set title = 'Enable account' %}
+  {% set body = username ~ ': Disabled → Active. They can sign in again.' %}
+  {% set confirm_class = 'btn-primary' %}
+{% else %}
+  {% set title = 'Clear lockout' %}
+  {% set body = username ~ ': Locked → Active. Their failed sign-in count is reset.' %}
+  {% set confirm_class = 'btn-primary' %}
+{% endif %}
+
+<div class="modal-header">
+  <h2 class="modal-title fs-5">{{ title }}</h2>
+  <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+</div>
+<div class="modal-body">
+  <p class="mb-0">{{ body }}</p>
+</div>
+<div class="modal-footer">
+  <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+  <form method="post" action="{{ url_for('admin.apply', username=username) }}"
+        hx-post="{{ url_for('admin.apply', username=username) }}"
+        hx-target="#user-row-{{ username }}" hx-swap="outerHTML"
+        data-bs-dismiss="modal">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="action" value="{{ action }}">
+    {% if action == 'role' %}
+    <input type="hidden" name="new_role" value="{{ new_role }}">
+    {% elif action == 'active' %}
+    <input type="hidden" name="active" value="{{ active }}">
+    {% endif %}
+    <button type="submit" class="btn {{ confirm_class }}">{{ title }}</button>
+  </form>
+</div>

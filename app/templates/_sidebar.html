@@ -22,6 +22,12 @@
       <i class="bi bi-journal-plus"></i> Add note
     </a>
     {% endif %}
+    {% if authorize(g.user.role, 'manage_users') %}
+    <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('admin.') else '' }}"
+       href="{{ url_for('admin.users_view') }}">
+      <i class="bi bi-people-fill"></i> Staff accounts
+    </a>
+    {% endif %}
   </nav>
 
   <form method="post" action="{{ url_for('auth.logout') }}" class="mt-6">

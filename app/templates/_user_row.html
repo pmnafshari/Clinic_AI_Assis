@@ -1,0 +1,54 @@
+{% set locked = row.locked_until is not none %}
+<tr id="user-row-{{ row.username }}">
+  <td>
+    {{ row.username }}
+    {% if row.username == me %}
+    <span class="text-secondary">This is you</span>
+    {% endif %}
+    {% if locked %}
+    <small class="text-secondary d-block">Locked after {{ row.failed_attempts }} failed attempts.</small>
+    {% endif %}
+  </td>
+  <td>{{ row.role }}</td>
+  <td>
+    {% if locked %}
+    <span class="badge text-bg-warning">Locked</span>
+    {% elif row.active %}
+    <span class="badge text-bg-secondary">Active</span>
+    {% else %}
+    <span class="badge text-bg-light border">Disabled</span>
+    {% endif %}
+  </td>
+  <td>
+    <div class="d-flex gap-2 justify-content-end">
+      {% if row.username != me %}
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=role&new_role={{ 'dentist' if row.role != 'dentist' else 'assistant' }}"
+              hx-target="#admin-modal-body"
+              data-bs-toggle="modal" data-bs-target="#admin-modal">Change role</button>
+      {% if row.active %}
+      <button type="button" class="btn btn-outline-danger btn-sm"
+              hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=active"
+              hx-target="#admin-modal-body"
+              data-bs-toggle="modal" data-bs-target="#admin-modal">Disable</button>
+      {% else %}
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=active"
+              hx-target="#admin-modal-body"
+              data-bs-toggle="modal" data-bs-target="#admin-modal">Enable</button>
+      {% endif %}
+      {% if locked %}
+      <button type="button" class="btn btn-outline-secondary btn-sm"
+              hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=lockout"
+              hx-target="#admin-modal-body"
+              data-bs-toggle="modal" data-bs-target="#admin-modal">Clear lockout</button>
+      {% endif %}
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{% if toast_message %}
+<div hx-swap-oob="afterbegin:#admin-toast-container">
+  {% with message=toast_message, ok=toast_ok %}{% include "_user_toast.html" %}{% endwith %}
+</div>
+{% endif %}
