@@ -36,7 +36,7 @@ def load_session(conn, token, now=None):
     token_hash = _hash_token(token)
     # join users so deactivating an account also kills its live sessions
     row = conn.execute(
-        "SELECT s.username, s.role, s.last_seen_at FROM sessions s"
+        "SELECT s.username, s.role, s.last_seen_at, u.must_change_password FROM sessions s"
         " JOIN users u ON u.username = s.username"
         " WHERE s.token_hash = ? AND u.active = 1",
         (token_hash,),
@@ -56,7 +56,11 @@ def load_session(conn, token, now=None):
         (now.isoformat(), token_hash),
     )
     conn.commit()
-    return {"username": row["username"], "role": row["role"]}
+    return {
+        "username": row["username"],
+        "role": row["role"],
+        "must_change_password": row["must_change_password"],
+    }
 
 
 def destroy_session(conn, token):
@@ -97,8 +101,9 @@ def selftest():
 
         # 2. load_session round-trips username/role for a live token
         session = load_session(conn, token)
-        assert session == {"username": "drossi", "role": "dentist"}, \
-            "2: load_session did not round-trip username/role"
+        assert session == {
+            "username": "drossi", "role": "dentist", "must_change_password": 0
+        }, "2: load_session did not round-trip username/role/must_change_password"
 
         # 3. an unknown token returns None
         assert load_session(conn, "not-a-real-token") is None, \

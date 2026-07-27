@@ -12,6 +12,10 @@ from . import db
 
 WHITELIST_ENDPOINTS = {"static", "auth.login"}
 
+# reachable while an account still owes a password change - without logout in
+# here a flagged user could neither proceed nor leave
+CHANGE_PW_ALLOWED = {"static", "auth.login", "auth.change_password", "auth.logout"}
+
 
 def create_app():
     app = Flask(__name__)
@@ -74,5 +78,8 @@ def create_app():
         if user is None:
             return redirect(url_for("auth.login"))
         g.user = user
+
+        if user["must_change_password"] and request.endpoint not in CHANGE_PW_ALLOWED:
+            return redirect(url_for("auth.change_password"))
 
     return app

@@ -8,10 +8,11 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-  {% if request.endpoint != 'auth.login' %}
+  {% set chromeless = request.endpoint in ('auth.login', 'auth.change_password') %}
+  {% if not chromeless %}
     {% include "_sidebar.html" %}
   {% endif %}
-  <main class="content{{ ' content-shifted' if request.endpoint != 'auth.login' else '' }}">
+  <main class="content{{ '' if chromeless else ' content-shifted' }}">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         {% for category, message in messages %}
