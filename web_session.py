@@ -64,6 +64,14 @@ def destroy_session(conn, token):
     conn.commit()
 
 
+def destroy_user_sessions(conn, username):
+    # load_session already refuses a session whose account went inactive, but
+    # disabling should not leave the rows lying around waiting on that join.
+    cur = conn.execute("DELETE FROM sessions WHERE username = ?", (username,))
+    conn.commit()
+    return cur.rowcount
+
+
 def selftest():
     import tempfile
 
@@ -127,6 +135,21 @@ def selftest():
         conn.commit()
         assert load_session(conn, token3) is None, \
             "7: session for a deactivated user must be rejected"
+
+        # 8. destroy_user_sessions clears every session for one user only
+        conn.execute("UPDATE users SET active = 1 WHERE username = ?", ("drossi",))
+        conn.commit()
+        create_session(conn, "drossi", "dentist")
+        create_session(conn, "drossi", "dentist")
+        keep = create_session(conn, "aassist", "assistant")
+        removed = destroy_user_sessions(conn, "drossi")
+        assert removed == 3, f"8: expected 3 drossi sessions removed, got {removed}"
+        left = conn.execute(
+            "SELECT COUNT(*) c FROM sessions WHERE username = ?", ("drossi",)
+        ).fetchone()["c"]
+        assert left == 0, "8: drossi should have no sessions left"
+        assert load_session(conn, keep) is not None, \
+            "8: another user's session must survive"
 
     print("selftest ok")
 

@@ -44,7 +44,8 @@ def init_db(db_path):
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL CHECK(role IN ('dentist', 'assistant', 'admin')),
-            active INTEGER NOT NULL DEFAULT 1
+            active INTEGER NOT NULL DEFAULT 1,
+            must_change_password INTEGER NOT NULL DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,6 +84,8 @@ def _ensure_lockout_columns(conn):
         conn.execute("ALTER TABLE users ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0")
     if "locked_until" not in existing:
         conn.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
+    if "must_change_password" not in existing:
+        conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
 
 
 def upsert_note_sql(note, source_path, conn):
