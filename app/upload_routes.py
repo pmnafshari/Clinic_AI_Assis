@@ -31,6 +31,9 @@ def _process_uploads(files, cf, username, role, conn):
 
         ext = os.path.splitext(filename)[1].lower()
         if ext not in ALLOWED_EXTS:
+            # a refused upload is still an attempt - audit it like the role
+            # denial above, or the log only ever shows what succeeded
+            log_audit(conn, username, role, "upload_file", filename, allowed=0)
             results.append({
                 "filename": filename,
                 "status": "rejected",
