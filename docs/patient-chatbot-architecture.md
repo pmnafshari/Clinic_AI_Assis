@@ -469,7 +469,174 @@ loaded for it at all.
 
 ## 5. Network and trust boundary
 
-_PLACEHOLDER — written in a later plan._
+D-12, D-13, and D-14 specify how the patient surface reaches the internet while everything
+else stays local. This section states the tunnel topology, the process/port isolation it
+depends on, the GDPR exception that isolation creates, and the four controls that stay at
+the app layer regardless of what the tunnel provider does.
+
+### 5.1 Tunnel topology
+
+**D-12:** the patient surface is internet-exposed through a secure tunnel — Cloudflare
+Tunnel is the named candidate. The database, the models, and all clinical processing stay
+strictly local, behind the clinic firewall. The tunnel exposes a surface, not the system —
+any design that moves data or model inference outward fails this decision.
+
+```
+Patient browser (unmanaged home device)
+        |
+        | HTTPS — TLS terminated at the Cloudflare edge
+        v
+  ================ GDPR processor boundary (see 5.3) ================
+        |
+        | outbound-only connection, initiated by cloudflared
+        v
+  cloudflared daemon (runs on the clinic machine, same host as both apps)
+        |
+        | forwards only to the port named in the ingress config (see 5.2)
+        v
+  +---------------------------+     +------------------------------+
+  | Patient Flask app         |     | Staff Flask app (Phase 8)     |
+  | own process, own port     |     | binds 127.0.0.1               |
+  | (D-13)                    |     | absent from every ingress rule|
+  +------------+--------------+     +------------------------------+
+               |
+               v
+     patient_auth session check
+               |
+               v
+     intent gate (section 4)
+               |
+               v
+     patient_accessor.py (section 3)
+               |
+               v
+     db/clinic.sqlite
+               |
+               v
+     log_audit (section 5.5)
+```
+
+What crosses the boundary and what does not:
+
+| Crosses the tunnel | Stays local |
+|---|---|
+| HTTP request bodies (question text) | `db/clinic.sqlite` |
+| HTTP response bodies (rendered answer) | the `patient_notes` Chroma collection |
+| the patient session cookie | model weights |
+| — | every inference call |
+
+First login and the mandatory credential change happen from home, not at the chair — that
+is why D-02's 7-day validity window exists: a patient who receives a PIN in person or by
+phone needs enough time to complete the forced change from an unmanaged device before the
+temp credential expires.
+
+### 5.2 Process and port isolation
+
+**D-13:** the patient chatbot is a separate Flask app, in its own OS process, on its own
+port, with its own `SECRET_KEY` and its own cookie name, distinct from
+`web_session.COOKIE_NAME` (`web_session.py:10`). It has its own entry point alongside
+`run.py` and does not register into `app/__init__.py`. The staff app binds to `127.0.0.1`
+and appears in no tunnel ingress rule. Isolation is enforced by process and socket, not by
+routing rules or forwarded-header inspection — a header check is spoofable, a separate
+listening socket is not.
+
+That isolation claim needs a qualification, stated plainly rather than softened.
+`cloudflared`'s ingress config is a human-authored map from a public hostname to
+`http://localhost:PORT`, and `cloudflared` runs on the same host as both Flask apps, so it
+can reach either app's loopback port. Process separation prevents the two apps from ever
+sharing a socket; it cannot prevent a wrong port number in the tunnel's own config from
+pointing at the staff app. Earlier project language describing this as unreachable
+"regardless of tunnel misconfiguration" is stronger than the mechanism supports. D-13's
+actual decision — separate process, separate port — stands unchanged and is correct; the
+gap belongs to the ingress config, not to the process boundary, and is carried forward as
+threat **T8** in section 6 rather than claimed away here.
+
+Named mitigations for T8: a single-purpose ingress config file that contains only the
+patient app's hostname and port, with no staff-app hostname or port ever present in that
+file; the config reviewed at setup and after any edit; and periodic verification with
+`cloudflared tunnel ingress rule <hostname>`, a real subcommand that reports which rule a
+given URL matches. A minimal ingress config:
+
+```yaml
+tunnel: <tunnel-id>
+credentials-file: /path/to/credentials.json
+ingress:
+  - hostname: patients.clinic-example.com
+    service: http://localhost:PATIENT_PORT
+  - service: http_status:404
+```
+
+No hostname or port for the staff app appears anywhere in this file — the catch-all
+`http_status:404` rule at the bottom is what makes an omission fail closed rather than open.
+
+### 5.3 GDPR processor statement and the offline-first exception
+
+**D-14 control 2:** Cloudflare is a data processor under GDPR for patient traffic transiting
+the tunnel, and a Data Processing Addendum (DPA) is required before the tunnel carries
+anything real. The clinic is the controller; Cloudflare is the processor. TLS terminates at
+Cloudflare's edge, so Cloudflare has plaintext access to request and response bodies in
+transit — not a theoretical exposure, a structural one.
+
+Patient traffic crossing a third party is a deliberate, documented exception to this
+project's offline-first property, recorded here so a later reader does not treat it as
+settled practice for the rest of the system. Every other capability in this project — the
+notes model, retrieval, X-ray inference, voice — stays local; the patient chatbot's HTTP
+transport is the one path that does not, and it is scoped to exactly that transport.
+
+Open item, not settled: whether Cloudflare's DPA is available to free-tier tunnel customers
+on the same terms as paid tiers was not conclusively confirmed during research. Free-tier
+DPA access needs direct confirmation from Cloudflare before CHAT-03 ships, not left as an
+assumption at document time.
+
+**D-14 control 3, the no-real-data precondition,** is a hard gate on going live, not a
+recommendation: the tunnel must not carry real patient data until the milestone-level switch
+to offline storage plus encryption has happened. Development and UAT run on fake data only.
+
+### 5.4 App-layer controls
+
+| Control | What it does | Why it is not outsourced to the tunnel |
+|---|---|---|
+| Login throttling | Per-account and per-source-IP throttling in `patient_auth.py`: threshold 5, cooldown 15 minutes, timed auto-unlock, same numbers as `web_auth.py:9-10`'s tested constants (section 2.1) | The D-05 lockout must not depend on infrastructure this repo does not control; granular rate-limiting rules are historically a paid Cloudflare WAF feature, so the free tier may not provide equivalent throttling at all |
+| GDPR processor / DPA | Cloudflare is named as a processor and a DPA is required before real traffic — see 5.3 | The tunnel provider's own terms of service are not a substitute for the clinic's own GDPR obligations as controller |
+| No-real-data precondition | The tunnel carries fake data only until the offline+encryption milestone switch — see 5.3 | The tunnel's TLS and access controls do not change what the clinic is permitted to expose while real data is not yet protected at rest |
+| Tunnel-independent audit | Every interaction is logged at the app layer via `log_audit` — see 5.5 | Tunnel access logs live with the provider, expire on their schedule, and cannot be joined to a patient session |
+
+The patient app needs its own default-deny guard: a `before_request` handler with its own
+whitelist, mirroring the structure at `app/__init__.py:70-83` and `app/__init__.py:13`
+without importing it, so a newly added route is protected by default rather than by
+remembering to protect it. The patient session cookie carries `HttpOnly` and
+`SameSite=Strict`, matching `app/__init__.py:24`, and every patient form carries CSRF
+protection via Flask-WTF. These matter more here than on the staff app because the patient
+surface is internet-reachable, not localhost-only.
+
+### 5.5 Audit logging of patient interactions
+
+**D-14 control 4:** every patient interaction is logged at the app layer, allowed or denied,
+using `auth.log_audit` (`auth.py:19-27`) and the existing `audit_log` table — not a second
+parallel log, which would fragment the trail AUDIT-01 and AUDIT-02 depend on. Tunnel access
+logs live with the provider, expire on the provider's schedule, and cannot be joined to a
+patient session — that is why per-interaction audit belongs at the app layer, independent
+of what the tunnel logs.
+
+The column mapping for a patient row: `username` carries the authenticated codice_fiscale;
+`role` carries the literal string `role="patient"`; `action` names the interaction — for
+example `patient_query`, `patient_deflect`, `patient_login`, `patient_scope_violation`;
+`target` names the accessor function or the deflection category; `allowed` is 1 for a served
+answer and 0 for a deflection or a scope violation.
+
+The schema fact that makes this legal: `audit_log.role` (`storage.py:50-58`) carries no CHECK
+constraint. `users.role` (`storage.py:46`) does —
+`CHECK(role IN ('dentist', 'assistant', 'admin'))` — but `audit_log` does not. Writing
+`role="patient"` into `audit_log` via the existing `log_audit()` call violates no database
+constraint and requires no change to `auth.VALID_ROLES` (`auth.py:4`).
+
+The corollary rule: `"patient"` must stay absent from `VALID_ROLES` and from `PERMISSIONS`
+(`auth.py:7-11`), because a patient is an audited identity, never an authorised staff role —
+adding it to either would silently reverse D-06's structural separation.
+
+Close with the log-before-respond rule: the `log_audit` write sits on the same code path as
+the response, so a served answer cannot exist without its audit row — the same
+log-before-write discipline this project already uses for undo.
 
 ## 6. Threat register
 
