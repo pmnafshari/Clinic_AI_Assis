@@ -813,9 +813,9 @@ sections and threat rows that satisfy it.
 
 | Criterion | Section traced | Approved | Date |
 |---|---|---|---|
-| 1 | §2.1, §2.4 | pending | pending |
-| 2 | §3.1-§3.3 | pending | pending |
-| 3 | §3.1, §4, §5.5 | pending | pending |
+| 1 | §2.1, §2.4 | approved | 2026-07-30 |
+| 2 | §3.1-§3.3 | approved | 2026-07-30 |
+| 3 | §3.1, §4, §5.5 | approved | 2026-07-30 |
 
 ## 9. Open questions for CHAT-03
 
@@ -826,9 +826,11 @@ working default, that default is recorded here as reversible, not as a settled d
    embedded document text is `note.clinical_notes` (`storage.py:186-190`), which D-10
    excludes. Unclear: whether the MVP ships zero Chroma-querying functions with D-08's clause
    standing as a forward-looking rule, or whether CHAT-03 takes on an ingest change adding a
-   second non-clinical collection. Default: zero Chroma callers, as stated in §3.4. Decides:
-   the reviewer at D-18 sign-off — this changes CHAT-03's scope, so it needs an explicit yes.
-   Wanted before CHAT-03 planning starts.
+   second non-clinical collection. Decided at the 2026-07-30 D-18 walkthrough: the reviewer
+   kept the recommended default — the MVP ships zero Chroma-querying functions, and D-08's
+   clause stands as forward-looking, matching §3.4. Decides: settled by the reviewer at
+   sign-off; CHAT-03 planning only revisits this if it wants the alternative (an ingest change
+   adding a non-clinical collection).
 
 2. **How strongly to qualify D-13's isolation claim.** Known: `cloudflared`'s ingress is a
    human-authored hostname-to-port map on the same host as both apps. Unclear: whether the
