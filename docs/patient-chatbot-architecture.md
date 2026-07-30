@@ -386,7 +386,86 @@ advice-shaped question never reaches retrieval at all.
 
 ## 4. No-clinical-advice intent gate
 
-_PLACEHOLDER — written in a later plan._
+D-11's rule: no-clinical-advice is enforced by an intent gate that runs before retrieval,
+not by a system-prompt instruction. This section specifies the gate's placement, its two
+layers, the option that was considered and rejected, and the posture that governs how it is
+tuned.
+
+### 4.1 Placement in the request flow
+
+The gate runs on the raw question text immediately after session validation and before any
+accessor call, any retrieval, and any model call — step 3 of section 3.5's flow, ahead of
+step 4's accessor call by construction.
+
+D-11 explicitly rejects a system-prompt instruction telling the model not to give medical
+advice as the enforcement mechanism. It is not an enforcement mechanism and does not satisfy
+ROADMAP criterion 3 on its own: the model still receives the question and still generates a
+response, so a system prompt is a suggestion the model can ignore, not a gate that blocks
+anything. This matches the wider industry direction — OWASP's Top 10 for LLM Applications
+treats prompt-level instruction as insufficient against prompt injection and sensitive
+information disclosure, and this design applies the same reasoning to clinical-advice
+requests.
+
+### 4.2 Layer 1: bilingual keyword and pattern match
+
+Mandatory, always on, zero model cost. The question is normalised (lowercase, accents
+stripped) before matching. Three categories, Italian-primary with English secondary:
+
+| Category | Italian triggers | English triggers | Why it triggers |
+|---|---|---|---|
+| (a) explicit advice-request phrasing | dovrei, devo, è normale che, cosa devo fare | should I, is this normal, do I need | the patient is asking the system to make a clinical judgment call |
+| (b) symptom and pain vocabulary | dolore, fa male, gonfiore, sanguina, infiammazione | pain, swelling, bleeding | a patient describing a symptom is implicitly asking for guidance even with no question mark |
+| (c) treatment and medication requests | antibiotico, antidolorifico, medicina | what should I take | a request for a treatment or drug recommendation is advice regardless of phrasing |
+
+**[ASSUMED].** 13-RESEARCH.md rates this Italian vocabulary as LOW confidence — synthesised
+from general knowledge, not verified against a linguistic corpus or a native speaker. A
+native or fluent Italian speaker (clinical staff qualifies) must review and extend this list
+before CHAT-03 treats it as an enforcement control. This project already has a precedent for
+reviewed domain vocabulary — `dental_shorthand_glossary.json` — and this list should go
+through the same kind of review before it ships. Do not treat the table above as
+authoritative as written.
+
+### 4.3 Layer 2: semantic similarity (optional, recommended)
+
+Optional for CHAT-03, but recommended: cosine similarity between the question's embedding
+and a small curated set of labelled advice-seeking exemplar sentences (Italian and English);
+above a threshold, deflect. This reuses the ONNX MiniLM embedder Chroma already loads via
+`get_collection()` (`storage.py:173-179`), so the incremental memory cost is near zero and no
+new dependency is added — a real constraint under this project's 16GB, one-big-model-at-a-
+time rule.
+
+The threshold needs live tuning data and is not ship-ready as specified in this document —
+mark layer 2 as needing tuning against real question logs once the patient chatbot has
+traffic to tune against. Layer 1 alone is the shipping floor; layer 2 is defence-in-depth on
+top of it, not a replacement for it.
+
+### 4.4 Rejected option: repurposing the dental-notes model
+
+Repurposing the fine-tuned `dental-notes` model as an intent classifier was considered and
+rejected, for three reasons: a full Ollama round-trip costs seconds per question, which is
+slow for a gate that should run before every question is even processed; it needs the 3B
+model resident in memory, competing with the answer-synthesis call under this project's
+one-big-model-at-a-time rule; and the model is fine-tuned for structured extraction from
+third-person dentist notes — a different task and a different input distribution from
+classifying a first-person patient question. The third reason is an assumption, not a
+measured result: fine-tuning is generally understood to narrow a model's general
+instruction-following on out-of-distribution prompts, but this was not tested directly
+against this specific model this session.
+
+### 4.5 False-negative posture and deflection response
+
+Design principle, stated on its own: when uncertain, deflect. A false positive costs the
+patient one extra step and a "please ask your dentist" message. A false negative risks an
+unsupervised local 3B model giving clinical guidance to a patient over the internet. The
+asymmetry is not close — every layer above is tuned toward over-triggering, not
+under-triggering.
+
+The deflection itself is a fixed, non-generated response string — the model is never invoked
+to phrase it — pointing the patient at the clinic. An `auth.log_audit(..., allowed=0)` row
+records the deflection, so deflections are visible in the audit trail and the gate's
+real-world trigger rate is measurable once the chatbot has live traffic. A deflected question
+never reaches retrieval (step 3 precedes step 4 in section 3.5's flow), so no patient data is
+loaded for it at all.
 
 ## 5. Network and trust boundary
 
