@@ -710,12 +710,147 @@ traceability separately.
 
 ## 7. Deviation policy
 
-_PLACEHOLDER — written in a later plan._
+D-17 makes this document binding, with recorded deviation as the only permitted departure
+from a security property. This section states which properties are held to that standard and
+how a deviation is written down.
+
+### 7.1 What is binding
+
+Five security properties are binding on any future implementation of this document. Each
+must hold as written; the document does not permit a silent variant.
+
+1. **Structural separation of patient identity from staff auth** (§2) — a patient is never a
+   row in `users` and never a value in `auth.VALID_ROLES`; `patient_auth.py` shares no
+   function with `web_auth.py` or `web_session.py`.
+2. **Query-layer scoping to the authenticated codice_fiscale** (§3) — every accessor function
+   filters by the session's `cf`, never by a value taken from request input.
+3. **The read-only patient surface with no write functions** (§3.1) — no `INSERT`, `UPDATE`,
+   or `DELETE` statement and no write-verb function name exists anywhere in the patient
+   toolset.
+4. **The pre-retrieval no-advice gate** (§4) — an advice-shaped question is deflected before
+   any accessor call, any retrieval, and any model call; a system-prompt instruction alone
+   does not satisfy this.
+5. **Staff-app isolation by separate process and port** (§5.2) — the patient surface and the
+   staff app never share a socket, a `SECRET_KEY`, or a cookie name.
+
+What is not binding, and may evolve freely as CHAT-03 is actually built: exact table and
+column names, accessor function signatures, the idle-expiry and lockout numbers chosen in
+§2.1, the intent-gate vocabulary and thresholds in §4.2-4.3, and the section ordering of this
+document itself. The line is explicit: schemas and function surfaces may change; the five
+security properties above may not change silently. This is D-17's rule stated as a working
+line an implementer can apply without re-reading the whole document.
+
+### 7.2 How to record a deviation
+
+A deviation from one of the five binding properties is permitted only if it is written down.
+The record has six fields:
+
+| Deviation | Property affected | Reason | Alternative control | Date | Approved by |
+|---|---|---|---|---|---|
+| _(example row — delete before the first real entry)_ | | | | | |
+
+Each deviation record is appended to a `### Deviations` subsection of this document, in the
+repo — not in a plan file, not in `.planning/` — so it travels with the contract itself
+rather than living in a milestone-scoped artifact that gets archived away from CHAT-03's
+implementer.
+
+The rule in one line: a documented deviation is allowed, an undocumented deviation is not.
+This is the same discipline GSD already applies to plan-level deviations (an architectural
+change requires a recorded decision), applied here to a cross-milestone document instead of a
+single plan. Per D-17, an implementer who cannot follow one of the five binding properties as
+written must add a row to this table before shipping the deviating behavior, not after.
 
 ## 8. Decision traceability
 
-_PLACEHOLDER — written in a later plan._
+### 8.1 Decisions to sections
+
+| Decision | Summary | Section | Threat rows |
+|---|---|---|---|
+| D-01 | Clinic-issued patient accounts; no self-registration path exists | §1 Scope and non-goals | — |
+| D-02 | Staff-set PIN, 7-day validity; codice fiscale explicitly disallowed as the temp credential | §2.1 Table schemas | T6 |
+| D-03 | Forced PIN change on first login, before any chatbot route is reachable | §2.3 Sequence flow: login and forced credential change | — |
+| D-04 | Temp credential expires at 7 days; staff reissue is the only recovery path | §2.3 Sequence flow: login and forced credential change | T13 |
+| D-05 | Shorter patient idle expiry than staff's 30 minutes, with a timed auto-unlock lockout cooldown | §2.1 Table schemas | T5 |
+| D-06 | Structural separation: separate tables and module, no shared session function, no patient role in `users` | §2.4 Separation rules | T14 |
+| D-07 | Patient credential row bound to `patients.codice_fiscale` by an enforced foreign key | §2.1 Table schemas | — |
+| D-08 | Constrained accessor module: every query CF-filtered by construction, an unfiltered query is unwritable | §3.1 Accessor function surface | T1, T2 |
+| D-09 | Return assertion re-checks every row and chunk against the session's cf, drops and logs a mismatch | §3.3 Return assertion and its documented limit | T2 |
+| D-10 | Exposed surface is administrative data plus factual clinical facts only; `clinical_notes` excluded; read-only throughout | §3.2 Row and column scoping | T4 |
+| D-11 | No-clinical-advice enforced by an intent gate that runs before retrieval, not by a system-prompt instruction | §4.1 Placement in the request flow | T3 |
+| D-12 | Patient surface is internet-exposed via a secure tunnel; database, models, and clinical processing stay strictly local | §5.1 Tunnel topology | T7 |
+| D-13 | Separate Flask app, own process and port; the tunnel points only at that port | §5.2 Process and port isolation | T8 |
+| D-14 | Four app-layer controls: login throttling, GDPR processor statement, no-real-data precondition, mandatory per-interaction audit | §5.4 App-layer controls | T5, T7, T9 |
+| D-15 | Deliverable is a full spec plus enumerated threat register, not a short ADR | §6. Threat register | — |
+| D-16 | Document lives in `docs/`, committed and pushed — not `.planning/` | §1's "Document status and authority" | — |
+| D-17 | Document is binding, with recorded deviation, as the only permitted departure | §7. Deviation policy | T6 |
+| D-18 | Approval is a criteria walkthrough sign-off, one roadmap criterion at a time, with explicit human sign-off | §8.2 Success criteria walkthrough | — |
+
+### 8.2 Success criteria walkthrough
+
+D-18 makes this walkthrough the approval mechanism for the phase — the document is reviewed
+against the three ROADMAP §Phase 13 success criteria one at a time, each traced to the
+sections and threat rows that satisfy it.
+
+1. **Patient identity/session structurally separate from staff `users`, never a role in the
+   staff table.** Satisfied by §2.1 (the two `patient_*` table schemas, no `role` column, no
+   FK to `users`) and §2.4 (separation rules: no shared function with `web_auth.py` or
+   `web_session.py`, the one deliberate `auth.log_audit` exception stated and justified).
+   Threat rows T6 and T14 name the failure modes this criterion guards against.
+
+2. **Every data-retrieval call, SQLite and Chroma, hard-filtered by the authenticated
+   patient's own codice_fiscale, enforced at the query layer, not just the prompt.**
+   Satisfied by §3.1 (every accessor function's fixed, CF-filtered query), §3.2 (the row and
+   column scoping axes held together), and §3.3 (the return assertion and its documented
+   limit). Threat rows T1 and T2 name the failure modes.
+
+3. **The threat model explicitly covers: read-only toolset, no clinical advice, no
+   cross-patient visibility, mandatory per-interaction logging.** Satisfied by §3.1 (no write
+   function exists in the accessor), §4 (the pre-retrieval intent gate), and §5.5 (audit
+   logging on the same code path as the response). Threat rows T2, T3, T4, and T9 cover the
+   four categories in order.
+
+### Sign-off
+
+| Criterion | Section traced | Approved | Date |
+|---|---|---|---|
+| 1 | §2.1, §2.4 | pending | pending |
+| 2 | §3.1-§3.3 | pending | pending |
+| 3 | §3.1, §4, §5.5 | pending | pending |
 
 ## 9. Open questions for CHAT-03
 
-_PLACEHOLDER — written in a later plan._
+Five items are enumerated here rather than resolved. Where sections 3 and 5 already state a
+working default, that default is recorded here as reversible, not as a settled decision.
+
+1. **D-08's Chroma clause versus D-10's free-text exclusion.** Known: `patient_notes`' only
+   embedded document text is `note.clinical_notes` (`storage.py:186-190`), which D-10
+   excludes. Unclear: whether the MVP ships zero Chroma-querying functions with D-08's clause
+   standing as a forward-looking rule, or whether CHAT-03 takes on an ingest change adding a
+   second non-clinical collection. Default: zero Chroma callers, as stated in §3.4. Decides:
+   the reviewer at D-18 sign-off — this changes CHAT-03's scope, so it needs an explicit yes.
+   Wanted before CHAT-03 planning starts.
+
+2. **How strongly to qualify D-13's isolation claim.** Known: `cloudflared`'s ingress is a
+   human-authored hostname-to-port map on the same host as both apps. Unclear: whether the
+   single-purpose ingress config plus periodic `cloudflared tunnel ingress rule` check is
+   sufficient, or whether CHAT-03 should add a startup assertion. Default: the §5.2
+   mitigations, with the gap carried as T8. Decides: reviewer. Wanted before CHAT-03 planning
+   starts.
+
+3. **Conversation and transcript retention.** Known: nothing is stored today and D-14.4 only
+   mandates per-interaction audit rows. Unclear: whether patient chat history is retained at
+   all, for how long, and who may read it — GDPR-relevant. Default: none — this was raised
+   and left undecided in discussion. Decides: CHAT-03 planning, with a GDPR review. Answerable
+   during CHAT-03 planning.
+
+4. **Behaviour when the tunnel is down.** Known: the patient surface becomes unreachable; the
+   staff app and all local processing are unaffected. Unclear: the patient-facing degradation
+   story. Default: none — operational rather than architectural. Decides: CHAT-03 planning.
+   Answerable during CHAT-03 planning.
+
+5. **Direct database access versus a narrower local service boundary.** Known: §3.1 states
+   the patient app opens `db/clinic.sqlite` directly with `patient_accessor.py` as the only
+   module holding that connection. Unclear: whether a separate local service boundary is
+   worth the added moving parts. Default: direct connection, accessor-only, enforced by the
+   §3.1 selftest — the simpler option. Decides: reviewer, since CONTEXT.md marks it
+   undecided. Wanted before CHAT-03 planning starts.
