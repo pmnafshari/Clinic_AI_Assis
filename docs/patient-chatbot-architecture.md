@@ -640,7 +640,73 @@ log-before-write discipline this project already uses for undo.
 
 ## 6. Threat register
 
-_PLACEHOLDER — written in a later plan._
+D-15 requires the deliverable to carry a full enumerated threat register with a named
+mitigation per threat, not a short ADR. This section is the register criterion 3 is graded
+on.
+
+### 6.1 Method and trust boundaries
+
+STRIDE is used as a per-row tag on a single table, not a full system-wide walkthrough. This
+satisfies D-15's named-mitigation-per-threat requirement, gives D-18's criteria walkthrough
+concrete rows to trace against each roadmap success criterion, and stays lighter than a
+methodology write-up — matching this project's simplest-correct bias.
+
+| Boundary | What crosses | Assumed trustworthy |
+|---|---|---|
+| internet to tunnel edge | HTTPS request/response bodies | no — public internet |
+| tunnel edge to cloudflared on the clinic host | decrypted HTTP, GDPR processor boundary (§5.3) | Cloudflare as a named, DPA-bound processor |
+| cloudflared to the patient Flask app port | plain HTTP over loopback | yes — same host, config-gated (§5.2) |
+| patient app to `patient_accessor.py` | the session's codice_fiscale, the question text | yes — same process |
+| accessor to `db/clinic.sqlite` | one parameterised, CF-filtered SQL query | yes — same process, D-08's fixed functions |
+| patient app to the local model | retrieved rows, the question | yes — same host, no network hop |
+
+The one assumption that matters: everything below the accessor is trusted, so the accessor
+is the enforcement choke point — the same role `authorize()` plays for staff.
+
+### 6.2 Threat register
+
+| ID | Threat | STRIDE | Attack scenario | Mitigation | Residual risk / limit | Criterion |
+|---|---|---|---|---|---|---|
+| T1 | Prompt injection attempting cross-patient exfiltration | Information Disclosure | Patient submits a crafted question instructing the model to ignore instructions and reveal another patient's data | Accessor CF-scoping (D-08, §3.1) means no other patient's rows or chunks are ever loaded into context — nothing exists in the prompt for an injection to exfiltrate | Model could still fabricate plausible but false content; mitigated, not eliminated, by the "not in records" structural refusal already used for staff Q&A (§3.5 step 7) | 2 |
+| T2 | Cross-patient visibility via a broken or omitted Chroma filter | Information Disclosure | A future accessor function queries Chroma without a where clause, or with a malformed one, and returns another patient's chunk | D-08's mandatory where={"codice_fiscale": cf} (§3.1) plus D-09's return assertion (§3.3) drop and log any row or chunk whose cf does not match the session | Does not catch a chunk ingested under the wrong codice_fiscale at write time (§3.3's documented limit) — the ingest-time provenance gap is explicitly deferred out of this phase (§9) | 2, 3 |
+| T3 | An advice-shaped question reaches the model | Information Disclosure / Elevation of Privilege | Patient asks "should I take antibiotics for this swelling" and the question is passed straight to retrieval and the model | D-11's two-layer pre-retrieval gate (§4.1-4.3): mandatory bilingual keyword and pattern match plus optional semantic similarity, both running before any accessor or model call | The gate's own false-negative rate is unvalidated without live question data; the Italian trigger vocabulary is marked [ASSUMED] in §4.2 and needs native-speaker review before shipping — flagged for post-launch monitoring | 3 |
+| T4 | Attempted write through the patient chatbot | Tampering | Patient's question is phrased as an instruction to update a record, add an invoice line, or append a note | D-10, §3.1: no write function exists anywhere in patient_accessor.py — a write is not denied at runtime, it is absent as code, the same unwritable-not-unwritten standard the read path is held to | None known — no code path exists to attempt a write against; the selftest in §3.1 statically asserts no INSERT, UPDATE, or DELETE appears in the module | 3 |
+| T5 | Credential stuffing or brute force on the internet-exposed patient login | Spoofing | Automated attempts against many codice_fiscale plus PIN combinations from the internet | D-05 lockout (§2.1: threshold 5, cooldown 15 minutes) plus D-14 control 1 app-layer throttling (§5.4), independent of the tunnel provider | Lockout is per-account; a distributed low-and-slow attack spread across many accounts is not fully addressed by a per-account threshold | — |
+| T6 | Future reintroduction of the codice fiscale as a temporary password, for convenience | Spoofing | A later maintainer adds CF-as-PIN as a shortcut because it removes a manual staff step | D-02's rationale recorded in §2.1 (a CF is derived from name, date of birth, and birthplace — a public value, not a secret) plus D-17's binding-with-recorded-deviation discipline | Relies on CHAT-03's implementer reading and following the document; not enforced by any runtime check | 1 |
+| T7 | Tunnel provider as adversary or compromised dependency with plaintext access to traffic | Information Disclosure | Cloudflare's edge, or a party who compromises it, reads request and response bodies in transit since TLS terminates there | D-14 control 2 names Cloudflare as a GDPR processor requiring a DPA (§5.3); D-12 keeps the database, models, and all clinical processing local (§5.1) — only HTTP request and response bodies cross the tunnel | Accepted, documented exception to offline-first (§5.3); scope-limited since clinical DB and model traffic never leave the LAN; the no-real-data precondition (§5.3) keeps this residual theoretical until go-live | — |
+| T8 | Staff app reachable through tunnel misconfiguration | Elevation of Privilege | The cloudflared ingress config is edited to point a hostname at the staff app's port, or a typo sends the patient hostname there | D-13 process/port separation (§5.2) plus a single-purpose ingress config containing only the patient app's hostname and port, verified periodically with cloudflared tunnel ingress rule (§5.2) | Isolation depends on the ingress config being correct, not on process separation alone — a wrong port number in that human-authored file is not prevented by either app's own code | — |
+| T9 | An interaction is not logged | Repudiation | A code path returns an answer or a deflection without a corresponding audit_log row | D-14 control 4: log_audit (auth.py:19-27) sits on the same code path as the response, log-before-respond (§5.5), reusing the existing audit_log table rather than a second parallel log | None known, provided the log_audit call and the response stay on the same code path — the same log-before-write discipline this project already applies to undo | 3 |
+| T10 | Model output leaking or fabricating data the accessor correctly filtered | Information Disclosure | Model free-associates or hallucinates a plausible-sounding fact not present in the retrieved, correctly-scoped context | The "not in records" structural refusal (§3.5 step 7), the same guard already built for staff Q&A in ask.py, triggers when retrieval is empty or insufficient | Residual risk is inherent to any generative model; reduced, not eliminated, by the structural refusal | — |
+| T11 | Session token compromise via XSS or cookie theft | Information Disclosure / Spoofing | An attacker reads the patient session cookie through a script injection or physical or shared-device access | HttpOnly and SameSite=Strict cookie flags on the patient session cookie (§5.4), matching app/__init__.py:24; CSRF protection via Flask-WTF on every patient form (§5.4) | Standard browser-security residual; device-level compromise on a shared or unmanaged home device is out of scope for an app-layer control | — |
+| T12 | Weak or guessable staff-set PIN | Spoofing | Staff issues a short or sequential PIN that is easy to guess or shoulder-surf | Minimum PIN policy enforced at issuance in patient_auth.py (§2.1): at least 8 characters, reject all-same-digit and sequential-digit PINs, hashed with werkzeug scrypt (§2.1), never compared with == | Policy strength is a document-time choice; a determined guesser with unlimited attempts is still bounded by D-05's lockout (§2.1), not by PIN strength alone | — |
+| T13 | Expired or reissued credential still accepting a login, or a stale patient session surviving a staff revocation | Spoofing | Patient's temp PIN passes 7 days unused but the expiry check is skipped, or staff revokes a patient's access but an already-issued session keeps working | D-04's expires_at check and D-05's active flag (§2.1, §2.3) at login, plus deletion of the patient's patient_sessions rows on revocation | Revocation is only as fast as the next request the patient's existing session makes — a session already mid-request when revoked completes that one request | — |
+| T14 | A future maintainer adds a shared session helper parameterised by table name, or adds "patient" to VALID_ROLES | Elevation of Privilege | A later change collapses the structural separation D-06 requires, for code-reuse convenience | D-06 (§2.4) and the §7 deviation policy, plus a selftest asserting "patient" is absent from auth.VALID_ROLES | Relies on the deviation policy being followed and the selftest being run; not prevented by a database constraint | 1 |
+
+The table above covers all four of criterion 3's graded categories: T4 (read-only), T3 (no
+clinical advice), T2 (no cross-patient visibility), T9 (mandatory per-interaction logging).
+
+The controls below are what CHAT-03 must implement — none of them are implemented in this
+phase, which produces a document only.
+
+| Category | Control specified | Section |
+|---|---|---|
+| V2 Authentication | Staff-issued PIN hashed with werkzeug scrypt, forced change on first login, 7-day expiry | §2.1-2.3 |
+| V3 Session Management | Server-side hashed-token sessions in patient_sessions, shorter idle expiry than the staff 30 minutes | §2.1 |
+| V4 Access Control | Constrained accessor, read-only toolset, "patient" kept absent from VALID_ROLES and PERMISSIONS | §3, §5.5 |
+| V5 Input Validation | Codice fiscale format validated before lookup; intent-gate input normalised before matching | §2.3, §4.2 |
+| V6 Cryptography | PIN and session-token hashing via werkzeug scrypt and hashlib.sha256, never a hand-rolled scheme | §2.1 |
+| V13 API and Web Service | CSRF protection via Flask-WTF and HttpOnly/SameSite=Strict cookie flags on every patient form and session cookie | §5.4 |
+
+### 6.3 Criterion coverage
+
+| Criterion | What it requires | Threat rows | Sections |
+|---|---|---|---|
+| 1 | Patient identity/session structurally separate from staff users — never a role in the staff table | T6, T14 | §2.1, §2.4 |
+| 2 | Every data-retrieval call hard-filtered by the authenticated patient's own codice_fiscale, enforced at the query layer | T1, T2 | §3.1-3.3 |
+| 3 | Threat model explicitly covers read-only toolset, no clinical advice, no cross-patient visibility, mandatory per-interaction logging | T3, T4, T2, T9 | §3.1, §4, §5.5 |
+
+This table is what D-18's criteria walkthrough reads from; section 8 carries decision-level
+traceability separately.
 
 ## 7. Deviation policy
 
