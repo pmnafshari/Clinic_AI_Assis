@@ -815,7 +815,7 @@ sections and threat rows that satisfy it.
 |---|---|---|---|
 | 1 | §2.1, §2.4 | approved | 2026-07-30 |
 | 2 | §3.1-§3.3 | approved | 2026-07-30 |
-| 3 | §3.1, §4, §5.5 | approved | 2026-07-30 |
+| 3 | §6.2 (T2, T3, T4, T9), §6.3 | approved | 2026-07-30 |
 
 ## 9. Open questions for CHAT-03
 
