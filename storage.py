@@ -771,8 +771,29 @@ def selftest():
 
 
 def main():
-    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+    # usage: python storage.py [--selftest | --backfill [--dry-run]]
+    # bare invocation (no flags) loads sorted/ as the logged-in cli session,
+    # unchanged from before this repair command existed
+    flags = [a for a in sys.argv[1:] if a.startswith("--")]
+
+    if "--selftest" in flags:
         selftest()
+        return
+
+    if "--backfill" in flags:
+        # runs as system (D-03), not the operator's cli session - a bulk
+        # repair must never read as a clinician appending hundreds of notes
+        dry_run = "--dry-run" in flags
+        Path("db").mkdir(exist_ok=True)
+        conn = init_db("db/clinic.sqlite")
+        collection = get_shared_collection("db/chroma")
+        landed, already, failed = backfill_sorted(Path("sorted"), conn, collection, dry_run=dry_run)
+
+        if dry_run:
+            print("dry run - nothing written")
+        print(f"landed {landed}, already present {already}, failed {len(failed)}")
+        for path in failed:
+            print(f"    {path}")
         return
 
     from cli_session import read_session
