@@ -8,6 +8,8 @@
     </div>
     {% if row.allowed %}
     <span class="badge text-bg-primary">Sorted</span>
+    {% elif row.action == 'sync_note' %}
+    <span class="badge text-bg-warning">Not searchable</span>
     {% else %}
     <span class="badge text-bg-danger">Rejected</span>
     {% endif %}
