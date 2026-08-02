@@ -48,6 +48,23 @@ def enqueue(path, username, role):
     _queue.put((str(path), username, role))
 
 
+def _record_worker_failure(path, username, role, exc):
+    # each step guarded on its own: the connection or process that just
+    # failed may be the reason this is unreachable too, and a raise here
+    # would kill the only worker thread - the same silence this replaces
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        log_audit(conn, username, role, "sync_note", str(path), allowed=0)
+        conn.close()
+    except Exception:
+        pass
+    try:
+        log_action(path, "-", f"worker failed: {exc}", LOG_PATH)
+    except Exception:
+        pass
+
+
 def _worker_loop():
     # the app worker is the authoritative processor for uploaded .txt - it
     # alone knows the uploading username. the upload route (Plan 11-03) does
@@ -56,8 +73,8 @@ def _worker_loop():
         path, username, role = _queue.get()
         try:
             _process_one(path, username, role)
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_worker_failure(path, username, role, exc)
         finally:
             _queue.task_done()
 
@@ -92,7 +109,7 @@ def selftest():
     from dental_notes_schema import DentalNote
     from storage import init_db
 
-    global SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
+    global SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract, _process_one
 
     VALID_CF = "MRRS800010150100"
 
@@ -106,6 +123,7 @@ def selftest():
         SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
     )
     orig_get_shared_collection = storage.get_shared_collection
+    orig_process_one = _process_one
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -252,8 +270,55 @@ def selftest():
             assert "sync failed" in log_text, "4: log.txt has no 'sync failed' line"
             assert (SORTED_ROOT / VALID_CF / "notes" / "note4.txt").exists(), \
                 "4: a sync failure must not move the filed note"
+
+            # 5. an arbitrary exception in _process_one is recorded, not swallowed,
+            # and the thread keeps serving the next item
+            def _boom(path, username, role):
+                raise RuntimeError("boom")
+
+            _process_one = _boom
+            enqueue(root / "note5.txt", "eneri", "assistant")
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            deadline = time.time() + 3.0
+            worker_fail_row = None
+            while time.time() < deadline:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action=? AND allowed=0",
+                    ("eneri", "sync_note"),
+                ).fetchall()
+                if rows:
+                    worker_fail_row = rows[0]
+                    break
+                time.sleep(0.1)
+            assert worker_fail_row is not None, "5: no failed sync_note row for eneri within deadline"
+            conn.close()
+
+            _process_one = orig_process_one
+            LOG_PATH = None
+            txt6 = root / "note6.txt"
+            txt6.write_text("patient note six")
+            enqueue(txt6, "fgalli", "assistant")
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            deadline = time.time() + 3.0
+            survived_row = None
+            while time.time() < deadline:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action=? AND allowed=1",
+                    ("fgalli", "upload_file"),
+                ).fetchall()
+                if rows:
+                    survived_row = rows[0]
+                    break
+                time.sleep(0.1)
+            assert survived_row is not None, "5: worker thread did not process the next item after a failure"
+            conn.close()
     finally:
         storage.get_shared_collection = orig_get_shared_collection
+        _process_one = orig_process_one
         SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract = (
             orig_sorted_root, orig_log_path, orig_db_path, orig_chroma_path, orig_extract
         )
