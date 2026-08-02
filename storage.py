@@ -200,8 +200,7 @@ def get_shared_collection(chroma_path):
 
 
 def upsert_note_chroma(note, source_path, collection):
-    stem = Path(source_path).stem
-    chunk_id = f"{note.codice_fiscale}:{stem}"
+    chunk_id = note_chunk_id(note.codice_fiscale, source_path)
 
     proc_text = ", ".join(note.procedures)
     if proc_text:
@@ -234,6 +233,46 @@ def load_note(note, source_path, conn, collection, role, username):
 
     upsert_note_sql(note, source_path, conn)
     upsert_note_chroma(note, source_path, collection)
+
+
+def note_chunk_id(codice_fiscale, source_path):
+    return f"{codice_fiscale}:{Path(source_path).stem}"
+
+
+def note_is_synced(note, source_path, conn, collection):
+    # both halves must be present - sql alone is not synced (D-05)
+    row = conn.execute(
+        "SELECT 1 FROM visits WHERE source_path = ?", (source_path,)
+    ).fetchone()
+    if row is None:
+        return False
+    chunk_id = note_chunk_id(note.codice_fiscale, source_path)
+    chunk = collection.get(ids=[chunk_id])
+    return len(chunk["ids"]) > 0
+
+
+def sync_note_file(json_path, sorted_root, conn, collection, role, username, target=None):
+    json_path = Path(json_path)
+    if target is None:
+        target = str(json_path)
+
+    try:
+        note = DentalNote.model_validate_json(json_path.read_text())
+        source_path = str(json_path.relative_to(sorted_root))
+        before = note_is_synced(note, source_path, conn, collection)
+        load_note(note, source_path, conn, collection, role, username)
+        # check again after the write instead of trusting "no exception" -
+        # this is what catches a denied role and a chroma half-write (D-05)
+        ok = note_is_synced(note, source_path, conn, collection)
+    except Exception:
+        ok = False
+
+    if not ok:
+        log_audit(conn, username, role, "sync_note", target, allowed=0)
+        return "failed"
+
+    log_audit(conn, username, role, "sync_note", target, allowed=1)
+    return "already" if before else "landed"
 
 
 def save_new_note(note, conn, collection, role, username, sorted_root=Path("sorted")):
