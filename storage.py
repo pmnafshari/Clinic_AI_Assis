@@ -1,11 +1,14 @@
 import json
 import sqlite3
 import sys
+import threading
 from datetime import date, datetime
 from pathlib import Path
 
 import chromadb
 from chromadb.config import Settings
+# internal chroma path, pinned by chromadb==1.3.7 in requirements.txt
+from chromadb.api.client import SharedSystemClient
 
 from auth import authorize, log_audit
 from dental_notes_schema import DentalNote
@@ -185,6 +188,8 @@ def get_collection(chroma_path):
 
 _shared_collection = None
 _shared_collection_path = None
+_shared_collection_count = None
+_shared_refresh_lock = threading.Lock()
 
 
 def get_shared_collection(chroma_path):
@@ -192,11 +197,27 @@ def get_shared_collection(chroma_path):
     # thread or the watcher never opens a new PersistentClient (and its
     # ~83MB embedder) per note. path-keyed so a selftest can point at a
     # temp dir and get a fresh handle without reaching in to reset a global.
-    global _shared_collection, _shared_collection_path
-    if _shared_collection is None or _shared_collection_path != chroma_path:
-        _shared_collection = get_collection(chroma_path)
-        _shared_collection_path = chroma_path
-    return _shared_collection
+    #
+    # count() reads sqlite and is fresh across processes, but vector search
+    # reads a per-System hnsw reader that only sees its own process's writes -
+    # and re-opening alone hands back the same cached System, so the
+    # identifier cache has to be cleared first (measured, 14-08).
+    global _shared_collection, _shared_collection_path, _shared_collection_count
+    with _shared_refresh_lock:
+        if _shared_collection is None or _shared_collection_path != chroma_path:
+            _shared_collection = get_collection(chroma_path)
+            _shared_collection_path = chroma_path
+            _shared_collection_count = _shared_collection.count()
+            return _shared_collection
+
+        count = _shared_collection.count()
+        if count != _shared_collection_count:
+            SharedSystemClient.clear_system_cache()
+            _shared_collection = get_collection(chroma_path)
+            _shared_collection_count = _shared_collection.count()
+            return _shared_collection
+
+        return _shared_collection
 
 
 def upsert_note_chroma(note, source_path, collection):
