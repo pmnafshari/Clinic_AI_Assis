@@ -112,14 +112,33 @@ def submit_dashboard():
 def _user_recent_intake(conn, username, limit=10):
     # per-user scoping (D-19) - reads audit_log only, never the shared
     # operational log, which has no user field and would leak clinic-wide
-    # filenames (D-02/CR-01)
+    # filenames (D-02/CR-01). widened to sync_note (D-07) so the badge can
+    # report whether a filed note actually landed, not just whether the
+    # upload itself was authorized. role != 'system' keeps every watcher and
+    # backfill row out of a per-user list structurally (D-11), independent
+    # of what any real account happens to be named.
     rows = conn.execute(
-        "SELECT ts, target, allowed FROM audit_log"
-        " WHERE username = ? AND action = 'upload_file'"
+        "SELECT ts, target, action, allowed FROM audit_log"
+        " WHERE username = ? AND action IN ('upload_file', 'sync_note') AND role != 'system'"
         " ORDER BY id DESC LIMIT ?",
-        (username, limit),
+        (username, limit * 3),
     ).fetchall()
-    return rows
+
+    # collapse to one row per file, newest first: a .txt's upload_file row
+    # shows "Sorted" until the worker's later sync_note row supersedes it in
+    # place. two rows sharing a target otherwise only means a repeated
+    # rejection of the same filename - sort_files._move renames real
+    # collisions to <stem>_1, so this never merges two distinct filed notes.
+    seen = set()
+    collapsed = []
+    for row in rows:
+        if row["target"] in seen:
+            continue
+        seen.add(row["target"])
+        collapsed.append(row)
+        if len(collapsed) == limit:
+            break
+    return collapsed
 
 
 @upload_bp.route("/upload/recent")
