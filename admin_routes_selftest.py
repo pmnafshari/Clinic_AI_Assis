@@ -70,7 +70,6 @@ def selftest():
 
         app_db.DB_PATH = db_path
         app_db.CHROMA_PATH = str(tmp_path / "chroma")
-        app_db._collection_cache = None
 
         app = create_app()
         app.config["TESTING"] = True

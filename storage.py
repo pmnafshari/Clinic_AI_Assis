@@ -170,6 +170,10 @@ def lookup_clinical(cf, conn):
     ]
 
 
+SYSTEM_USERNAME = "system"
+SYSTEM_ROLE = "system"
+
+
 def get_collection(chroma_path):
     # first run downloads the ~83MB all-MiniLM-L6-v2 ONNX model once, then it's cached
     client = chromadb.PersistentClient(
@@ -177,6 +181,22 @@ def get_collection(chroma_path):
         settings=Settings(anonymized_telemetry=False),
     )
     return client.get_or_create_collection(name="patient_notes")
+
+
+_shared_collection = None
+_shared_collection_path = None
+
+
+def get_shared_collection(chroma_path):
+    # one process-lifetime collection handle per chroma path, so a worker
+    # thread or the watcher never opens a new PersistentClient (and its
+    # ~83MB embedder) per note. path-keyed so a selftest can point at a
+    # temp dir and get a fresh handle without reaching in to reset a global.
+    global _shared_collection, _shared_collection_path
+    if _shared_collection is None or _shared_collection_path != chroma_path:
+        _shared_collection = get_collection(chroma_path)
+        _shared_collection_path = chroma_path
+    return _shared_collection
 
 
 def upsert_note_chroma(note, source_path, collection):

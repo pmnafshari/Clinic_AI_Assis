@@ -75,7 +75,6 @@ def selftest():
 
         app_db.DB_PATH = db_path
         app_db.CHROMA_PATH = str(tmp_path / "chroma")
-        app_db._collection_cache = None
 
         upload_routes.SORTED_ROOT = sorted_root
         upload_routes.DROP_DIR = drop_dir

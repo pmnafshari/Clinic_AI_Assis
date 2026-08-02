@@ -49,7 +49,6 @@ def selftest():
         db_path = str(Path(tmp) / "clinic.sqlite")
         app_db.DB_PATH = db_path
         app_db.CHROMA_PATH = str(Path(tmp) / "chroma")
-        app_db._collection_cache = None
 
         app = create_app()
         app.config["TESTING"] = True
