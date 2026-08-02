@@ -322,6 +322,54 @@ def selftest():
                 time.sleep(0.1)
             assert survived_row is not None, "5: worker thread did not process the next item after a failure"
             conn.close()
+
+            # 6. the collection open itself raises (mirrors chmod -w db/chroma), before
+            # sync_note_file is ever entered - still exactly one sync_note row, and its
+            # target must match the routed upload_file row, not the enqueued drop path
+            def _boom_open(path):
+                raise RuntimeError("chroma open boom")
+
+            storage.get_shared_collection = _boom_open
+            log_path6 = str(root / "log6.txt")
+            LOG_PATH = log_path6
+            _extract = _fake_ok
+            txt_defect2 = root / "note_defect2.txt"
+            txt_defect2.write_text("patient note defect2")
+            enqueue(txt_defect2, "ghirsch", "assistant")
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            deadline = time.time() + 3.0
+            sync_row6 = None
+            while time.time() < deadline:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action=?",
+                    ("ghirsch", "sync_note"),
+                ).fetchall()
+                if rows:
+                    sync_row6 = rows[0]
+                    all_rows6 = rows
+                    break
+                time.sleep(0.1)
+            assert sync_row6 is not None, "6: no sync_note row for ghirsch within deadline"
+            assert len(all_rows6) == 1, f"6: expected exactly one sync_note row, got {len(all_rows6)}"
+            assert sync_row6["allowed"] == 0, f"6: expected allowed=0, got {sync_row6['allowed']}"
+
+            upload_row6 = conn.execute(
+                "SELECT * FROM audit_log WHERE username=? AND action=?",
+                ("ghirsch", "upload_file"),
+            ).fetchone()
+            assert upload_row6 is not None, "6: no upload_file row for ghirsch"
+            assert sync_row6["target"] == upload_row6["target"], (
+                "6: sync failure must be recorded against the routed target, not the enqueued path"
+            )
+            assert sync_row6["target"].startswith(str(SORTED_ROOT)), (
+                f"6: target not routed under SORTED_ROOT, got {sync_row6['target']!r}"
+            )
+            conn.close()
+
+            assert (SORTED_ROOT / VALID_CF / "notes" / "note_defect2.txt").exists(), \
+                "6: a sync failure must not move the filed note"
     finally:
         storage.get_shared_collection = orig_get_shared_collection
         _process_one = orig_process_one
