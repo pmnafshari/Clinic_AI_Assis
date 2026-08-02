@@ -1,3 +1,4 @@
+import sqlite3
 import sys
 import time
 import tempfile
@@ -7,6 +8,14 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 from sort_files import route_file
+from extract_note import extract_note
+from action_log import log_action
+import storage
+
+# module-level, selftest-patchable seams
+DB_PATH = "db/clinic.sqlite"
+CHROMA_PATH = "db/chroma"
+_extract = extract_note
 
 
 class DropHandler(FileSystemEventHandler):
@@ -47,61 +56,156 @@ def watch(drop_dir, sorted_root, log_path=None):
 
 def selftest():
     # offline — uses .xlsx with CF in filename (find_cf_in_name, no model call)
+    from dental_notes_schema import DentalNote
+
+    global DB_PATH, CHROMA_PATH, _extract
+
     CF = "MRRS800010150100"
+
+    def _fake_extract(text):
+        return DentalNote(patient_name="test", codice_fiscale=CF)
+
+    orig_db_path, orig_chroma_path, orig_extract = DB_PATH, CHROMA_PATH, _extract
 
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         drop = root / "drop"
         drop.mkdir()
         sorted_ = root / "sorted"
+        log_path = str(root / "watch.log")
+        db_path = str(root / "clinic.sqlite")
+        storage.init_db(db_path)
 
-        # 1. startup catch-up: file present before watcher starts is routed
-        pre = drop / f"fattura_{CF}_2026.xlsx"
-        pre.write_bytes(b"PK")
+        try:
+            DB_PATH = db_path
+            CHROMA_PATH = str(root / "chroma")
+            _extract = _fake_extract
 
-        handler = DropHandler(sorted_)
-        observer = Observer()
-        observer.schedule(handler, path=str(drop), recursive=True)
-        observer.start()
+            # 1. startup catch-up: file present before watcher starts is routed
+            pre = drop / f"fattura_{CF}_2026.xlsx"
+            pre.write_bytes(b"PK")
 
-        # run startup catch-up manually (watch() does it; selftest calls it directly)
-        for f in drop.rglob("*"):
-            if f.is_file():
-                route_file(f, sorted_)
+            handler = DropHandler(sorted_, log_path)
+            observer = Observer()
+            observer.schedule(handler, path=str(drop), recursive=True)
+            observer.start()
 
-        # wait briefly so any observer init settles
-        time.sleep(0.2)
+            # run startup catch-up manually (watch() does it; selftest calls it directly)
+            for f in drop.rglob("*"):
+                if f.is_file():
+                    dest = route_file(f, sorted_, log_path, extract=_extract)
+                    sync_dropped(dest, sorted_, log_path)
 
-        assert (sorted_ / CF / "records" / pre.name).exists(), "1: startup catch-up file not routed"
+            # wait briefly so any observer init settles
+            time.sleep(0.2)
 
-        # 2. new file dropped while watcher is live routes within 2 seconds
-        new_file = drop / f"rx_{CF}.jpg"
-        new_file.write_bytes(b"\xff\xd8\xff")
+            assert (sorted_ / CF / "records" / pre.name).exists(), "1: startup catch-up file not routed"
 
-        deadline = time.time() + 2.0
-        routed = sorted_ / CF / "images" / new_file.name
-        while time.time() < deadline:
-            if routed.exists():
-                break
-            time.sleep(0.1)
-        assert routed.exists(), "2: new file not routed within 2 seconds"
+            # 2. new file dropped while watcher is live routes within 2 seconds
+            new_file = drop / f"rx_{CF}.jpg"
+            new_file.write_bytes(b"\xff\xd8\xff")
 
-        # 3. recursive: file dropped into a nested subfolder is detected
-        sub = drop / "inbox" / "sub"
-        sub.mkdir(parents=True, exist_ok=True)
-        nested = sub / f"preventivo_{CF}_q1.xlsx"
-        nested.write_bytes(b"PK")
+            deadline = time.time() + 2.0
+            routed = sorted_ / CF / "images" / new_file.name
+            while time.time() < deadline:
+                if routed.exists():
+                    break
+                time.sleep(0.1)
+            assert routed.exists(), "2: new file not routed within 2 seconds"
 
-        deadline = time.time() + 2.0
-        routed_nested = sorted_ / CF / "records" / nested.name
-        while time.time() < deadline:
-            if routed_nested.exists():
-                break
-            time.sleep(0.1)
-        assert routed_nested.exists(), "3: nested subfolder file not routed within 2 seconds"
+            # 3. recursive: file dropped into a nested subfolder is detected
+            sub = drop / "inbox" / "sub"
+            sub.mkdir(parents=True, exist_ok=True)
+            nested = sub / f"preventivo_{CF}_q1.xlsx"
+            nested.write_bytes(b"PK")
 
-        observer.stop()
-        observer.join()
+            deadline = time.time() + 2.0
+            routed_nested = sorted_ / CF / "records" / nested.name
+            while time.time() < deadline:
+                if routed_nested.exists():
+                    break
+                time.sleep(0.1)
+            assert routed_nested.exists(), "3: nested subfolder file not routed within 2 seconds"
+
+            # 4. a .txt present before start is routed and synced by the catch-up loop
+            pre_note = drop / "note_pre.txt"
+            pre_note.write_text("patient note")
+            dest4 = route_file(pre_note, sorted_, log_path, extract=_extract)
+            sync_dropped(dest4, sorted_, log_path)
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            json_path4 = dest4.with_suffix(".json")
+            source_path4 = str(json_path4.relative_to(sorted_))
+            visit_row = conn.execute(
+                "SELECT 1 FROM visits WHERE source_path = ?", (source_path4,)
+            ).fetchone()
+            assert visit_row is not None, "4: catch-up did not sync the pre-existing note"
+            sync_row = conn.execute(
+                "SELECT * FROM audit_log WHERE action='sync_note' AND target=?", (str(json_path4),)
+            ).fetchone()
+            assert sync_row is not None, "4: no sync_note row for the catch-up note"
+            assert sync_row["username"] == "system", f"4: expected username=system, got {sync_row['username']}"
+            assert sync_row["role"] == "system", f"4: expected role=system, got {sync_row['role']}"
+            assert sync_row["allowed"] == 1, f"4: expected allowed=1, got {sync_row['allowed']}"
+            conn.close()
+
+            # 4b. a .txt dropped while the observer is live is synced within the deadline poll
+            live_note = drop / "note_live.txt"
+            live_note.write_text("patient note live")
+
+            deadline = time.time() + 2.0
+            sync_row_live = None
+            while time.time() < deadline:
+                conn = sqlite3.connect(db_path)
+                conn.row_factory = sqlite3.Row
+                sync_row_live = conn.execute(
+                    "SELECT * FROM audit_log WHERE action='sync_note' AND target LIKE ?",
+                    (f"%{live_note.stem}%",),
+                ).fetchone()
+                conn.close()
+                if sync_row_live:
+                    break
+                time.sleep(0.1)
+            assert sync_row_live is not None, "4b: live-dropped note not synced within deadline"
+            assert sync_row_live["username"] == "system", "4b: live sync not attributed to system"
+
+            # 4c. the .jpg from block 2 produced no sync_note row (D-09)
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            jpg_sync = conn.execute(
+                "SELECT 1 FROM audit_log WHERE action='sync_note' AND target LIKE ?",
+                (f"%{new_file.name}%",),
+            ).fetchone()
+            assert jpg_sync is None, "4c: .jpg produced a sync_note row"
+            conn.close()
+
+            # 5. sync failure -> a log.txt line, sync_dropped does not raise
+            class _FailingCollection:
+                def upsert(self, **kwargs):
+                    raise RuntimeError("upsert boom")
+
+                def get(self, ids=None):
+                    return {"ids": []}
+
+            orig_get_shared_collection = storage.get_shared_collection
+            storage.get_shared_collection = lambda path: _FailingCollection()
+            try:
+                fail_note = drop / "note_fail.txt"
+                fail_note.write_text("patient note fail")
+                dest_fail = route_file(fail_note, sorted_, log_path, extract=_extract)
+                sync_dropped(dest_fail, sorted_, log_path)
+            finally:
+                storage.get_shared_collection = orig_get_shared_collection
+
+            with open(log_path) as f:
+                log_text = f.read()
+            assert "sync failed" in log_text, "5: log.txt has no 'sync failed' line"
+
+            observer.stop()
+            observer.join()
+        finally:
+            DB_PATH, CHROMA_PATH, _extract = orig_db_path, orig_chroma_path, orig_extract
 
     print("selftest ok")
 
