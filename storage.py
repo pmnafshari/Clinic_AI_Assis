@@ -356,6 +356,7 @@ def backfill_sorted(sorted_root, conn, collection, dry_run=False):
 
 
 def selftest():
+    import subprocess
     import tempfile
     from dental_notes_schema import Invoice
 
@@ -787,6 +788,47 @@ def selftest():
         assert landed10c == 1, f"10c: expected 1 landed note, got {landed10c}"
         assert str(broken_path) in failed10c, f"10c: expected broken path in failed list, got {failed10c}"
         assert lookup_patient(cf10d, conn10c) is not None, "10c: the valid note in the same tree should still land"
+
+        # 11. cross-process visibility - a chunk written by a real second
+        # process (the watcher, --backfill) must be found by query() without
+        # restarting this process (DEFECT-1, 14-08)
+        path11 = Path(tmp) / "chroma11"
+        collection11 = get_shared_collection(str(path11))
+        cf11 = "BNCG800010150400"
+        note11 = DentalNote(
+            patient_name="giorgio bianchi",
+            codice_fiscale=cf11,
+            clinical_notes="fitted with a night guard",
+        )
+        upsert_note_chroma(note11, f"{cf11}/notes/n1.json", collection11)
+        seeded = collection11.query(query_texts=["night guard"], n_results=3)
+        assert f"{cf11}:n1" in seeded["ids"][0], \
+            f"11: seeded chunk not found by query, got {seeded['ids'][0]}"
+
+        writer_code = (
+            "import storage\n"
+            f"c = storage.get_collection({str(path11)!r})\n"
+            "c.upsert(\n"
+            "    ids=['EXTERNAL:one'],\n"
+            "    documents=['fitted a night guard splint'],\n"
+            f"    metadatas=[{{'codice_fiscale': {cf11!r}}}],\n"
+            ")\n"
+        )
+        subprocess.run(
+            [sys.executable, "-c", writer_code],
+            check=True,
+            cwd=str(Path(__file__).parent),
+        )
+
+        refreshed = get_shared_collection(str(path11))
+        found = refreshed.query(query_texts=["night guard splint"], n_results=5)
+        assert "EXTERNAL:one" in found["ids"][0], \
+            f"11: externally written chunk not visible after refresh, got {found['ids'][0]}"
+
+        # 11b. no churn on the common path - repeat calls with no external
+        # write in between must return the identical cached object
+        assert get_shared_collection(str(path11)) is get_shared_collection(str(path11)), \
+            "11b: unconditional re-open on the common path"
 
     print("selftest ok")
 
