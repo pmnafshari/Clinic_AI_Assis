@@ -547,6 +547,130 @@ def selftest():
         assert len(denied_note_rows) == 1, \
             f"8b: expected 1 denied append_note row for test-admin, got {len(denied_note_rows)}"
 
+        # 9. sync_note_file, system role: a filed note not yet in either store lands
+        collection9 = get_collection(str(Path(tmp) / "chroma9"))
+        cf9 = "GVNP900010150600"
+        note9 = DentalNote(
+            patient_name="giovanni pane",
+            codice_fiscale=cf9,
+            clinical_notes="sync test note",
+        )
+        notes_dir9 = sorted_root / cf9 / "notes"
+        notes_dir9.mkdir(parents=True, exist_ok=True)
+        json_path9 = notes_dir9 / "n1.json"
+        json_path9.write_text(note9.model_dump_json())
+        source_path9 = str(json_path9.relative_to(sorted_root))
+
+        result9 = sync_note_file(json_path9, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME)
+        assert result9 == "landed", f"9: expected landed, got {result9}"
+        assert lookup_patient(cf9, conn) is not None, "9: lookup_patient should find the synced patient"
+        chunk_id9 = note_chunk_id(cf9, source_path9)
+        assert collection9.get(ids=[chunk_id9])["ids"] == [chunk_id9], "9: chroma missing the synced chunk"
+        sync_rows9 = conn.execute(
+            "SELECT * FROM audit_log WHERE username = ? AND role = ? AND action = 'sync_note'",
+            (SYSTEM_USERNAME, SYSTEM_ROLE),
+        ).fetchall()
+        assert len(sync_rows9) == 1, f"9: expected 1 sync_note row, got {len(sync_rows9)}"
+        assert sync_rows9[0]["allowed"] == 1, "9: sync_note row should be allowed=1"
+        append_rows9 = conn.execute(
+            "SELECT * FROM audit_log WHERE username = ? AND role = ? AND action = 'append_note' AND allowed = 1",
+            (SYSTEM_USERNAME, SYSTEM_ROLE),
+        ).fetchall()
+        assert len(append_rows9) == 1, \
+            f"9: expected 1 allowed append_note row from load_note, got {len(append_rows9)}"
+
+        # 9b. same call repeated is idempotent - no duplicate visit row or chunk
+        result9b = sync_note_file(json_path9, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME)
+        assert result9b == "already", f"9b: expected already, got {result9b}"
+        assert collection9.count() == 1, f"9b: expected chroma count unchanged at 1, got {collection9.count()}"
+        visits9b = conn.execute(
+            "SELECT COUNT(*) c FROM visits WHERE source_path = ?", (source_path9,)
+        ).fetchone()["c"]
+        assert visits9b == 1, f"9b: expected 1 visit row, got {visits9b}"
+
+        # 9c. a role without append_note is denied and writes nothing (RBAC-05)
+        cf9c = "GVNP900010150700"
+        note9c = DentalNote(
+            patient_name="test denied",
+            codice_fiscale=cf9c,
+            clinical_notes="denied sync test",
+        )
+        notes_dir9c = sorted_root / cf9c / "notes"
+        notes_dir9c.mkdir(parents=True, exist_ok=True)
+        json_path9c = notes_dir9c / "n1.json"
+        json_path9c.write_text(note9c.model_dump_json())
+        source_path9c = str(json_path9c.relative_to(sorted_root))
+
+        result9c = sync_note_file(json_path9c, sorted_root, conn, collection9, "admin", "test-admin-sync")
+        assert result9c == "failed", f"9c: expected failed, got {result9c}"
+        visits9c = conn.execute(
+            "SELECT COUNT(*) c FROM visits WHERE source_path = ?", (source_path9c,)
+        ).fetchone()["c"]
+        assert visits9c == 0, f"9c: expected no visit row for a denied sync, got {visits9c}"
+        sync_rows9c = conn.execute(
+            "SELECT * FROM audit_log WHERE username = ? AND action = 'sync_note' AND allowed = 0",
+            ("test-admin-sync",),
+        ).fetchall()
+        assert len(sync_rows9c) == 1, f"9c: expected 1 denied sync_note row, got {len(sync_rows9c)}"
+
+        # 9d. sql-ok/chroma-fail counts as failed, not landed (D-05). the sql
+        # half is left in place so a later --backfill can repair it (D-04)
+        class _ChromaDownStub:
+            def upsert(self, **kwargs):
+                raise RuntimeError("chroma down")
+
+            def get(self, ids):
+                return {"ids": []}
+
+        cf9d = "GVNP900010150800"
+        note9d = DentalNote(
+            patient_name="test halfwrite",
+            codice_fiscale=cf9d,
+            clinical_notes="half write sync test",
+        )
+        notes_dir9d = sorted_root / cf9d / "notes"
+        notes_dir9d.mkdir(parents=True, exist_ok=True)
+        json_path9d = notes_dir9d / "n1.json"
+        json_path9d.write_text(note9d.model_dump_json())
+        source_path9d = str(json_path9d.relative_to(sorted_root))
+
+        result9d = sync_note_file(json_path9d, sorted_root, conn, _ChromaDownStub(), SYSTEM_ROLE, SYSTEM_USERNAME)
+        assert result9d == "failed", f"9d: expected failed, got {result9d}"
+        sync_rows9d = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'sync_note' AND allowed = 0 AND target = ?",
+            (str(json_path9d),),
+        ).fetchall()
+        assert len(sync_rows9d) == 1, f"9d: expected 1 failed sync_note row, got {len(sync_rows9d)}"
+        visits9d = conn.execute(
+            "SELECT COUNT(*) c FROM visits WHERE source_path = ?", (source_path9d,)
+        ).fetchone()["c"]
+        assert visits9d == 1, \
+            f"9d: expected the sql half to have written despite the chroma failure, got {visits9d}"
+
+        # 9e. target override lets the upload worker share one audit target
+        # with its upload_file row (plan 14-04)
+        cf9e = "GVNP900010150900"
+        note9e = DentalNote(
+            patient_name="test target",
+            codice_fiscale=cf9e,
+            clinical_notes="target override sync test",
+        )
+        notes_dir9e = sorted_root / cf9e / "notes"
+        notes_dir9e.mkdir(parents=True, exist_ok=True)
+        json_path9e = notes_dir9e / "n1.json"
+        json_path9e.write_text(note9e.model_dump_json())
+
+        target9e = f"sorted/{cf9e}/notes/whatever.txt"
+        result9e = sync_note_file(
+            json_path9e, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME, target=target9e
+        )
+        assert result9e == "landed", f"9e: expected landed, got {result9e}"
+        sync_rows9e = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'sync_note' AND target = ?", (target9e,)
+        ).fetchall()
+        assert len(sync_rows9e) == 1, \
+            f"9e: expected the sync_note row target to be the override string, got {len(sync_rows9e)}"
+
     print("selftest ok")
 
 
