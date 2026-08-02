@@ -49,13 +49,13 @@ def route_note(src, sorted_root, log_path=None, extract=extract_note):
         return _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
 
 
-def route_file(src, sorted_root, log_path=None):
+def route_file(src, sorted_root, log_path=None, extract=extract_note):
     # symlink guard — never follow, for any file type
     if src.is_symlink():
         return _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
     ext = src.suffix.lower()
     if ext == ".txt":
-        return route_note(src, sorted_root, log_path)
+        return route_note(src, sorted_root, log_path, extract=extract)
     cf = find_cf_in_name(src.name)
     if ext == ".xlsx":
         sub = "records"
@@ -221,6 +221,13 @@ def selftest():
         f17.write_text("patient note")
         dest17 = route_note(f17, sorted_, log_path=log_path, extract=make_extractor(cf=VALID_CF))
         assert dest17 == sorted_ / VALID_CF / "notes" / f17.name, "17: route_note did not return matched-CF dest"
+
+        # 18. route_file forwards its extract= seam to route_note, not just accepting it
+        f18 = root / "note18.txt"
+        f18.write_text("patient note")
+        dest18 = route_file(f18, sorted_, log_path, extract=make_extractor(cf=VALID_CF))
+        assert dest18 == sorted_ / VALID_CF / "notes" / f18.name, "18: route_file did not forward extract to route_note"
+        assert dest18.with_suffix(".json").exists(), "18: route_file's extract seam did not reach route_note's json write"
 
     print("selftest ok")
 
