@@ -8,6 +8,8 @@ PERMISSIONS = {
     "dentist": {"read_notes", "append_note", "edit_note", "update_field", "add_invoice", "read_clinical", "upload_file"},
     "assistant": {"read_notes", "append_note", "add_invoice", "upload_file"},
     "admin": {"manage_users"},
+    # system: the automated sync actor (watcher/backfill), no user row
+    "system": {"append_note"},
 }
 
 
@@ -60,6 +62,16 @@ def selftest():
         assert not authorize("admin", "upload_file"), "3: admin should deny upload_file"
 
         assert not authorize("nobody", "read_notes"), "4: unknown role should deny everything"
+
+        assert authorize("system", "append_note"), "6: system should allow append_note"
+        assert not authorize("system", "read_notes"), "6: system should deny read_notes"
+        assert not authorize("system", "edit_note"), "6: system should deny edit_note"
+        assert not authorize("system", "update_field"), "6: system should deny update_field"
+        assert not authorize("system", "add_invoice"), "6: system should deny add_invoice"
+        assert not authorize("system", "read_clinical"), "6: system should deny read_clinical"
+        assert not authorize("system", "upload_file"), "6: system should deny upload_file"
+        assert not authorize("system", "manage_users"), "6: system should deny manage_users"
+        assert "system" not in VALID_ROLES, "6: system must not become a creatable user role"
 
         log_audit(conn, "drossi", "dentist", "update_field", "MRRS800010150100", 1)
         log_audit(conn, "aassist", "assistant", "edit_note", "MRRS800010150100", 0)
