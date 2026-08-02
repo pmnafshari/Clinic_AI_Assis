@@ -18,6 +18,33 @@ CHROMA_PATH = "db/chroma"
 _extract = extract_note
 
 
+def sync_dropped(dest, sorted_root, log_path):
+    # only a filed .txt with a sibling .json went through route_note's
+    # matched-CF path - media files and needs_review notes get no sync (D-09)
+    if dest is None or dest.suffix.lower() != ".txt":
+        return
+    json_path = dest.with_suffix(".json")
+    if not json_path.exists():
+        return
+
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        collection = storage.get_shared_collection(CHROMA_PATH)
+        status = storage.sync_note_file(
+            json_path, sorted_root, conn, collection, storage.SYSTEM_ROLE, storage.SYSTEM_USERNAME
+        )
+        if status == "failed":
+            log_action(dest, "-", "sync failed", log_path)
+    except Exception as exc:
+        # a daemon must not die on one bad note
+        log_action(dest, "-", f"sync failed: {exc}", log_path)
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 class DropHandler(FileSystemEventHandler):
     def __init__(self, sorted_root, log_path=None):
         self.sorted_root = sorted_root
@@ -30,7 +57,8 @@ class DropHandler(FileSystemEventHandler):
         time.sleep(0.5)
         src = Path(event.src_path)
         if src.exists():
-            route_file(src, self.sorted_root, self.log_path)
+            dest = route_file(src, self.sorted_root, self.log_path, extract=_extract)
+            sync_dropped(dest, self.sorted_root, self.log_path)
 
 
 def watch(drop_dir, sorted_root, log_path=None):
@@ -40,7 +68,8 @@ def watch(drop_dir, sorted_root, log_path=None):
     # startup catch-up: route files already present before watcher started
     for f in drop_dir.rglob("*"):
         if f.is_file():
-            route_file(f, sorted_root, log_path)
+            dest = route_file(f, sorted_root, log_path, extract=_extract)
+            sync_dropped(dest, sorted_root, log_path)
 
     handler = DropHandler(sorted_root, log_path)
     observer = Observer()
