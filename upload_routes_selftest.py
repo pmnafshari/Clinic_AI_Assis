@@ -8,6 +8,7 @@ from pathlib import Path
 
 from werkzeug.security import generate_password_hash
 
+from auth import log_audit
 import app.db as app_db
 import app.upload_routes as upload_routes
 import upload_worker
@@ -273,6 +274,81 @@ def selftest():
             "10: a categoryless flash should render as alert-primary"
         assert "alert-message" not in admin_patients_resp.text, \
             "10: must never render the broken alert-message class"
+
+        # 11. SYNC-03 badge states (numbered 11, not the plan's 9/9b/9c/9d/
+        # 9e - sections 9 and 10 above, the 413 banner and flash-category
+        # regression guards, were added to this file after the plan's
+        # <read_first> was written). each sub-case gets its own fresh user
+        # so badge-presence assertions aren't muddied by earlier rows in the
+        # same fragment.
+        conn11 = sqlite3.connect(db_path)
+
+        # 11 - synced .txt: upload_file allowed=1 + sync_note allowed=1 on
+        # the same target collapses to one Sorted row
+        _seed_user(db_path, "unote1", "goodpass", "assistant")
+        client11 = _login(app, "unote1", "goodpass")
+        target11 = f"sorted/{VALID_CF}/notes/synced11.txt"
+        log_audit(conn11, "unote1", "assistant", "upload_file", target11, allowed=1)
+        log_audit(conn11, "unote1", "assistant", "sync_note", target11, allowed=1)
+        resp11 = client11.get("/upload/recent")
+        assert resp11.status_code == 200
+        assert "Sorted" in resp11.text, "11: a synced note should show Sorted"
+        assert "Not searchable" not in resp11.text, "11: a synced note must not show Not searchable"
+        assert resp11.text.count("synced11.txt") == 1, "11: synced note should appear exactly once"
+
+        # 11b - failed sync: upload_file allowed=1 + sync_note allowed=0 on
+        # the same target shows Not searchable, not Sorted (success criterion 4)
+        _seed_user(db_path, "unote2", "goodpass", "assistant")
+        client11b = _login(app, "unote2", "goodpass")
+        target11b = f"sorted/{VALID_CF}/notes/failed11b.txt"
+        log_audit(conn11, "unote2", "assistant", "upload_file", target11b, allowed=1)
+        log_audit(conn11, "unote2", "assistant", "sync_note", target11b, allowed=0)
+        resp11b = client11b.get("/upload/recent")
+        assert resp11b.status_code == 200
+        assert "Not searchable" in resp11b.text, "11b: a failed sync should show Not searchable"
+        assert "Sorted" not in resp11b.text, "11b: a failed sync must not show Sorted for that file"
+        assert resp11b.text.count("failed11b.txt") == 1, "11b: failed-sync note should appear exactly once"
+
+        # 11c - media upload never gets a sync_note row, so it terminates at
+        # Sorted and never shows Not searchable (D-09)
+        _seed_user(db_path, "unote3", "goodpass", "assistant")
+        client11c = _login(app, "unote3", "goodpass")
+        target11c = f"sorted/{VALID_CF}/documents/xray11c.jpg"
+        log_audit(conn11, "unote3", "assistant", "upload_file", target11c, allowed=1)
+        resp11c = client11c.get("/upload/recent")
+        assert resp11c.status_code == 200
+        assert "Sorted" in resp11c.text, "11c: a media upload should show Sorted"
+        assert "Not searchable" not in resp11c.text, "11c: a media upload must never show Not searchable"
+
+        # 11d - a rejected upload still reads Rejected
+        _seed_user(db_path, "unote4", "goodpass", "assistant")
+        client11d = _login(app, "unote4", "goodpass")
+        log_audit(conn11, "unote4", "assistant", "upload_file", "malware11d.dat", allowed=0)
+        resp11d = client11d.get("/upload/recent")
+        assert resp11d.status_code == 200
+        assert "Rejected" in resp11d.text, "11d: a rejected upload should still show Rejected"
+
+        # 11e - D-11/D-19 leak guard. a plain `username = ?` filter alone
+        # would leak watcher rows to any account literally named "system",
+        # so seed exactly that account and prove the role check is what
+        # keeps its own upload separate from the watcher's row, not the
+        # username match (which is identical for both rows here).
+        _seed_user(db_path, "system", "goodpass", "assistant")
+        system_named_client = _login(app, "system", "goodpass")
+        own_target11e = f"sorted/{VALID_CF}/notes/mynote11e.txt"
+        watcher_target11e = f"sorted/{VALID_CF}/notes/watcher11e.txt"
+        log_audit(conn11, "system", "assistant", "upload_file", own_target11e, allowed=1)
+        log_audit(conn11, "system", "system", "sync_note", watcher_target11e, allowed=1)
+        conn11.close()
+
+        resp11e = system_named_client.get("/upload/recent")
+        assert resp11e.status_code == 200
+        assert "mynote11e.txt" in resp11e.text, \
+            "11e: the system-named account's own upload should still show"
+        assert "watcher11e.txt" not in resp11e.text, \
+            "11e: a role='system' row must never appear even when username matches (D-11)"
+        assert "failed11b.txt" not in resp11e.text, \
+            "11e: another user's sync_note row must never leak"
 
     print("selftest ok")
 
