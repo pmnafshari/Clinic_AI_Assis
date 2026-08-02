@@ -7,13 +7,16 @@ import urllib.request
 from pathlib import Path
 
 import sort_files
+import storage
 from auth import log_audit
+from action_log import log_action
 from extract_note import call_model, parse_reply, OllamaUnreachable
 
 # module-level, selftest-patchable
 SORTED_ROOT = Path("sorted")
 LOG_PATH = None
 DB_PATH = "db/clinic.sqlite"
+CHROMA_PATH = "db/chroma"
 
 # own Ollama seam (mirrors app/notes_routes.py) - this is the injection point
 # that keeps the selftest offline and deterministic, since route_file's .txt
@@ -67,6 +70,15 @@ def _process_one(path, username, role):
         if src.exists():
             dest = sort_files.route_note(src, SORTED_ROOT, LOG_PATH, extract=_extract)
             log_audit(conn, username, role, "upload_file", str(dest), allowed=1)
+
+            json_path = dest.with_suffix(".json")
+            if dest.suffix.lower() == ".txt" and json_path.exists():
+                collection = storage.get_shared_collection(CHROMA_PATH)
+                status = storage.sync_note_file(
+                    json_path, SORTED_ROOT, conn, collection, role, username, target=str(dest)
+                )
+                if status == "failed":
+                    log_action(src.name, dest, "sync failed", LOG_PATH)
         else:
             # a concurrently-running external watcher grabbed it first - still
             # attribute the upload so it appears in the user's recent-intake list
@@ -80,7 +92,7 @@ def selftest():
     from dental_notes_schema import DentalNote
     from storage import init_db
 
-    global SORTED_ROOT, LOG_PATH, DB_PATH, _extract
+    global SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
 
     VALID_CF = "MRRS800010150100"
 
@@ -90,7 +102,10 @@ def selftest():
     def _fake_unreachable(text):
         raise OllamaUnreachable("offline")
 
-    orig_sorted_root, orig_log_path, orig_db_path, orig_extract = SORTED_ROOT, LOG_PATH, DB_PATH, _extract
+    orig_sorted_root, orig_log_path, orig_db_path, orig_chroma_path, orig_extract = (
+        SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
+    )
+    orig_get_shared_collection = storage.get_shared_collection
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -100,6 +115,7 @@ def selftest():
             SORTED_ROOT = root / "sorted"
             LOG_PATH = None
             DB_PATH = db_path
+            CHROMA_PATH = str(root / "chroma")
 
             # 1. matched CF -> success, attributed to aassist
             _extract = _fake_ok
@@ -150,9 +166,97 @@ def selftest():
             assert row2 is not None, "2: no audit_log row for drossi within deadline"
             assert len(all_rows2) == 1, f"2: expected exactly one row, got {len(all_rows2)}"
             assert "needs_review" in row2["target"], f"2: target not in needs_review, got {row2['target']}"
+            # 3b. a needs_review .txt has no sibling .json, so it must never sync
+            sync_rows_drossi = conn.execute(
+                "SELECT 1 FROM audit_log WHERE username=? AND action=?",
+                ("drossi", "sync_note"),
+            ).fetchall()
+            assert len(sync_rows_drossi) == 0, "3b: needs_review upload produced a sync_note row"
             conn.close()
+
+            # 3. matched CF, sync succeeds -> sync_note row landed, attributed to the
+            # uploader, sharing its target with the upload_file row, and a visits row lands
+            _extract = _fake_ok
+            txt3 = root / "note3.txt"
+            txt3.write_text("patient note three")
+            enqueue(txt3, "bbianchi", "assistant")
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            deadline = time.time() + 3.0
+            sync_row = None
+            while time.time() < deadline:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action=?",
+                    ("bbianchi", "sync_note"),
+                ).fetchall()
+                if rows:
+                    sync_row = rows[0]
+                    break
+                time.sleep(0.1)
+            assert sync_row is not None, "3: no sync_note row for bbianchi within deadline"
+            assert sync_row["allowed"] == 1, f"3: expected allowed=1, got {sync_row['allowed']}"
+
+            upload_row = conn.execute(
+                "SELECT * FROM audit_log WHERE username=? AND action=?",
+                ("bbianchi", "upload_file"),
+            ).fetchone()
+            assert upload_row is not None, "3: no upload_file row for bbianchi"
+            assert sync_row["target"] == upload_row["target"], (
+                f"3: sync_note target {sync_row['target']!r} != "
+                f"upload_file target {upload_row['target']!r}"
+            )
+
+            source_path = str(Path(sync_row["target"]).with_suffix(".json").relative_to(SORTED_ROOT))
+            visit_row = conn.execute(
+                "SELECT 1 FROM visits WHERE source_path = ?", (source_path,)
+            ).fetchone()
+            assert visit_row is not None, "3: no visits row landed for the synced note"
+            conn.close()
+
+            # 4. sync failure (Chroma upsert raises) -> sync_note allowed=0, log.txt line,
+            # file stays where route_note filed it
+            class _FailingCollection:
+                def upsert(self, **kwargs):
+                    raise RuntimeError("upsert boom")
+
+                def get(self, ids=None):
+                    return {"ids": []}
+
+            storage.get_shared_collection = lambda path: _FailingCollection()
+            log_path4 = str(root / "log4.txt")
+            LOG_PATH = log_path4
+            txt4 = root / "note4.txt"
+            txt4.write_text("patient note four")
+            enqueue(txt4, "cverdi", "assistant")
+
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            deadline = time.time() + 3.0
+            fail_row = None
+            while time.time() < deadline:
+                rows = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action=?",
+                    ("cverdi", "sync_note"),
+                ).fetchall()
+                if rows:
+                    fail_row = rows[0]
+                    break
+                time.sleep(0.1)
+            assert fail_row is not None, "4: no sync_note row for cverdi within deadline"
+            assert fail_row["allowed"] == 0, f"4: expected allowed=0, got {fail_row['allowed']}"
+            conn.close()
+
+            with open(log_path4) as f:
+                log_text = f.read()
+            assert "sync failed" in log_text, "4: log.txt has no 'sync failed' line"
+            assert (SORTED_ROOT / VALID_CF / "notes" / "note4.txt").exists(), \
+                "4: a sync failure must not move the filed note"
     finally:
-        SORTED_ROOT, LOG_PATH, DB_PATH, _extract = orig_sorted_root, orig_log_path, orig_db_path, orig_extract
+        storage.get_shared_collection = orig_get_shared_collection
+        SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract = (
+            orig_sorted_root, orig_log_path, orig_db_path, orig_chroma_path, orig_extract
+        )
 
     print("selftest ok")
 
