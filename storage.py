@@ -671,6 +671,71 @@ def selftest():
         assert len(sync_rows9e) == 1, \
             f"9e: expected the sync_note row target to be the override string, got {len(sync_rows9e)}"
 
+        # 10. backfill_sorted (non-dry-run): two unsynced notes land, a second
+        # run finds them already present, and no duplicate chroma chunks pile up
+        sorted_root10 = Path(tmp) / "sorted10"
+        conn10 = init_db(str(Path(tmp) / "clinic10.sqlite"))
+        collection10 = get_collection(str(Path(tmp) / "chroma10"))
+
+        cf10a = "GVNP900010151000"
+        cf10b = "GVNP900010151100"
+        note10a = DentalNote(patient_name="test backfill a", codice_fiscale=cf10a, clinical_notes="backfill test a")
+        note10b = DentalNote(patient_name="test backfill b", codice_fiscale=cf10b, clinical_notes="backfill test b")
+        for cf_, n in [(cf10a, note10a), (cf10b, note10b)]:
+            notes_dir = sorted_root10 / cf_ / "notes"
+            notes_dir.mkdir(parents=True, exist_ok=True)
+            (notes_dir / "n1.json").write_text(n.model_dump_json())
+
+        result10 = backfill_sorted(sorted_root10, conn10, collection10)
+        assert result10 == (2, 0, []), f"10: expected (2, 0, []), got {result10}"
+
+        result10_again = backfill_sorted(sorted_root10, conn10, collection10)
+        assert result10_again == (0, 2, []), f"10: expected (0, 2, []) on second run, got {result10_again}"
+        assert collection10.count() == 2, f"10: expected chroma count unchanged at 2, got {collection10.count()}"
+
+        # 10b. dry_run=True classifies would-land notes but writes nothing -
+        # safe to run against the live clinic database
+        sorted_root10b = Path(tmp) / "sorted10b"
+        conn10b = init_db(str(Path(tmp) / "clinic10b.sqlite"))
+        collection10b = get_collection(str(Path(tmp) / "chroma10b"))
+
+        cf10c_ = "GVNP900010151200"
+        note10c_ = DentalNote(patient_name="test dry run", codice_fiscale=cf10c_, clinical_notes="dry run test")
+        notes_dir10b = sorted_root10b / cf10c_ / "notes"
+        notes_dir10b.mkdir(parents=True, exist_ok=True)
+        (notes_dir10b / "n1.json").write_text(note10c_.model_dump_json())
+
+        result10b = backfill_sorted(sorted_root10b, conn10b, collection10b, dry_run=True)
+        assert result10b == (1, 0, []), f"10b: expected (1, 0, []), got {result10b}"
+
+        visits10b = conn10b.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"]
+        audit10b = conn10b.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+        assert visits10b == 0, f"10b: expected 0 visits after dry run, got {visits10b}"
+        assert audit10b == 0, f"10b: expected 0 audit_log rows after dry run, got {audit10b}"
+        assert collection10b.count() == 0, f"10b: expected 0 chroma chunks after dry run, got {collection10b.count()}"
+
+        # 10c. a corrupt json fails and is listed by path; the walk continues
+        # to the remaining files in the same tree
+        sorted_root10c = Path(tmp) / "sorted10c"
+        conn10c = init_db(str(Path(tmp) / "clinic10c.sqlite"))
+        collection10c = get_collection(str(Path(tmp) / "chroma10c"))
+
+        cf10d = "GVNP900010151300"
+        note10d = DentalNote(patient_name="test ok note", codice_fiscale=cf10d, clinical_notes="ok note")
+        notes_dir10d = sorted_root10c / cf10d / "notes"
+        notes_dir10d.mkdir(parents=True, exist_ok=True)
+        (notes_dir10d / "n1.json").write_text(note10d.model_dump_json())
+
+        broken_dir = sorted_root10c / "BROKEN000000000000" / "notes"
+        broken_dir.mkdir(parents=True, exist_ok=True)
+        broken_path = broken_dir / "broken.json"
+        broken_path.write_text("not json at all")
+
+        landed10c, already10c, failed10c = backfill_sorted(sorted_root10c, conn10c, collection10c)
+        assert landed10c == 1, f"10c: expected 1 landed note, got {landed10c}"
+        assert str(broken_path) in failed10c, f"10c: expected broken path in failed list, got {failed10c}"
+        assert lookup_patient(cf10d, conn10c) is not None, "10c: the valid note in the same tree should still land"
+
     print("selftest ok")
 
 
