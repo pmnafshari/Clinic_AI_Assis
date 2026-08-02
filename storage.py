@@ -303,6 +303,37 @@ def load_from_sorted(sorted_root, conn, collection, role, username):
         load_note(note, source_path, conn, collection, role, username)
 
 
+def backfill_sorted(sorted_root, conn, collection, dry_run=False):
+    # one-time repair for notes filed before this milestone (SYNC-02). runs
+    # as system (D-03) - a bulk automated repair must never read as a
+    # clinician appending hundreds of notes
+    landed = 0
+    already = 0
+    failed = []
+
+    for json_path in sorted(Path(sorted_root).glob("*/notes/*.json")):
+        if dry_run:
+            try:
+                note = DentalNote.model_validate_json(json_path.read_text())
+                source_path = str(json_path.relative_to(sorted_root))
+                if note_is_synced(note, source_path, conn, collection):
+                    already += 1
+                else:
+                    landed += 1
+            except Exception:
+                failed.append(str(json_path))
+        else:
+            outcome = sync_note_file(json_path, sorted_root, conn, collection, SYSTEM_ROLE, SYSTEM_USERNAME)
+            if outcome == "landed":
+                landed += 1
+            elif outcome == "already":
+                already += 1
+            else:
+                failed.append(str(json_path))
+
+    return landed, already, failed
+
+
 def selftest():
     import tempfile
     from dental_notes_schema import Invoice
