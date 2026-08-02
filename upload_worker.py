@@ -90,12 +90,18 @@ def _process_one(path, username, role):
 
             json_path = dest.with_suffix(".json")
             if dest.suffix.lower() == ".txt" and json_path.exists():
-                collection = storage.get_shared_collection(CHROMA_PATH)
-                status = storage.sync_note_file(
-                    json_path, SORTED_ROOT, conn, collection, role, username, target=str(dest)
-                )
-                if status == "failed":
-                    log_action(src.name, dest, "sync failed", LOG_PATH)
+                # a failed sync_note row has to carry the same target as the
+                # upload_file row above - the intake list collapses by target,
+                # and a drop/ path here leaves two rows for one file
+                try:
+                    collection = storage.get_shared_collection(CHROMA_PATH)
+                    status = storage.sync_note_file(
+                        json_path, SORTED_ROOT, conn, collection, role, username, target=str(dest)
+                    )
+                    if status == "failed":
+                        log_action(src.name, dest, "sync failed", LOG_PATH)
+                except Exception as exc:
+                    _record_worker_failure(dest, username, role, exc)
         else:
             # a concurrently-running external watcher grabbed it first - still
             # attribute the upload so it appears in the user's recent-intake list
