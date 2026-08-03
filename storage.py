@@ -363,6 +363,23 @@ def load_from_sorted(sorted_root, conn, collection, role, username):
         load_note(note, source_path, conn, collection, role, username)
 
 
+def _clear_failed_sync(conn, json_path):
+    # a repair writes its outcome row as system, and the per-user intake list
+    # filters system rows out by design - so "Not searchable" would never
+    # clear for the person who uploaded the note. write the resolution under
+    # their name instead. the uploader's row carries the .txt path (the worker
+    # audits the routed file), the watcher's carries the .json.
+    json_path = Path(json_path)
+    row = conn.execute(
+        "SELECT username, role, target, allowed FROM audit_log"
+        " WHERE action = 'sync_note' AND role != 'system' AND target IN (?, ?)"
+        " ORDER BY id DESC LIMIT 1",
+        (str(json_path), str(json_path.with_suffix(".txt"))),
+    ).fetchone()
+    if row is not None and row["allowed"] == 0:
+        log_audit(conn, row["username"], row["role"], "sync_note", row["target"], allowed=1)
+
+
 def backfill_sorted(sorted_root, conn, collection, dry_run=False):
     # one-time repair for notes filed before this milestone (SYNC-02). runs
     # as system (D-03) - a bulk automated repair must never read as a
@@ -384,12 +401,14 @@ def backfill_sorted(sorted_root, conn, collection, dry_run=False):
                 failed.append(str(json_path))
         else:
             outcome = sync_note_file(json_path, sorted_root, conn, collection, SYSTEM_ROLE, SYSTEM_USERNAME)
+            if outcome == "failed":
+                failed.append(str(json_path))
+                continue
             if outcome == "landed":
                 landed += 1
-            elif outcome == "already":
-                already += 1
             else:
-                failed.append(str(json_path))
+                already += 1
+            _clear_failed_sync(conn, json_path)
 
     return landed, already, failed
 
@@ -865,6 +884,37 @@ def selftest():
         assert landed10c == 1, f"10c: expected 1 landed note, got {landed10c}"
         assert str(broken_path) in failed10c, f"10c: expected broken path in failed list, got {failed10c}"
         assert lookup_patient(cf10d, conn10c) is not None, "10c: the valid note in the same tree should still land"
+
+        # 10d. a repair has to clear the uploader's "Not searchable" state. its
+        # own outcome row is written as system, and the per-user intake list
+        # filters system rows out, so the resolution needs their name on it.
+        sorted_root10d = Path(tmp) / "sorted10d"
+        conn10d = init_db(str(Path(tmp) / "clinic10d.sqlite"))
+        collection10d = get_collection(str(Path(tmp) / "chroma10d"))
+
+        cf10e = "GVNP900010151400"
+        note10e = DentalNote(
+            patient_name="renata pini", codice_fiscale=cf10e, clinical_notes="note to repair"
+        )
+        notes_dir10e = sorted_root10d / cf10e / "notes"
+        notes_dir10e.mkdir(parents=True, exist_ok=True)
+        (notes_dir10e / "n1.json").write_text(note10e.model_dump_json())
+
+        # the worker audits the routed .txt, which is what the badge reads
+        txt_target10e = str(notes_dir10e / "n1.txt")
+        log_audit(conn10d, "drossi", "dentist", "sync_note", txt_target10e, allowed=0)
+
+        backfill_sorted(sorted_root10d, conn10d, collection10d)
+
+        newest10e = conn10d.execute(
+            "SELECT * FROM audit_log WHERE action = 'sync_note' AND target = ? ORDER BY id DESC LIMIT 1",
+            (txt_target10e,),
+        ).fetchone()
+        assert newest10e["allowed"] == 1, "10d: the uploader's failed sync row was never resolved"
+        assert newest10e["username"] == "drossi", \
+            f"10d: resolution not attributed to the uploader, got {newest10e['username']}"
+        assert newest10e["role"] != SYSTEM_ROLE, \
+            "10d: a system-role resolution is filtered out of the user's intake list"
 
         # 11. cross-process visibility - a chunk written by a real second
         # process (the watcher, --backfill) must be found by query() without
