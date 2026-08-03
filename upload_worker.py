@@ -53,8 +53,7 @@ def _record_worker_failure(path, username, role, exc):
     # failed may be the reason this is unreachable too, and a raise here
     # would kill the only worker thread - the same silence this replaces
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
+        conn = storage.connect(DB_PATH)
         log_audit(conn, username, role, "sync_note", str(path), allowed=0)
         conn.close()
     except Exception:
@@ -81,8 +80,7 @@ def _worker_loop():
 
 def _process_one(path, username, role):
     src = Path(path)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = storage.connect(DB_PATH)
     try:
         if src.exists():
             dest = sort_files.route_note(src, SORTED_ROOT, LOG_PATH, extract=_extract)

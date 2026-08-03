@@ -1,8 +1,6 @@
-import sqlite3
-
 from flask import g
 
-from storage import get_shared_collection
+from storage import connect, get_shared_collection
 
 DB_PATH = "db/clinic.sqlite"
 CHROMA_PATH = "db/chroma"
@@ -10,9 +8,7 @@ CHROMA_PATH = "db/chroma"
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = connect(DB_PATH)
     return g.db
 
 

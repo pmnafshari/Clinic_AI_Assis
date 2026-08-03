@@ -31,8 +31,7 @@ def sync_dropped(dest, sorted_root, log_path):
 
     conn = None
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
+        conn = storage.connect(DB_PATH)
         collection = storage.get_shared_collection(CHROMA_PATH)
         status = storage.sync_note_file(
             json_path, sorted_root, conn, collection, storage.SYSTEM_ROLE, storage.SYSTEM_USERNAME

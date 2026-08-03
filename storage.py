@@ -14,10 +14,20 @@ from auth import authorize, log_audit
 from dental_notes_schema import DentalNote
 
 
-def init_db(db_path):
-    conn = sqlite3.connect(db_path)
-    conn.execute("PRAGMA foreign_keys = ON")
+def connect(db_path):
+    # the app, the upload worker and the watcher all write this file from
+    # separate threads and processes. the default rollback journal takes an
+    # EXCLUSIVE lock, so without WAL any overlap is a "database is locked".
+    conn = sqlite3.connect(db_path, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 30000")
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_db(db_path):
+    conn = connect(db_path)
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS patients (
             codice_fiscale TEXT PRIMARY KEY,
@@ -399,6 +409,11 @@ def selftest():
 
         fk_on = conn.execute("PRAGMA foreign_keys").fetchone()[0]
         assert fk_on == 1, "1: foreign_keys pragma not ON"
+
+        # the watcher writes this file from its own process while the app
+        # reads it - the default rollback journal makes that a locked db
+        journal = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        assert journal == "wal", f"1: expected WAL journal mode, got {journal}"
 
         # init_db must be safe to call twice on the same file
         conn2 = init_db(str(Path(tmp) / "clinic.sqlite"))
