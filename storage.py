@@ -335,12 +335,13 @@ def sync_note_file(json_path, sorted_root, conn, collection, role, username, tar
 
 
 def save_new_note(note, conn, collection, role, username, sorted_root=Path("sorted")):
-    # web-entered note, gated the same way a watcher-loaded note is
+    # web-entered note, gated the same way a watcher-loaded note is. load_note
+    # checks the role too, but a denied role must not get a file written for
+    # it first, so the check is repeated here.
     if not authorize(role, "append_note"):
         log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=0)
         print(f"not permitted: {role} may not add notes")
-        return
-    log_audit(conn, username, role, "append_note", target=note.codice_fiscale, allowed=1)
+        return "failed"
 
     # write the json file first - load_note/load_from_sorted assume it already
     # exists on disk, and this keeps a web-entered note indistinguishable from
@@ -350,9 +351,9 @@ def save_new_note(note, conn, collection, role, username, sorted_root=Path("sort
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(note.model_dump_json())
 
-    source_path = str(json_path.relative_to(sorted_root))
-    upsert_note_sql(note, source_path, conn)
-    upsert_note_chroma(note, source_path, collection)
+    # go through the shared path so this write gets the same verify-after-write
+    # and the same sync_note outcome row as every other one (D-05)
+    return sync_note_file(json_path, sorted_root, conn, collection, role, username)
 
 
 def load_from_sorted(sorted_root, conn, collection, role, username):
@@ -618,11 +619,18 @@ def selftest():
             visit_date=date(2026, 7, 1),
             clinical_notes="checkup done",
         )
-        save_new_note(note4, conn, collection, "dentist", "test-dentist", sorted_root=sorted_root)
+        result4 = save_new_note(note4, conn, collection, "dentist", "test-dentist", sorted_root=sorted_root)
 
         note4_files = list((sorted_root / cf4 / "notes").glob("web-*.json"))
         assert len(note4_files) == 1, f"8: expected 1 web-*.json file, got {len(note4_files)}"
         assert lookup_patient(cf4, conn) is not None, "8: save_new_note left no sqlite row"
+        assert result4 == "landed", f"8: expected landed, got {result4}"
+        sync_rows4 = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'sync_note' AND username = ? AND allowed = 1",
+            ("test-dentist",),
+        ).fetchall()
+        assert len(sync_rows4) == 1, \
+            f"8: web-entered note should get one sync_note outcome row, got {len(sync_rows4)}"
 
         # 8b. a denied role writes no file and logs an allowed=0 audit row
         cf5 = "BNCH900010150500"
@@ -642,6 +650,32 @@ def selftest():
         ).fetchall()
         assert len(denied_note_rows) == 1, \
             f"8b: expected 1 denied append_note row for test-admin, got {len(denied_note_rows)}"
+
+        # 8c. a chroma failure on the web path is reported as a failed sync,
+        # not raised out of the route with the sql half committed (D-05)
+        class _FailingCollection8c:
+            def upsert(self, **kwargs):
+                raise RuntimeError("upsert boom")
+
+            def get(self, ids=None):
+                return {"ids": []}
+
+        cf6 = "TSCF900010150700"
+        note6 = DentalNote(
+            patient_name="tosca fini",
+            codice_fiscale=cf6,
+            clinical_notes="checkup done",
+        )
+        result6 = save_new_note(
+            note6, conn, _FailingCollection8c(), "dentist", "test-dentist", sorted_root=sorted_root
+        )
+        assert result6 == "failed", f"8c: expected failed, got {result6}"
+        failed_sync_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'sync_note' AND username = ? AND allowed = 0",
+            ("test-dentist",),
+        ).fetchall()
+        assert len(failed_sync_rows) == 1, \
+            f"8c: a half-written web note should leave one failed sync_note row, got {len(failed_sync_rows)}"
 
         # 9. sync_note_file, system role: a filed note not yet in either store lands
         collection9 = get_collection(str(Path(tmp) / "chroma9"))

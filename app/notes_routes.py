@@ -66,6 +66,11 @@ def new_note():
                    target=note.codice_fiscale, allowed=0)
         return render_template("notes_new.html", error="You don't have permission to add notes.")
 
-    save_new_note(note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT)
-    flash("Note saved.")
+    status = save_new_note(
+        note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT
+    )
+    if status == "failed":
+        flash("Note saved to disk but it is not searchable yet - ask an admin to run a backfill.", "danger")
+    else:
+        flash("Note saved.")
     return redirect(url_for("dashboard.index"))
