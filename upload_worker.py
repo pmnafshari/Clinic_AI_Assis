@@ -101,6 +101,8 @@ def _worker_loop():
     # the app worker is the authoritative processor for uploaded .txt - it
     # alone knows the uploading username. the upload route (Plan 11-03) does
     # an atomic temp+rename hand-off, so this loop only ever sees whole files.
+    # a crash between the upload route's rename into drop/ and its media
+    # branch can strand a non-.txt there, so route by type, not as a note.
     while True:
         path, username, role = _queue.get()
         try:
@@ -116,7 +118,7 @@ def _process_one(path, username, role):
     conn = storage.connect(DB_PATH)
     try:
         if src.exists():
-            dest = sort_files.route_note(src, SORTED_ROOT, LOG_PATH, extract=_extract)
+            dest = sort_files.route_file(src, SORTED_ROOT, LOG_PATH, extract=_extract)
             log_audit(conn, username, role, "upload_file", str(dest), allowed=1)
 
             json_path = dest.with_suffix(".json")
@@ -443,6 +445,61 @@ def selftest():
             assert str(SORTED_ROOT) in resumed_row["target"], \
                 f"7: leftover not routed under sorted, got {resumed_row['target']}"
             assert (drop7 / "halfwritten.part").exists(), "7: a .part must be left alone"
+
+            # 8. the upload route renames every upload into drop/ before the
+            # media branch routes it, so a crash in that window leaves a media
+            # file behind for the next boot to sweep. it must be filed by type,
+            # not handed to the note path: read_text() on a jpg raises
+            # UnicodeDecodeError, which is a ValueError, so route_note quietly
+            # files it in needs_review, and an xlsx whose bytes happen to decode
+            # reaches the model and can be synced as a clinical note.
+            drop8 = root / "drop8"
+            drop8.mkdir()
+            DROP_DIR = drop8
+            stray_jpg = drop8 / f"rx_{VALID_CF}.jpg"
+            stray_jpg.write_bytes(b"\xff\xd8\xff")
+            stray_xlsx = drop8 / f"fattura_{VALID_CF}_2026.xlsx"
+            stray_xlsx.write_bytes(b"PK")
+
+            taken8 = resume_pending()
+            assert taken8 == 2, f"8: expected 2 strays taken, got {taken8}"
+
+            deadline = time.time() + 5.0
+            rows8 = []
+            while time.time() < deadline:
+                conn = storage.connect(db_path)
+                rows8 = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action='upload_file'",
+                    (storage.SYSTEM_USERNAME,),
+                ).fetchall()
+                conn.close()
+                if len(rows8) >= 2:
+                    break
+                time.sleep(0.1)
+            assert len(rows8) == 2, f"8: expected 2 upload_file rows for the strays, got {len(rows8)}"
+
+            assert (SORTED_ROOT / VALID_CF / "images" / stray_jpg.name).exists(), \
+                "8: stray jpg not filed by type - the note path got it"
+            assert (SORTED_ROOT / VALID_CF / "records" / stray_xlsx.name).exists(), \
+                "8: stray xlsx not filed by type - the note path got it"
+            assert not (SORTED_ROOT / "needs_review" / stray_jpg.name).exists(), \
+                "8: stray jpg dumped in needs_review by read_text failing"
+            assert not (SORTED_ROOT / VALID_CF / "notes" / stray_xlsx.name).exists(), \
+                "8: stray xlsx filed as a clinical note"
+            assert not any(drop8.iterdir()), "8: a stray was left behind in drop/"
+
+            conn = storage.connect(db_path)
+            for stray in (stray_jpg, stray_xlsx):
+                sync8 = conn.execute(
+                    "SELECT 1 FROM audit_log WHERE action='sync_note' AND target LIKE ?",
+                    (f"%{stray.stem}%",),
+                ).fetchall()
+                assert not sync8, f"8: {stray.suffix} produced a sync_note row (D-09)"
+                visit8 = conn.execute(
+                    "SELECT 1 FROM visits WHERE source_path LIKE ?", (f"%{stray.stem}%",)
+                ).fetchall()
+                assert not visit8, f"8: {stray.suffix} landed a visits row"
+            conn.close()
     finally:
         storage.get_shared_collection = orig_get_shared_collection
         _process_one = orig_process_one
