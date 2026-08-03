@@ -3,6 +3,7 @@ import re
 import sqlite3
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -349,6 +350,52 @@ def selftest():
             "11e: a role='system' row must never appear even when username matches (D-11)"
         assert "failed11b.txt" not in resp11e.text, \
             "11e: another user's sync_note row must never leak"
+
+        # 12. two uploads of the same filename must not clobber each other in
+        # drop/. the first extraction blocks so the second file is written
+        # while the first is still sitting there - the actual race window.
+        _seed_user(db_path, "udup", "goodpass", "assistant")
+        dup_client = _login(app, "udup", "goodpass")
+        release = threading.Event()
+
+        def _blocking_unreachable(text):
+            release.wait(5)
+            raise OllamaUnreachable("offline")
+
+        upload_worker._extract = _blocking_unreachable
+        rows12 = []
+        try:
+            for body in (b"first note body", b"second note body"):
+                dash12 = dup_client.get("/")
+                dup_client.post(
+                    "/upload",
+                    data={
+                        "csrf_token": _csrf_from(dash12.text),
+                        "files": (io.BytesIO(body), "dup12.txt"),
+                    },
+                    content_type="multipart/form-data",
+                    headers={"HX-Request": "true"},
+                )
+            assert len(list(drop_dir.glob("dup12*.txt"))) == 2, \
+                f"12: same-named uploads overwrote each other in drop/, {list(drop_dir.iterdir())}"
+            release.set()
+
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                rows12 = _audit_rows(db_path, username="udup", action="upload_file", allowed=1)
+                if len(rows12) == 2:
+                    break
+                time.sleep(0.1)
+        finally:
+            release.set()
+            upload_worker._extract = orig_extract
+
+        assert len(rows12) == 2, f"12: expected 2 audit rows for udup, got {len(rows12)}"
+        assert len({row["target"] for row in rows12}) == 2, \
+            f"12: same-named uploads share one audit target: {[r['target'] for r in rows12]}"
+        bodies = {p.read_bytes() for p in (sorted_root / "needs_review").glob("dup12*.txt")}
+        assert bodies == {b"first note body", b"second note body"}, \
+            f"12: a same-named upload was lost, found {bodies}"
 
     print("selftest ok")
 

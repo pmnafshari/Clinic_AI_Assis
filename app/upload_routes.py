@@ -1,4 +1,5 @@
 import os
+import tempfile
 from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
@@ -52,12 +53,20 @@ def _process_uploads(files, cf, username, role, conn):
             safe = f"{cf}_{safe}"
 
         # atomic hand-off (D-05): write to a temp name in the same drop dir,
-        # then rename into place so the watcher never sees a half-written file
+        # then rename into place so the watcher never sees a half-written file.
+        # the name has to be unique and the rename must not overwrite, or two
+        # uploads of the same filename clobber each other and the surviving
+        # content gets audited under the first uploader's name.
         DROP_DIR.mkdir(parents=True, exist_ok=True)
-        tmp = DROP_DIR / (safe + ".part")
-        file.save(str(tmp))
         final = DROP_DIR / safe
-        os.rename(str(tmp), str(final))
+        n = 1
+        while final.exists():
+            final = DROP_DIR / f"{Path(safe).stem}_{n}{Path(safe).suffix}"
+            n += 1
+        fd, tmp = tempfile.mkstemp(dir=str(DROP_DIR), suffix=".part")
+        os.close(fd)
+        file.save(tmp)
+        os.rename(tmp, str(final))
 
         if ext in MEDIA_EXTS:
             dest = sort_files.route_file(final, SORTED_ROOT, LOG_PATH)
