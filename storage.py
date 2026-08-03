@@ -957,6 +957,13 @@ def main():
     # unchanged from before this repair command existed
     flags = [a for a in sys.argv[1:] if a.startswith("--")]
 
+    # a typo used to be silently ignored, so "--dry_run" ran a real backfill
+    known = {"--selftest", "--backfill", "--dry-run"}
+    unknown = [f for f in flags if f not in known]
+    if unknown:
+        print(f"unknown option: {unknown[0]}")
+        sys.exit(1)
+
     if "--selftest" in flags:
         selftest()
         return
