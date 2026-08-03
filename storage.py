@@ -188,8 +188,31 @@ def get_collection(chroma_path):
 
 _shared_collection = None
 _shared_collection_path = None
-_shared_collection_count = None
+_shared_collection_stamp = None
 _shared_refresh_lock = threading.Lock()
+
+
+def _chroma_stamp(chroma_path):
+    # mtime+size of chroma's own sqlite file. a row count misses an in-place
+    # re-upsert of an existing chunk - which is exactly what --backfill does
+    # to an already-present note - and that is the case that leaves this
+    # process querying the pre-repair text (measured, 14-08).
+    path = Path(chroma_path) / "chroma.sqlite3"
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def _note_own_write(collection):
+    # this process just wrote through the shared handle, so its hnsw reader
+    # is already current - record the new stamp or the next caller rebuilds
+    # the whole client (and its ~83MB embedder) for nothing
+    global _shared_collection_stamp
+    with _shared_refresh_lock:
+        if collection is _shared_collection:
+            _shared_collection_stamp = _chroma_stamp(_shared_collection_path)
 
 
 def get_shared_collection(chroma_path):
@@ -198,25 +221,24 @@ def get_shared_collection(chroma_path):
     # ~83MB embedder) per note. path-keyed so a selftest can point at a
     # temp dir and get a fresh handle without reaching in to reset a global.
     #
-    # count() reads sqlite and is fresh across processes, but vector search
+    # get() reads sqlite and is fresh across processes, but vector search
     # reads a per-System hnsw reader that only sees its own process's writes -
     # and re-opening alone hands back the same cached System, so the
     # identifier cache has to be cleared first (measured, 14-08).
-    global _shared_collection, _shared_collection_path, _shared_collection_count
+    global _shared_collection, _shared_collection_path, _shared_collection_stamp
     with _shared_refresh_lock:
         if _shared_collection is None or _shared_collection_path != chroma_path:
             _shared_collection = get_collection(chroma_path)
             _shared_collection_path = chroma_path
-            _shared_collection_count = _shared_collection.count()
+            _shared_collection_stamp = _chroma_stamp(chroma_path)
             return _shared_collection
 
-        count = _shared_collection.count()
-        if count != _shared_collection_count:
-            SharedSystemClient.clear_system_cache()
-            _shared_collection = get_collection(chroma_path)
-            _shared_collection_count = _shared_collection.count()
+        if _chroma_stamp(chroma_path) == _shared_collection_stamp:
             return _shared_collection
 
+        SharedSystemClient.clear_system_cache()
+        _shared_collection = get_collection(chroma_path)
+        _shared_collection_stamp = _chroma_stamp(chroma_path)
         return _shared_collection
 
 
@@ -241,6 +263,7 @@ def upsert_note_chroma(note, source_path, collection):
             "source_path": source_path,
         }],
     )
+    _note_own_write(collection)
 
 
 def load_note(note, source_path, conn, collection, role, username):
@@ -829,6 +852,47 @@ def selftest():
         # write in between must return the identical cached object
         assert get_shared_collection(str(path11)) is get_shared_collection(str(path11)), \
             "11b: unconditional re-open on the common path"
+
+        # 11c. an external in-place re-upsert leaves the row count alone -
+        # exactly what --backfill does to an already-present note - so a
+        # count-equality gate would keep searching the pre-repair text
+        stale_id = f"{cf11}:n1"
+        repaired_text = "root canal on the upper left molar"
+        rewriter_code = (
+            "import storage\n"
+            f"c = storage.get_collection({str(path11)!r})\n"
+            "c.upsert(\n"
+            f"    ids=[{stale_id!r}],\n"
+            f"    documents=[{repaired_text!r}],\n"
+            f"    metadatas=[{{'codice_fiscale': {cf11!r}}}],\n"
+            ")\n"
+        )
+        count_before = get_shared_collection(str(path11)).count()
+        subprocess.run(
+            [sys.executable, "-c", rewriter_code],
+            check=True,
+            cwd=str(Path(__file__).parent),
+        )
+
+        rewritten = get_shared_collection(str(path11))
+        assert rewritten.count() == count_before, \
+            "11c: the rewrite was supposed to leave the count unchanged"
+        found11c = rewritten.query(query_texts=[repaired_text], n_results=1)
+        assert found11c["ids"][0][0] == stale_id, \
+            f"11c: repaired chunk not ranked first, got {found11c['ids'][0]}"
+        assert found11c["distances"][0][0] < 0.01, \
+            f"11c: query ran against the stale embedding, distance {found11c['distances'][0][0]}"
+
+        # 11d. this process's own write must not force a rebuild - the
+        # replacement client would load another ~83MB embedder alongside it
+        note11d = DentalNote(
+            patient_name="giorgio bianchi",
+            codice_fiscale=cf11,
+            clinical_notes="scale and polish",
+        )
+        upsert_note_chroma(note11d, f"{cf11}/notes/n2.json", rewritten)
+        assert get_shared_collection(str(path11)) is rewritten, \
+            "11d: an in-process write forced a rebuild of the shared handle"
 
     print("selftest ok")
 
