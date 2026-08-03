@@ -42,6 +42,12 @@ def _process_uploads(files, cf, username, role, conn):
             continue
 
         safe = secure_filename(filename)
+        # secure_filename strips non-ascii, so a name like "приветик.txt"
+        # comes back as "txt" - extension gone, and the worker's .txt sync
+        # gate never matches. put the checked extension back.
+        stem, safe_ext = os.path.splitext(safe)
+        if safe_ext.lower() != ext:
+            safe = (stem or "upload") + ext
         if cf:
             safe = f"{cf}_{safe}"
 

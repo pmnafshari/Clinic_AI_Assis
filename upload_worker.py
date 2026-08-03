@@ -89,7 +89,10 @@ def _process_one(path, username, role):
             log_audit(conn, username, role, "upload_file", str(dest), allowed=1)
 
             json_path = dest.with_suffix(".json")
-            if dest.suffix.lower() == ".txt" and json_path.exists():
+            # the sibling json is what decides syncability - route_note only
+            # writes one on the matched-CF path. keying off dest.suffix
+            # instead would skip any note whose extension got mangled.
+            if json_path.exists():
                 # a failed sync_note row has to carry the same target as the
                 # upload_file row above - the intake list collapses by target,
                 # and a drop/ path here leaves two rows for one file
