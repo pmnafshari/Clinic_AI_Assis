@@ -397,6 +397,48 @@ def selftest():
         assert bodies == {b"first note body", b"second note body"}, \
             f"12: a same-named upload was lost, found {bodies}"
 
+        # 13. a queued .txt is recorded and shown as pending straight away, and
+        # the routed row supersedes it in place instead of adding a second entry
+        _seed_user(db_path, "uq13", "goodpass", "assistant")
+        q_client = _login(app, "uq13", "goodpass")
+        held = threading.Event()
+
+        def _held_unreachable(text):
+            held.wait(5)
+            raise OllamaUnreachable("offline")
+
+        upload_worker._extract = _held_unreachable
+        try:
+            dash13 = q_client.get("/")
+            q_client.post(
+                "/upload",
+                data={
+                    "csrf_token": _csrf_from(dash13.text),
+                    "files": (io.BytesIO(b"note thirteen"), "note13.txt"),
+                },
+                content_type="multipart/form-data",
+                headers={"HX-Request": "true"},
+            )
+            resp13 = q_client.get("/upload/recent")
+            assert "Queued" in resp13.text, "13: a queued .txt should show as pending"
+            assert resp13.text.count("note13.txt") == 1, \
+                "13: a queued .txt should appear exactly once"
+
+            held.set()
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                if _audit_rows(db_path, username="uq13", action="upload_file", allowed=1):
+                    break
+                time.sleep(0.1)
+        finally:
+            held.set()
+            upload_worker._extract = orig_extract
+
+        resp13b = q_client.get("/upload/recent")
+        assert resp13b.text.count("note13.txt") == 1, \
+            "13: the routed row should supersede the queued one, not sit beside it"
+        assert "Queued" not in resp13b.text, "13: the pending badge should clear once the file is filed"
+
     print("selftest ok")
 
 

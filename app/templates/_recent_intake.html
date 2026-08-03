@@ -6,7 +6,9 @@
       <small class="text-secondary d-block">{{ row.ts }}</small>
       <span>{{ row.target }}</span>
     </div>
-    {% if row.allowed %}
+    {% if row.action == 'queue_upload' %}
+    <span class="badge text-bg-secondary">Queued</span>
+    {% elif row.allowed %}
     <span class="badge text-bg-primary">Sorted</span>
     {% elif row.action == 'sync_note' %}
     <span class="badge text-bg-warning">Not searchable</span>

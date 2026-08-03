@@ -14,6 +14,7 @@ from extract_note import call_model, parse_reply, OllamaUnreachable
 
 # module-level, selftest-patchable
 SORTED_ROOT = Path("sorted")
+DROP_DIR = Path("drop")
 LOG_PATH = None
 DB_PATH = "db/clinic.sqlite"
 CHROMA_PATH = "db/chroma"
@@ -46,6 +47,38 @@ def ensure_started():
 def enqueue(path, username, role):
     ensure_started()
     _queue.put((str(path), username, role))
+
+
+def _original_uploader(conn, path):
+    # the upload route writes a queue_upload row before enqueuing, so the
+    # uploader survives a restart even though the queue entry does not
+    row = conn.execute(
+        "SELECT username, role FROM audit_log"
+        " WHERE action = 'queue_upload' AND target = ? ORDER BY id DESC LIMIT 1",
+        (str(path),),
+    ).fetchone()
+    if row is None:
+        return storage.SYSTEM_USERNAME, storage.SYSTEM_ROLE
+    return row["username"], row["role"]
+
+
+def resume_pending():
+    # the queue is in memory and the worker is a daemon thread, so a restart
+    # drops everything still waiting. the files are all still in drop/.
+    drop = Path(DROP_DIR)
+    if not drop.is_dir():
+        return 0
+    conn = storage.connect(DB_PATH)
+    try:
+        taken = 0
+        for f in sorted(drop.rglob("*")):
+            if f.is_file() and not f.name.endswith(".part"):
+                username, role = _original_uploader(conn, f)
+                enqueue(f, username, role)
+                taken += 1
+    finally:
+        conn.close()
+    return taken
 
 
 def _record_worker_failure(path, username, role, exc):
@@ -105,8 +138,11 @@ def _process_one(path, username, role):
                     _record_worker_failure(dest, username, role, exc)
         else:
             # a concurrently-running external watcher grabbed it first - still
-            # attribute the upload so it appears in the user's recent-intake list
-            log_audit(conn, username, role, "upload_file", "routed by watcher", allowed=1)
+            # attribute the upload so it appears in the user's recent-intake
+            # list. the name has to be in the target: a fixed string would be
+            # one target shared by every such upload, and the intake list
+            # collapses by target, so all but the newest would vanish.
+            log_audit(conn, username, role, "upload_file", f"routed by watcher: {src.name}", allowed=1)
     finally:
         conn.close()
 
@@ -116,7 +152,7 @@ def selftest():
     from dental_notes_schema import DentalNote
     from storage import init_db
 
-    global SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract, _process_one
+    global SORTED_ROOT, DROP_DIR, LOG_PATH, DB_PATH, CHROMA_PATH, _extract, _process_one
 
     VALID_CF = "MRRS800010150100"
 
@@ -126,8 +162,8 @@ def selftest():
     def _fake_unreachable(text):
         raise OllamaUnreachable("offline")
 
-    orig_sorted_root, orig_log_path, orig_db_path, orig_chroma_path, orig_extract = (
-        SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
+    orig_sorted_root, orig_drop_dir, orig_log_path, orig_db_path, orig_chroma_path, orig_extract = (
+        SORTED_ROOT, DROP_DIR, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
     )
     orig_get_shared_collection = storage.get_shared_collection
     orig_process_one = _process_one
@@ -371,11 +407,47 @@ def selftest():
 
             assert (SORTED_ROOT / VALID_CF / "notes" / "note_defect2.txt").exists(), \
                 "6: a sync failure must not move the filed note"
+
+            # 7. a restart drops the in-memory queue, but whatever is still in
+            # drop/ gets picked up again under the account that uploaded it
+            storage.get_shared_collection = orig_get_shared_collection
+            _extract = _fake_ok
+            LOG_PATH = None
+            drop7 = root / "drop7"
+            drop7.mkdir()
+            DROP_DIR = drop7
+            leftover = drop7 / "leftover7.txt"
+            leftover.write_text("patient note leftover")
+            (drop7 / "halfwritten.part").write_text("not finished")
+
+            conn = storage.connect(db_path)
+            log_audit(conn, "hleft", "assistant", "queue_upload", str(leftover), allowed=1)
+            conn.close()
+
+            taken = resume_pending()
+            assert taken == 1, f"7: expected 1 leftover taken (the .part is not one), got {taken}"
+
+            deadline = time.time() + 3.0
+            resumed_row = None
+            while time.time() < deadline:
+                conn = storage.connect(db_path)
+                resumed_row = conn.execute(
+                    "SELECT * FROM audit_log WHERE username=? AND action=? AND allowed=1",
+                    ("hleft", "upload_file"),
+                ).fetchone()
+                conn.close()
+                if resumed_row:
+                    break
+                time.sleep(0.1)
+            assert resumed_row is not None, "7: leftover drop file was never re-enqueued"
+            assert str(SORTED_ROOT) in resumed_row["target"], \
+                f"7: leftover not routed under sorted, got {resumed_row['target']}"
+            assert (drop7 / "halfwritten.part").exists(), "7: a .part must be left alone"
     finally:
         storage.get_shared_collection = orig_get_shared_collection
         _process_one = orig_process_one
-        SORTED_ROOT, LOG_PATH, DB_PATH, CHROMA_PATH, _extract = (
-            orig_sorted_root, orig_log_path, orig_db_path, orig_chroma_path, orig_extract
+        SORTED_ROOT, DROP_DIR, LOG_PATH, DB_PATH, CHROMA_PATH, _extract = (
+            orig_sorted_root, orig_drop_dir, orig_log_path, orig_db_path, orig_chroma_path, orig_extract
         )
 
     print("selftest ok")

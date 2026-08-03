@@ -77,6 +77,10 @@ def _process_uploads(files, cf, username, role, conn):
                 "message": f"Filed to {dest.parent.name}.",
             })
         else:
+            # the queue is in memory and the worker is a daemon thread, so a
+            # restart before it drains would leave no record the file was ever
+            # uploaded. this row is that record, and it shows as pending.
+            log_audit(conn, username, role, "queue_upload", str(final), allowed=1)
             upload_worker.enqueue(final, username, role)
             results.append({
                 "filename": filename,
@@ -134,22 +138,25 @@ def _user_recent_intake(conn, username, limit=10):
     # of what any real account happens to be named.
     rows = conn.execute(
         "SELECT ts, target, action, allowed FROM audit_log"
-        " WHERE username = ? AND action IN ('upload_file', 'sync_note') AND role != 'system'"
+        " WHERE username = ? AND action IN ('queue_upload', 'upload_file', 'sync_note')"
+        " AND role != 'system' AND target IS NOT NULL"
         " ORDER BY id DESC LIMIT ?",
         (username, limit * 3),
     ).fetchall()
 
-    # collapse to one row per file, newest first: a .txt's upload_file row
-    # shows "Sorted" until the worker's later sync_note row supersedes it in
-    # place. two rows sharing a target otherwise only means a repeated
-    # rejection of the same filename - sort_files._move renames real
-    # collisions to <stem>_1, so this never merges two distinct filed notes.
+    # collapse to one row per file, newest first. the three rows a .txt
+    # produces sit on different paths - drop/ while queued, sorted/ once
+    # filed - so the key is the filename, not the full target: queued is
+    # superseded by sorted, which is superseded by the sync outcome.
+    # drop names are made unique on upload and sort_files._move renames
+    # collisions to <stem>_1, so two distinct files never share a name.
     seen = set()
     collapsed = []
     for row in rows:
-        if row["target"] in seen:
+        name = Path(row["target"]).name
+        if name in seen:
             continue
-        seen.add(row["target"])
+        seen.add(name)
         collapsed.append(row)
         if len(collapsed) == limit:
             break
