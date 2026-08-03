@@ -12,9 +12,11 @@ from extract_note import extract_note
 from action_log import log_action
 import storage
 
-# module-level, selftest-patchable seams
-DB_PATH = "db/clinic.sqlite"
-CHROMA_PATH = "db/chroma"
+# module-level, selftest-patchable seams. resolved against this file, not the
+# CWD - the watcher is started from anywhere and a relative path would just
+# create an empty db next to wherever it was launched
+DB_PATH = str(Path(__file__).parent / "db" / "clinic.sqlite")
+CHROMA_PATH = str(Path(__file__).parent / "db" / "chroma")
 _extract = extract_note
 
 
@@ -45,6 +47,19 @@ def sync_dropped(dest, sorted_root, log_path):
             conn.close()
 
 
+def route_and_sync(src, sorted_root, log_path):
+    # route_note only catches OllamaUnreachable and ValueError. anything else
+    # (unreadable file, a race with the upload worker) would propagate into
+    # watchdog's dispatcher thread and kill it while watch() keeps sleeping,
+    # so the daemon looks healthy and silently stops filing everything.
+    try:
+        dest = route_file(src, sorted_root, log_path, extract=_extract)
+    except Exception as exc:
+        log_action(src, "-", f"route failed: {exc}", log_path)
+        return
+    sync_dropped(dest, sorted_root, log_path)
+
+
 class DropHandler(FileSystemEventHandler):
     def __init__(self, sorted_root, log_path=None):
         self.sorted_root = sorted_root
@@ -57,19 +72,22 @@ class DropHandler(FileSystemEventHandler):
         time.sleep(0.5)
         src = Path(event.src_path)
         if src.exists():
-            dest = route_file(src, self.sorted_root, self.log_path, extract=_extract)
-            sync_dropped(dest, self.sorted_root, self.log_path)
+            route_and_sync(src, self.sorted_root, self.log_path)
 
 
 def watch(drop_dir, sorted_root, log_path=None):
     drop_dir = Path(drop_dir)
     sorted_root = Path(sorted_root)
 
+    # the app may never have run here - without this every audit and upsert
+    # below fails with "no such table" and is swallowed by sync_dropped
+    Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    storage.init_db(DB_PATH).close()
+
     # startup catch-up: route files already present before watcher started
     for f in drop_dir.rglob("*"):
         if f.is_file():
-            dest = route_file(f, sorted_root, log_path, extract=_extract)
-            sync_dropped(dest, sorted_root, log_path)
+            route_and_sync(f, sorted_root, log_path)
 
     handler = DropHandler(sorted_root, log_path)
     observer = Observer()
@@ -230,6 +248,36 @@ def selftest():
             with open(log_path) as f:
                 log_text = f.read()
             assert "sync failed" in log_text, "5: log.txt has no 'sync failed' line"
+
+            # 6. a route failure the sorter does not catch must be logged and
+            # swallowed, not raised into watchdog's dispatcher thread
+            def _fake_boom(text):
+                raise RuntimeError("route boom")
+
+            _extract = _fake_boom
+            bad = drop / "note_bad.txt"
+            bad.write_text("boom")
+
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                with open(log_path) as f:
+                    if "route failed" in f.read():
+                        break
+                time.sleep(0.1)
+            with open(log_path) as f:
+                assert "route failed" in f.read(), "6: no 'route failed' line for the bad file"
+
+            _extract = _fake_extract
+            after_bad = drop / f"rx_after_bad_{CF}.jpg"
+            after_bad.write_bytes(b"\xff\xd8\xff")
+
+            deadline = time.time() + 5.0
+            routed_after = sorted_ / CF / "images" / after_bad.name
+            while time.time() < deadline:
+                if routed_after.exists():
+                    break
+                time.sleep(0.1)
+            assert routed_after.exists(), "6: dispatcher stopped routing after one bad file"
 
             observer.stop()
             observer.join()
