@@ -56,12 +56,12 @@ def _record_worker_failure(path, username, role, exc):
         conn = storage.connect(DB_PATH)
         log_audit(conn, username, role, "sync_note", str(path), allowed=0)
         conn.close()
-    except Exception:
-        pass
+    except Exception as inner:
+        print(f"worker failure row lost ({inner}), original: {exc}", file=sys.stderr)
     try:
         log_action(path, "-", f"worker failed: {exc}", LOG_PATH)
-    except Exception:
-        pass
+    except Exception as inner:
+        print(f"worker failure log lost ({inner}), original: {exc}", file=sys.stderr)
 
 
 def _worker_loop():

@@ -310,6 +310,7 @@ def sync_note_file(json_path, sorted_root, conn, collection, role, username, tar
     if target is None:
         target = str(json_path)
 
+    reason = "verify-after-write says the note is not in both stores"
     try:
         note = DentalNote.model_validate_json(json_path.read_text())
         source_path = str(json_path.relative_to(sorted_root))
@@ -318,11 +319,15 @@ def sync_note_file(json_path, sorted_root, conn, collection, role, username, tar
         # check again after the write instead of trusting "no exception" -
         # this is what catches a denied role and a chroma half-write (D-05)
         ok = note_is_synced(note, source_path, conn, collection)
-    except Exception:
+    except Exception as exc:
         ok = False
+        reason = f"{type(exc).__name__}: {exc}"
 
     if not ok:
+        # the audit row records that it failed; without this nothing anywhere
+        # records why, and --backfill reports paths with no reasons either
         log_audit(conn, username, role, "sync_note", target, allowed=0)
+        print(f"sync failed: {reason}", file=sys.stderr)
         return "failed"
 
     log_audit(conn, username, role, "sync_note", target, allowed=1)
