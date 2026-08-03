@@ -118,10 +118,15 @@ def selftest():
         drop = root / "drop"
         drop.mkdir()
         sorted_ = root / "sorted"
+        # staging area outside the watched dir: blocks 4 and 5 route by hand,
+        # and a file written into drop/ would race the live observer for it
+        stage = root / "stage"
+        stage.mkdir()
         log_path = str(root / "watch.log")
         db_path = str(root / "clinic.sqlite")
-        storage.init_db(db_path)
+        storage.init_db(db_path).close()
 
+        observer = None
         try:
             DB_PATH = db_path
             CHROMA_PATH = str(root / "chroma")
@@ -139,8 +144,7 @@ def selftest():
             # run startup catch-up manually (watch() does it; selftest calls it directly)
             for f in drop.rglob("*"):
                 if f.is_file():
-                    dest = route_file(f, sorted_, log_path, extract=_extract)
-                    sync_dropped(dest, sorted_, log_path)
+                    route_and_sync(f, sorted_, log_path)
 
             # wait briefly so any observer init settles
             time.sleep(0.2)
@@ -174,7 +178,7 @@ def selftest():
             assert routed_nested.exists(), "3: nested subfolder file not routed within 2 seconds"
 
             # 4. a .txt present before start is routed and synced by the catch-up loop
-            pre_note = drop / "note_pre.txt"
+            pre_note = stage / "note_pre.txt"
             pre_note.write_text("patient note")
             dest4 = route_file(pre_note, sorted_, log_path, extract=_extract)
             sync_dropped(dest4, sorted_, log_path)
@@ -237,7 +241,7 @@ def selftest():
             orig_get_shared_collection = storage.get_shared_collection
             storage.get_shared_collection = lambda path: _FailingCollection()
             try:
-                fail_note = drop / "note_fail.txt"
+                fail_note = stage / "note_fail.txt"
                 fail_note.write_text("patient note fail")
                 dest_fail = route_file(fail_note, sorted_, log_path, extract=_extract)
                 sync_dropped(dest_fail, sorted_, log_path)
@@ -277,10 +281,12 @@ def selftest():
                     break
                 time.sleep(0.1)
             assert routed_after.exists(), "6: dispatcher stopped routing after one bad file"
-
-            observer.stop()
-            observer.join()
         finally:
+            # in the try, a failed assertion would leak a live observer into
+            # the TemporaryDirectory teardown
+            if observer is not None:
+                observer.stop()
+                observer.join()
             DB_PATH, CHROMA_PATH, _extract = orig_db_path, orig_chroma_path, orig_extract
 
     print("selftest ok")
