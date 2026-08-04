@@ -338,6 +338,36 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
             "target": f"xlsx:{xlsx_path}",
         }, None
 
+    elif call.tool == "update_visit_field":
+        # ownership check (D-06): a visit id belonging to a different
+        # patient resolves to no row
+        row = conn.execute(
+            "SELECT visit_date, next_appointment, source_path FROM visits"
+            " WHERE id = ? AND codice_fiscale = ?", (args.visit_id, cf)
+        ).fetchone()
+        if row is None:
+            return None, f"no visit {args.visit_id} on record for {cf}"
+
+        # the sqlite row and the json sibling are separately mutable - bail
+        # before the pending action is built for an edit that can't happen
+        json_path = sorted_root / cf / "notes" / (Path(row["source_path"]).stem + ".json")
+        if not json_path.exists():
+            return None, f"note file missing for this visit ({json_path}) - fix the sorted tree first"
+
+        new_value = args.value.strip() or None
+        current = row["next_appointment"]
+        name = lookup_patient(cf, conn)["patient_name"]
+        diff_line = (f"next_appointment: {current or '(none)'} -> {new_value or '(none)'} "
+                     f"({name}, {cf}) - visit of {row['visit_date'] or 'no date'}")
+        return {
+            "tool": call.tool,
+            "args": {"value": new_value},
+            "cf": cf,
+            "diff_line": diff_line,
+            "before": current,
+            "target": f"sqlite:visits.next_appointment:{args.visit_id}",
+        }, None
+
 
 def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
                           collection=None, sorted_root=Path("sorted")):
@@ -361,6 +391,9 @@ def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
         append_note(pending["cf"], args["text"], source_path, conn, collection, sorted_root)
     elif pending["tool"] == "add_invoice":
         add_invoice(pending["cf"], args["amount"], args["description"], args["visit_date"], sorted_root)
+    elif pending["tool"] == "update_visit_field":
+        visit_id = int(pending["target"][len("sqlite:visits.next_appointment:"):])
+        update_visit_field(pending["cf"], visit_id, args["value"], conn, sorted_root)
 
     write_undo_entry({
         "ts": datetime.now().isoformat(),
@@ -430,18 +463,28 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
         cf = entry["codice_fiscale"]
 
         # figure out which action this restore needs before touching anything -
-        # an unknown or invalid target is a graceful no-op, never authorized
+        # an unknown or invalid target is a graceful no-op, never authorized.
+        # kind drives the restore dispatch below; action drives the authorize
+        # gate and the audit row - they collapse to the same value except for
+        # the visit-field branch, where the permission check (D-11) is
+        # update_field but the restore itself is not update_field's restore
         if target.startswith("sqlite:patients."):
             field = target[len("sqlite:patients."):]
             if field not in EDITABLE_FIELDS:
                 return "error", f"don't know how to undo target {target!r}"
-            action = "update_field"
+            kind = action = "update_field"
         elif target.startswith("visit:"):
             # undoing an append rewrites existing note content - that's an edit,
             # not a fresh append, so an assistant (append-only, D-04) can't do it
-            action = "edit_note"
+            kind = action = "edit_note"
         elif target.startswith("xlsx:"):
-            action = "add_invoice"
+            kind = action = "add_invoice"
+        elif target.startswith("sqlite:visits.next_appointment:"):
+            # D-11: permission action is update_field (dentist-only); the
+            # restore itself is a distinct kind so it can never fall through
+            # into update_field's patients-column restore
+            kind = "update_visit_field"
+            action = "update_field"
         else:
             return "error", f"don't know how to undo target {target!r}"
 
@@ -450,10 +493,10 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
             return "denied", f"not permitted: {role} may not undo {action}"
         log_audit(conn, username, role, action, target=cf, allowed=1)
 
-        if action == "update_field":
+        if kind == "update_field":
             update_field(cf, field, entry["before"], conn)
             status, message = "restored", f"restored {field} to {entry['before']} for {cf}"
-        elif action == "edit_note":
+        elif kind == "edit_note":
             source_path = target[len("visit:"):]
             json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
             note = DentalNote.model_validate_json(json_path.read_text())
@@ -462,13 +505,17 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
             upsert_note_sql(note, source_path, conn)
             upsert_note_chroma(note, source_path, collection)
             status, message = "restored", f"restored clinical note text for {cf}"
-        elif action == "add_invoice":
+        elif kind == "add_invoice":
             # D-09: invoice rows are restored by hand - drop the entry so the
             # edits beneath it stay reachable, but report "manual" so no caller
             # claims the row was reverted
             xlsx_path = target[len("xlsx:"):]
             status = "manual"
             message = f"cannot auto-undo an invoice row append at {xlsx_path} - restore manually"
+        elif kind == "update_visit_field":
+            visit_id = int(target[len("sqlite:visits.next_appointment:"):])
+            update_visit_field(cf, visit_id, entry["before"], conn, sorted_root)
+            status, message = "restored", f"restored next appointment for {cf}"
 
         # remove only this entry, keep every other line (including other users'
         # more-recent entries) in place and in order
