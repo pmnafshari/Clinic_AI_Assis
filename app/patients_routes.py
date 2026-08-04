@@ -152,3 +152,67 @@ def edit_submit(cf):
 
     token = pending_actions.create_pending_action(conn, g.user["username"], g.user["role"], pending)
     return render_template("_confirm_diff.html", diff_line=pending["diff_line"], token=token)
+
+
+@patients_bp.route("/patients/<cf>/visits/<int:visit_id>/edit-form")
+def visit_edit_form_fragment(cf, visit_id):
+    # HTMX target - a denied fragment returns a bare status, not a redirect.
+    # gated on read_clinical (dentist-only) since this exposes clinical data
+    # (visit date, next appointment), not on read_notes (RBAC-03 / CR-01)
+    if not authorize(g.user["role"], "read_clinical"):
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    row = get_db().execute(
+        "SELECT visit_date, next_appointment FROM visits WHERE id = ? AND codice_fiscale = ?",
+        (visit_id, cf),
+    ).fetchone()
+    if row is None:
+        abort(404)
+
+    return render_template(
+        "_visit_edit_form.html", cf=cf, visit_id=visit_id,
+        value=row["next_appointment"], visit_date=row["visit_date"],
+    )
+
+
+@patients_bp.route("/patients/<cf>/visits/<int:visit_id>/edit", methods=["POST"])
+def visit_edit_submit(cf, visit_id):
+    if not authorize(g.user["role"], "read_clinical"):
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    value = request.form.get("value", "")
+
+    conn = get_db()
+    patient = lookup_patient(cf, conn)
+    if patient is None:
+        abort(404)
+
+    call = agent.ToolCall(
+        tool="update_visit_field",
+        args={"patient": patient["patient_name"], "visit_id": visit_id, "value": value},
+    )
+    try:
+        call.parsed_args()
+    except Exception as e:
+        return render_template(
+            "_visit_edit_form.html", cf=cf, visit_id=visit_id, value=value,
+            error=f"invalid value: {e}",
+        )
+
+    pending, reason = agent.build_pending_action(
+        call, conn, g.user["role"], g.user["username"], sorted_root=SORTED_ROOT,
+        choose_cf=lambda candidates, cf=cf: cf if cf in candidates else None,
+    )
+    if pending is None:
+        return render_template(
+            "_visit_edit_form.html", cf=cf, visit_id=visit_id, value=value, error=reason
+        )
+
+    token = pending_actions.create_pending_action(conn, g.user["username"], g.user["role"], pending)
+    return render_template("_confirm_diff.html", diff_line=pending["diff_line"], token=token)

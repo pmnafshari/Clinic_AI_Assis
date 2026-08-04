@@ -1,4 +1,5 @@
 import urllib.request
+from pathlib import Path
 
 from flask import Blueprint, flash, g, make_response, redirect, render_template, request, url_for
 
@@ -12,6 +13,7 @@ from .db import get_chroma, get_db
 agent_bp = Blueprint("agent", __name__)
 
 UNDO_LOG = agent.UNDO_LOG
+SORTED_ROOT = Path("sorted")
 _urlopen = urllib.request.urlopen
 
 
@@ -118,7 +120,7 @@ def confirm_change():
     try:
         agent.apply_pending_action(
             pending, get_db(), g.user["role"], g.user["username"],
-            log_path=UNDO_LOG, collection=get_chroma(),
+            log_path=UNDO_LOG, collection=get_chroma(), sorted_root=SORTED_ROOT,
         )
     except (OSError, ValueError):
         # e.g. the note file vanished during the confirm window
@@ -144,7 +146,7 @@ def undo_change():
     # "restore manually" must not read as a completed revert (WR-02)
     status, message = agent.undo_last(
         get_db(), g.user["role"], g.user["username"],
-        log_path=UNDO_LOG, collection=get_chroma(),
+        log_path=UNDO_LOG, collection=get_chroma(), sorted_root=SORTED_ROOT,
     )
     flash(message)
     return redirect(url_for("dashboard.index"))
