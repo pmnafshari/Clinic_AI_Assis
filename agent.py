@@ -78,15 +78,22 @@ class AddInvoiceArgs(BaseModel):
     description: str
 
 
+class UpdateVisitFieldArgs(BaseModel):
+    patient: str
+    visit_id: int
+    value: str  # "" is legal and means "clear the field"
+
+
 TOOL_ARGS = {
     "update_field": UpdateFieldArgs,
     "append_note": AppendNoteArgs,
     "add_invoice": AddInvoiceArgs,
+    "update_visit_field": UpdateVisitFieldArgs,
 }
 
 
 class ToolCall(BaseModel):
-    tool: Literal["update_field", "append_note", "add_invoice"]
+    tool: Literal["update_field", "append_note", "add_invoice", "update_visit_field"]
     args: dict
 
     def parsed_args(self):
@@ -240,6 +247,28 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
 
     upsert_note_sql(note, source_path, conn)
     upsert_note_chroma(note, source_path, collection)
+
+
+def update_visit_field(cf, visit_id, value, conn, sorted_root=Path("sorted")):
+    # cf must be validated before any path is built (T-06-02)
+    if not CF_PATTERN.match(cf):
+        raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
+
+    # ownership re-check - safe no matter who builds the ToolCall
+    row = conn.execute(
+        "SELECT source_path FROM visits WHERE id = ? AND codice_fiscale = ?", (visit_id, cf)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"no visit {visit_id} for {cf}")
+    source_path = row["source_path"]
+
+    json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+    note = DentalNote.model_validate_json(json_path.read_text())
+    note.next_appointment = value or None
+    json_path.write_text(note.model_dump_json())
+
+    # no upsert_note_chroma call - next_appointment is not embedded (D-10)
+    upsert_note_sql(note, source_path, conn)
 
 
 def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"), choose_cf=None):

@@ -168,12 +168,13 @@ def lookup_clinical(cf, conn):
     # dentist-only visit detail - kept separate from lookup_patient's
     # CRM-only contract so existing callers are unaffected
     visits = conn.execute(
-        "SELECT visit_date, procedures, clinical_notes, next_appointment"
+        "SELECT id, visit_date, procedures, clinical_notes, next_appointment"
         " FROM visits WHERE codice_fiscale = ? ORDER BY id", (cf,)
     ).fetchall()
 
     return [
         {
+            "id": v["id"],
             "visit_date": v["visit_date"],
             "procedures": json.loads(v["procedures"]) if v["procedures"] else [],
             "clinical_notes": v["clinical_notes"],

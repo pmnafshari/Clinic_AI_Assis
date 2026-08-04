@@ -5,7 +5,7 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "add_invoice", "read_clinical", "upload_file"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file"},
     "assistant": {"read_notes", "append_note", "add_invoice", "upload_file"},
     "admin": {"manage_users"},
     # system: the automated sync actor (watcher/backfill), no user row
@@ -38,6 +38,7 @@ def selftest():
         conn = init_db(str(Path(tmp) / "clinic.sqlite"))
 
         assert authorize("dentist", "update_field"), "1: dentist should allow update_field"
+        assert authorize("dentist", "update_visit_field"), "1: dentist should allow update_visit_field"
         assert authorize("dentist", "add_invoice"), "1: dentist should allow add_invoice"
         assert authorize("dentist", "append_note"), "1: dentist should allow append_note"
         assert authorize("dentist", "edit_note"), "1: dentist should allow edit_note"
@@ -50,6 +51,7 @@ def selftest():
         assert authorize("assistant", "upload_file"), "2: assistant should allow upload_file"
         assert not authorize("assistant", "edit_note"), "2: assistant should deny edit_note"
         assert not authorize("assistant", "update_field"), "2: assistant should deny update_field"
+        assert not authorize("assistant", "update_visit_field"), "2: assistant should deny update_visit_field"
         assert not authorize("assistant", "read_clinical"), "2: assistant should deny read_clinical"
         assert not authorize("assistant", "manage_users"), "2: assistant should deny manage_users"
 
