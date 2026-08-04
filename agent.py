@@ -858,6 +858,131 @@ def selftest():
         assert "user-a" in remaining_usernames, \
             "another user's entry must remain in the log after a user-scoped undo"
 
+        # --- update_visit_field fixtures: reuse the append_note visit seeded
+        # above (cf, sorted_root, notes_dir, source_path already in scope) ---
+        visit_id = conn.execute(
+            "SELECT id FROM visits WHERE source_path = ?", (source_path,)
+        ).fetchone()["id"]
+        clinical_notes_before = conn.execute(
+            "SELECT clinical_notes FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()["clinical_notes"]
+
+        # l. a confirmed visit-field edit writes json and sqlite, and no chroma
+        call = ToolCall(
+            tool="update_visit_field",
+            args={"patient": "rossi", "visit_id": visit_id, "value": "2026-09-10"},
+        )
+        pending, reason = build_pending_action(call, conn, "dentist", "test-dentist",
+                                                sorted_root=sorted_root)
+        assert pending is not None, f"l: build_pending_action should have succeeded, got {reason}"
+        assert pending["target"] == f"sqlite:visits.next_appointment:{visit_id}", \
+            "l: wrong undo target for a visit-field edit"
+        assert "next_appointment:" in pending["diff_line"], "l: diff line missing field name"
+        assert "visit of" in pending["diff_line"], "l: diff line missing visit suffix"
+
+        # collection=None is the D-10 proof - if the branch ever grows a
+        # chroma call it raises AttributeError and this line fails loudly
+        apply_pending_action(pending, conn, "dentist", "test-dentist", log_path=log_path,
+                              collection=None, sorted_root=sorted_root)
+
+        row = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()
+        assert row["next_appointment"] == "2026-09-10", "l: sqlite next_appointment not updated"
+        jf = DentalNote.model_validate_json((notes_dir / "n1.json").read_text())
+        assert jf.next_appointment == "2026-09-10", "l: json next_appointment not updated"
+        assert jf.clinical_notes == clinical_notes_before, \
+            "l: visit-field edit must not touch clinical_notes"
+        still_id = conn.execute(
+            "SELECT id FROM visits WHERE source_path = ?", (source_path,)
+        ).fetchone()["id"]
+        assert still_id == visit_id, "l: the edit must update in place, not add a new visit row"
+
+        # m. the guard rails
+        # m1: a foreign visit id is refused before anything mutates (D-06)
+        call = ToolCall(
+            tool="update_visit_field",
+            args={"patient": "rossi", "visit_id": 999999, "value": "2026-10-01"},
+        )
+        pending, reason = build_pending_action(call, conn, "dentist", "test-dentist",
+                                                sorted_root=sorted_root)
+        assert pending is None, "m1: a foreign visit id must not build a pending action"
+        assert "no visit" in reason, f"m1: expected 'no visit' in reason, got {reason!r}"
+
+        # m2: a missing json sibling is refused before anything mutates (D-09)
+        json_path = notes_dir / "n1.json"
+        renamed_path = notes_dir / "n1.json.bak"
+        json_path.rename(renamed_path)
+        call = ToolCall(
+            tool="update_visit_field",
+            args={"patient": "rossi", "visit_id": visit_id, "value": "2026-10-01"},
+        )
+        pending, reason = build_pending_action(call, conn, "dentist", "test-dentist",
+                                                sorted_root=sorted_root)
+        renamed_path.rename(json_path)
+        assert pending is None, "m2: a missing json sibling must not build a pending action"
+        assert "note file missing" in reason, \
+            f"m2: expected 'note file missing' in reason, got {reason!r}"
+        row = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()
+        assert row["next_appointment"] == "2026-09-10", "m2: a refused build must not touch sqlite"
+
+        # m3: an empty value clears next_appointment to NULL/None (D-07)
+        call = ToolCall(
+            tool="update_visit_field",
+            args={"patient": "rossi", "visit_id": visit_id, "value": ""},
+        )
+        pending, reason = build_pending_action(call, conn, "dentist", "test-dentist",
+                                                sorted_root=sorted_root)
+        assert pending is not None, f"m3: build_pending_action should have succeeded, got {reason}"
+        apply_pending_action(pending, conn, "dentist", "test-dentist", log_path=log_path,
+                              collection=None, sorted_root=sorted_root)
+        row = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()
+        assert row["next_appointment"] is None, "m3: empty value must clear sqlite to NULL"
+        jf = DentalNote.model_validate_json((notes_dir / "n1.json").read_text())
+        assert jf.next_appointment is None, "m3: empty value must clear json to None"
+
+        # restore a live non-null value directly (bypassing build/apply, so
+        # the undo entry m3 just wrote stays the most recent one for this
+        # user - section n needs a non-null before to make undo observable)
+        update_visit_field(cf, visit_id, "2026-11-11", conn, sorted_root=sorted_root)
+
+        # n. undo, and its permission gate
+        status, message = undo_last(conn, role="assistant", username="test-dentist",
+                                     log_path=log_path, sorted_root=sorted_root)
+        assert status == "denied", f"n: assistant undo should be denied, got {status}"
+        row = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()
+        assert row["next_appointment"] == "2026-11-11", "n: denied undo must not change sqlite"
+
+        denied_before_n = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 0"
+        ).fetchone()["c"]
+        assert denied_before_n >= 1, "n: denied visit-field undo should log a denied update_field row"
+
+        allowed_before_n = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 1"
+        ).fetchone()["c"]
+        status, message = undo_last(conn, role="dentist", username="test-dentist",
+                                     log_path=log_path, sorted_root=sorted_root)
+        assert status == "restored", f"n: dentist undo should restore, got {status}"
+        row = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()
+        assert row["next_appointment"] == "2026-09-10", "n: dentist undo must restore the before-value"
+        jf = DentalNote.model_validate_json((notes_dir / "n1.json").read_text())
+        assert jf.next_appointment == "2026-09-10", "n: dentist undo must restore the json field"
+        assert jf.clinical_notes == clinical_notes_before, "n: undo must not touch clinical_notes"
+        allowed_after_n = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'update_field' AND allowed = 1"
+        ).fetchone()["c"]
+        assert allowed_after_n == allowed_before_n + 1, \
+            "n: allowed visit-field undo should add exactly one allowed update_field row"
+
     print("selftest passed")
 
 
