@@ -10,6 +10,7 @@ import app.agent_routes as agent_routes
 import app.db as app_db
 import app.patients_routes as patients_routes
 from app import create_app
+from dental_notes_schema import DentalNote
 from web_session import _hash_token
 
 
@@ -102,6 +103,9 @@ def selftest():
         # something real to leak
         sorted_root = Path(tmp) / "sorted"
         patients_routes.SORTED_ROOT = sorted_root
+        # confirm_change reads/writes through sorted_root too - without this
+        # /agent/confirm resolves "sorted/" against the repo, not the temp tree
+        agent_routes.SORTED_ROOT = sorted_root
 
         _seed_user(db_path, "drossi", "goodpass", "dentist")
         _seed_user(db_path, "aassist", "goodpass", "assistant")
@@ -137,7 +141,18 @@ def selftest():
         conn.close()
 
         (sorted_root / cf / "notes").mkdir(parents=True)
-        (sorted_root / cf / "notes" / "n1.json").write_text("{}")
+        # a real serialized note, not the "{}" placeholder - build_pending_action's
+        # D-09 check opens and validates it as a DentalNote
+        seed_note = DentalNote(
+            patient_name="mario rossi",
+            codice_fiscale=cf,
+            phone="333123456",
+            visit_date="2026-06-01",
+            procedures=["rct 26"],
+            clinical_notes="rct done on tooth 26",
+            next_appointment="2026-08-01",
+        )
+        (sorted_root / cf / "notes" / "n1.json").write_text(seed_note.model_dump_json())
         (sorted_root / cf / "images").mkdir(parents=True)
         (sorted_root / cf / "images" / "xray-26-rct.jpg").write_text("x")
 
@@ -360,6 +375,196 @@ def selftest():
             "an htmx confirm error must stay a fragment too"
         assert "expired" in stale_confirm_resp.text.lower(), \
             "a stale token should say so inside the modal"
+
+        # 11. the visit-edit fragment - its gate and its ownership check (D-06/D-11)
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        visit_id = conn.execute(
+            "SELECT id FROM visits WHERE source_path = 'n1.json'"
+        ).fetchone()["id"]
+        other_visit_id = conn.execute(
+            "SELECT id FROM visits WHERE source_path = 'n10.json'"
+        ).fetchone()["id"]
+        conn.close()
+
+        visit_fragment_resp = dentist_client.get(f"/patients/{cf}/visits/{visit_id}/edit-form")
+        assert visit_fragment_resp.status_code == 200
+        assert "2026-08-01" in visit_fragment_resp.text, \
+            "visit-edit fragment should show the current next appointment"
+        assert "2026-06-01" in visit_fragment_resp.text, \
+            "visit-edit fragment should say which visit is being edited"
+        assert "<html" not in visit_fragment_resp.text.lower(), \
+            "visit-edit fragment must be chrome-free (loads into the modal)"
+
+        assistant_fragment_resp = assistant_client.get(f"/patients/{cf}/visits/{visit_id}/edit-form")
+        assert assistant_fragment_resp.status_code == 403, \
+            "assistant should get a bare 403 from the visit-edit fragment (D-11)"
+        assert assistant_fragment_resp.text == "", \
+            "a denied fragment must be empty, not a page"
+        assert "Location" not in assistant_fragment_resp.headers, \
+            "a denied fragment must never redirect"
+
+        foreign_resp = dentist_client.get(f"/patients/{cap_cf}/visits/{other_visit_id}/edit-form")
+        assert foreign_resp.status_code == 404, \
+            "a visit id from another patient's record must 404 (D-06)"
+
+        missing_resp = dentist_client.get(f"/patients/{cf}/visits/999999/edit-form")
+        assert missing_resp.status_code == 404, "an unknown visit id must 404"
+
+        # 12. build, confirm, apply (GUI-08's ROADMAP success criterion 2)
+        visit_edit_csrf = _csrf_from(visit_fragment_resp.text)
+        visit_build_resp = dentist_client.post(
+            f"/patients/{cf}/visits/{visit_id}/edit",
+            data={"value": "2026-09-10", "csrf_token": visit_edit_csrf},
+        )
+        assert visit_build_resp.status_code == 200
+        assert "<html" not in visit_build_resp.text.lower()
+        assert "next_appointment:" in visit_build_resp.text
+        assert "2026-08-01" in visit_build_resp.text and "2026-09-10" in visit_build_resp.text
+        assert "mario rossi" in visit_build_resp.text
+        assert "visit of" in visit_build_resp.text.lower()
+        assert 'name="token"' in visit_build_resp.text
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        next_appt = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()["next_appointment"]
+        conn.close()
+        assert next_appt == "2026-08-01", "building the diff must not write the visit row"
+
+        visit_token = _token_from(visit_build_resp.text)
+        visit_confirm_csrf = _csrf_from(visit_build_resp.text)
+        visit_confirm_resp = dentist_client.post(
+            "/agent/confirm",
+            data={"token": visit_token, "csrf_token": visit_confirm_csrf},
+            headers={"HX-Request": "true"},
+        )
+        assert visit_confirm_resp.status_code == 200
+        assert "<html" not in visit_confirm_resp.text.lower()
+        assert cf in visit_confirm_resp.headers.get("HX-Redirect", ""), \
+            "confirming a visit edit should send the browser back to the patient page"
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        next_appt = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()["next_appointment"]
+        conn.close()
+        assert next_appt == "2026-09-10", "confirming should apply the frozen new value to sqlite"
+
+        note_json = DentalNote.model_validate_json(
+            (sorted_root / cf / "notes" / "n1.json").read_text()
+        )
+        assert note_json.next_appointment == "2026-09-10", \
+            "confirming should apply the frozen new value to the json sibling too (D-09)"
+        assert note_json.clinical_notes == "rct done on tooth 26", \
+            "a visit-field edit must never touch clinical_notes"
+
+        # assistant's own csrf, not the dentist's - a fragment gate is checked
+        # after csrf, so the wrong session's token would 400 before it 403s
+        assistant_csrf = _csrf_from(assistant_client.get(f"/patients/{cf}").text)
+        assistant_visit_edit_resp = assistant_client.post(
+            f"/patients/{cf}/visits/{visit_id}/edit",
+            data={"value": "2026-10-10", "csrf_token": assistant_csrf},
+        )
+        assert assistant_visit_edit_resp.status_code == 403, \
+            "assistant should get a bare 403 from the visit-edit submit (D-11)"
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        next_appt = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()["next_appointment"]
+        conn.close()
+        assert next_appt == "2026-09-10", "a denied submit must not change the visit row"
+
+        clear_form_resp = dentist_client.get(f"/patients/{cf}/visits/{visit_id}/edit-form")
+        clear_csrf = _csrf_from(clear_form_resp.text)
+        clear_build_resp = dentist_client.post(
+            f"/patients/{cf}/visits/{visit_id}/edit",
+            data={"value": "", "csrf_token": clear_csrf},
+        )
+        clear_token = _token_from(clear_build_resp.text)
+        clear_confirm_csrf = _csrf_from(clear_build_resp.text)
+        dentist_client.post(
+            "/agent/confirm",
+            data={"token": clear_token, "csrf_token": clear_confirm_csrf},
+            headers={"HX-Request": "true"},
+        )
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        next_appt = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()["next_appointment"]
+        conn.close()
+        assert next_appt is None, "an empty value should clear next_appointment to NULL (D-07)"
+        note_json = DentalNote.model_validate_json(
+            (sorted_root / cf / "notes" / "n1.json").read_text()
+        )
+        assert note_json.next_appointment is None, "an empty value should clear the json field too"
+
+        # set it back so section 13 has a value to fail to change
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE visits SET next_appointment = '2026-09-10' WHERE id = ?", (visit_id,)
+        )
+        conn.commit()
+        conn.close()
+        note_json.next_appointment = "2026-09-10"
+        (sorted_root / cf / "notes" / "n1.json").write_text(note_json.model_dump_json())
+
+        # 13. SC4 RBAC re-check on the new tool - a role downgraded mid-flow
+        # is denied at apply time, not just hidden by the UI
+        recheck_form_resp = dentist_client.get(f"/patients/{cf}/visits/{visit_id}/edit-form")
+        recheck_csrf = _csrf_from(recheck_form_resp.text)
+        recheck_build_resp = dentist_client.post(
+            f"/patients/{cf}/visits/{visit_id}/edit",
+            data={"value": "2026-12-25", "csrf_token": recheck_csrf},
+        )
+        recheck_token = _token_from(recheck_build_resp.text)
+        recheck_confirm_csrf = _csrf_from(recheck_build_resp.text)
+
+        raw_session_token2 = dentist_client.get_cookie("session_token").value
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE sessions SET role = 'assistant' WHERE token_hash = ?",
+            (_hash_token(raw_session_token2),),
+        )
+        conn.commit()
+        conn.close()
+
+        recheck_denied_resp = dentist_client.post(
+            "/agent/confirm",
+            data={"token": recheck_token, "csrf_token": recheck_confirm_csrf},
+        )
+        assert recheck_denied_resp.status_code == 200, \
+            "a denied visit-field confirm should re-render, not redirect"
+        assert "permission" in recheck_denied_resp.text.lower(), \
+            "a denied visit-field confirm should show a permission message"
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        next_appt = conn.execute(
+            "SELECT next_appointment FROM visits WHERE id = ?", (visit_id,)
+        ).fetchone()["next_appointment"]
+        denied_visit_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'update_visit_field' AND allowed = 0"
+        ).fetchall()
+        conn.close()
+        assert next_appt == "2026-09-10", \
+            "a mid-flow role downgrade must not change the visit row"
+        assert len(denied_visit_rows) == 1, \
+            f"expected 1 denied update_visit_field row, got {len(denied_visit_rows)}"
+
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "UPDATE sessions SET role = 'dentist' WHERE token_hash = ?",
+            (_hash_token(raw_session_token2),),
+        )
+        conn.commit()
+        conn.close()
 
     print("selftest ok")
 
