@@ -1,0 +1,9 @@
+{% if files %}
+<ul class="mb-0">
+  {% for f in files %}
+  <li>{{ f }}</li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-secondary mb-0">No files on record.</p>
+{% endif %}

@@ -72,24 +72,34 @@ def detail_view(cf):
     show_clinical = authorize(g.user["role"], "read_clinical")
     clinical = lookup_clinical(cf, conn) if show_clinical else None
 
-    # filenames are clinical data too (notes/, images/, records/) - same gate
-    # as the clinical card, so an unauthorized role never walks the tree
-    files = []
-    if show_clinical:
-        patient_dir = SORTED_ROOT / cf
-        if patient_dir.is_dir():
-            files = sorted(
-                str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file()
-            )
-
     return render_template(
         "patients_detail.html",
         cf=cf,
         patient=patient,
         clinical=clinical,
         show_clinical=show_clinical,
-        files=files,
     )
+
+
+@patients_bp.route("/patients/<cf>/files")
+def files_fragment(cf):
+    # HTMX-polled fragment - a denied fragment returns a bare status, never
+    # a redirect (an HX-swap would otherwise get a whole login/dashboard page
+    # every 5 seconds). filenames are clinical data too (notes/, images/,
+    # records/), so this stays read_clinical, not read_notes (CR-01/RBAC-03)
+    if not authorize(g.user["role"], "read_clinical"):
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    patient_dir = SORTED_ROOT / cf
+    files = []
+    if patient_dir.is_dir():
+        files = sorted(
+            str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file()
+        )
+    return render_template("_patient_files.html", files=files)
 
 
 @patients_bp.route("/patients/<cf>/edit-form")
