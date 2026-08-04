@@ -62,6 +62,30 @@ def boom_urlopen(req, timeout=120):
     raise urllib.error.URLError("connection refused")
 
 
+def mismatch_urlopen(req, timeout=120):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def read(self):
+            note = {
+                "patient_name": "giulia bianchi",
+                "codice_fiscale": "BNCG910010150200",
+                "phone": "333777777",
+                "visit_date": "2026-06-02",
+                "procedures": ["extraction"],
+                "invoices": [],
+                "clinical_notes": "giulia's checkup",
+                "next_appointment": "",
+            }
+            return json.dumps({"response": json.dumps(note)}).encode()
+
+    return FakeResponse()
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
@@ -194,6 +218,118 @@ def selftest():
         assert down_resp.status_code == 200, "Ollama-down should re-render, not 500"
         assert "ollama run dental-notes" in down_resp.text.lower(), \
             "Ollama-down should surface the remediation message"
+
+        # 5. GUI-07 locked identity (D-02) - ?cf= locks and prefills the
+        # patient, and the disclosure is gated on append_note
+        notes_routes._urlopen = fake_urlopen
+
+        locked_get = client.get(f"/notes/new?cf={FAKE_CF}")
+        assert locked_get.status_code == 200, "5: GET with a valid cf should return 200"
+        assert FAKE_CF in locked_get.text, "5: locked form should show the cf"
+        assert "paolo lilli" in locked_get.text, "5: locked form should show the seeded patient name"
+        assert 'name="cf"' in locked_get.text, "5: locked form should carry a hidden cf"
+
+        bad_cf_resp = client.get("/notes/new?cf=NOTACF")
+        assert bad_cf_resp.status_code == 404, "5: a pattern-invalid cf should 404 before any db access"
+
+        unknown_cf_resp = client.get("/notes/new?cf=ZZZZ999990150000")
+        assert unknown_cf_resp.status_code == 404, "5: a pattern-valid but unknown cf should 404"
+
+        gated_resp = client_admin.get(f"/notes/new?cf={FAKE_CF}")
+        assert gated_resp.status_code == 302, "5: admin lacks append_note, ?cf= should redirect"
+        assert "paolo lilli" not in gated_resp.text, \
+            "5: gated redirect must not disclose the patient name"
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        gated_audit = conn.execute(
+            "SELECT 1 FROM audit_log WHERE username = ? AND action = 'append_note'"
+            " AND allowed = 0 AND target = ?",
+            ("aadmin", FAKE_CF),
+        ).fetchone()
+        conn.close()
+        assert gated_audit is not None, \
+            "5: gated ?cf= GET should log an allowed=0 audit row targeting the cf"
+
+        # 6. mismatch notice, and the lock holding on a tampered step 2 (D-02, D-03)
+        notes_routes._urlopen = mismatch_urlopen
+
+        new_get_locked = client.get(f"/notes/new?cf={FAKE_CF}")
+        csrf_mismatch_paste = _csrf_from(new_get_locked.text)
+        mismatch_resp = client.post(
+            "/notes/new",
+            data={"raw_note": "giulia came in", "cf": FAKE_CF, "csrf_token": csrf_mismatch_paste},
+        )
+        assert mismatch_resp.status_code == 200, "6: mismatch preview should render, not redirect"
+        assert "giulia bianchi" in mismatch_resp.text, "6: notice should name the extracted patient"
+        assert "paolo lilli" in mismatch_resp.text, "6: notice should name the locked patient"
+        assert "Save note" in mismatch_resp.text, "6: save must stay available on a mismatch (D-03)"
+
+        csrf_mismatch_confirm = _csrf_from(mismatch_resp.text)
+        tamper_resp = client.post(
+            "/notes/new",
+            data={
+                "cf": FAKE_CF,
+                "patient_name": "giulia bianchi",
+                "codice_fiscale": "BNCG910010150200",
+                "phone": "",
+                "visit_date": "",
+                "clinical_notes": "tampered clinical note text",
+                "procedures": "",
+                "next_appointment": "",
+                "csrf_token": csrf_mismatch_confirm,
+            },
+        )
+        assert tamper_resp.status_code == 302, "6: confirm POST should redirect on success"
+        assert tamper_resp.headers["Location"].endswith(f"/patients/{FAKE_CF}"), \
+            "6: locked confirm should redirect to the locked patient (D-04)"
+
+        assert not (Path(tmp) / "sorted" / "BNCG910010150200").exists(), \
+            "6: a tampered codice_fiscale must never reach the filesystem (D-02)"
+
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        tampered_row = conn.execute(
+            "SELECT codice_fiscale FROM visits WHERE clinical_notes = ?",
+            ("tampered clinical note text",),
+        ).fetchone()
+        conn.close()
+        assert tampered_row is not None, "6: the note should still land under the locked patient"
+        assert tampered_row["codice_fiscale"] == FAKE_CF, \
+            "6: the tampered identity must go nowhere (D-02)"
+
+        notes_routes._urlopen = fake_urlopen
+
+        # 7. not-searchable save still lands on the patient screen (D-04)
+        new_get_for_fail = client.get(f"/notes/new?cf={FAKE_CF}")
+        csrf_fail = _csrf_from(new_get_for_fail.text)
+
+        real_save_new_note = notes_routes.save_new_note
+        notes_routes.save_new_note = lambda *a, **kw: "failed"
+        fail_resp = client.post(
+            "/notes/new",
+            data={
+                "cf": FAKE_CF,
+                "patient_name": "paolo lilli",
+                "codice_fiscale": FAKE_CF,
+                "phone": "",
+                "visit_date": "",
+                "clinical_notes": "checkup",
+                "procedures": "",
+                "next_appointment": "",
+                "csrf_token": csrf_fail,
+            },
+        )
+        notes_routes.save_new_note = real_save_new_note
+
+        assert fail_resp.status_code == 302, "7: a failed save should still redirect"
+        assert fail_resp.headers["Location"].endswith(f"/patients/{FAKE_CF}"), \
+            "7: a failed save should redirect to the patient screen, not / or /dashboard"
+
+        follow_resp = client.get(fail_resp.headers["Location"])
+        assert follow_resp.status_code == 200, "7: patient screen should render after the redirect"
+        assert "not searchable yet" in follow_resp.text, \
+            "7: the existing danger flash wording should show on the patient screen"
 
     print("selftest ok")
 
