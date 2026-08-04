@@ -193,15 +193,20 @@ def selftest():
         assert "rct done on tooth 26" not in assistant_detail_resp.text, \
             "assistant (read_notes but not read_clinical) must not see clinical text - RBAC-03"
 
-        # 2b. CR-01 - the file listing is clinical data too. the dentist sees
-        # it, the assistant must not get the document inventory at all.
-        assert "n1.json" in dentist_detail_resp.text, \
-            "dentist (read_clinical) should see the patient file listing"
-        assert "xray-26-rct.jpg" in dentist_detail_resp.text
+        # 2b. CR-01 - the file listing is clinical data too. it now lives
+        # behind its own polled fragment route (files_fragment), not inline
+        # on the detail page - the dentist's page just wires up the poll
+        # target, and the assistant's page doesn't even mention the
+        # endpoint. the filename assertions themselves moved to section 14,
+        # against the fragment route.
+        assert f"/patients/{cf}/files" in dentist_detail_resp.text, \
+            "dentist (read_clinical) should see the files poll target"
         assert "n1.json" not in assistant_detail_resp.text, \
             "assistant must not see clinical filenames - RBAC-03"
         assert "xray-26-rct.jpg" not in assistant_detail_resp.text, \
             "assistant must not see clinical filenames - RBAC-03"
+        assert f"/patients/{cf}/files" not in assistant_detail_resp.text, \
+            "assistant must not even be told the files fragment endpoint exists"
 
         # 2c. CR-04 - the list picks next appointment / last visit by
         # visit_date, not by insert order
@@ -565,6 +570,61 @@ def selftest():
         )
         conn.commit()
         conn.close()
+
+        # 14. the Files fragment (GUI-09, D-13/D-15) - dentist-only, CF-validated,
+        # and re-derived per request so a late-arriving file shows up on the next
+        # fetch rather than only at page-render time
+        files_resp = dentist_client.get(f"/patients/{cf}/files")
+        assert files_resp.status_code == 200
+        assert "n1.json" in files_resp.text, \
+            "the fragment must still list the .json sibling - D-15, nothing filtered"
+        assert "xray-26-rct.jpg" in files_resp.text
+        assert "<html" not in files_resp.text.lower(), \
+            "the files fragment must be chrome-free - safe for an htmx swap"
+
+        assistant_files_resp = assistant_client.get(f"/patients/{cf}/files")
+        assert assistant_files_resp.status_code == 403, \
+            "assistant should get a bare 403 from the files fragment (CR-01/RBAC-03)"
+        assert assistant_files_resp.text == "", \
+            "a denied files fragment must be empty, not a page"
+        assert "Location" not in assistant_files_resp.headers, \
+            "a denied files fragment must never redirect"
+
+        admin_files_resp = admin_client.get(f"/patients/{cf}/files")
+        assert admin_files_resp.status_code == 403, \
+            "admin should also get a bare 403 from the files fragment"
+
+        bad_cf_resp = dentist_client.get("/patients/NOTACF/files")
+        assert bad_cf_resp.status_code == 404, \
+            "a malformed cf must 404 before any filesystem access (T-06-02)"
+
+        empty_files_resp = dentist_client.get(f"/patients/{cap_cf}/files")
+        assert empty_files_resp.status_code == 200
+        assert "No files on record." in empty_files_resp.text, \
+            "a patient with no sorted directory should render the empty state"
+
+        # the poll's whole point: a file that lands after the first fetch
+        # must appear on the next one, with no page reload in between
+        (sorted_root / cf / "images" / "xray-36-new.jpg").write_text("x")
+        refetch_resp = dentist_client.get(f"/patients/{cf}/files")
+        assert refetch_resp.status_code == 200
+        assert "xray-36-new.jpg" in refetch_resp.text, \
+            "a file that arrives after the first fetch must show up on the next poll"
+
+        # 15. the header Add note button (GUI-07, D-01) - in the page header,
+        # not the dentist-only clinical card, since assistants hold
+        # append_note too
+        dentist_notes_link_resp = dentist_client.get(f"/patients/{cf}")
+        assert f"/notes/new?cf={cf}" in dentist_notes_link_resp.text, \
+            "dentist should see the Add note link, scoped to this patient"
+        assert 'hx-trigger="load, every 5s"' in dentist_notes_link_resp.text, \
+            "dentist's page should poll the Files fragment"
+
+        assistant_notes_link_resp = assistant_client.get(f"/patients/{cf}")
+        assert f"/notes/new?cf={cf}" in assistant_notes_link_resp.text, \
+            "assistant holds append_note too - D-01 puts the button outside the clinical card"
+        assert 'hx-trigger="load, every 5s"' not in assistant_notes_link_resp.text, \
+            "assistant lacks read_clinical, so the Files poll div must not be on their page"
 
     print("selftest ok")
 
