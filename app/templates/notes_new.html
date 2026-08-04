@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">Add a note</h1>
+<h1 class="page-title mb-4">{% if locked %}Add a note for {{ locked.patient_name }}{% else %}Add a note{% endif %}</h1>
 <div class="card p-4">
   {% if error %}
   <p class="text-danger">{{ error }}</p>
   {% endif %}
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
     <div class="mb-3">
       <label for="raw_note" class="form-label">paste note</label>
       <textarea id="raw_note" name="raw_note" rows="6" class="form-control" autofocus></textarea>
@@ -18,13 +19,25 @@
   <hr class="my-4">
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
+    {% if mismatch %}
+    <div class="alert alert-warning" role="alert">{{ mismatch }}</div>
+    {% endif %}
     <div class="mb-3">
       <label for="patient_name" class="form-label">patient name</label>
+      {% if locked %}
+      <input type="text" id="patient_name" name="patient_name" value="{{ locked.patient_name }}" class="form-control bg-body-secondary" readonly>
+      {% else %}
       <input type="text" id="patient_name" name="patient_name" value="{{ preview.patient_name }}" class="form-control">
+      {% endif %}
     </div>
     <div class="mb-3">
       <label for="codice_fiscale" class="form-label">codice fiscale</label>
+      {% if locked %}
+      <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ locked.cf }}" class="form-control bg-body-secondary" readonly>
+      {% else %}
       <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}" class="form-control">
+      {% endif %}
     </div>
     <div class="mb-3">
       <label for="phone" class="form-label">phone</label>
