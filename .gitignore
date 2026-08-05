@@ -3,6 +3,14 @@
 CLAUDE.md
 .claude/
 .env
+# copies of planning docs pulled out of .planning/ to read them - the folder
+# rule above doesn't cover them once they sit at the root
+/ROADMAP.md
+/STATE.md
+/PROJECT.md
+/REQUIREMENTS.md
+/MILESTONES.md
+/RETROSPECTIVE.md
 
 # python
 __pycache__/
