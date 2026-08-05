@@ -11,6 +11,7 @@ import agent
 import app.dashboard_routes as dashboard_routes
 import app.db as app_db
 from app import create_app
+from web_auth import MIN_PASSWORD_LENGTH
 from web_session import SESSION_IDLE_MINUTES, _hash_token
 
 
@@ -200,6 +201,151 @@ def selftest():
         assert b"<aside" not in login_page.data, "11: login must render without the sidebar"
         dash_with_shell = client_a.get("/")
         assert b"<aside" in dash_with_shell.data, "11: an authenticated screen must render the sidebar"
+
+        # ---- AUTH-05 staff password self-service ----
+
+        def sign_in(username, password):
+            client = app.test_client()
+            csrf = _csrf_from(client.get("/login").text)
+            resp = client.post(
+                "/login",
+                data={"username": username, "password": password, "csrf_token": csrf},
+            )
+            return client, resp
+
+        def change_pw(client, current, new, confirm=None):
+            page = client.get("/change-password")
+            return client.post(
+                "/change-password",
+                data={
+                    "current": current,
+                    "password": new,
+                    "confirm": new if confirm is None else confirm,
+                    "csrf_token": _csrf_from(page.text),
+                },
+            )
+
+        def db():
+            conn = sqlite3.connect(db_path)
+            conn.row_factory = sqlite3.Row
+            return conn
+
+        def count_rows(sql, args=()):
+            conn = db()
+            n = conn.execute(sql, args).fetchone()[0]
+            conn.close()
+            return n
+
+        def stored_hash(username):
+            conn = db()
+            row = conn.execute(
+                "SELECT password_hash FROM users WHERE username = ?", (username,)
+            ).fetchone()
+            conn.close()
+            return row["password_hash"]
+
+        # 12. AUTH-05 SC1 + SC2 - a staff member changes their own password, the
+        # new one works and the old one stops working
+        _seed_user(db_path, "pchange", "oldpass123", "assistant")
+        client_p, _ = sign_in("pchange", "oldpass123")
+        assert client_p.get("/").status_code == 200, "12: sign-in should reach the dashboard"
+
+        form = client_p.get("/change-password")
+        assert form.status_code == 200, "12: change-password should be reachable"
+        assert b'name="current"' in form.data, "12: the form must ask for the current password"
+        assert str(MIN_PASSWORD_LENGTH).encode() in form.data, \
+            "12: the form should state the real minimum length"
+
+        changed = change_pw(client_p, "oldpass123", "brandnewpass1")
+        assert changed.status_code == 302, "12: a successful change should redirect"
+        assert changed.headers["Location"].endswith("/login"), \
+            "12: a successful change should land on login (D-03)"
+
+        _, old_login = sign_in("pchange", "oldpass123")
+        assert old_login.status_code == 200, "12: the old password must stop working (SC2)"
+        _, new_login = sign_in("pchange", "brandnewpass1")
+        assert new_login.status_code == 302, "12: the new password must work immediately (SC2)"
+
+        # 13. AUTH-05 SC4 - the completed change is audited
+        assert count_rows(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'change_password'"
+            " AND allowed = 1 AND username = ?", ("pchange",)
+        ) == 1, "13: a completed change should write one allowed change_password row"
+
+        # 14. AUTH-05 SC3 - every session dies, not just the acting one. two
+        # separate clients are the point: destroy_session would pass this with
+        # only client A checked
+        client_x, _ = sign_in("pchange", "brandnewpass1")
+        client_y, _ = sign_in("pchange", "brandnewpass1")
+        assert client_y.get("/").status_code == 200, "14: second session should start authenticated"
+
+        change_pw(client_x, "brandnewpass1", "thirdpassword1")
+        assert client_x.get("/").status_code == 302, "14: the acting session must be revoked"
+        assert client_y.get("/").status_code == 302, \
+            "14: every other session for that account must be revoked too (SC3)"
+        assert count_rows(
+            "SELECT COUNT(*) FROM sessions WHERE username = ?", ("pchange",)
+        ) == 0, "14: no session rows should remain for the account"
+
+        # 15. D-01/D-02 - a wrong current password refuses, writes nothing, and
+        # is audited as change_password rather than login
+        client_w, _ = sign_in("pchange", "thirdpassword1")
+        hash_before = stored_hash("pchange")
+        logins_before = count_rows("SELECT COUNT(*) FROM audit_log WHERE action = 'login'")
+
+        refused = change_pw(client_w, "notmypassword", "yetanotherpass1")
+        assert refused.status_code == 200, "15: a wrong current password should re-render, not redirect"
+        assert b"Current password is not correct." in refused.data, "15: expected the refusal message"
+        assert stored_hash("pchange") == hash_before, "15: nothing should have been written"
+        assert client_w.get("/").status_code == 200, "15: the session should survive a refusal"
+        assert count_rows(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'change_password' AND allowed = 0"
+        ) >= 1, "15: a failed check should be audited as change_password"
+        assert count_rows("SELECT COUNT(*) FROM audit_log WHERE action = 'login'") == logins_before, \
+            "15: a failed current-password check must not write a login row (D-02)"
+
+        # 16. D-04 rules, and the forced first-change path still works
+        hash_before = stored_hash("pchange")
+        attempts_before = count_rows(
+            "SELECT failed_attempts FROM users WHERE username = ?", ("pchange",)
+        )
+
+        short = change_pw(client_w, "thirdpassword1", "a" * (MIN_PASSWORD_LENGTH - 1))
+        assert short.status_code == 200 and b"at least" in short.data, \
+            "16: a too-short new password should be refused"
+        assert stored_hash("pchange") == hash_before, "16: a refused change must write nothing"
+
+        same = change_pw(client_w, "thirdpassword1", "thirdpassword1")
+        assert same.status_code == 200 and b"different from your current one" in same.data, \
+            "16: reusing the current password should be refused"
+        assert stored_hash("pchange") == hash_before, "16: a refused change must write nothing"
+        assert count_rows(
+            "SELECT failed_attempts FROM users WHERE username = ?", ("pchange",)
+        ) == attempts_before, \
+            "16: rule violations must not burn a lockout attempt - the credential check runs last"
+
+        conn = db()
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, active, must_change_password)"
+            " VALUES (?, ?, ?, 1, 1)",
+            ("forced", generate_password_hash("temp12345"), "dentist"),
+        )
+        conn.commit()
+        conn.close()
+
+        client_f, _ = sign_in("forced", "temp12345")
+        forced_dash = client_f.get("/")
+        assert forced_dash.status_code == 302 and "change-password" in forced_dash.headers["Location"], \
+            "16: an account with must_change_password should be redirected to the form"
+        forced_form = client_f.get("/change-password")
+        assert b'name="current"' in forced_form.data, \
+            "16: the forced path must also ask for the current password (D-01)"
+
+        forced_done = change_pw(client_f, "temp12345", "forcednewpass1")
+        assert forced_done.status_code == 302, "16: the forced change should succeed"
+        assert count_rows(
+            "SELECT must_change_password FROM users WHERE username = ?", ("forced",)
+        ) == 0, "16: completing the change must clear must_change_password"
 
     print("selftest ok")
 

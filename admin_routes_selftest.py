@@ -273,14 +273,22 @@ def selftest():
             "forced-change: logout must stay reachable"
 
         fresh = _login(app, "fresh", "temp-pass")
-        resp = fresh.post("/change-password", data={"password": "aaa", "confirm": "bbb"})
+        # AUTH-05 D-01: the current password is required on the forced path too,
+        # so every post here carries it
+        resp = fresh.post(
+            "/change-password",
+            data={"current": "temp-pass", "password": "aaa", "confirm": "bbb"},
+        )
         # jinja escapes the apostrophe, so match on the part that survives
         assert "The two passwords" in resp.text, "forced-change: mismatch should be reported"
         assert _user(db_path, "fresh")["must_change_password"] == 1, \
             "forced-change: a failed attempt must not clear the flag"
 
         old_hash = _user(db_path, "fresh")["password_hash"]
-        resp = fresh.post("/change-password", data={"password": "newpass", "confirm": "newpass"})
+        resp = fresh.post(
+            "/change-password",
+            data={"current": "temp-pass", "password": "newpass1", "confirm": "newpass1"},
+        )
         assert resp.status_code == 302, "forced-change: success should redirect"
         after = _user(db_path, "fresh")
         assert after["must_change_password"] == 0, "forced-change: flag not cleared"

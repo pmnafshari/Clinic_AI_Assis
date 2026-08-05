@@ -33,22 +33,38 @@ def login():
 
 @auth_bp.route("/change-password", methods=["GET", "POST"])
 def change_password():
-    if request.method == "GET":
-        return render_template("change_password.html")
+    min_length = web_auth.MIN_PASSWORD_LENGTH
 
+    if request.method == "GET":
+        return render_template("change_password.html", min_length=min_length)
+
+    current = request.form.get("current", "")
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
 
+    def refuse(message):
+        return render_template("change_password.html", error=message, min_length=min_length)
+
+    # cheap validations first, the credential check last - otherwise a typo in
+    # confirm or a short new password burns a failed attempt against the
+    # lockout and staff get locked out over mistakes in unrelated fields
+    if not current:
+        return refuse("Enter your current password.")
     if not password:
-        return render_template(
-            "change_password.html", error="Enter a password for the new account."
-        )
+        return refuse("Enter a new password.")
     if password != confirm:
-        return render_template(
-            "change_password.html", error="The two passwords don't match."
-        )
+        return refuse("The two passwords don't match.")
+    if len(password) < min_length:
+        return refuse(f"New password must be at least {min_length} characters.")
+    if password == current:
+        return refuse("New password must be different from your current one.")
 
     conn = get_db()
+    # one message for a wrong password and for a locked account - telling them
+    # apart would confirm to an attacker that the password itself was right
+    if web_auth.verify_current_password(g.user["username"], current, conn) is None:
+        return refuse("Current password is not correct.")
+
     conn.execute(
         "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE username = ?",
         (generate_password_hash(password), g.user["username"]),
@@ -56,7 +72,13 @@ def change_password():
     conn.commit()
     log_audit(conn, g.user["username"], g.user["role"], "change_password",
               g.user["username"], allowed=1)
-    return redirect(url_for("dashboard.index"))
+
+    # every session for this account, including this one (D-03) - matches what
+    # disabling an account already does
+    web_session.destroy_user_sessions(conn, g.user["username"])
+    resp = redirect(url_for("auth.login"))
+    resp.delete_cookie(web_session.COOKIE_NAME)
+    return resp
 
 
 @auth_bp.route("/logout", methods=["POST"])
