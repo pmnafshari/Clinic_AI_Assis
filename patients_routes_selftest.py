@@ -626,6 +626,93 @@ def selftest():
         assert 'hx-trigger="load, every 5s"' not in assistant_notes_link_resp.text, \
             "assistant lacks read_clinical, so the Files poll div must not be on their page"
 
+        # 16. CHAT-03 SC1 - staff issue a patient PIN, and it is shown once
+        import re as _re
+
+        import patient_auth
+
+        def _cred_count(codice):
+            c = sqlite3.connect(db_path)
+            n = c.execute(
+                "SELECT COUNT(*) FROM patient_credentials WHERE codice_fiscale = ?", (codice,)
+            ).fetchone()[0]
+            c.close()
+            return n
+
+        def _issue(client, codice):
+            # the control is a bare hx-post button, so the token rides in the
+            # X-CSRFToken header that base.html's hx-headers sets - the same
+            # path a browser uses. the token is sourced from a page every role
+            # can reach: admin's patient-detail GET redirects under RBAC-04, so
+            # reading it from there would fail csrf before the authorize gate
+            # and mask what this is testing.
+            page = client.get("/", follow_redirects=True)
+            return client.post(
+                f"/patients/{codice}/issue-pin",
+                headers={"X-CSRFToken": _csrf_from(page.text)},
+            )
+
+        # csrf is enforced here too
+        assert dentist_client.post(f"/patients/{cf}/issue-pin").status_code == 400, \
+            "16: issue-pin without a csrf token should be rejected"
+        assert _cred_count(cf) == 0, "16: a rejected csrf issue must write nothing"
+
+        issue_resp = _issue(dentist_client, cf)
+        assert issue_resp.status_code == 200, "16: a dentist should be able to issue a PIN"
+        pin_match = _re.search(r"\b(\d{8})\b", issue_resp.text)
+        assert pin_match, "16: the response should display an 8-digit PIN"
+        issued_pin = pin_match.group(1)
+        assert _cred_count(cf) == 1, "16: a credential row should exist"
+
+        # the assistant holds it too (D-01)
+        assistant_issue_resp = _issue(assistant_client, cap_cf)
+        assert assistant_issue_resp.status_code == 200, "16: an assistant should be able to issue"
+
+        # 17. admin cannot, and the denial is audited
+        before_admin = _cred_count(cf)
+        admin_issue_resp = _issue(admin_client, cf)
+        assert admin_issue_resp.status_code == 403, "17: admin must not be able to issue a PIN"
+        assert _cred_count(cf) == before_admin, "17: a denied issue must write nothing"
+        conn_a = sqlite3.connect(db_path)
+        denied = conn_a.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'issue_patient_pin' AND allowed = 0"
+        ).fetchone()[0]
+        conn_a.close()
+        assert denied == 1, f"17: expected 1 denied issue_patient_pin row, got {denied}"
+
+        # 18. D-02 show-once - the PIN is in that one response body and nowhere
+        # else. hashing is necessary but does not stop a leak through the page
+        # or the audit log, which is where it would actually land.
+        detail_after = dentist_client.get(f"/patients/{cf}")
+        assert issued_pin not in detail_after.text, \
+            "18: the PIN must not be retrievable from the patient page"
+        conn_b = sqlite3.connect(db_path)
+        leaked = conn_b.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE target = ? OR username = ?",
+            (issued_pin, issued_pin),
+        ).fetchone()[0]
+        conn_b.close()
+        assert leaked == 0, "18: the PIN must never appear in the audit log"
+
+        # 19. reissue supersedes the previous credential
+        reissue_resp = _issue(dentist_client, cf)
+        new_pin = _re.search(r"\b(\d{8})\b", reissue_resp.text).group(1)
+        assert new_pin != issued_pin, "19: reissue should produce a different PIN"
+        conn_c = sqlite3.connect(db_path)
+        conn_c.row_factory = sqlite3.Row
+        assert patient_auth.verify_pin(cf, issued_pin, conn_c)[0] == "wrong", \
+            "19: the superseded PIN must stop working"
+        assert patient_auth.verify_pin(cf, new_pin, conn_c)[0] == "ok", \
+            "19: the new PIN must work"
+        conn_c.close()
+        assert _cred_count(cf) == 1, "19: reissue must update in place, not add a row"
+
+        # 20. an unknown patient 404s and writes nothing
+        unknown_cf = "ZZZZ999999999999"
+        unknown_resp = _issue(dentist_client, unknown_cf)
+        assert unknown_resp.status_code == 404, "20: issuing for an unknown patient should 404"
+        assert _cred_count(unknown_cf) == 0, "20: no credential row for an unknown patient"
+
     print("selftest ok")
 
 

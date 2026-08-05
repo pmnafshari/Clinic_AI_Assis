@@ -2,8 +2,11 @@ from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import sqlite3
+
 import agent
 import ask
+import patient_auth
 import pending_actions
 from auth import authorize, log_audit
 from dental_notes_schema import CF_PATTERN
@@ -100,6 +103,35 @@ def files_fragment(cf):
             str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file()
         )
     return render_template("_patient_files.html", files=files)
+
+
+@patients_bp.route("/patients/<cf>/issue-pin", methods=["POST"])
+def issue_pin_submit(cf):
+    # HTMX target - a denied fragment returns a bare status, not a redirect.
+    # there is deliberately no GET counterpart: only the hash is stored, so a
+    # pin cannot be re-displayed even if someone wanted to build one.
+    if not authorize(g.user["role"], "issue_patient_pin"):
+        log_audit(get_db(), g.user["username"], g.user["role"], "issue_patient_pin",
+                  cf, allowed=0)
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    conn = get_db()
+    if lookup_patient(cf, conn) is None:
+        abort(404)
+
+    try:
+        pin = patient_auth.issue_pin(cf, conn, g.user["username"], g.user["role"])
+    except sqlite3.IntegrityError:
+        # the patient row went away between the lookup and the write
+        abort(404)
+
+    # the plaintext goes into this one response body and nowhere else: not a
+    # flash (which survives a redirect), not the url, not the log, not the
+    # audit row. issue_pin already recorded that an issuance happened.
+    return render_template("_patient_pin.html", cf=cf, pin=pin)
 
 
 @patients_bp.route("/patients/<cf>/edit-form")

@@ -5,8 +5,11 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin"},
+    # admin deliberately excluded from issue_patient_pin: it holds only
+    # manage_users and cannot open a patient record at all, so granting it
+    # would widen admin's reach into patient data
     "admin": {"manage_users"},
     # system: the automated sync actor (watcher/backfill), no user row
     "system": {"append_note"},
@@ -44,11 +47,13 @@ def selftest():
         assert authorize("dentist", "edit_note"), "1: dentist should allow edit_note"
         assert authorize("dentist", "read_clinical"), "1: dentist should allow read_clinical"
         assert authorize("dentist", "upload_file"), "1: dentist should allow upload_file"
+        assert authorize("dentist", "issue_patient_pin"), "1: dentist should allow issue_patient_pin"
         assert not authorize("dentist", "manage_users"), "1: dentist should deny manage_users"
 
         assert authorize("assistant", "append_note"), "2: assistant should allow append_note"
         assert authorize("assistant", "add_invoice"), "2: assistant should allow add_invoice"
         assert authorize("assistant", "upload_file"), "2: assistant should allow upload_file"
+        assert authorize("assistant", "issue_patient_pin"), "2: assistant should allow issue_patient_pin"
         assert not authorize("assistant", "edit_note"), "2: assistant should deny edit_note"
         assert not authorize("assistant", "update_field"), "2: assistant should deny update_field"
         assert not authorize("assistant", "update_visit_field"), "2: assistant should deny update_visit_field"
@@ -56,6 +61,7 @@ def selftest():
         assert not authorize("assistant", "manage_users"), "2: assistant should deny manage_users"
 
         assert authorize("admin", "manage_users"), "3: admin should allow manage_users"
+        assert not authorize("admin", "issue_patient_pin"), "3: admin should deny issue_patient_pin"
         assert not authorize("admin", "update_field"), "3: admin should deny update_field"
         assert not authorize("admin", "append_note"), "3: admin should deny append_note"
         assert not authorize("admin", "add_invoice"), "3: admin should deny add_invoice"

@@ -22,6 +22,18 @@
     <dd class="col-sm-9">{{ patient.phone or "-" }}</dd>
   </dl>
 
+  {% if authorize(g.user.role, 'issue_patient_pin') %}
+  <div class="mt-4">
+    <button type="button" class="btn btn-outline-secondary btn-sm"
+      hx-post="{{ url_for('patients.issue_pin_submit', cf=cf) }}"
+      hx-target="#patient-pin-target" hx-swap="innerHTML"
+      hx-confirm="Issue a new PIN? Any PIN this patient already has will stop working.">
+      <i class="bi bi-key"></i> Issue patient PIN
+    </button>
+    <div id="patient-pin-target"></div>
+  </div>
+  {% endif %}
+
   <h3 class="fs-6 mt-4 mb-2">Visit dates</h3>
   {% if patient.visit_dates %}
   <ul class="mb-0">

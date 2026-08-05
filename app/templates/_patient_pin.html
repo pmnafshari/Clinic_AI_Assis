@@ -1,0 +1,8 @@
+{# the plaintext pin exists only in this response. only its hash is stored, so
+   there is no way to show it again - reissuing is the only option. #}
+<div class="alert alert-success mt-3 mb-0">
+  <p class="mb-1">PIN for this patient:</p>
+  <p class="fs-3 fw-semibold font-monospace mb-1">{{ pin }}</p>
+  <p class="mb-0 small">Read it to the patient now. It is shown only once - if it is
+    lost, issue a new one. Issuing again replaces this PIN.</p>
+</div>

@@ -88,6 +88,13 @@ def init_db(db_path):
     """)
     _ensure_lockout_columns(conn)
     conn.commit()
+
+    # patient credential/session tables. deferred import because patient_auth
+    # imports storage - same circular-import dodge as main()/cli_session. the
+    # tables live in this file alongside the staff ones; the separation that
+    # matters is by table and module, not by database file.
+    from patient_auth import init_patient_tables
+    init_patient_tables(conn)
     return conn
 
 
