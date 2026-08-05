@@ -102,13 +102,18 @@ def _ensure_lockout_columns(conn):
 
 
 def upsert_note_sql(note, source_path, conn):
+    # the note names the patient on the way in, but it does not get to rename
+    # one that already exists - notes arrive under maiden and misspelled names
+    # and the patients row is the one staff curate (and can edit through the
+    # confirm-diff flow). a blank stored name is a gap rather than a curated
+    # value, so that one still gets filled. phone keeps updating from the note.
     visit_date = note.visit_date.isoformat() if note.visit_date else None
 
     conn.execute("""
         INSERT INTO patients (codice_fiscale, patient_name, phone)
         VALUES (?, ?, ?)
         ON CONFLICT(codice_fiscale) DO UPDATE SET
-            patient_name = excluded.patient_name,
+            patient_name = COALESCE(NULLIF(patients.patient_name, ''), excluded.patient_name),
             phone = excluded.phone
     """, (note.codice_fiscale, note.patient_name, note.phone))
 
@@ -515,6 +520,32 @@ def selftest():
 
         result2 = lookup_patient(cf, conn)
         assert result2["phone"] == "333999999", "4: patient phone not updated in place"
+
+        # 4b. a re-imported note must not rename an existing patient. notes get
+        # filed under maiden/old names and the patients row is the one staff
+        # curate, so intake fills a name it doesn't have - it never overwrites.
+        stale = DentalNote(
+            patient_name="giulia rossi",
+            codice_fiscale=cf,
+            phone="333999999",
+            visit_date=date(2026, 6, 15),
+            procedures=["cleaning"],
+            clinical_notes="cleaning done",
+        )
+        upsert_note_sql(stale, "MRRS800010150100/notes/n2.json", conn)
+        assert lookup_patient(cf, conn)["patient_name"] == "mario rossi", \
+            "4b: a re-imported note renamed an existing patient"
+
+        # 4c. but a blank name is a gap, not a curated value - let intake fill it
+        conn.execute("UPDATE patients SET patient_name = '' WHERE codice_fiscale = ?", (cf,))
+        conn.commit()
+        upsert_note_sql(stale, "MRRS800010150100/notes/n2.json", conn)
+        assert lookup_patient(cf, conn)["patient_name"] == "giulia rossi", \
+            "4c: a blank patient_name should be filled from the note"
+        conn.execute(
+            "UPDATE patients SET patient_name = 'mario rossi' WHERE codice_fiscale = ?", (cf,)
+        )
+        conn.commit()
 
         # 5. chroma chunk is CF-tagged, 384-dim, and idempotent on re-upsert
         collection = get_collection(str(Path(tmp) / "chroma"))
