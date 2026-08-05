@@ -1,0 +1,77 @@
+/* layered on the same vendored bootstrap the staff app uses. holds only the
+   departures the design contract specifies - shared foundation, distinct
+   identity. */
+
+:root {
+  /* green, not the staff blue. this is the one visual signal that tells a
+     public surface apart from the internal clinic app at a glance. */
+  --bs-primary: #2f855a;
+  --bs-primary-rgb: 47, 133, 90;
+  /* an error is an error in both apps - inherited unchanged */
+  --bs-danger: #c53030;
+  --bs-danger-rgb: 197, 48, 48;
+}
+
+/* larger than the staff app's 16px: patients use this on their own phone,
+   once or twice, possibly without reading glasses to hand */
+body {
+  font-size: 18px;
+  line-height: 1.6;
+  background: #f8f9fa;
+}
+
+.form-label {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+h1 {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.patient-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem 1rem;
+}
+
+.patient-card {
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+}
+
+.patient-lang {
+  width: 100%;
+  max-width: 420px;
+  text-align: right;
+  margin-bottom: 0.5rem;
+}
+
+/* 48px minimum touch target, against the staff app's 44px - thumbs on a
+   phone, not a mouse on a workstation */
+.patient-lang-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 48px;
+  min-height: 48px;
+  color: #6c757d;
+  text-decoration: none;
+}
+
+.patient-lang-link.active {
+  color: var(--bs-primary);
+  font-weight: 600;
+}
+
+.patient-card .btn,
+.patient-card .form-control {
+  min-height: 48px;
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="{{ lang }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Studio dentistico{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('vendor', filename='bootstrap/5.3.3/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/patient.css') }}">
+</head>
+<body>
+  {# no sidebar and no nav: there is nowhere else to go, and adding navigation
+     to a two-screen auth surface creates a dead end #}
+  <main class="patient-shell">
+    <div class="patient-lang">
+      <a href="{{ url_for('set_language', code='it') }}"
+         class="patient-lang-link{{ ' active' if lang == 'it' else '' }}">IT</a>
+      <a href="{{ url_for('set_language', code='en') }}"
+         class="patient-lang-link{{ ' active' if lang == 'en' else '' }}">EN</a>
+    </div>
+
+    <div class="card patient-card p-4">
+      {% if error %}
+      <div class="alert alert-danger" role="alert">{{ error }}</div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</body>
+</html>

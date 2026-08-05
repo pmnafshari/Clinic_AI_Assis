@@ -3,6 +3,8 @@
 CLAUDE.md
 .claude/
 .env
+# the patient app signs its cookies with its own key, in its own file
+.env.patient
 # copies of planning docs pulled out of .planning/ to read them - the folder
 # rule above doesn't cover them once they sit at the root
 /ROADMAP.md
