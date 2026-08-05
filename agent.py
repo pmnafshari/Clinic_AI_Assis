@@ -267,8 +267,16 @@ def update_visit_field(cf, visit_id, value, conn, sorted_root=Path("sorted")):
     note.next_appointment = value or None
     json_path.write_text(note.model_dump_json())
 
-    # no upsert_note_chroma call - next_appointment is not embedded (D-10)
-    upsert_note_sql(note, source_path, conn)
+    # no upsert_note_chroma call - next_appointment is not embedded (D-10).
+    # write only the column this tool owns rather than re-upserting the whole
+    # note: upsert_note_sql also rewrites patients.patient_name/phone from the
+    # json, so a note file that disagrees with the patients row would rename
+    # the patient as a side effect of an appointment edit (D-12).
+    conn.execute(
+        "UPDATE visits SET next_appointment = ? WHERE source_path = ?",
+        (note.next_appointment, source_path),
+    )
+    conn.commit()
 
 
 def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"), choose_cf=None):
@@ -866,6 +874,14 @@ def selftest():
         clinical_notes_before = conn.execute(
             "SELECT clinical_notes FROM visits WHERE id = ?", (visit_id,)
         ).fetchone()["clinical_notes"]
+        # the note json can legitimately disagree with the patients row (a note
+        # filed years ago under a maiden name, say). the visit-field edit must
+        # not treat that json as authority over demographics it doesn't own.
+        conn.execute(
+            "UPDATE patients SET patient_name = ?, phone = ? WHERE codice_fiscale = ?",
+            ("current rossi", "555 9999", cf),
+        )
+        conn.commit()
 
         # l. a confirmed visit-field edit writes json and sqlite, and no chroma
         call = ToolCall(
@@ -897,6 +913,17 @@ def selftest():
             "SELECT id FROM visits WHERE source_path = ?", (source_path,)
         ).fetchone()["id"]
         assert still_id == visit_id, "l: the edit must update in place, not add a new visit row"
+
+        # l2. the edit must not rewrite the patients row from the note json.
+        # regression guard for the phase 15 live walk, where editing an
+        # appointment silently renamed the patient off a stale note file.
+        prow = conn.execute(
+            "SELECT patient_name, phone FROM patients WHERE codice_fiscale = ?", (cf,)
+        ).fetchone()
+        assert prow["patient_name"] == "current rossi", \
+            f"l2: visit-field edit renamed the patient to {prow['patient_name']!r}"
+        assert prow["phone"] == "555 9999", \
+            f"l2: visit-field edit overwrote the phone with {prow['phone']!r}"
 
         # m. the guard rails
         # m1: a foreign visit id is refused before anything mutates (D-06)
