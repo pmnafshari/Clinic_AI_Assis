@@ -86,6 +86,32 @@ def mismatch_urlopen(req, timeout=120):
     return FakeResponse()
 
 
+def no_cf_urlopen(req, timeout=120):
+    # what the model actually returns for ordinary dentist shorthand: it reads
+    # a name off the text but there is no codice fiscale in there to read
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def read(self):
+            note = {
+                "patient_name": "paolo lilli",
+                "codice_fiscale": "",
+                "phone": None,
+                "visit_date": None,
+                "procedures": ["filling 24"],
+                "invoices": [],
+                "clinical_notes": "otturazione sul 24",
+                "next_appointment": "6m",
+            }
+            return json.dumps({"response": json.dumps(note)}).encode()
+
+    return FakeResponse()
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
@@ -297,6 +323,26 @@ def selftest():
         assert tampered_row is not None, "6: the note should still land under the locked patient"
         assert tampered_row["codice_fiscale"] == FAKE_CF, \
             "6: the tampered identity must go nowhere (D-02)"
+
+        # 6b. a locked paste whose text carries no codice fiscale still reaches
+        # the preview. the model returning "" is correct - the cf is in the
+        # request, not the note - so it must not sink the extraction, and no
+        # mismatch notice should fire when only the cf was blank.
+        notes_routes._urlopen = no_cf_urlopen
+
+        no_cf_get = client.get(f"/notes/new?cf={FAKE_CF}")
+        csrf_no_cf = _csrf_from(no_cf_get.text)
+        no_cf_resp = client.post(
+            "/notes/new",
+            data={"raw_note": "otturazione sul 24", "cf": FAKE_CF, "csrf_token": csrf_no_cf},
+        )
+        assert no_cf_resp.status_code == 200, "6b: a no-cf locked paste should render the preview"
+        assert "extraction rejected" not in no_cf_resp.text, \
+            "6b: a note without a codice fiscale must not be rejected in the locked flow"
+        assert "Save note" in no_cf_resp.text, "6b: the preview should offer Save note"
+        assert FAKE_CF in no_cf_resp.text, "6b: the preview should carry the locked cf"
+        assert "it will be filed under" not in no_cf_resp.text, \
+            "6b: a blank cf alone is not a mismatch - the names agree"
 
         notes_routes._urlopen = fake_urlopen
 

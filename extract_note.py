@@ -24,12 +24,21 @@ def extract_json(text):
         return None
 
 
-def parse_reply(reply):
+def parse_reply(reply, fallback_cf=None):
     # reply -> validated DentalNote. Raises ValueError when the output is not
     # schema-valid so a half-formed or wrong-shape record never passes silently.
+    #
+    # fallback_cf is for callers that already know the patient (the ?cf= note
+    # form). Most notes don't spell out a codice fiscale, so the model returns
+    # "" and validation would reject the whole extraction over a field the
+    # caller owns and is about to overwrite anyway. It only fills a blank -
+    # a cf the model actually read is left alone so the mismatch notice can
+    # still catch a note pasted under the wrong patient.
     obj = extract_json(reply)
     if obj is None:
         raise ValueError("model did not return valid JSON")
+    if fallback_cf and not obj.get("codice_fiscale"):
+        obj["codice_fiscale"] = fallback_cf
     try:
         return DentalNote(**obj)
     except Exception as e:
@@ -90,6 +99,35 @@ def selftest():
     try:
         parse_reply('{"patient_name": "anna bianchi", "codice_fiscale": "not-a-cf"}')
         raise AssertionError("invalid codice_fiscale should have been flagged")
+    except ValueError:
+        pass
+
+    # 3c. a caller that already knows the patient can supply the codice fiscale.
+    # real dentist shorthand rarely spells one out, so the model returns "" and
+    # the whole extraction used to be rejected over a field the caller owns.
+    no_cf = '{"patient_name": "anna bianchi", "codice_fiscale": "", "procedures": []}'
+    note = parse_reply(no_cf, fallback_cf="BNCA850010150300")
+    assert note.codice_fiscale == "BNCA850010150300", "3c: fallback_cf should fill an empty cf"
+
+    # 3d. the fallback fills a gap, it never overrides what the model did read -
+    # otherwise a note pasted under the wrong patient would be silently relabelled
+    # instead of raising the mismatch notice.
+    other_cf = ('{"patient_name": "giulia neri", "codice_fiscale": "NREG900010150400", '
+                '"procedures": []}')
+    note = parse_reply(other_cf, fallback_cf="BNCA850010150300")
+    assert note.codice_fiscale == "NREG900010150400", "3d: fallback_cf must not override a real cf"
+
+    # 3e. the fallback is not a way past the regex - a malformed non-empty cf is
+    # still rejected, and an empty one still fails when no caller supplies a cf
+    try:
+        parse_reply('{"patient_name": "anna bianchi", "codice_fiscale": "not-a-cf"}',
+                    fallback_cf="BNCA850010150300")
+        raise AssertionError("3e: a malformed codice_fiscale should still be flagged")
+    except ValueError:
+        pass
+    try:
+        parse_reply(no_cf)
+        raise AssertionError("3e: an empty codice_fiscale should still fail without a fallback")
     except ValueError:
         pass
 

@@ -16,11 +16,11 @@ SORTED_ROOT = Path("sorted")
 _urlopen = urllib.request.urlopen
 
 
-def extract_note(raw_note):
+def extract_note(raw_note, fallback_cf=None):
     # composes extract_note.py's call_model + parse_reply with the local
     # _urlopen seam (same shape as qa_routes._urlopen), since extract_note.py's
     # own extract_note() has no urlopen override point
-    return parse_reply(call_model(raw_note, urlopen=_urlopen))
+    return parse_reply(call_model(raw_note, urlopen=_urlopen), fallback_cf=fallback_cf)
 
 
 def _locked_patient(cf):
@@ -56,7 +56,12 @@ def new_note():
         cf = request.form.get("cf", "")
         locked = _locked_patient(cf)
         try:
-            note = extract_note(request.form["raw_note"])
+            # a locked request already knows the cf, so a note that doesn't
+            # spell one out is still extractable (the save path uses the
+            # locked value regardless)
+            note = extract_note(
+                request.form["raw_note"], fallback_cf=locked["cf"] if locked else None
+            )
         except OllamaUnreachable as e:
             return render_template("notes_new.html", error=str(e), locked=locked)
         except ValueError as e:
@@ -65,14 +70,21 @@ def new_note():
         # D-03: extraction misreading a name shouldn't block the note - warn
         # and let the human decide, the locked identity still wins on save
         mismatch = None
-        if locked is not None and (
-            note.codice_fiscale != locked["cf"]
-            or note.patient_name.strip().casefold() != locked["patient_name"].strip().casefold()
-        ):
-            mismatch = (
-                f"this note names {note.patient_name} ({note.codice_fiscale}) - "
-                f"it will be filed under {locked['patient_name']} ({locked['cf']})"
+        if locked is not None:
+            cf_differs = note.codice_fiscale != locked["cf"]
+            name_differs = (
+                note.patient_name.strip().casefold() != locked["patient_name"].strip().casefold()
             )
+            if cf_differs or name_differs:
+                # only quote a cf the model actually read - when it read none we
+                # filled in the locked one, and printing that back would look
+                # like the note agreed on the patient when it never said
+                named = f"{note.patient_name} ({note.codice_fiscale})" if cf_differs \
+                    else note.patient_name
+                mismatch = (
+                    f"this note names {named} - "
+                    f"it will be filed under {locked['patient_name']} ({locked['cf']})"
+                )
         return render_template("notes_new.html", preview=note, locked=locked, mismatch=mismatch)
 
     # step 2: confirm POST - re-validate the (possibly staff-corrected) fields,
