@@ -593,13 +593,27 @@ def selftest():
         conn.commit()
         issue_pin(cf11, conn, "test-dentist", "dentist")
 
-        t0 = time.perf_counter()
-        verify_pin(cf11, "00000000", conn)
-        known_elapsed = time.perf_counter() - t0
+        # medians of five, not single samples. the known path also writes the
+        # failed_attempts row and commits, so one slow disk write on a loaded
+        # machine used to drag the ratio under the bar and redden the suite
+        # for a property that had not actually broken.
+        def _median_elapsed(cf_arg):
+            runs = []
+            for _ in range(5):
+                t0 = time.perf_counter()
+                verify_pin(cf_arg, "00000000", conn)
+                runs.append(time.perf_counter() - t0)
+            runs.sort()
+            return runs[2]
 
-        t0 = time.perf_counter()
-        verify_pin("ZZZZ999999999999", "00000000", conn)
-        miss_elapsed = time.perf_counter() - t0
+        known_elapsed = _median_elapsed(cf11)
+        miss_elapsed = _median_elapsed("ZZZZ999999999999")
+
+        # ten timing calls all report the same source, so they eat the per-ip
+        # budget the later sections rely on. this section is not testing the
+        # throttle - clear what it spent.
+        conn.execute("DELETE FROM patient_login_attempts")
+        conn.commit()
 
         assert miss_elapsed >= known_elapsed * 0.25, \
             f"11: miss path ({miss_elapsed:.4f}s) should cost at least 25% of the " \
