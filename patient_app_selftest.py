@@ -7,6 +7,7 @@ from pathlib import Path
 
 from flask import url_for
 
+import patient_app
 import patient_auth
 import storage
 import web_session
@@ -355,6 +356,85 @@ def selftest():
         assert padding_match, "17: expected a padding declaration on .patient-shell"
         assert padding_match.group(1).strip() == "2rem", \
             "17: .patient-shell padding must be 2rem on both axes (the spec's xl/32px token)"
+
+        # 18. D-02/WR-05/WR-09/WR-13 - written first, observed failing (17.1-02).
+        # D-02: the clinic line is unconditional - present on an anonymous GET,
+        # on a wrong-pin refusal and on an unknown-cf refusal, in both languages.
+        anon_client = app.test_client()
+        anon_page = anon_client.get("/login")
+        assert t("help_line", "it") in anon_page.text, \
+            "18: the clinic line must appear on an anonymous GET with no error"
+
+        cf_help_wrong = "MRSS950010150800"
+        seed_and_issue(cf_help_wrong)
+        wrong_help_client = app.test_client()
+        wrong_help_page = wrong_help_client.get("/login")
+        wrong_help_resp = wrong_help_client.post("/login", data={
+            "codice_fiscale": cf_help_wrong, "pin": "00000000",
+            "csrf_token": _csrf_from(wrong_help_page.text),
+        })
+        assert t("help_line", "it") in wrong_help_resp.text, \
+            "18: the clinic line must appear on a wrong-pin refusal"
+
+        unknown_help_client = app.test_client()
+        unknown_help_page = unknown_help_client.get("/login")
+        unknown_help_resp = unknown_help_client.post("/login", data={
+            "codice_fiscale": "ZZZZ888888888888", "pin": "00000000",
+            "csrf_token": _csrf_from(unknown_help_page.text),
+        })
+        assert t("help_line", "it") in unknown_help_resp.text, \
+            "18: the clinic line must appear on an unknown-cf refusal"
+
+        en_anon_client = app.test_client()
+        en_anon_client.get("/lang/en", follow_redirects=True)
+        en_anon_page = en_anon_client.get("/login")
+        assert t("help_line", "en") in en_anon_page.text, \
+            "18: the clinic line must appear in english too"
+
+        # structural: help_line must never be reachable inside a jinja
+        # conditional - the simplest honest form is to assert the template
+        # contains no {% if tag at all. this pins D-02's "unconditional"
+        # property against a later edit that wraps the line in a condition.
+        login_template_text = Path("patient_app/templates/patient_login.html").read_text()
+        assert "{% if" not in login_template_text, \
+            "18: patient_login.html must contain no jinja conditional - " \
+            "help_line must render unconditionally"
+
+        # WR-05: the home screen has its own copy, not the login screen's
+        cf_home = "BLLN960010150900"
+        pin_home = seed_and_issue(cf_home)
+        home_client, _ = sign_in(cf_home, pin_home)
+        home_change_page = home_client.get("/change-pin")
+        home_client.post("/change-pin", data={
+            "pin": "97531864", "confirm": "97531864",
+            "csrf_token": _csrf_from(home_change_page.text),
+        })
+        home_resp = home_client.get("/")
+        assert t("home_heading", "it") in home_resp.text, \
+            "18: the home screen should carry its own heading"
+        assert t("login_heading", "it") not in home_resp.text, \
+            "18: the home screen must not read like the login screen"
+
+        # WR-13: an unmapped verify_pin status fails closed, not 500
+        original_verify_pin = patient_auth.verify_pin
+        patient_auth.verify_pin = lambda cf, pin, conn: ("no_such_status", None)
+        try:
+            unmapped_client = app.test_client()
+            unmapped_page = unmapped_client.get("/login")
+            unmapped_resp = unmapped_client.post("/login", data={
+                "codice_fiscale": "ANYTHING", "pin": "00000000",
+                "csrf_token": _csrf_from(unmapped_page.text),
+            })
+            assert unmapped_resp.status_code == 200, \
+                "18: an unmapped verify_pin status must not 500 the login form"
+            assert t("err_bad_credentials", "it") in unmapped_resp.text, \
+                "18: an unmapped status should fail closed to the generic refusal"
+        finally:
+            patient_auth.verify_pin = original_verify_pin
+
+        # WR-09: one language helper, not two definitions that happen to agree
+        assert patient_app.current_language is patient_routes.current_language, \
+            "18: patient_app and patient_app.routes must share the same current_language function object"
 
     print("selftest ok")
 
