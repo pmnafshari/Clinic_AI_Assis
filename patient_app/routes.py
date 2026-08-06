@@ -5,6 +5,8 @@ before_request function so the "don't trap the user" property lives in one
 place, the same shape app/__init__.py uses for CHANGE_PW_ALLOWED.
 """
 
+from pathlib import Path
+
 from flask import Blueprint, current_app, g, redirect, render_template, request, url_for
 
 import patient_auth
@@ -15,9 +17,18 @@ from .strings import current_language, t
 
 patient_bp = Blueprint("patient", __name__)
 
+# anchors every cwd-relative path in this app on the repo root instead of the
+# process's launch directory. this file lives at patient_app/routes.py, so
+# two parents reach the repo root. launched from anywhere else, the app used
+# to serve an unstyled login page, write a stray .env.patient (generating a
+# fresh SECRET_KEY and invalidating every live CSRF session), and open or
+# create the wrong database (WR-11).
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
 # selftests point this at a temp db before calling create_patient_app, same
-# pattern as app/db.py's DB_PATH
-DB_PATH = "db/clinic.sqlite"
+# pattern as app/db.py's DB_PATH. stays a plain string, not REPO_ROOT itself,
+# so a selftest can still reassign it.
+DB_PATH = str(REPO_ROOT / "db" / "clinic.sqlite")
 
 # reachable with no patient session at all
 NO_SESSION_ALLOWED = {"static", "vendor", "patient.login", "set_language"}
@@ -43,6 +54,25 @@ STATUS_TO_ERROR_KEY = {
 
 
 def get_db():
+    # WR-12, residual stated where the connection is actually opened. the
+    # separation the selftests assert (patient_app_selftest.py section 1,
+    # section 23f) is a module-import separation - patient_auth never
+    # imports web_auth/web_session, and this file's own SQL never names a
+    # staff table. at runtime this is still an ordinary read-write sqlite
+    # connection to DB_PATH, which also holds users (password hashes),
+    # sessions (staff session hashes), audit_log and every clinical note.
+    # SQLite has no per-table privileges, so any SQL-reachable defect in this
+    # internet-facing app is a full compromise of the staff credential
+    # store, not a patient-scoped one.
+    #
+    # what narrows it: every patient-side query stays parameterised and
+    # confined to patient_*, patients and visits, and section 23f fails the
+    # suite if any patient-side module ever names a staff table in a SQL
+    # clause. Phase 17's D-05 (direct connection, accessor-only) is not
+    # re-opened here - this states and narrows the residual, it does not
+    # replace it. a genuinely separate database file, or an attached
+    # read-only view of the patient-visible tables, is the real fix and
+    # belongs with Phase 20's tunnel work.
     if "db" not in g:
         g.db = storage.connect(DB_PATH)
     return g.db

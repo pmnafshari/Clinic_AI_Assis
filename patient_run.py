@@ -4,5 +4,8 @@ from patient_app import create_patient_app
 # is the only thing that should ever reach it, and not until phase 20.
 PATIENT_PORT = 5001
 
-app = create_patient_app()
-app.run(host="127.0.0.1", port=PATIENT_PORT, threaded=True)
+if __name__ == "__main__":
+    # without this guard, any import of this module - a future selftest, a
+    # wsgi loader - blocks forever inside the dev server (WR-11)
+    app = create_patient_app()
+    app.run(host="127.0.0.1", port=PATIENT_PORT, threaded=True)

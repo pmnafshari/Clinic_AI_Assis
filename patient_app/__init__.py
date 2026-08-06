@@ -15,15 +15,16 @@ import storage
 from env_config import load_secret_key
 
 from . import routes
-from .routes import patient_bp, require_patient_session
+from .routes import REPO_ROOT, patient_bp, require_patient_session
 from .strings import LANG_COOKIE_NAME, LANGUAGES, current_language, t
 
-# its own secret file, so the two apps never sign each other's cookies
-PATIENT_ENV_PATH = Path(".env.patient")
+# its own secret file, so the two apps never sign each other's cookies.
+# anchored on REPO_ROOT, not the process cwd - see routes.REPO_ROOT (WR-11)
+PATIENT_ENV_PATH = REPO_ROOT / ".env.patient"
 
 # the vendored bootstrap already on disk for the staff app. served rather than
 # copied - offline-first forbids a cdn, and a second copy would drift.
-VENDOR_ROOT = Path("app/static/vendor").resolve()
+VENDOR_ROOT = REPO_ROOT / "app" / "static" / "vendor"
 
 
 def create_patient_app(env_path=PATIENT_ENV_PATH):
