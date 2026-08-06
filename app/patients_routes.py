@@ -134,6 +134,43 @@ def issue_pin_submit(cf):
     return render_template("_patient_pin.html", cf=cf, pin=pin)
 
 
+@patients_bp.route("/patients/<cf>/revoke-pin", methods=["POST"])
+def revoke_pin_submit(cf):
+    # HTMX target - a denied fragment returns a bare status, not a redirect.
+    # there is deliberately no GET counterpart and no un-revoke route:
+    # reissuing a PIN already sets active = 1 and is the documented recovery
+    # path, so a second way back would just be a second thing to get wrong.
+    if not authorize(g.user["role"], "revoke_patient_pin"):
+        log_audit(get_db(), g.user["username"], g.user["role"], "revoke_patient_pin",
+                  cf, allowed=0)
+        return "", 403
+
+    if not CF_PATTERN.match(cf):
+        abort(404)
+
+    conn = get_db()
+    if lookup_patient(cf, conn) is None:
+        abort(404)
+
+    cur = conn.execute(
+        "UPDATE patient_credentials SET active = 0 WHERE codice_fiscale = ?", (cf,)
+    )
+    conn.commit()
+    if cur.rowcount == 0:
+        # no credential to revoke - don't report a revocation that never happened
+        abort(404)
+
+    log_audit(conn, g.user["username"], g.user["role"], "revoke_patient_pin", cf, allowed=1)
+
+    # deactivating the credential alone would leave a live session sliding
+    # its own idle window forward on every request - the loader's
+    # c.active = 1 clause plus this call are what make revocation immediate
+    # rather than eventual
+    patient_auth.destroy_patient_sessions(conn, cf)
+
+    return render_template("_patient_pin_revoked.html", cf=cf)
+
+
 @patients_bp.route("/patients/<cf>/edit-form")
 def edit_form_fragment(cf):
     # HTMX target - a denied fragment returns a bare status, not a redirect

@@ -5,11 +5,11 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin"},
-    # admin deliberately excluded from issue_patient_pin: it holds only
-    # manage_users and cannot open a patient record at all, so granting it
-    # would widen admin's reach into patient data
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin"},
+    # admin deliberately excluded from issue_patient_pin and revoke_patient_pin:
+    # it holds only manage_users and cannot open a patient record at all, so
+    # granting either would widen admin's reach into patient data
     "admin": {"manage_users"},
     # system: the automated sync actor (watcher/backfill), no user row
     "system": {"append_note"},
