@@ -215,6 +215,15 @@ def selftest():
             "SELECT must_change_pin FROM patient_credentials WHERE codice_fiscale = ?", (cf_forced,)
         ) == 0, "12: must_change_pin should be cleared"
 
+        # reset the throttle before this section - every test client here
+        # reports 127.0.0.1, so without this reset sections 13-15 would
+        # throttle each other and it would read as an application defect
+        # rather than the plumbing this file's test clients share
+        reset13 = raw_db()
+        reset13.execute("DELETE FROM patient_login_attempts")
+        reset13.commit()
+        reset13.close()
+
         # 13. SC4 - an expired credential is refused with the "contact the
         # clinic" copy, in both languages, never the generic message
         cf_expired = "BNCG900010150300"
@@ -245,6 +254,13 @@ def selftest():
         })
         assert t("err_expired", "en") in resp_en.text, "13: expected the expired copy in english"
 
+        # reset the throttle before this section - see the comment above
+        # section 13
+        reset14 = raw_db()
+        reset14.execute("DELETE FROM patient_login_attempts")
+        reset14.commit()
+        reset14.close()
+
         # 14. SC4 - a locked-out credential gives no distinct signal even for
         # the correct pin, in both languages
         cf_locked = "VRDL910010150400"
@@ -274,6 +290,13 @@ def selftest():
         })
         assert t("err_locked", "en") in locked_resp_en.text, \
             "14: expected the locked copy in english too"
+
+        # reset the throttle before this section - see the comment above
+        # section 13
+        reset15 = raw_db()
+        reset15.execute("DELETE FROM patient_login_attempts")
+        reset15.commit()
+        reset15.close()
 
         # 15. enumeration - a wrong pin and an unknown codice fiscale must be
         # indistinguishable. byte-identical bodies (apart from the csrf
@@ -435,6 +458,56 @@ def selftest():
         # WR-09: one language helper, not two definitions that happen to agree
         assert patient_app.current_language is patient_routes.current_language, \
             "18: patient_app and patient_app.routes must share the same current_language function object"
+
+        # 19. D-04/D-06 - the login route threads the source address, and a
+        # throttled source renders the generic refusal like every other
+        # refusal. fails until the route passes ip=request.remote_addr into
+        # verify_pin and STATUS_TO_ERROR_KEY maps "throttled".
+        reset19 = raw_db()
+        reset19.execute("DELETE FROM patient_login_attempts")
+        reset19.commit()
+        reset19.close()
+
+        cf19 = "FBRZ970010150900"
+        seed_and_issue(cf19)
+        ip_client = app.test_client()
+        page19 = ip_client.get("/login")
+        ip_client.post("/login", data={
+            "codice_fiscale": cf19, "pin": "00000000", "csrf_token": _csrf_from(page19.text),
+        })
+        newest19 = raw_db().execute(
+            "SELECT ip FROM audit_log WHERE action = 'patient_pin_check' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert newest19["ip"] == "127.0.0.1", \
+            f"19: the login route should thread request.remote_addr into the audit row, got " \
+            f"{dict(newest19) if newest19 else None}"
+
+        reset19b = raw_db()
+        reset19b.execute("DELETE FROM patient_login_attempts")
+        reset19b.commit()
+        reset19b.close()
+
+        throttle_client = app.test_client()
+        for i in range(patient_auth.PATIENT_IP_ATTEMPT_THRESHOLD):
+            tcf19 = f"THRT{i:012d}"
+            seed_and_issue(tcf19, name="throttle patient")
+            page = throttle_client.get("/login")
+            throttle_client.post("/login", data={
+                "codice_fiscale": tcf19, "pin": "00000000", "csrf_token": _csrf_from(page.text),
+            })
+
+        page19b = throttle_client.get("/login")
+        throttled_resp = throttle_client.post("/login", data={
+            "codice_fiscale": "GNTZ980010151000", "pin": "00000000",
+            "csrf_token": _csrf_from(page19b.text),
+        })
+        assert throttled_resp.status_code == 200, "19: a throttled source should re-render the login form"
+        assert t("err_bad_credentials", "it") in throttled_resp.text, \
+            "19: a throttled source should render the generic refusal"
+        assert t("err_locked", "it") not in throttled_resp.text, \
+            "19: a throttled source must not render the locked copy"
+        assert t("err_expired", "it") not in throttled_resp.text, \
+            "19: a throttled source must not render the expired copy"
 
     print("selftest ok")
 

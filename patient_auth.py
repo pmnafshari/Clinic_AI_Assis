@@ -439,6 +439,166 @@ def selftest():
         remaining9 = conn.execute("SELECT COUNT(*) c FROM patient_login_attempts").fetchone()["c"]
         assert remaining9 == 0, "9: the throttle check should sweep stale rows, not just skip them"
 
+        # 10. the oracle is closed (D-01). a locked account probed with the
+        # wrong pin must read exactly like an unknown codice fiscale, and the
+        # 17-01 property survives: a correct pin during lockout still returns
+        # locked. fails until verify_pin checks the pin before revealing
+        # locked/expired.
+        cf10 = "BSSN930010150100"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf10, "oracle patient"),
+        )
+        conn.commit()
+        pin10 = issue_pin(cf10, conn, "test-dentist", "dentist")
+        for _ in range(PIN_LOCKOUT_THRESHOLD):
+            verify_pin(cf10, "00000000", conn)
+        assert _credential(conn, cf10)["locked_until"] is not None, \
+            "10: setup - the account should be locked"
+        assert verify_pin(cf10, "wrongpin", conn)[0] == "wrong", \
+            "10: a locked account probed with the wrong pin must read as wrong, not locked"
+        assert verify_pin(cf10, pin10, conn)[0] == "locked", \
+            "10: a correct pin during lockout must still return locked - the 17-01 property"
+
+        cf10b = "GNTL940010150200"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf10b, "expired patient"),
+        )
+        conn.commit()
+        pin10b = issue_pin(cf10b, conn, "test-dentist", "dentist")
+        conn.execute(
+            "UPDATE patient_credentials SET expires_at = ? WHERE codice_fiscale = ?",
+            ((datetime.now() - timedelta(days=1)).isoformat(), cf10b),
+        )
+        conn.commit()
+        assert verify_pin(cf10b, "wrongpin", conn)[0] == "wrong", \
+            "10: an expired credential probed with the wrong pin must read as wrong, not expired"
+        assert verify_pin(cf10b, pin10b, conn)[0] == "expired", \
+            "10: the correct pin on an expired credential should still reveal expired"
+
+        # 11. timing is equalised (D-03). the miss path must pay the same key
+        # derivation as the hit path - a ratio, not an absolute, since
+        # machines differ. fails until _DUMMY_HASH exists and is burned on
+        # every miss path.
+        import time
+
+        assert "_DUMMY_HASH" in globals(), "11: expected a module-level _DUMMY_HASH"
+
+        cf11 = "PPRT950010150300"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf11, "timing patient"),
+        )
+        conn.commit()
+        issue_pin(cf11, conn, "test-dentist", "dentist")
+
+        t0 = time.perf_counter()
+        verify_pin(cf11, "00000000", conn)
+        known_elapsed = time.perf_counter() - t0
+
+        t0 = time.perf_counter()
+        verify_pin("ZZZZ999999999999", "00000000", conn)
+        miss_elapsed = time.perf_counter() - t0
+
+        assert miss_elapsed >= known_elapsed * 0.25, \
+            f"11: miss path ({miss_elapsed:.4f}s) should cost at least 25% of the " \
+            f"known path ({known_elapsed:.4f}s)"
+
+        # 12. WR-01 - a cooldown that has already passed must not carry its
+        # counter into the next attempt. fails until verify_pin resets
+        # failed_attempts/locked_until before evaluating the pin.
+        cf12 = "VNZL960010150400"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf12, "cooldown patient"),
+        )
+        conn.commit()
+        pin12 = issue_pin(cf12, conn, "test-dentist", "dentist")
+        for _ in range(PIN_LOCKOUT_THRESHOLD):
+            verify_pin(cf12, "00000000", conn)
+        locked12 = _credential(conn, cf12)
+        assert locked12["locked_until"] is not None, "12: setup - the account should be locked"
+        after_cooldown = datetime.fromisoformat(locked12["locked_until"]) + timedelta(minutes=1)
+
+        status12, _ = verify_pin(cf12, "wrongpin", conn, now=after_cooldown)
+        assert status12 == "wrong", "12: a typo right after the cooldown should read as wrong"
+        reset12 = _credential(conn, cf12)
+        assert reset12["failed_attempts"] == 1, \
+            f"12: failed_attempts should reset to 1 after the cooldown, got {reset12['failed_attempts']}"
+        assert reset12["locked_until"] is None, \
+            "12: a single typo after the cooldown must not re-lock the account"
+
+        status12b, _ = verify_pin(cf12, pin12, conn, now=after_cooldown)
+        assert status12b == "ok", "12: the correct pin at that same moment should still succeed"
+
+        # 13. D-04 - the per-ip throttle sits in front of the per-credential
+        # logic. fails until verify_pin accepts ip= and checks _ip_throttled
+        # before touching any credential row.
+        conn.execute("DELETE FROM patient_login_attempts")
+        conn.commit()
+        throttle_ip = "203.0.113.9"
+        other_ip = "203.0.113.10"
+        throttle_cfs = []
+        for i in range(PATIENT_IP_ATTEMPT_THRESHOLD):
+            tcf = f"THRT{i:012d}"
+            conn.execute(
+                "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+                (tcf, "throttle patient"),
+            )
+            conn.commit()
+            issue_pin(tcf, conn, "test-dentist", "dentist")
+            throttle_cfs.append(tcf)
+            verify_pin(tcf, "00000000", conn, ip=throttle_ip)
+
+        target_cf13 = throttle_cfs[0]
+        before_attempts13 = _credential(conn, target_cf13)["failed_attempts"]
+        status13, _ = verify_pin(target_cf13, "00000000", conn, ip=throttle_ip)
+        assert status13 == "throttled", "13: the next call from a throttled ip should return throttled"
+        after_attempts13 = _credential(conn, target_cf13)["failed_attempts"]
+        assert after_attempts13 == before_attempts13, \
+            "13: a throttled attempt must not still increment the targeted credential's failed_attempts"
+
+        status13b, _ = verify_pin(target_cf13, "00000000", conn, ip=other_ip)
+        assert status13b != "throttled", "13: a different source ip must not be throttled by another ip's sweep"
+
+        # 14. D-06 - every failed verify_pin call, including an unknown
+        # codice fiscale, writes a patient_pin_check row carrying the source
+        # ip. fails until the ip flows into log_audit and the unknown/
+        # malformed paths audit too.
+        conn.execute("DELETE FROM patient_login_attempts")
+        conn.commit()
+        cf14 = "GRSS970010150500"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf14, "audit patient"),
+        )
+        conn.commit()
+        issue_pin(cf14, conn, "test-dentist", "dentist")
+
+        before_rows14 = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_pin_check'"
+        ).fetchone()["c"]
+        verify_pin(cf14, "00000000", conn, ip="203.0.113.9")
+        newest14 = conn.execute(
+            "SELECT ip FROM audit_log WHERE action = 'patient_pin_check' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert newest14["ip"] == "203.0.113.9", \
+            f"14: the newest patient_pin_check row should carry the source ip, got " \
+            f"{dict(newest14) if newest14 else None}"
+        after_rows14 = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_pin_check'"
+        ).fetchone()["c"]
+        assert after_rows14 == before_rows14 + 1, "14: a failed attempt should write exactly one audit row"
+
+        before_unknown14 = after_rows14
+        verify_pin("ZZZZ777777777777", "00000000", conn, ip="203.0.113.11")
+        after_unknown14 = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_pin_check'"
+        ).fetchone()["c"]
+        assert after_unknown14 == before_unknown14 + 1, \
+            "14: an unknown codice fiscale must also write a patient_pin_check row - today it produces none"
+
     print("selftest ok")
 
 
