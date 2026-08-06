@@ -84,8 +84,13 @@ def init_patient_tables(conn):
 
 
 def _pin_is_weak(pin):
+    # safe for any string, not just digits - the consecutive-digit run only
+    # means something for an all-digit pin, but "all one character" is a weak
+    # choice either way (WR-04's isdigit() guard used to skip aaaaaaaa entirely)
     if len(set(pin)) == 1:
         return True
+    if not pin.isdigit():
+        return False
     digits = [int(c) for c in pin]
     steps = {b - a for a, b in zip(digits, digits[1:])}
     return steps in ({1}, {-1})
@@ -254,15 +259,35 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     return "ok", _credential(conn, cf)
 
 
-def change_pin(cf, new_pin, conn, now=None):
-    # no current-pin re-auth here, unlike the staff change-password flow: the
-    # patient authenticated seconds ago and is being compelled to change, so a
-    # re-auth prompt is friction with no gain.
+def change_pin(cf, new_pin, conn, now=None, current_pin=None):
+    # cheap checks first, credential check last - a typo in an unrelated
+    # field should not be evaluated against the credential (D-07)
     _require_cf(cf)
+    row = _credential(conn, cf)
+    if row is None:
+        raise ValueError("unknown")
     if len(new_pin or "") < PIN_LENGTH:
-        raise ValueError(f"pin must be at least {PIN_LENGTH} characters")
-    if new_pin.isdigit() and _pin_is_weak(new_pin):
-        raise ValueError("pin must not be all one digit or a run of consecutive digits")
+        raise ValueError("short")
+    if _pin_is_weak(new_pin):
+        raise ValueError("weak")
+    if check_password_hash(row["pin_hash"], new_pin):
+        # stops the patient re-entering the temporary pin the clinic just
+        # read to them over the phone, which would defeat the whole point
+        # of the forced change
+        raise ValueError("same")
+
+    if row["must_change_pin"]:
+        # the compelled path (D-07): the patient authenticated seconds ago
+        # with the temporary pin and is being compelled to change it, so
+        # asking again is friction with no gain. current_pin is ignored.
+        pass
+    else:
+        # the voluntary path (D-07/CR-01): /change-pin stays registered for
+        # the life of a session, so without this a stolen cookie converts
+        # into a permanent account takeover. deliberately does not count a
+        # wrong current_pin toward the lockout - see the comment below.
+        if not check_password_hash(row["pin_hash"], current_pin or ""):
+            raise ValueError("current")
 
     conn.execute(
         "UPDATE patient_credentials SET pin_hash = ?, must_change_pin = 0,"
@@ -271,6 +296,13 @@ def change_pin(cf, new_pin, conn, now=None):
     )
     conn.commit()
     log_audit(conn, cf, "patient", "patient_change_pin", cf, allowed=1)
+
+    # every session for this codice fiscale, including the one making the
+    # change - the route's job is to hand that session a fresh token (D-09),
+    # not this function's (D-08). a failed current_pin above never reaches
+    # here, so a cookie thief who cannot supply it cannot lock the real
+    # patient out from inside a session they do not own (T-17-48)
+    destroy_patient_sessions(conn, cf)
 
 
 def _hash_token(token):
