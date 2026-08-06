@@ -30,6 +30,13 @@ PIN_LOCKOUT_COOLDOWN_MINUTES = 15
 PIN_LENGTH = 8
 CREDENTIAL_VALIDITY_DAYS = 7
 
+# chosen here, not locked. a sweep needs at least PIN_LOCKOUT_THRESHOLD (5)
+# posts per candidate codice fiscale, so 20 caps a single source at roughly
+# four candidates per window, while a waiting room or a household behind one
+# address still has room to mistype.
+PATIENT_IP_ATTEMPT_THRESHOLD = 20
+PATIENT_IP_ATTEMPT_WINDOW_MINUTES = 15
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS patient_credentials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +56,12 @@ CREATE TABLE IF NOT EXISTS patient_sessions (
     codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
     created_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS patient_login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ip TEXT NOT NULL,
+    attempted_at TEXT NOT NULL
 );
 """
 
@@ -87,6 +100,27 @@ def _credential(conn, cf):
     return conn.execute(
         "SELECT * FROM patient_credentials WHERE codice_fiscale = ?", (cf,)
     ).fetchone()
+
+
+def _record_login_attempt(conn, ip, now):
+    conn.execute(
+        "INSERT INTO patient_login_attempts (ip, attempted_at) VALUES (?, ?)",
+        (ip, now.isoformat()),
+    )
+    conn.commit()
+
+
+def _ip_throttled(conn, ip, now):
+    # sweep on the request that touches it, same inline shape
+    # load_patient_session uses for expired sessions - this project has no
+    # scheduler, so there is no reaper to do it separately
+    cutoff = (now - timedelta(minutes=PATIENT_IP_ATTEMPT_WINDOW_MINUTES)).isoformat()
+    conn.execute("DELETE FROM patient_login_attempts WHERE attempted_at < ?", (cutoff,))
+    conn.commit()
+    count = conn.execute(
+        "SELECT COUNT(*) c FROM patient_login_attempts WHERE ip = ?", (ip,)
+    ).fetchone()["c"]
+    return count >= PATIENT_IP_ATTEMPT_THRESHOLD
 
 
 def issue_pin(cf, conn, issued_by, issued_by_role="staff", now=None):
