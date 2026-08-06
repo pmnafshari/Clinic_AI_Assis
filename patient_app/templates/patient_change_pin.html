@@ -4,9 +4,15 @@
 <p class="text-secondary mb-4">{{ t('change_body', lang) }}</p>
 <form method="post" action="{{ url_for('patient.change_pin') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if not patient.must_change_pin %}
+  <div class="mb-3">
+    <label for="current" class="form-label">{{ t('current_pin_label', lang) }}</label>
+    <input type="password" id="current" name="current" class="form-control" inputmode="numeric" autofocus required>
+  </div>
+  {% endif %}
   <div class="mb-3">
     <label for="pin" class="form-label">{{ t('pin_label', lang) }}</label>
-    <input type="password" id="pin" name="pin" class="form-control" inputmode="numeric" autofocus required>
+    <input type="password" id="pin" name="pin" class="form-control" inputmode="numeric" {% if patient.must_change_pin %}autofocus{% endif %} required>
   </div>
   <div class="mb-4">
     <label for="confirm" class="form-label">{{ t('confirm_label', lang) }}</label>

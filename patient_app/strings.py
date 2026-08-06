@@ -33,6 +33,7 @@ STRINGS = {
     },
     "cf_label": {"it": "Codice fiscale", "en": "Codice fiscale"},
     "pin_label": {"it": "PIN", "en": "PIN"},
+    "current_pin_label": {"it": "PIN attuale", "en": "Current PIN"},
     "login_cta": {"it": "Accedi", "en": "Sign in"},
     "change_heading": {
         "it": "Scegli un nuovo PIN",

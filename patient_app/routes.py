@@ -116,6 +116,7 @@ def change_pin():
     if request.method == "GET":
         return render_template("patient_change_pin.html")
 
+    current = request.form.get("current", "")
     pin = request.form.get("pin", "")
     confirm = request.form.get("confirm", "")
     lang = current_language()
@@ -128,14 +129,31 @@ def change_pin():
     conn = get_db()
     cf = g.patient["codice_fiscale"]
     try:
-        # no current-pin re-auth here, unlike the staff change-password flow:
-        # the patient authenticated seconds ago with the temporary pin and is
-        # being compelled to change it, so asking again is friction with no
-        # gain. patient_auth.change_pin clears must_change_pin and audits the
-        # change itself.
-        patient_auth.change_pin(cf, pin, conn)
-    except ValueError:
-        error = t("err_pin_short", lang, n=patient_auth.PIN_LENGTH)
+        patient_auth.change_pin(cf, pin, conn, current_pin=current)
+    except ValueError as exc:
+        reason = str(exc)
+        if reason == "short":
+            error = t("err_pin_short", lang, n=patient_auth.PIN_LENGTH)
+        elif reason == "weak":
+            error = t("err_pin_weak", lang)
+        elif reason == "same":
+            error = t("err_pin_same", lang)
+        elif reason == "current":
+            # the screen is behind a session, so the copy must not read as
+            # confirmation that some other field was accepted
+            error = t("err_bad_credentials", lang)
+        else:
+            error = t("err_bad_credentials", lang)
         return render_template("patient_change_pin.html", error=error)
 
-    return redirect(url_for("home"))
+    # change_pin just destroyed every session for this codice fiscale,
+    # including this browser's - hand it a fresh token rather than bouncing
+    # it to the login screen for changing its own pin. a stolen token is
+    # dead even in the case where the stolen token is the one being used (D-09)
+    token = patient_auth.create_patient_session(conn, cf)
+    resp = redirect(url_for("home"))
+    resp.set_cookie(
+        patient_auth.PATIENT_COOKIE_NAME, token,
+        httponly=True, samesite="Strict",
+    )
+    return resp
