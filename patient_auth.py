@@ -30,6 +30,11 @@ PIN_LOCKOUT_COOLDOWN_MINUTES = 15
 PIN_LENGTH = 8
 CREDENTIAL_VALIDITY_DAYS = 7
 
+# chosen here, not locked. the idle window protects an abandoned tab; the
+# absolute cap protects a session that is being kept warm by whoever holds
+# it, refreshed forever by ordinary use. 12 hours is one clinic day (WR-08).
+PATIENT_SESSION_MAX_HOURS = 12
+
 # chosen here, not locked. a sweep needs at least PIN_LOCKOUT_THRESHOLD (5)
 # posts per candidate codice fiscale, so 20 caps a single source at roughly
 # four candidates per window, while a waiting room or a household behind one
@@ -287,13 +292,24 @@ def load_patient_session(conn, token, now=None):
         now = datetime.now()
 
     token_hash = _hash_token(token)
+    # join credentials so a revoked pin also kills its live sessions, and use
+    # an inner join so a session with no credential row cannot arrive here
+    # carrying must_change_pin=None - require_patient_session reads that as
+    # falsy and would let it slide past the forced-change gate (D-10, WR-07)
     row = conn.execute("""
-        SELECT s.codice_fiscale, s.last_seen_at, c.must_change_pin
+        SELECT s.codice_fiscale, s.created_at, s.last_seen_at, c.must_change_pin
         FROM patient_sessions s
-        LEFT JOIN patient_credentials c ON c.codice_fiscale = s.codice_fiscale
-        WHERE s.token_hash = ?
+        JOIN patient_credentials c ON c.codice_fiscale = s.codice_fiscale
+        WHERE s.token_hash = ? AND c.active = 1
     """, (token_hash,)).fetchone()
     if row is None:
+        return None
+
+    # checked before the idle window, so a session already past the absolute
+    # cap is never touched by the last_seen_at UPDATE below (WR-08)
+    if now - datetime.fromisoformat(row["created_at"]) > timedelta(hours=PATIENT_SESSION_MAX_HOURS):
+        conn.execute("DELETE FROM patient_sessions WHERE token_hash = ?", (token_hash,))
+        conn.commit()
         return None
 
     if now - datetime.fromisoformat(row["last_seen_at"]) > timedelta(minutes=PATIENT_IDLE_MINUTES):
@@ -694,7 +710,7 @@ def selftest():
         # 17. an orphan session (a patients row exists, but no credential row
         # at all) must not load - it must not return a dict carrying
         # must_change_pin=None, which require_patient_session reads as
-        # falsy (WR-07). fails until the LEFT JOIN becomes an inner join.
+        # falsy (WR-07). fails until the outer join becomes an inner one.
         cf17 = "PZZL910010151400"
         conn.execute(
             "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
@@ -741,6 +757,13 @@ def selftest():
 
         token18b = create_patient_session(conn, cf18)
         inside_cap = datetime.now() + timedelta(hours=PATIENT_SESSION_MAX_HOURS - 1)
+        # refresh last_seen_at to the same moment, so this checks only the
+        # absolute cap - not the unrelated 15-minute idle window
+        conn.execute(
+            "UPDATE patient_sessions SET last_seen_at = ? WHERE token_hash = ?",
+            (inside_cap.isoformat(), _hash_token(token18b)),
+        )
+        conn.commit()
         assert load_patient_session(conn, token18b, now=inside_cap) is not None, \
             "18: a session just inside the cap should still load"
 
