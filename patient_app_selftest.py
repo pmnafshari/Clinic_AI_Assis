@@ -555,6 +555,37 @@ def selftest():
         assert t("err_expired", "it") not in throttled_resp.text, \
             "19: a throttled source must not render the expired copy"
 
+        # reset the throttle before this section - see the comment above
+        # section 13
+        reset20 = raw_db()
+        reset20.execute("DELETE FROM patient_login_attempts")
+        reset20.commit()
+        reset20.close()
+
+        # 20. D-08's route-level proof - reissue actually recovers something.
+        # a signed-in patient whose credential is reissued by staff must be
+        # bounced to /login on their very next request. a service-level
+        # assertion alone (patient_auth.py section 15) is what let CR-02 ship
+        # in the first place (17-REVIEW.md).
+        cf20 = "MNTV930010151600"
+        pin20 = seed_and_issue(cf20)
+        client20, _ = sign_in(cf20, pin20)
+        change_page20 = client20.get("/change-pin")
+        client20.post("/change-pin", data={
+            "pin": "15935728", "confirm": "15935728",
+            "csrf_token": _csrf_from(change_page20.text),
+        })
+        still_ok = client20.get("/")
+        assert still_ok.status_code == 200, "20: setup - the session should still work before reissue"
+
+        raw_conn20 = raw_db()
+        patient_auth.issue_pin(cf20, raw_conn20, "test-dentist", "dentist")
+        raw_conn20.close()
+
+        bounced = client20.get("/")
+        assert bounced.status_code == 302 and "login" in bounced.headers["Location"], \
+            "20: a session must be rejected on the next request after its credential is reissued"
+
     print("selftest ok")
 
 

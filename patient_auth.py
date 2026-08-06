@@ -636,6 +636,114 @@ def selftest():
         assert after_unknown14 == before_unknown14 + 1, \
             "14: an unknown codice fiscale must also write a patient_pin_check row - today it produces none"
 
+        # 15. reissue destroys every session for that patient, on the
+        # production path (D-08). fails until issue_pin calls
+        # destroy_patient_sessions.
+        cf15 = "MRNZ980010151100"
+        other15 = "TRNL990010151200"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf15, "reissue patient"),
+        )
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (other15, "other reissue patient"),
+        )
+        conn.commit()
+        issue_pin(cf15, conn, "test-dentist", "dentist")
+        issue_pin(other15, conn, "test-dentist", "dentist")
+        sess15a = create_patient_session(conn, cf15)
+        sess15b = create_patient_session(conn, cf15)
+        other_sess15 = create_patient_session(conn, other15)
+
+        issue_pin(cf15, conn, "test-dentist", "dentist")
+
+        assert load_patient_session(conn, sess15a) is None, \
+            "15: reissue must destroy this patient's existing sessions"
+        assert load_patient_session(conn, sess15b) is None, \
+            "15: reissue must destroy every one of this patient's sessions, not just one"
+        assert load_patient_session(conn, other_sess15) is not None, \
+            "15: reissue for one patient must not touch another patient's session"
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM patient_sessions WHERE codice_fiscale = ?", (cf15,)
+        ).fetchone()["c"] == 0, "15: no session rows should remain for the reissued patient"
+
+        # 16. a revoked credential (active=0) kills its live sessions (D-10 /
+        # CR-02). only the revoked-state assertion is pinned - whether the
+        # session row is later deleted or just fails the join once
+        # reactivated is not over-specified here. fails until
+        # load_patient_session inner-joins on active=1.
+        cf16 = "LNDR900010151300"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf16, "revoked patient"),
+        )
+        conn.commit()
+        issue_pin(cf16, conn, "test-dentist", "dentist")
+        sess16 = create_patient_session(conn, cf16)
+        assert load_patient_session(conn, sess16) is not None, "16: setup - session should load"
+
+        conn.execute("UPDATE patient_credentials SET active = 0 WHERE codice_fiscale = ?", (cf16,))
+        conn.commit()
+        assert load_patient_session(conn, sess16) is None, \
+            "16: a session must not load while its credential is revoked"
+
+        conn.execute("UPDATE patient_credentials SET active = 1 WHERE codice_fiscale = ?", (cf16,))
+        conn.commit()
+
+        # 17. an orphan session (a patients row exists, but no credential row
+        # at all) must not load - it must not return a dict carrying
+        # must_change_pin=None, which require_patient_session reads as
+        # falsy (WR-07). fails until the LEFT JOIN becomes an inner join.
+        cf17 = "PZZL910010151400"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf17, "orphan patient"),
+        )
+        conn.commit()
+        now17 = datetime.now()
+        token17 = "orphan-token-17"
+        conn.execute(
+            "INSERT INTO patient_sessions (token_hash, codice_fiscale, created_at, last_seen_at)"
+            " VALUES (?, ?, ?, ?)",
+            (_hash_token(token17), cf17, now17.isoformat(), now17.isoformat()),
+        )
+        conn.commit()
+        assert load_patient_session(conn, token17) is None, \
+            "17: a session with no credential row must not load at all"
+
+        # 18. a session cannot outlive an absolute cap no matter how often
+        # last_seen_at is refreshed (WR-08). fails until
+        # PATIENT_SESSION_MAX_HOURS exists and is checked against created_at.
+        cf18 = "GRVN920010151500"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf18, "lifetime patient"),
+        )
+        conn.commit()
+        issue_pin(cf18, conn, "test-dentist", "dentist")
+        token18 = create_patient_session(conn, cf18)
+
+        assert "PATIENT_SESSION_MAX_HOURS" in globals(), \
+            "18: expected a module-level PATIENT_SESSION_MAX_HOURS"
+
+        past_cap = datetime.now() + timedelta(hours=PATIENT_SESSION_MAX_HOURS, minutes=1)
+        conn.execute(
+            "UPDATE patient_sessions SET last_seen_at = ? WHERE token_hash = ?",
+            (past_cap.isoformat(), _hash_token(token18)),
+        )
+        conn.commit()
+        assert load_patient_session(conn, token18, now=past_cap) is None, \
+            "18: a session past the absolute cap must not load even with a fresh last_seen_at"
+        assert conn.execute(
+            "SELECT COUNT(*) c FROM patient_sessions WHERE token_hash = ?", (_hash_token(token18),)
+        ).fetchone()["c"] == 0, "18: a session past the absolute cap should be deleted"
+
+        token18b = create_patient_session(conn, cf18)
+        inside_cap = datetime.now() + timedelta(hours=PATIENT_SESSION_MAX_HOURS - 1)
+        assert load_patient_session(conn, token18b, now=inside_cap) is not None, \
+            "18: a session just inside the cap should still load"
+
     print("selftest ok")
 
 
