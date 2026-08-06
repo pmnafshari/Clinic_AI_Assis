@@ -1,0 +1,17 @@
+{% extends "patient_base.html" %}
+{% block content %}
+<h1 class="mb-3">{{ t('change_heading', lang) }}</h1>
+<p class="text-secondary mb-4">{{ t('change_body', lang) }}</p>
+<form method="post" action="{{ url_for('patient.change_pin') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3">
+    <label for="pin" class="form-label">{{ t('pin_label', lang) }}</label>
+    <input type="password" id="pin" name="pin" class="form-control" inputmode="numeric" autofocus required>
+  </div>
+  <div class="mb-4">
+    <label for="confirm" class="form-label">{{ t('confirm_label', lang) }}</label>
+    <input type="password" id="confirm" name="confirm" class="form-control" inputmode="numeric" required>
+  </div>
+  <button type="submit" class="btn btn-primary w-100">{{ t('change_cta', lang) }}</button>
+</form>
+{% endblock %}
