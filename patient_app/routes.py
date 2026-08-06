@@ -71,6 +71,16 @@ def login():
 
     cf = request.form.get("codice_fiscale", "").strip().upper()
     pin = request.form.get("pin", "")
+
+    # unbounded form input goes straight into werkzeug's key derivation
+    # function - a handful of concurrent multi-megabyte posts would pin cpu
+    # and memory on a machine that also has to hold a language model. the
+    # generic message is deliberate - this refusal must read like every
+    # other one (WR-06)
+    if len(pin) > 128:
+        error = t("err_bad_credentials", current_language())
+        return render_template("patient_login.html", error=error)
+
     conn = get_db()
     status, _row = patient_auth.verify_pin(cf, pin, conn, ip=request.remote_addr)
 

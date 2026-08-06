@@ -11,8 +11,10 @@ from flask import Flask, g, redirect, render_template, send_from_directory, url_
 from flask_wtf import CSRFProtect
 
 import patient_auth
+import storage
 from env_config import load_secret_key
 
+from . import routes
 from .routes import patient_bp, require_patient_session
 from .strings import LANG_COOKIE_NAME, LANGUAGES, current_language, t
 
@@ -43,8 +45,35 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
     # one constant drives Secure on both this cookie and the auth cookie in
     # routes.py, so a selftest that flips it flips both writers at once (CR-06)
     app.config["SESSION_COOKIE_SECURE"] = patient_auth.COOKIE_SECURE
+    # this app takes no uploads - the cap is a bound on form bodies, chosen
+    # not locked (WR-06). no 413 handler: app/__init__.py's exists because
+    # its upload form needs a flashed banner, and a patient hitting a 64KB
+    # cap on a two-field login form is not a flow worth designing for
+    app.config["MAX_CONTENT_LENGTH"] = 64 * 1024
     # the more exposed surface does not get weaker defaults than the staff app
     CSRFProtect(app)
+
+    # read routes.DB_PATH at call time, not by importing the value - the
+    # selftest patches this attribute, and copying it at import would freeze
+    # the wrong path (mirrors app/__init__.py's db.DB_PATH comment). a first
+    # boot before the staff app has ever run is a plausible ordering: without
+    # this, db/ doesn't exist and every request 500s, or db/ exists without
+    # clinic.sqlite and sqlite creates an empty file that shadows the real
+    # one (WR-02). init_db already calls patient_auth.init_patient_tables.
+    Path(routes.DB_PATH).parent.mkdir(parents=True, exist_ok=True)
+    conn = storage.init_db(routes.DB_PATH)
+    conn.close()
+
+    @app.teardown_appcontext
+    def _close_db(exception):
+        # app.run(threaded=True) means several requests can be live at once,
+        # each holding a WAL reader - closure must not depend on refcounting
+        # eventually collecting g (WR-03). inline rather than a patient_app/
+        # db.py: this module has no separate db module, and manufacturing
+        # one for a single function is not proportionate.
+        db = g.pop("db", None)
+        if db is not None:
+            db.close()
 
     app.register_blueprint(patient_bp)
     app.before_request(require_patient_session)
