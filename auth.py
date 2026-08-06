@@ -93,6 +93,25 @@ def selftest():
             assert row["username"], "5: username must not be null/empty"
             assert row["action"], "5: action must not be null/empty"
 
+        # 7. log_audit takes an optional source address (D-06). every existing
+        # caller passes no ip and must keep storing NULL - the patient login
+        # surface is the only caller that will ever set it.
+        log_audit(conn, "u", "patient", "patient_pin_check", "CF", allowed=0, ip="203.0.113.9")
+        ip_row = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'patient_pin_check' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert ip_row["ip"] == "203.0.113.9", "7: ip should round-trip"
+
+        log_audit(conn, "drossi", "dentist", "update_field", "MRRS800010150100", 1)
+        no_ip_row = conn.execute(
+            "SELECT * FROM audit_log WHERE username = 'drossi' AND action = 'update_field'"
+            " ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert no_ip_row["ip"] is None, "7: a call with no ip= must store NULL"
+
+        audit_columns = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)")}
+        assert "ip" in audit_columns, "7: audit_log should have an ip column"
+
     print("selftest passed")
 
 

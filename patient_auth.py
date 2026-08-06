@@ -377,6 +377,34 @@ def selftest():
             assert forbidden not in imported, \
                 f"8: patient_auth must not import {forbidden} - binding separation property"
 
+        # 9. patient_login_attempts: a durable per-IP throttle, swept on write
+        # instead of a reaper (D-04, D-05). fails until the table and the two
+        # helpers exist.
+        attempt_columns = {row["name"] for row in conn.execute("PRAGMA table_info(patient_login_attempts)")}
+        assert attempt_columns == {"id", "ip", "attempted_at"}, \
+            f"9: unexpected patient_login_attempts columns, got {attempt_columns}"
+
+        ip_a = "203.0.113.9"
+        ip_b = "203.0.113.10"
+        now9 = datetime.now()
+        assert _ip_throttled(conn, ip_a, now9) is False, "9: fresh table should not throttle"
+
+        for _ in range(PATIENT_IP_ATTEMPT_THRESHOLD):
+            _record_login_attempt(conn, ip_a, now9)
+        assert _ip_throttled(conn, ip_a, now9) is True, "9: threshold attempts should throttle"
+        assert _ip_throttled(conn, ip_b, now9) is False, \
+            "9: throttle must be per-source, not global"
+
+        conn.execute("DELETE FROM patient_login_attempts")
+        conn.commit()
+        for _ in range(PATIENT_IP_ATTEMPT_THRESHOLD):
+            _record_login_attempt(conn, ip_a, now9)
+        later9 = now9 + timedelta(minutes=PATIENT_IP_ATTEMPT_WINDOW_MINUTES + 1)
+        assert _ip_throttled(conn, ip_a, later9) is False, \
+            "9: an attempt outside the window must not count"
+        remaining9 = conn.execute("SELECT COUNT(*) c FROM patient_login_attempts").fetchone()["c"]
+        assert remaining9 == 0, "9: the throttle check should sweep stale rows, not just skip them"
+
     print("selftest ok")
 
 
