@@ -773,6 +773,115 @@ def selftest():
         assert load_patient_session(conn, token18b, now=inside_cap) is not None, \
             "18: a session just inside the cap should still load"
 
+        # 19. D-07 - the compelled first change stays exempt: no current_pin
+        # is required while must_change_pin is still set. pinned so a later
+        # tightening cannot silently remove the exemption.
+        cf19 = "FRCD940010151600"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf19, "forced change patient"),
+        )
+        conn.commit()
+        issue_pin(cf19, conn, "test-dentist", "dentist")
+        assert _credential(conn, cf19)["must_change_pin"] == 1, \
+            "19: setup - a fresh credential forces a change"
+        change_pin(cf19, "15935728", conn)
+        assert _credential(conn, cf19)["must_change_pin"] == 0, \
+            "19: the compelled first change must succeed with no current_pin"
+
+        # 20. D-07/CR-01 - once must_change_pin is cleared, a change is
+        # voluntary and requires the correct current pin. fails until
+        # change_pin accepts and checks a current_pin argument.
+        cf20 = "VLNT950010151700"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf20, "voluntary change patient"),
+        )
+        conn.commit()
+        issue_pin(cf20, conn, "test-dentist", "dentist")
+        change_pin(cf20, "15935728", conn)  # the compelled change - clears the flag
+        before_hash20 = _credential(conn, cf20)["pin_hash"]
+
+        try:
+            change_pin(cf20, "26846913", conn)
+            raise AssertionError("20: a voluntary change with no current_pin should be refused")
+        except ValueError as exc:
+            assert str(exc) == "current", f"20: expected ValueError('current'), got {exc!r}"
+
+        try:
+            change_pin(cf20, "26846913", conn, current_pin="00000000")
+            raise AssertionError("20: a voluntary change with the wrong current_pin should be refused")
+        except ValueError as exc:
+            assert str(exc) == "current", f"20: expected ValueError('current'), got {exc!r}"
+
+        assert _credential(conn, cf20)["pin_hash"] == before_hash20, \
+            "20: a refused voluntary change must not half-write pin_hash"
+
+        change_pin(cf20, "26846913", conn, current_pin="15935728")
+        assert verify_pin(cf20, "26846913", conn)[0] == "ok", \
+            "20: a voluntary change with the correct current_pin should succeed"
+
+        # 21. WR-04 - three distinguishable refusals, and the isdigit()
+        # guard is gone. fails until change_pin raises short/weak/same
+        # instead of the two old long sentences, and a non-digit pin is
+        # subject to the weakness policy.
+        cf21 = "WRFR960010151800"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf21, "wr04 patient"),
+        )
+        conn.commit()
+        pin21 = issue_pin(cf21, conn, "test-dentist", "dentist")
+
+        try:
+            change_pin(cf21, "1234567", conn)
+            raise AssertionError("21: a 7-character pin should be refused")
+        except ValueError as exc:
+            assert str(exc) == "short", f"21: expected ValueError('short'), got {exc!r}"
+
+        for weak21 in ("11111111", "aaaaaaaa", "12345678"):
+            try:
+                change_pin(cf21, weak21, conn)
+                raise AssertionError(f"21: {weak21!r} should be refused as weak")
+            except ValueError as exc:
+                assert str(exc) == "weak", \
+                    f"21: expected ValueError('weak') for {weak21!r}, got {exc!r}"
+
+        try:
+            change_pin(cf21, pin21, conn)
+            raise AssertionError("21: reusing the current pin should be refused")
+        except ValueError as exc:
+            assert str(exc) == "same", f"21: expected ValueError('same'), got {exc!r}"
+
+        # 22. D-08's change half - a successful change_pin destroys every
+        # session for that patient, and spares another patient's sessions.
+        # fails until change_pin calls destroy_patient_sessions.
+        cf22 = "CHNG970010151900"
+        other22 = "OTHR980010152000"
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (cf22, "change session patient"),
+        )
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+            (other22, "other change session patient"),
+        )
+        conn.commit()
+        issue_pin(cf22, conn, "test-dentist", "dentist")
+        issue_pin(other22, conn, "test-dentist", "dentist")
+        sess22a = create_patient_session(conn, cf22)
+        sess22b = create_patient_session(conn, cf22)
+        other_sess22 = create_patient_session(conn, other22)
+
+        change_pin(cf22, "37159428", conn)
+
+        assert load_patient_session(conn, sess22a) is None, \
+            "22: change_pin must destroy this patient's existing sessions"
+        assert load_patient_session(conn, sess22b) is None, \
+            "22: change_pin must destroy every one of this patient's sessions"
+        assert load_patient_session(conn, other_sess22) is not None, \
+            "22: change_pin for one patient must not touch another patient's session"
+
     print("selftest ok")
 
 

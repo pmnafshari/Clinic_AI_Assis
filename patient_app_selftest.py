@@ -586,6 +586,88 @@ def selftest():
         assert bounced.status_code == 302 and "login" in bounced.headers["Location"], \
             "20: a session must be rejected on the next request after its credential is reissued"
 
+        # 21. D-09/CR-01/WR-04 route-level proof. written first, observed
+        # failing (17.1-05). the route must require the current pin for a
+        # voluntary change, rotate the acting session's token rather than
+        # bounce to login, and show the current-pin field only outside the
+        # forced flow.
+        reset21 = raw_db()
+        reset21.execute("DELETE FROM patient_login_attempts")
+        reset21.commit()
+        reset21.close()
+
+        # 21a - the acting session survives a voluntary change with a
+        # rotated token, and exactly one session row remains
+        cf21 = "PNRT940010152100"
+        pin21 = seed_and_issue(cf21)
+        client21, _ = sign_in(cf21, pin21)
+        change_page21 = client21.get("/change-pin")
+        client21.post("/change-pin", data={
+            "pin": "51739246", "confirm": "51739246",
+            "csrf_token": _csrf_from(change_page21.text),
+        })
+        old_token21 = client21.get_cookie(patient_auth.PATIENT_COOKIE_NAME).value
+
+        voluntary_page21 = client21.get("/change-pin")
+        voluntary_resp21 = client21.post("/change-pin", data={
+            "current": "51739246", "pin": "62840357", "confirm": "62840357",
+            "csrf_token": _csrf_from(voluntary_page21.text),
+        })
+        assert voluntary_resp21.status_code == 302 and voluntary_resp21.headers["Location"] == "/", \
+            "21: a completed voluntary change should redirect home"
+        new_token21 = client21.get_cookie(patient_auth.PATIENT_COOKIE_NAME).value
+        assert new_token21 != old_token21, \
+            "21: the acting session's token must be rotated by a successful change"
+        assert client21.get("/").status_code == 200, \
+            "21: the same browser should stay signed in on the rotated token"
+        assert count(
+            "SELECT COUNT(*) FROM patient_sessions WHERE codice_fiscale = ?", (cf21,)
+        ) == 1, "21: exactly one session row should remain for this patient"
+
+        # 21b - the three messages reach the screen for a voluntary change
+        cf21b = "MSSG950010152200"
+        pin21b = seed_and_issue(cf21b)
+        client21b, _ = sign_in(cf21b, pin21b)
+        change_page21b = client21b.get("/change-pin")
+        client21b.post("/change-pin", data={
+            "pin": "84627193", "confirm": "84627193",
+            "csrf_token": _csrf_from(change_page21b.text),
+        })
+
+        weak_page21b = client21b.get("/change-pin")
+        weak_resp21b = client21b.post("/change-pin", data={
+            "current": "84627193", "pin": "11111111", "confirm": "11111111",
+            "csrf_token": _csrf_from(weak_page21b.text),
+        })
+        assert t("err_pin_weak", "it") in weak_resp21b.text, \
+            "21: a weak new pin should render err_pin_weak"
+        assert t("err_pin_short", "it", n=8) not in weak_resp21b.text, \
+            "21: a weak-but-correct-length pin must not render the short message"
+
+        same_page21b = client21b.get("/change-pin")
+        same_resp21b = client21b.post("/change-pin", data={
+            "current": "84627193", "pin": "84627193", "confirm": "84627193",
+            "csrf_token": _csrf_from(same_page21b.text),
+        })
+        assert t("err_pin_same", "it") in same_resp21b.text, \
+            "21: reusing the current pin should render err_pin_same"
+
+        # 21c - the current-pin field is on the voluntary screen and absent
+        # from the forced one
+        cf21c = "FLDR960010152300"
+        pin21c = seed_and_issue(cf21c)
+        client21c, _ = sign_in(cf21c, pin21c)
+        forced_screen21c = client21c.get("/change-pin")
+        assert 'name="current"' not in forced_screen21c.text, \
+            "21: the forced change screen must not show a current-pin field"
+        client21c.post("/change-pin", data={
+            "pin": "73951628", "confirm": "73951628",
+            "csrf_token": _csrf_from(forced_screen21c.text),
+        })
+        voluntary_screen21c = client21c.get("/change-pin")
+        assert 'name="current"' in voluntary_screen21c.text, \
+            "21: the voluntary change screen must show a current-pin field"
+
     print("selftest ok")
 
 
