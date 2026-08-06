@@ -5,6 +5,8 @@ import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from flask import url_for
+
 import patient_auth
 import storage
 import web_session
@@ -294,6 +296,65 @@ def selftest():
             "15: both refusals should re-render the login form"
         assert _strip_csrf(unknown_resp.text) == _strip_csrf(wrong_resp.text), \
             "15: an unknown codice fiscale and a wrong pin must render byte-identical bodies"
+
+        # 16. DEF-1 - the logout control must be reachable from rendered
+        # HTML, not just provable by driving the route directly. section 12
+        # above proved the mechanism works; it never looked at the page.
+        # that gap is exactly how the live walk found this defect.
+        with app.test_request_context():
+            logout_url = url_for("patient.logout")
+        logout_form_re = re.compile(
+            r'<form[^>]*action="' + re.escape(logout_url) + r'"[^>]*>.*?</form>', re.DOTALL
+        )
+
+        cf_logout = "MRTN930010150600"
+        pin_logout = seed_and_issue(cf_logout)
+        logout_client, _ = sign_in(cf_logout, pin_logout)
+        change_page = logout_client.get("/change-pin")
+        logout_client.post("/change-pin", data={
+            "pin": "24681357", "confirm": "24681357",
+            "csrf_token": _csrf_from(change_page.text),
+        })
+        home_page = logout_client.get("/")
+        assert home_page.status_code == 200, "16: the home page should render"
+        home_form = logout_form_re.search(home_page.text)
+        assert home_form, "16: expected a form posting to patient.logout on the home screen"
+        assert t("logout_cta", "it") in home_form.group(0), \
+            "16: the logout control must carry the logout_cta string"
+        assert 'name="csrf_token"' in home_form.group(0), \
+            "16: the logout form must carry a csrf token - the route is POST-only and CSRF-protected"
+
+        # same control, still on the forced change-pin screen - the screen it
+        # matters most on, since it's the only screen a first-login patient
+        # can reach, and FORCED_CHANGE_ALLOWED already keeps the route open
+        cf_forced_logout = "GRLL940010150700"
+        pin_forced_logout = seed_and_issue(cf_forced_logout)
+        forced_logout_client, _ = sign_in(cf_forced_logout, pin_forced_logout)
+        change_screen = forced_logout_client.get("/change-pin")
+        change_form = logout_form_re.search(change_screen.text)
+        assert change_form, "16: the forced change-pin screen must render the logout control too"
+        assert t("logout_cta", "it") in change_form.group(0), \
+            "16: the change-pin screen's logout button must carry the logout_cta string"
+
+        # absent where there is no session to end - rendering it there would
+        # be a dead control
+        anon_login_page = app.test_client().get("/login")
+        assert not logout_form_re.search(anon_login_page.text), \
+            "16: the login screen has no session, so it must not render a logout control"
+
+        # 17. DEF-2 - the card keeps the UI-SPEC's xl (32px = 2rem) minimum
+        # margin from the viewport edge on both axes. this is a source-level
+        # assertion, not a computed-style check - this project has no
+        # rendering harness, and adding one for a one-line margin is not
+        # proportionate. it pins the value so a later edit can't silently
+        # drift the horizontal margin back down to the sm token.
+        css_text = Path("patient_app/static/css/patient.css").read_text()
+        shell_match = re.search(r"\.patient-shell\s*\{([^}]*)\}", css_text, re.DOTALL)
+        assert shell_match, "17: expected a .patient-shell rule in patient.css"
+        padding_match = re.search(r"padding:\s*([^;]+);", shell_match.group(1))
+        assert padding_match, "17: expected a padding declaration on .patient-shell"
+        assert padding_match.group(1).strip() == "2rem", \
+            "17: .patient-shell padding must be 2rem on both axes (the spec's xl/32px token)"
 
     print("selftest ok")
 
