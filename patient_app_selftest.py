@@ -215,6 +215,24 @@ def selftest():
             "SELECT must_change_pin FROM patient_credentials WHERE codice_fiscale = ?", (cf_forced,)
         ) == 0, "12: must_change_pin should be cleared"
 
+        # D-16 reconciliation (17.1-03). CHAT-03's original criterion said,
+        # and still says: a patient who holds a real credential and cannot
+        # get in is told to contact the clinic. what changed under D-01's
+        # reorder is *when* that telling happens - the expired and locked
+        # messages below are now reachable only by a caller who has already
+        # submitted the correct pin, because revealing them to anyone who
+        # merely guesses a codice fiscale was the enrolment oracle CR-03
+        # described. what still gets the genuinely-forgot-their-pin patient
+        # to the clinic is D-02's help_line: a permanent, unconditional
+        # "trouble signing in? contact the clinic" line rendered on every
+        # response, correct pin or not, so it carries no information and
+        # needs no oracle to reach them. the rule for whoever reads this
+        # next: help_line must stay unconditional (section 18 already pins
+        # that structurally) - making it conditional would re-open the
+        # oracle this reorder closed. sections 13 and 14 below pass with
+        # their original assertions unmodified; only the throttle reset and
+        # the wrong-pin negative case were added.
+
         # reset the throttle before this section - every test client here
         # reports 127.0.0.1, so without this reset sections 13-15 would
         # throttle each other and it would read as an application defect
@@ -254,6 +272,20 @@ def selftest():
         })
         assert t("err_expired", "en") in resp_en.text, "13: expected the expired copy in english"
 
+        # D-01's negative case: the same expired credential probed with the
+        # wrong pin must render the generic refusal, not the expired copy -
+        # expired is reachable only by a caller who already knows the pin
+        wrong_expired_client = app.test_client()
+        wrong_expired_page = wrong_expired_client.get("/login")
+        wrong_expired_resp = wrong_expired_client.post("/login", data={
+            "codice_fiscale": cf_expired, "pin": "00000000",
+            "csrf_token": _csrf_from(wrong_expired_page.text),
+        })
+        assert t("err_bad_credentials", "it") in wrong_expired_resp.text, \
+            "13: an expired credential probed with the wrong pin must render the generic refusal"
+        assert t("err_expired", "it") not in wrong_expired_resp.text, \
+            "13: a wrong pin must not reveal that the credential is expired"
+
         # reset the throttle before this section - see the comment above
         # section 13
         reset14 = raw_db()
@@ -290,6 +322,20 @@ def selftest():
         })
         assert t("err_locked", "en") in locked_resp_en.text, \
             "14: expected the locked copy in english too"
+
+        # D-01's negative case: the same locked credential probed with the
+        # wrong pin must render the generic refusal, not the locked copy -
+        # locked is reachable only by a caller who already knows the pin
+        wrong_locked_client = app.test_client()
+        wrong_locked_page = wrong_locked_client.get("/login")
+        wrong_locked_resp = wrong_locked_client.post("/login", data={
+            "codice_fiscale": cf_locked, "pin": "00000000",
+            "csrf_token": _csrf_from(wrong_locked_page.text),
+        })
+        assert t("err_bad_credentials", "it") in wrong_locked_resp.text, \
+            "14: a locked credential probed with the wrong pin must render the generic refusal"
+        assert t("err_locked", "it") not in wrong_locked_resp.text, \
+            "14: a wrong pin must not reveal that the account is locked"
 
         # reset the throttle before this section - see the comment above
         # section 13
