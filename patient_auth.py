@@ -161,6 +161,12 @@ def issue_pin(cf, conn, issued_by, issued_by_role="staff", now=None):
 
     # the pin itself is never in the audit row - only that one was issued
     log_audit(conn, issued_by, issued_by_role, "issue_patient_pin", cf, allowed=1)
+
+    # reissue supersedes the previous credential, so every session standing
+    # on it goes too - without this the documented recovery path recovers
+    # nothing while a compromised session slides its own idle window forward
+    # on every request (D-08)
+    destroy_patient_sessions(conn, cf)
     return pin
 
 
