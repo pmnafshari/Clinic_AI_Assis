@@ -21,13 +21,15 @@ def authorize(role, action):
     return action in PERMISSIONS.get(role, set())
 
 
-def log_audit(conn, username, role, action, target, allowed, ts=None):
+def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None):
+    # ip: the source address behind the row, set only by the patient login
+    # surface - a sweep with no source recorded is invisible after the fact
     if ts is None:
         ts = datetime.now().isoformat()
     conn.execute(
-        "INSERT INTO audit_log (ts, username, role, action, target, allowed)"
-        " VALUES (?, ?, ?, ?, ?, ?)",
-        (ts, username, role, action, target, allowed),
+        "INSERT INTO audit_log (ts, username, role, action, target, allowed, ip)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (ts, username, role, action, target, allowed, ip),
     )
     conn.commit()
 

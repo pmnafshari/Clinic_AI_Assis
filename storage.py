@@ -67,7 +67,8 @@ def init_db(db_path):
             role TEXT NOT NULL,
             action TEXT NOT NULL,
             target TEXT,
-            allowed INTEGER NOT NULL
+            allowed INTEGER NOT NULL,
+            ip TEXT
         );
         CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -87,6 +88,7 @@ def init_db(db_path):
         );
     """)
     _ensure_lockout_columns(conn)
+    _ensure_audit_ip_column(conn)
     conn.commit()
 
     # patient credential/session tables. deferred import because patient_auth
@@ -106,6 +108,14 @@ def _ensure_lockout_columns(conn):
         conn.execute("ALTER TABLE users ADD COLUMN locked_until TEXT")
     if "must_change_password" not in existing:
         conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
+
+
+def _ensure_audit_ip_column(conn):
+    # db/clinic.sqlite already exists with hundreds of rows on this machine -
+    # CREATE TABLE IF NOT EXISTS alone would never reach it
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
+    if "ip" not in existing:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN ip TEXT")
 
 
 def upsert_note_sql(note, source_path, conn):
