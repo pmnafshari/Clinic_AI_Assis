@@ -8,6 +8,7 @@ sanctioned reuse - it is an audit utility, not an auth mechanism.
 """
 
 import hashlib
+import os
 import secrets
 import sqlite3
 import sys
@@ -20,6 +21,14 @@ from auth import log_audit
 from dental_notes_schema import CF_PATTERN
 
 PATIENT_COOKIE_NAME = "patient_session"
+
+# chosen here, not locked. defaults secure - the failure mode being avoided
+# is shipping a cleartext-eligible bearer token for medical records to the
+# most exposed surface in the project. the opt-out is PATIENT_COOKIE_SECURE=0
+# for a local http run, and it must stay an opt-out, never the default.
+# always-secure was rejected: it would force a TLS setup into a selftest
+# suite whose central virtue is running offline with no setup (CR-06, D-13)
+COOKIE_SECURE = os.environ.get("PATIENT_COOKIE_SECURE", "1") != "0"
 
 # chosen here, not locked. only the staff-vs-patient asymmetry is the locked
 # part of the design: patients are more likely on shared or unmanaged devices,

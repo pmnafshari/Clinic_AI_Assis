@@ -5,7 +5,7 @@ before_request function so the "don't trap the user" property lives in one
 place, the same shape app/__init__.py uses for CHANGE_PW_ALLOWED.
 """
 
-from flask import Blueprint, g, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, g, redirect, render_template, request, url_for
 
 import patient_auth
 import storage
@@ -90,7 +90,7 @@ def login():
     resp = redirect(url_for("home"))
     resp.set_cookie(
         patient_auth.PATIENT_COOKIE_NAME, token,
-        httponly=True, samesite="Strict",
+        httponly=True, samesite="Strict", secure=current_app.config["SESSION_COOKIE_SECURE"],
     )
     return resp
 
@@ -154,6 +154,6 @@ def change_pin():
     resp = redirect(url_for("home"))
     resp.set_cookie(
         patient_auth.PATIENT_COOKIE_NAME, token,
-        httponly=True, samesite="Strict",
+        httponly=True, samesite="Strict", secure=current_app.config["SESSION_COOKIE_SECURE"],
     )
     return resp

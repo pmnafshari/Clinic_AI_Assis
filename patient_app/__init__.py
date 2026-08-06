@@ -40,6 +40,9 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
     app.config["SESSION_COOKIE_NAME"] = "patient_csrf"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
+    # one constant drives Secure on both this cookie and the auth cookie in
+    # routes.py, so a selftest that flips it flips both writers at once (CR-06)
+    app.config["SESSION_COOKIE_SECURE"] = patient_auth.COOKIE_SECURE
     # the more exposed surface does not get weaker defaults than the staff app
     CSRFProtect(app)
 
