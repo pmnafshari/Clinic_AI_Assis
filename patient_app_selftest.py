@@ -52,6 +52,14 @@ def selftest():
         # Cookie writers silently overwrite each other (see patient_app/__init__.py)
         assert app.config.get("SESSION_COOKIE_NAME", "session") != patient_auth.PATIENT_COOKIE_NAME, \
             "1: flask's session cookie must not collide with the patient auth cookie"
+        # the collision that actually happens: both apps share a host, and
+        # RFC 6265 cookies are not port-scoped, so leaving either one at
+        # Flask's default "session" lets them clobber each other's csrf
+        # session, each signed with a different SECRET_KEY (CR-05)
+        assert app.config["SESSION_COOKIE_NAME"] != "session", \
+            "1: the two apps share a host, and cookies are not port-scoped"
+        assert app.config["SESSION_COOKIE_NAME"] != web_session.COOKIE_NAME, \
+            "1: must not collide with the staff app's own auth cookie name either"
 
         import ast
         import inspect
@@ -667,6 +675,61 @@ def selftest():
         voluntary_screen21c = client21c.get("/change-pin")
         assert 'name="current"' in voluntary_screen21c.text, \
             "21: the voluntary change screen must show a current-pin field"
+
+        # 22. CR-06 - the patient auth cookie and the csrf session cookie both
+        # carry Secure unless PATIENT_COOKIE_SECURE explicitly turns it off.
+        # source-level checks plus the Set-Cookie header text, since this
+        # suite has no TLS harness. fails until patient_auth.COOKIE_SECURE
+        # exists and drives both writers.
+        import importlib
+        import os
+
+        assert patient_auth.COOKIE_SECURE is True, \
+            "22: COOKIE_SECURE must default to True with no env override set"
+        assert app.config["SESSION_COOKIE_SECURE"] is True, \
+            "22: the csrf session cookie must be secure by default too"
+
+        cf22 = "SCRD970010152400"
+        pin22 = seed_and_issue(cf22)
+        secure_client = app.test_client()
+        secure_page = secure_client.get("/login")
+        secure_resp = secure_client.post("/login", data={
+            "codice_fiscale": cf22, "pin": pin22, "csrf_token": _csrf_from(secure_page.text),
+        })
+        login_set_cookie = secure_resp.headers.get("Set-Cookie", "")
+        assert "Secure" in login_set_cookie, \
+            "22: the login Set-Cookie header must carry Secure"
+        assert "HttpOnly" in login_set_cookie, \
+            "22: the login Set-Cookie header must still carry HttpOnly"
+        assert "SameSite=Strict" in login_set_cookie, \
+            "22: the login Set-Cookie header must still carry SameSite=Strict"
+
+        change_page22 = secure_client.get("/change-pin")
+        change_resp22 = secure_client.post("/change-pin", data={
+            "pin": "48627193", "confirm": "48627193",
+            "csrf_token": _csrf_from(change_page22.text),
+        })
+        rotate_set_cookie = change_resp22.headers.get("Set-Cookie", "")
+        assert "Secure" in rotate_set_cookie, \
+            "22: the change-pin rotation's Set-Cookie header must carry Secure too - " \
+            "both writers, not just the one that was easy to reach"
+        assert "HttpOnly" in rotate_set_cookie, \
+            "22: the change-pin rotation's Set-Cookie header must carry HttpOnly"
+        assert "SameSite=Strict" in rotate_set_cookie, \
+            "22: the change-pin rotation's Set-Cookie header must carry SameSite=Strict"
+
+        # the opt-out exists precisely so it can be turned off deliberately -
+        # test it in both directions and always restore the environment
+        os.environ["PATIENT_COOKIE_SECURE"] = "0"
+        try:
+            importlib.reload(patient_auth)
+            assert patient_auth.COOKIE_SECURE is False, \
+                "22: PATIENT_COOKIE_SECURE=0 must turn the constant off"
+        finally:
+            del os.environ["PATIENT_COOKIE_SECURE"]
+            importlib.reload(patient_auth)
+            assert patient_auth.COOKIE_SECURE is True, \
+                "22: the constant must return to secure once the override is removed"
 
     print("selftest ok")
 

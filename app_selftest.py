@@ -347,6 +347,19 @@ def selftest():
             "SELECT must_change_password FROM users WHERE username = ?", ("forced",)
         ) == 0, "16: completing the change must clear must_change_password"
 
+        # 17. CR-05 - the staff app's session cookie must not be left at
+        # Flask's default, and must differ from the patient app's own choice.
+        # importing patient_app here is fine - the binding rule is about what
+        # patient_app imports, and patient_app_selftest.py section 1 checks
+        # that import graph directly.
+        from patient_app import create_patient_app
+
+        patient_test_app = create_patient_app(env_path=Path(tmp) / ".env.patient")
+        assert app.config["SESSION_COOKIE_NAME"] != "session", \
+            "17: the two apps share a host, and cookies are not port-scoped"
+        assert app.config["SESSION_COOKIE_NAME"] != patient_test_app.config["SESSION_COOKIE_NAME"], \
+            "17: the staff and patient apps must not share a cookie name"
+
     print("selftest ok")
 
 
