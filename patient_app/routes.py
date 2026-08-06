@@ -11,7 +11,7 @@ import patient_auth
 import storage
 from auth import log_audit
 
-from .strings import DEFAULT_LANGUAGE, LANG_COOKIE_NAME, LANGUAGES, t
+from .strings import current_language, t
 
 patient_bp = Blueprint("patient", __name__)
 
@@ -45,11 +45,6 @@ def get_db():
     return g.db
 
 
-def _current_language():
-    lang = request.cookies.get(LANG_COOKIE_NAME)
-    return lang if lang in LANGUAGES else DEFAULT_LANGUAGE
-
-
 def require_patient_session():
     if request.endpoint is None:
         return  # unmatched route - let the normal 404 flow run
@@ -77,7 +72,11 @@ def login():
     status, _row = patient_auth.verify_pin(cf, pin, conn)
 
     if status != "ok":
-        error = t(STATUS_TO_ERROR_KEY[status], _current_language())
+        # fail closed on the generic refusal - it's also the safe enumeration
+        # answer, so the defensive default and the security default are the
+        # same string. plan 03 adds a "throttled" status to this dict; the
+        # .get is the backstop for the next one nobody remembers (WR-13)
+        error = t(STATUS_TO_ERROR_KEY.get(status, "err_bad_credentials"), current_language())
         return render_template("patient_login.html", error=error)
 
     token = patient_auth.create_patient_session(conn, cf)
@@ -116,7 +115,7 @@ def change_pin():
 
     pin = request.form.get("pin", "")
     confirm = request.form.get("confirm", "")
-    lang = _current_language()
+    lang = current_language()
 
     if pin != confirm:
         return render_template(

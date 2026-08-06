@@ -8,9 +8,19 @@ same caveat already carried against the intent-gate vocabulary. review before
 any real patient sees them.
 """
 
+from flask import request
+
 LANGUAGES = ("it", "en")
 DEFAULT_LANGUAGE = "it"
 LANG_COOKIE_NAME = "patient_lang"
+
+
+def current_language():
+    # the only flask dependency in this module - it earns its place by
+    # sitting next to the values it reads, so the page chrome and the error
+    # banner can't drift apart on the same response (WR-09)
+    lang = request.cookies.get(LANG_COOKIE_NAME)
+    return lang if lang in LANGUAGES else DEFAULT_LANGUAGE
 
 STRINGS = {
     "login_heading": {

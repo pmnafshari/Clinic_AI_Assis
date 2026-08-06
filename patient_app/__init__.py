@@ -7,14 +7,14 @@ binding security property, not a preference.
 
 from pathlib import Path
 
-from flask import Flask, g, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, g, redirect, render_template, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
 import patient_auth
 from env_config import load_secret_key
 
 from .routes import patient_bp, require_patient_session
-from .strings import DEFAULT_LANGUAGE, LANG_COOKIE_NAME, LANGUAGES, t
+from .strings import LANG_COOKIE_NAME, LANGUAGES, current_language, t
 
 # its own secret file, so the two apps never sign each other's cookies
 PATIENT_ENV_PATH = Path(".env.patient")
@@ -22,11 +22,6 @@ PATIENT_ENV_PATH = Path(".env.patient")
 # the vendored bootstrap already on disk for the staff app. served rather than
 # copied - offline-first forbids a cdn, and a second copy would drift.
 VENDOR_ROOT = Path("app/static/vendor").resolve()
-
-
-def current_language():
-    lang = request.cookies.get(LANG_COOKIE_NAME)
-    return lang if lang in LANGUAGES else DEFAULT_LANGUAGE
 
 
 def create_patient_app(env_path=PATIENT_ENV_PATH):
