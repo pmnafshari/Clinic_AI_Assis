@@ -10,6 +10,7 @@ import app.agent_routes as agent_routes
 import app.db as app_db
 import app.patients_routes as patients_routes
 from app import create_app
+from auth import authorize
 from dental_notes_schema import DentalNote
 from web_session import _hash_token
 
@@ -712,6 +713,173 @@ def selftest():
         unknown_resp = _issue(dentist_client, unknown_cf)
         assert unknown_resp.status_code == 404, "20: issuing for an unknown patient should 404"
         assert _cred_count(unknown_cf) == 0, "20: no credential row for an unknown patient"
+
+        # 21. D-11 - the gate: dentist and assistant may revoke, admin/system
+        # may not (Phase 17's D-01/D-02, not re-opened here)
+        assert authorize("dentist", "revoke_patient_pin"), \
+            "21: dentist should allow revoke_patient_pin"
+        assert authorize("assistant", "revoke_patient_pin"), \
+            "21: assistant should allow revoke_patient_pin"
+        assert not authorize("admin", "revoke_patient_pin"), \
+            "21: admin should deny revoke_patient_pin"
+        assert not authorize("system", "revoke_patient_pin"), \
+            "21: system should deny revoke_patient_pin"
+
+        # a patient of its own, seeded fresh so the revoke tests don't step on
+        # the credential state sections 16-20 already built up
+        revoke_cf = "VRDL900010150300"
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            (revoke_cf, "luca verdi", "333555777"),
+        )
+        conn.commit()
+        conn.close()
+
+        def _revoke(client, codice):
+            # same csrf-sourcing shape as _issue - a page every role can reach
+            page = client.get("/", follow_redirects=True)
+            return client.post(
+                f"/patients/{codice}/revoke-pin",
+                headers={"X-CSRFToken": _csrf_from(page.text)},
+            )
+
+        def _session_count(codice):
+            c = sqlite3.connect(db_path)
+            n = c.execute(
+                "SELECT COUNT(*) FROM patient_sessions WHERE codice_fiscale = ?", (codice,)
+            ).fetchone()[0]
+            c.close()
+            return n
+
+        def _is_active(codice):
+            c = sqlite3.connect(db_path)
+            c.row_factory = sqlite3.Row
+            row = c.execute(
+                "SELECT active FROM patient_credentials WHERE codice_fiscale = ?", (codice,)
+            ).fetchone()
+            c.close()
+            return row["active"]
+
+        # 22. the route works for a dentist - a live session dies with the
+        # credential it stood on
+        conn = sqlite3.connect(db_path)
+        revoke_pin = patient_auth.issue_pin(revoke_cf, conn, "drossi", "dentist")
+        patient_auth.create_patient_session(conn, revoke_cf)
+        conn.close()
+        assert _session_count(revoke_cf) == 1, "22: setup should leave one live session"
+
+        revoke_resp = _revoke(dentist_client, revoke_cf)
+        assert revoke_resp.status_code == 200, "22: a dentist should be able to revoke a PIN"
+        assert _is_active(revoke_cf) == 0, "22: revoking should set active = 0"
+        assert _session_count(revoke_cf) == 0, \
+            "22: revoking should destroy every live session for this patient"
+
+        # 23. the assistant control works too, same shape
+        assistant_revoke_cf = "BNCS910010150400"
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            (assistant_revoke_cf, "sara bianchi", "333111222"),
+        )
+        patient_auth.issue_pin(assistant_revoke_cf, conn, "aassist", "assistant")
+        patient_auth.create_patient_session(conn, assistant_revoke_cf)
+        conn.close()
+
+        assistant_revoke_resp = _revoke(assistant_client, assistant_revoke_cf)
+        assert assistant_revoke_resp.status_code == 200, \
+            "23: an assistant should be able to revoke a PIN"
+        assert _is_active(assistant_revoke_cf) == 0, "23: revoking should set active = 0"
+        assert _session_count(assistant_revoke_cf) == 0, \
+            "23: revoking should destroy every live session for this patient"
+
+        # 24. admin is refused, and the refusal is audited (RBAC-04/D-01) -
+        # the 403 must come from authorize() in the route, not from hiding
+        # the button
+        admin_target_cf = cap_cf
+        before_active = _is_active(admin_target_cf)
+        admin_revoke_resp = _revoke(admin_client, admin_target_cf)
+        assert admin_revoke_resp.status_code == 403, "24: admin must not be able to revoke a PIN"
+        assert _is_active(admin_target_cf) == before_active, \
+            "24: a denied revoke must not touch the credential"
+        conn_d = sqlite3.connect(db_path)
+        admin_denied = conn_d.execute(
+            "SELECT COUNT(*) FROM audit_log"
+            " WHERE action = 'revoke_patient_pin' AND role = 'admin' AND allowed = 0"
+        ).fetchone()[0]
+        conn_d.close()
+        assert admin_denied == 1, \
+            f"24: expected 1 denied revoke_patient_pin row for admin, got {admin_denied}"
+
+        # 25. success is audited too
+        conn_e = sqlite3.connect(db_path)
+        success_rows = conn_e.execute(
+            "SELECT COUNT(*) FROM audit_log"
+            " WHERE action = 'revoke_patient_pin' AND allowed = 1 AND username = 'drossi'"
+        ).fetchone()[0]
+        conn_e.close()
+        assert success_rows == 1, \
+            f"25: expected 1 allowed revoke_patient_pin row for drossi, got {success_rows}"
+
+        # 26. csrf is required, same as every other write
+        no_csrf_revoke_resp = dentist_client.post(f"/patients/{cap_cf}/revoke-pin")
+        assert no_csrf_revoke_resp.status_code == 400, \
+            "26: revoke-pin without a csrf token should be rejected"
+
+        # 27. an unknown patient 404s and writes nothing
+        unknown_revoke_cf = "ZZZZ888888888888"
+        unknown_revoke_resp = _revoke(dentist_client, unknown_revoke_cf)
+        assert unknown_revoke_resp.status_code == 404, \
+            "27: revoking for an unknown patient should 404"
+        conn_f = sqlite3.connect(db_path)
+        unknown_cred_count = conn_f.execute(
+            "SELECT COUNT(*) FROM patient_credentials WHERE codice_fiscale = ?",
+            (unknown_revoke_cf,),
+        ).fetchone()[0]
+        conn_f.close()
+        assert unknown_cred_count == 0, "27: no credential row for an unknown patient"
+
+        # 28. no distinct signal after revocation (WR-10 / T-17-51) - the
+        # revoked credential reads exactly like a wrong pin: same status,
+        # counted toward the lockout, one audit row. this is what proves the
+        # revoke control cannot become an unthrottled, unaudited probe target.
+        conn_g = sqlite3.connect(db_path)
+        conn_g.row_factory = sqlite3.Row
+        before_attempts = conn_g.execute(
+            "SELECT failed_attempts FROM patient_credentials WHERE codice_fiscale = ?",
+            (revoke_cf,),
+        ).fetchone()["failed_attempts"]
+        before_checks = conn_g.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_pin_check' AND target = ?",
+            (revoke_cf,),
+        ).fetchone()[0]
+        status, row = patient_auth.verify_pin(revoke_cf, revoke_pin, conn_g)
+        assert status == "wrong", \
+            "28: a revoked credential with the correct pin must read exactly like a wrong pin"
+        after_attempts = conn_g.execute(
+            "SELECT failed_attempts FROM patient_credentials WHERE codice_fiscale = ?",
+            (revoke_cf,),
+        ).fetchone()["failed_attempts"]
+        after_checks = conn_g.execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_pin_check' AND target = ?",
+            (revoke_cf,),
+        ).fetchone()[0]
+        conn_g.close()
+        assert after_attempts == before_attempts + 1, \
+            "28: probing a revoked credential must still count toward the lockout"
+        assert after_checks == before_checks + 1, \
+            "28: probing a revoked credential must still write a patient_pin_check row"
+
+        # 29. the button is rendered for a dentist, absent for an admin -
+        # admin never reaches the page at all (RBAC-04), so this asserts the
+        # redirect and relies on section 24's 403 for the real control
+        dentist_button_resp = dentist_client.get(f"/patients/{cap_cf}")
+        assert "revoke-pin" in dentist_button_resp.text, \
+            "29: dentist should see the revoke-pin control"
+
+        admin_page_resp = admin_client.get(f"/patients/{cap_cf}")
+        assert admin_page_resp.status_code == 302, \
+            "29: admin GET /patients/<cf> should redirect (RBAC-04)"
 
     print("selftest ok")
 
