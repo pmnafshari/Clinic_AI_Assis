@@ -37,6 +37,10 @@ CREDENTIAL_VALIDITY_DAYS = 7
 PATIENT_IP_ATTEMPT_THRESHOLD = 20
 PATIENT_IP_ATTEMPT_WINDOW_MINUTES = 15
 
+# exists so the miss paths in verify_pin pay the same key derivation as the
+# hit path (D-03) - costs one scrypt run at import, nothing more
+_DUMMY_HASH = generate_password_hash("0" * PIN_LENGTH)
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS patient_credentials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -155,37 +159,61 @@ def issue_pin(cf, conn, issued_by, issued_by_role="staff", now=None):
     return pin
 
 
-def verify_pin(cf, pin, conn, now=None):
+def verify_pin(cf, pin, conn, now=None, ip=None):
     # returns (status, row) where status is ok / wrong / unknown / expired /
-    # locked. the caller MUST render "unknown" and "wrong" identically - this
-    # surface is internet-reachable and must not confirm whether a codice
-    # fiscale belongs to a patient of this clinic. "expired" and "locked" are
-    # distinct on purpose: the patient already proved they hold a real
-    # credential, and telling them to contact the clinic is a success criterion.
+    # locked / throttled. the caller MUST render "unknown" and "wrong"
+    # identically - this surface is internet-reachable and must not confirm
+    # whether a codice fiscale belongs to a patient of this clinic.
+    # "expired" and "locked" are reachable only once the submitted pin is
+    # provably correct - that is what closes the enrolment oracle (D-01).
+    # they stay distinct once reached: the patient has proved they hold a
+    # real credential, and telling them to contact the clinic is a success
+    # criterion.
     if now is None:
         now = datetime.now()
+    # a request with no reported address still buckets into "unknown" rather
+    # than bypassing the throttle entirely
+    source = ip or "unknown"
+
+    def _refuse(status):
+        _record_login_attempt(conn, source, now)
+        log_audit(conn, cf, "patient", "patient_pin_check", cf, allowed=0, ip=source)
+        return status, None
+
+    if _ip_throttled(conn, source, now):
+        # a throttled source must not be able to keep driving other
+        # patients' lockout counters - no _record_login_attempt, no
+        # credential row touched
+        log_audit(conn, cf, "patient", "patient_pin_check", cf, allowed=0, ip=source)
+        return "throttled", None
+
     if not CF_PATTERN.match(cf or ""):
-        return "unknown", None
+        check_password_hash(_DUMMY_HASH, pin or "")  # equalise the miss-path timing (D-03)
+        return _refuse("unknown")
 
     row = _credential(conn, cf)
     if row is None:
-        return "unknown", None
-    if row["active"] != 1:
-        return "wrong", None
+        check_password_hash(_DUMMY_HASH, pin or "")  # equalise the miss-path timing (D-03)
+        return _refuse("unknown")
 
-    # expiry only gates the temporary credential; once the patient has chosen
-    # their own pin, expires_at stops applying
-    if row["must_change_pin"] and datetime.fromisoformat(row["expires_at"]) <= now:
-        log_audit(conn, cf, "patient", "patient_pin_check", cf, allowed=0)
-        return "expired", None
+    # WR-01: a cooldown that has already passed must not carry its counter
+    # into this attempt
+    if row["locked_until"] and now >= datetime.fromisoformat(row["locked_until"]):
+        conn.execute(
+            "UPDATE patient_credentials SET failed_attempts = 0, locked_until = NULL"
+            " WHERE codice_fiscale = ?", (cf,)
+        )
+        conn.commit()
+        row = _credential(conn, cf)
 
-    if row["locked_until"] and now < datetime.fromisoformat(row["locked_until"]):
-        # no distinct signal for a correct pin while locked, so the form cannot
-        # be used to confirm a guess
-        log_audit(conn, cf, "patient", "patient_pin_check", cf, allowed=0)
-        return "locked", None
+    pin_ok = check_password_hash(row["pin_hash"], pin or "")
 
-    if not check_password_hash(row["pin_hash"], pin or ""):
+    if not pin_ok or row["active"] != 1:
+        # a revoked credential presented with the right pin must not read
+        # differently from a wrong pin, and it must count toward the
+        # lockout and write an audit row like every neighbouring path
+        # (D-11, WR-10) - so it folds into this branch rather than
+        # returning early
         lock_ts = (now + timedelta(minutes=PIN_LOCKOUT_COOLDOWN_MINUTES)).isoformat()
         conn.execute(
             "UPDATE patient_credentials SET failed_attempts = failed_attempts + 1,"
@@ -195,9 +223,18 @@ def verify_pin(cf, pin, conn, now=None):
             (PIN_LOCKOUT_THRESHOLD, lock_ts, cf),
         )
         conn.commit()
-        log_audit(conn, cf, "patient", "patient_pin_check", cf, allowed=0)
-        return "wrong", None
+        return _refuse("wrong")
 
+    # reachable only once the submitted pin is provably correct - that is
+    # what removes the enrolment oracle. the locked branch still creates no
+    # session (the 17-01 property).
+    if row["must_change_pin"] and datetime.fromisoformat(row["expires_at"]) <= now:
+        return _refuse("expired")
+    if row["locked_until"] and now < datetime.fromisoformat(row["locked_until"]):
+        return _refuse("locked")
+
+    # a successful login records no attempt row - a busy clinic behind one
+    # address must not throttle itself
     conn.execute(
         "UPDATE patient_credentials SET failed_attempts = 0, locked_until = NULL"
         " WHERE codice_fiscale = ?", (cf,)

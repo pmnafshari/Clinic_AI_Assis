@@ -440,7 +440,7 @@ def selftest():
 
         # WR-13: an unmapped verify_pin status fails closed, not 500
         original_verify_pin = patient_auth.verify_pin
-        patient_auth.verify_pin = lambda cf, pin, conn: ("no_such_status", None)
+        patient_auth.verify_pin = lambda cf, pin, conn, now=None, ip=None: ("no_such_status", None)
         try:
             unmapped_client = app.test_client()
             unmapped_page = unmapped_client.get("/login")

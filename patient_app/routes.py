@@ -36,6 +36,9 @@ STATUS_TO_ERROR_KEY = {
     "unknown": "err_bad_credentials",
     "expired": "err_expired",
     "locked": "err_locked",
+    # a throttled source learns nothing it did not already know, so the body
+    # must stay byte-identical to the other refusals
+    "throttled": "err_bad_credentials",
 }
 
 
@@ -69,20 +72,20 @@ def login():
     cf = request.form.get("codice_fiscale", "").strip().upper()
     pin = request.form.get("pin", "")
     conn = get_db()
-    status, _row = patient_auth.verify_pin(cf, pin, conn)
+    status, _row = patient_auth.verify_pin(cf, pin, conn, ip=request.remote_addr)
 
     if status != "ok":
         # fail closed on the generic refusal - it's also the safe enumeration
         # answer, so the defensive default and the security default are the
-        # same string. plan 03 adds a "throttled" status to this dict; the
-        # .get is the backstop for the next one nobody remembers (WR-13)
+        # same string. the .get is the backstop for the next status nobody
+        # remembers to map (WR-13)
         error = t(STATUS_TO_ERROR_KEY.get(status, "err_bad_credentials"), current_language())
         return render_template("patient_login.html", error=error)
 
     token = patient_auth.create_patient_session(conn, cf)
     # a name that is not "login" so patient and staff sign-ins are
     # distinguishable in one audit trail (phase 16-01 precedent)
-    log_audit(conn, cf, "patient", "patient_login", cf, allowed=1)
+    log_audit(conn, cf, "patient", "patient_login", cf, allowed=1, ip=request.remote_addr)
 
     resp = redirect(url_for("home"))
     resp.set_cookie(
@@ -100,7 +103,7 @@ def logout():
         session = patient_auth.load_patient_session(conn, token)
         if session:
             log_audit(conn, session["codice_fiscale"], "patient", "patient_logout",
-                       session["codice_fiscale"], allowed=1)
+                       session["codice_fiscale"], allowed=1, ip=request.remote_addr)
         patient_auth.destroy_patient_session(conn, token)
 
     resp = redirect(url_for("patient.login"))
