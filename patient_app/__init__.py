@@ -7,7 +7,7 @@ binding security property, not a preference.
 
 from pathlib import Path
 
-from flask import Flask, redirect, render_template, request, send_from_directory, url_for
+from flask import Flask, g, redirect, render_template, request, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
 import patient_auth
@@ -46,7 +46,11 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
 
     @app.context_processor
     def inject_language():
-        return {"t": t, "lang": current_language()}
+        # g.patient is None on the login screen - no session exists there,
+        # and the same context processor runs for every route. the template
+        # uses this only as a presence check to decide whether to render the
+        # logout control; it never reads a field off it.
+        return {"t": t, "lang": current_language(), "patient": g.get("patient")}
 
     @app.route("/lang/<code>")
     def set_language(code):

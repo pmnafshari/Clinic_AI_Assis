@@ -9,9 +9,18 @@
 </head>
 <body>
   {# no sidebar and no nav: there is nowhere else to go, and adding navigation
-     to a two-screen auth surface creates a dead end #}
+     to a two-screen auth surface creates a dead end. a logout control is not
+     navigation - it is the one exit a session needs, and belongs here so it
+     is true on every screen that has a session, including the forced
+     change-pin screen where FORCED_CHANGE_ALLOWED already keeps it open. #}
   <main class="patient-shell">
     <div class="patient-lang">
+      {% if patient %}
+      <form method="post" action="{{ url_for('patient.logout') }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="patient-lang-link bg-transparent border-0">{{ t('logout_cta', lang) }}</button>
+      </form>
+      {% endif %}
       <a href="{{ url_for('set_language', code='it') }}"
          class="patient-lang-link{{ ' active' if lang == 'it' else '' }}">IT</a>
       <a href="{{ url_for('set_language', code='en') }}"
