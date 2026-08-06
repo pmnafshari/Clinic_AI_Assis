@@ -731,6 +731,122 @@ def selftest():
             assert patient_auth.COOKIE_SECURE is True, \
                 "22: the constant must return to secure once the override is removed"
 
+        # 23. WR-02/WR-03/WR-06/WR-11/WR-12 - written first, observed failing
+        # (17.1-08). reset the throttle before this section: 23a's GET
+        # /login and 23c's over-long-pin POST both still reach verify_pin in
+        # the pre-fix state (the length guard this plan adds does not exist
+        # yet), so this section draws on the shared per-ip budget like every
+        # other one that logs in.
+        reset23 = raw_db()
+        reset23.execute("DELETE FROM patient_login_attempts")
+        reset23.commit()
+        reset23.close()
+
+        # 23a. WR-02 - first boot creates the db directory and schema instead
+        # of letting sqlite make an empty shadow database that shadows the
+        # real one
+        original_db_path = patient_routes.DB_PATH
+        wr02_db_path = str(Path(tmp) / "wr02" / "nested" / "clinic.sqlite")
+        patient_routes.DB_PATH = wr02_db_path
+        try:
+            wr02_app = create_patient_app(env_path=Path(tmp) / ".env.patient.wr02")
+            assert Path(wr02_db_path).exists(), \
+                "23a: create_patient_app should create the db file on first boot"
+            wr02_conn = sqlite3.connect(wr02_db_path)
+            wr02_cols = wr02_conn.execute("PRAGMA table_info(patient_credentials)").fetchall()
+            wr02_conn.close()
+            assert len(wr02_cols) > 0, \
+                "23a: patient_credentials should exist with columns after first boot"
+            wr02_client = wr02_app.test_client()
+            wr02_resp = wr02_client.get("/login")
+            assert wr02_resp.status_code == 200, \
+                "23a: /login should render 200 on a freshly booted db, not 500"
+        finally:
+            patient_routes.DB_PATH = original_db_path
+
+        # 23b. WR-03 - every request's sqlite connection is closed on
+        # teardown, not left to refcounting to collect
+        assert app.teardown_appcontext_funcs, \
+            "23b: create_patient_app should register a teardown_appcontext handler"
+        with app.test_request_context():
+            teardown_conn = patient_routes.get_db()
+        # the only assertion possible from outside the app: a connection
+        # closed by the teardown raises on the next use
+        try:
+            teardown_conn.execute("SELECT 1")
+            raise AssertionError("23b: the connection should be closed once the request context ends")
+        except sqlite3.ProgrammingError:
+            pass
+
+        # 23c. WR-06 - a body cap, plus an over-long pin refused before it
+        # reaches the key derivation function
+        assert app.config["MAX_CONTENT_LENGTH"] == 64 * 1024, \
+            "23c: MAX_CONTENT_LENGTH should cap request bodies at 64KB"
+
+        cf23c = "LNGP980010152500"
+        seed_and_issue(cf23c)
+        long_pin_client = app.test_client()
+        long_pin_page = long_pin_client.get("/login")
+        long_pin_resp = long_pin_client.post("/login", data={
+            "codice_fiscale": cf23c, "pin": "1" * 200,
+            "csrf_token": _csrf_from(long_pin_page.text),
+        })
+        assert long_pin_resp.status_code == 200, \
+            "23c: an over-long pin should re-render the login form, not 500"
+        assert t("err_bad_credentials", "it") in long_pin_resp.text, \
+            "23c: an over-long pin should render the generic refusal, refused before hashing"
+
+        # 23d. WR-11 - paths anchored on the repo root, not the process cwd
+        assert patient_app.VENDOR_ROOT.is_absolute(), \
+            "23d: VENDOR_ROOT should be an absolute, repo-anchored path"
+        assert str(patient_app.VENDOR_ROOT).endswith("app/static/vendor"), \
+            "23d: VENDOR_ROOT should point at app/static/vendor"
+        original_vendor_root = patient_app.VENDOR_ROOT
+        original_cwd = os.getcwd()
+        try:
+            os.chdir(tmp)
+            importlib.reload(patient_app)
+            assert patient_app.VENDOR_ROOT == original_vendor_root, \
+                "23d: VENDOR_ROOT must not change when the process cwd changes"
+        finally:
+            os.chdir(original_cwd)
+            importlib.reload(patient_app)
+
+        # 23e. WR-11 - the entrypoint is guarded, so importing patient_run
+        # does not block forever inside app.run(). source-level, following
+        # section 17's own precedent - importing the module to prove the
+        # guard works is exactly what the guard exists to make unsafe, and a
+        # test that starts a listening server does not belong in an offline
+        # suite.
+        run_text = Path("patient_run.py").read_text()
+        assert 'if __name__ == "__main__":' in run_text, \
+            "23e: patient_run.py should guard its entrypoint"
+        assert not re.search(r"(?m)^app\.run\(", run_text), \
+            "23e: app.run( must not sit unguarded at column 0"
+
+        # 23f. WR-12 - the residual full-privilege handle is narrowed: no
+        # patient-side module may name a staff table in a SQL clause.
+        # patient_sessions must not trip this, which is why the patterns are
+        # anchored on the keyword before the table name rather than the bare
+        # word - this section pins today's clean state against a regression,
+        # it is not expected to fail red.
+        staff_table_patterns = [
+            re.compile(p, re.IGNORECASE) for p in (
+                r"FROM\s+users\b", r"JOIN\s+users\b", r"INTO\s+users\b", r"UPDATE\s+users\b",
+                r"FROM\s+sessions\b", r"INTO\s+sessions\b", r"UPDATE\s+sessions\b",
+                r"FROM\s+pending_actions\b", r"UPDATE\s+pending_actions\b",
+            )
+        ]
+        patient_side_files = list(Path("patient_app").rglob("*.py")) + [Path("patient_auth.py")]
+        offenders = []
+        for path in patient_side_files:
+            text = path.read_text()
+            for pattern in staff_table_patterns:
+                if pattern.search(text):
+                    offenders.append((str(path), pattern.pattern))
+        assert not offenders, \
+            f"23f: patient-side SQL must never name a staff table, found {offenders}"
+
     print("selftest ok")
 
 
