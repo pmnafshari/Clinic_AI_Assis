@@ -1,19 +1,40 @@
 import re
+import sqlite3
 import sys
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import patient_auth
+import storage
 import web_session
 from patient_app import create_patient_app
+from patient_app import routes as patient_routes
 from patient_app.strings import DEFAULT_LANGUAGE, LANG_COOKIE_NAME, LANGUAGES, STRINGS, t
 
 STAFF_ENDPOINTS = ("patients.detail_view", "auth.login", "qa.qa_page", "admin.users_view")
 
 
+def _csrf_from(html):
+    match = re.search(r'name="csrf_token" value="([^"]+)"', html)
+    return match.group(1)
+
+
+def _strip_csrf(html):
+    return re.sub(r'name="csrf_token" value="[^"]+"', "", html)
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
-        # its own secret file, so this never reads or writes the staff .env
+        db_path = str(Path(tmp) / "clinic.sqlite")
+        conn = storage.init_db(db_path)
+        patient_auth.init_patient_tables(conn)
+        conn.close()
+
+        # this file must not depend on the staff app - point routes.py at
+        # our own temp db, same pattern as app/db.py's DB_PATH
+        patient_routes.DB_PATH = db_path
+
         app = create_patient_app(env_path=Path(tmp) / ".env.patient")
         app.config["TESTING"] = True
 
@@ -23,8 +44,11 @@ def selftest():
             assert name not in endpoints, f"1: staff endpoint {name} must not exist on the patient app"
         assert patient_auth.PATIENT_COOKIE_NAME != web_session.COOKIE_NAME, \
             "1: the two apps must not share a cookie name"
-        assert app.config["SESSION_COOKIE_NAME"] == patient_auth.PATIENT_COOKIE_NAME, \
-            "1: the patient app must use its own cookie name"
+        # flask's own session cookie (flask_wtf's csrf token storage) must not
+        # alias the patient auth cookie - aliasing them makes the two Set-
+        # Cookie writers silently overwrite each other (see patient_app/__init__.py)
+        assert app.config.get("SESSION_COOKIE_NAME", "session") != patient_auth.PATIENT_COOKIE_NAME, \
+            "1: flask's session cookie must not collide with the patient auth cookie"
 
         import ast
         import inspect
@@ -41,30 +65,31 @@ def selftest():
 
         client = app.test_client()
 
-        # 2. no CDN - offline-first, and this is the internet-facing surface
-        home = client.get("/")
-        assert home.status_code == 200, "2: the placeholder page should render"
+        # 2. no CDN - offline-first, and this is the internet-facing surface.
+        # checked against /login: the app root now requires a session (SC3)
+        login_page = client.get("/login")
+        assert login_page.status_code == 200, "2: the login page should render"
         assert not re.search(
-            r'<(?:script|link)[^>]+(?:src|href)="https?://', home.text, re.IGNORECASE
+            r'<(?:script|link)[^>]+(?:src|href)="https?://', login_page.text, re.IGNORECASE
         ), "2: the patient surface must not reference any external asset"
         assert client.get("/vendor/bootstrap/5.3.3/bootstrap.min.css").status_code == 200, \
             "2: the vendored bootstrap should serve locally"
 
         # 3. italian is the default, not a fallback
         assert DEFAULT_LANGUAGE == "it"
-        assert t("login_heading", "it") in home.text, "3: default page should be italian"
-        assert t("login_heading", "en") not in home.text, "3: english must not leak into the default"
+        assert t("login_heading", "it") in login_page.text, "3: default page should be italian"
+        assert t("login_heading", "en") not in login_page.text, "3: english must not leak into the default"
 
         # 4. the switch persists across requests - this is what proves the
         # cookie is carrying the choice. a page-scoped implementation passes
         # the first half of this and fails the second.
         switched = client.get("/lang/en", follow_redirects=True)
         assert t("login_heading", "en") in switched.text, "4: switching should render english"
-        again = client.get("/")
+        again = client.get("/login")
         assert t("login_heading", "en") in again.text, \
             "4: the language choice must survive to the next page"
         client.get("/lang/it", follow_redirects=True)
-        assert t("login_heading", "it") in client.get("/").text, "4: and switch back"
+        assert t("login_heading", "it") in client.get("/login").text, "4: and switch back"
 
         # 5. an off-list value is ignored rather than stored
         bad = client.get("/lang/zz", follow_redirects=True)
@@ -103,6 +128,172 @@ def selftest():
         # 9. the language cookie is not the session cookie
         assert LANG_COOKIE_NAME != patient_auth.PATIENT_COOKIE_NAME, \
             "9: the language preference must not ride on the session cookie"
+
+        # ---- route-level coverage of the phase's four success criteria ----
+
+        def raw_db():
+            c = sqlite3.connect(db_path)
+            c.row_factory = sqlite3.Row
+            return c
+
+        def count(sql, args=()):
+            c = raw_db()
+            n = c.execute(sql, args).fetchone()[0]
+            c.close()
+            return n
+
+        def seed_and_issue(cf, name="test patient"):
+            c = raw_db()
+            c.execute(
+                "INSERT OR IGNORE INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
+                (cf, name),
+            )
+            c.commit()
+            pin = patient_auth.issue_pin(cf, c, "test-dentist", "dentist")
+            c.close()
+            return pin
+
+        def sign_in(cf, pin):
+            c = app.test_client()
+            page = c.get("/login")
+            resp = c.post("/login", data={
+                "codice_fiscale": cf, "pin": pin, "csrf_token": _csrf_from(page.text),
+            })
+            return c, resp
+
+        # 10. SC2 - login works
+        cf_ok = "FRRR850010150200"
+        pin_ok = seed_and_issue(cf_ok)
+        client_ok, resp_ok = sign_in(cf_ok, pin_ok)
+        assert resp_ok.status_code == 302, "10: a correct login should redirect"
+        assert count(
+            "SELECT COUNT(*) FROM patient_sessions WHERE codice_fiscale = ?", (cf_ok,)
+        ) == 1, "10: a session row should exist for this codice fiscale"
+
+        # 11. SC2 - nothing touches the staff tables. the criterion's literal
+        # wording names both users and sessions, not just the cookie.
+        assert count("SELECT COUNT(*) FROM users WHERE username = ?", (cf_ok,)) == 0, \
+            "11: the staff users table must stay untouched"
+        assert count("SELECT COUNT(*) FROM sessions WHERE username = ?", (cf_ok,)) == 0, \
+            "11: the staff sessions table must stay untouched"
+        set_cookie = resp_ok.headers.get("Set-Cookie", "")
+        assert patient_auth.PATIENT_COOKIE_NAME in set_cookie, "11: expected the patient cookie to be set"
+        assert web_session.COOKIE_NAME not in set_cookie, "11: must not set the staff cookie"
+
+        # 12. SC3 - forced change gates everything except the change screen,
+        # the language toggle and logout
+        cf_forced = "RSSM800010150100"
+        pin_forced = seed_and_issue(cf_forced)
+        client_forced, _ = sign_in(cf_forced, pin_forced)
+
+        root = client_forced.get("/")
+        assert root.status_code == 302 and "change-pin" in root.headers["Location"], \
+            "12: the app root should redirect to change-pin while must_change_pin is set"
+        assert client_forced.get("/lang/en", follow_redirects=True).status_code == 200, \
+            "12: the language toggle must still work while forced"
+        client_forced.get("/lang/it", follow_redirects=True)
+        change_screen = client_forced.get("/change-pin")
+        logout_resp = client_forced.post(
+            "/logout", data={"csrf_token": _csrf_from(change_screen.text)}
+        )
+        assert logout_resp.status_code == 302, "12: logout must still work while forced (not trapped)"
+
+        client_forced, _ = sign_in(cf_forced, pin_forced)
+        change_page = client_forced.get("/change-pin")
+        assert change_page.status_code == 200, "12: the change-pin screen should be reachable"
+        done = client_forced.post("/change-pin", data={
+            "pin": "13579246", "confirm": "13579246",
+            "csrf_token": _csrf_from(change_page.text),
+        })
+        assert done.status_code == 302, "12: a completed change should redirect"
+        assert client_forced.get("/").status_code == 200, \
+            "12: the root should be reachable once the change is complete"
+        assert count(
+            "SELECT must_change_pin FROM patient_credentials WHERE codice_fiscale = ?", (cf_forced,)
+        ) == 0, "12: must_change_pin should be cleared"
+
+        # 13. SC4 - an expired credential is refused with the "contact the
+        # clinic" copy, in both languages, never the generic message
+        cf_expired = "BNCG900010150300"
+        pin_expired = seed_and_issue(cf_expired)
+        c = raw_db()
+        c.execute(
+            "UPDATE patient_credentials SET expires_at = ? WHERE codice_fiscale = ?",
+            ((datetime.now() - timedelta(days=1)).isoformat(), cf_expired),
+        )
+        c.commit()
+        c.close()
+
+        expired_client = app.test_client()
+        page = expired_client.get("/login")
+        resp = expired_client.post("/login", data={
+            "codice_fiscale": cf_expired, "pin": pin_expired, "csrf_token": _csrf_from(page.text),
+        })
+        assert resp.status_code == 200, "13: an expired credential should re-render, not redirect"
+        assert t("err_expired", "it") in resp.text, "13: expected the expired copy in italian"
+        assert t("err_bad_credentials", "it") not in resp.text, \
+            "13: expired must not collapse into the generic refusal"
+
+        en_client = app.test_client()
+        en_client.get("/lang/en", follow_redirects=True)
+        page_en = en_client.get("/login")
+        resp_en = en_client.post("/login", data={
+            "codice_fiscale": cf_expired, "pin": pin_expired, "csrf_token": _csrf_from(page_en.text),
+        })
+        assert t("err_expired", "en") in resp_en.text, "13: expected the expired copy in english"
+
+        # 14. SC4 - a locked-out credential gives no distinct signal even for
+        # the correct pin, in both languages
+        cf_locked = "VRDL910010150400"
+        pin_locked = seed_and_issue(cf_locked)
+        lock_client = app.test_client()
+        for _ in range(patient_auth.PIN_LOCKOUT_THRESHOLD):
+            page = lock_client.get("/login")
+            lock_client.post("/login", data={
+                "codice_fiscale": cf_locked, "pin": "00000000", "csrf_token": _csrf_from(page.text),
+            })
+        page = lock_client.get("/login")
+        locked_resp = lock_client.post("/login", data={
+            "codice_fiscale": cf_locked, "pin": pin_locked, "csrf_token": _csrf_from(page.text),
+        })
+        assert t("err_locked", "it") in locked_resp.text, \
+            "14: the correct pin during lockout must still show the locked copy"
+
+        en_lock_client = app.test_client()
+        en_lock_client.get("/lang/en", follow_redirects=True)
+        page = en_lock_client.get("/login")
+        en_lock_client.post("/login", data={
+            "codice_fiscale": cf_locked, "pin": pin_locked, "csrf_token": _csrf_from(page.text),
+        })
+        page = en_lock_client.get("/login")
+        locked_resp_en = en_lock_client.post("/login", data={
+            "codice_fiscale": cf_locked, "pin": pin_locked, "csrf_token": _csrf_from(page.text),
+        })
+        assert t("err_locked", "en") in locked_resp_en.text, \
+            "14: expected the locked copy in english too"
+
+        # 15. enumeration - a wrong pin and an unknown codice fiscale must be
+        # indistinguishable. byte-identical bodies (apart from the csrf
+        # token) is the strongest available form of that guarantee.
+        unknown_cf = "ZZZZ999999999999"
+        unknown_client = app.test_client()
+        page = unknown_client.get("/login")
+        unknown_resp = unknown_client.post("/login", data={
+            "codice_fiscale": unknown_cf, "pin": "00000000", "csrf_token": _csrf_from(page.text),
+        })
+
+        cf_wrong = "PLLM920010150500"
+        seed_and_issue(cf_wrong)
+        wrong_client = app.test_client()
+        page2 = wrong_client.get("/login")
+        wrong_resp = wrong_client.post("/login", data={
+            "codice_fiscale": cf_wrong, "pin": "00000000", "csrf_token": _csrf_from(page2.text),
+        })
+
+        assert unknown_resp.status_code == 200 and wrong_resp.status_code == 200, \
+            "15: both refusals should re-render the login form"
+        assert _strip_csrf(unknown_resp.text) == _strip_csrf(wrong_resp.text), \
+            "15: an unknown codice fiscale and a wrong pin must render byte-identical bodies"
 
     print("selftest ok")
 
