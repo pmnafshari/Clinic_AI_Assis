@@ -27,10 +27,17 @@ VENDOR_ROOT = Path("app/static/vendor").resolve()
 def create_patient_app(env_path=PATIENT_ENV_PATH):
     app = Flask(__name__)
     app.config["SECRET_KEY"] = load_secret_key(env_path)
-    # Flask's own session cookie (flask_wtf's CSRF token storage) stays at its
-    # default name - it must NOT alias patient_auth.PATIENT_COOKIE_NAME, or
-    # the two would silently overwrite each other's Set-Cookie header and
-    # patients would get logged out the next time a csrf token regenerates
+    # Flask's own session cookie (flask_wtf's CSRF token storage) gets an
+    # explicit name for two reasons. it must not alias
+    # patient_auth.PATIENT_COOKIE_NAME, or the two would silently overwrite
+    # each other's Set-Cookie header and patients would get logged out the
+    # next time a csrf token regenerates. and it must not stay at Flask's
+    # default "session" either - this app and the staff app share a host,
+    # RFC 6265 cookies are not scoped by port, and each app signs with its
+    # own SECRET_KEY, so leaving both at "session" means whichever app is
+    # opened second overwrites a cookie the other one signed. the victim's
+    # next write then 400s with no explanation (CR-05)
+    app.config["SESSION_COOKIE_NAME"] = "patient_csrf"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     # the more exposed surface does not get weaker defaults than the staff app

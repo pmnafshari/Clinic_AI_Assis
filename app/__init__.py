@@ -20,6 +20,11 @@ CHANGE_PW_ALLOWED = {"static", "auth.login", "auth.change_password", "auth.logou
 def create_app():
     app = Flask(__name__)
     app.config["SECRET_KEY"] = load_secret_key()
+    # named explicitly, not left at Flask's default "session" - this app and
+    # the patient app share a host, cookies are not port-scoped, and each app
+    # signs with its own SECRET_KEY, so leaving both unnamed lets whichever
+    # opens second overwrite the other's csrf session cookie (CR-05)
+    app.config["SESSION_COOKIE_NAME"] = "staff_csrf"
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
