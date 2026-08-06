@@ -59,6 +59,28 @@ STRINGS = {
         "it": "I due PIN non coincidono.",
         "en": "The two PINs don't match.",
     },
+    "err_pin_weak": {
+        "it": "Scegli un PIN meno prevedibile: non tutto uguale e non in sequenza.",
+        "en": "Choose a less predictable PIN: not all the same character, and not "
+              "a run of consecutive digits.",
+    },
+    "err_pin_same": {
+        "it": "Il nuovo PIN deve essere diverso da quello attuale.",
+        "en": "The new PIN must be different from your current one.",
+    },
+    "home_heading": {"it": "Bentornato", "en": "Welcome back"},
+    "home_body": {
+        "it": "Da qui potrai fare domande sui tuoi dati.",
+        "en": "From here you'll be able to ask about your records.",
+    },
+    # D-02: this line is rendered to everyone, always, error or not - it is
+    # what makes it safe for verify_pin to stop distinguishing "wrong pin"
+    # from "unknown codice fiscale". making it conditional re-opens that
+    # oracle, so it must never move inside an {% if %} block.
+    "help_line": {
+        "it": "Problemi ad accedere? Contatta la clinica.",
+        "en": "Trouble signing in? Contact the clinic.",
+    },
 }
 
 
