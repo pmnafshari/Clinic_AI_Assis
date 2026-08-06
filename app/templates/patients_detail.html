@@ -34,6 +34,18 @@
   </div>
   {% endif %}
 
+  {% if authorize(g.user.role, 'revoke_patient_pin') %}
+  <div class="mt-4">
+    <button type="button" class="btn btn-outline-danger btn-sm"
+      hx-post="{{ url_for('patients.revoke_pin_submit', cf=cf) }}"
+      hx-target="#patient-pin-revoke-target" hx-swap="innerHTML"
+      hx-confirm="Revoke this patient's PIN? They will be signed out immediately and their PIN will stop working until a new one is issued.">
+      <i class="bi bi-key"></i> Revoke patient PIN
+    </button>
+    <div id="patient-pin-revoke-target"></div>
+  </div>
+  {% endif %}
+
   <h3 class="fs-6 mt-4 mb-2">Visit dates</h3>
   {% if patient.visit_dates %}
   <ul class="mb-0">
