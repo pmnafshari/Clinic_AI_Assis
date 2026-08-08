@@ -196,6 +196,13 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     # criterion.
     if now is None:
         now = datetime.now()
+    # this is what the socket reports and nothing more. it is attacker-controlled
+    # at the network layer, and once cloudflare fronts this app it becomes the
+    # tunnel's address unless a forwarded-for header is honoured - which carries
+    # its own spoofing trade-off and is a phase 20 decision. so treat it as
+    # evidence, never as a control input: the per-codice-fiscale lockout below is
+    # an independent second brake, and a forged or rotated source still cannot
+    # brute-force one patient (D-04).
     # a request with no reported address still buckets into "unknown" rather
     # than bypassing the throttle entirely
     source = ip or "unknown"

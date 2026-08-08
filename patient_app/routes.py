@@ -112,6 +112,8 @@ def login():
         return render_template("patient_login.html", error=error)
 
     conn = get_db()
+    # remote_addr is recorded as evidence for the throttle and the audit row, not
+    # trusted as identity - see the residual note in patient_auth.verify_pin
     status, _row = patient_auth.verify_pin(cf, pin, conn, ip=request.remote_addr)
 
     if status != "ok":
