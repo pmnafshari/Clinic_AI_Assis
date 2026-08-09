@@ -479,6 +479,45 @@ def selftest():
         user_columns_again = {row["name"] for row in conn2.execute("PRAGMA table_info(users)")}
         assert user_columns_again == user_columns, "1: re-running lockout migration changed columns"
 
+        # audit_log.ip migrates in place on a database that predates the
+        # column, and the pre-existing row survives - "gains the column
+        # without being rebuilt" (T-17-34), not proven by a fresh CREATE TABLE
+        legacy_path = str(Path(tmp) / "legacy.sqlite")
+        legacy_conn = sqlite3.connect(legacy_path)
+        legacy_conn.execute("""
+            CREATE TABLE audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target TEXT,
+                allowed INTEGER NOT NULL
+            )
+        """)
+        legacy_conn.execute(
+            "INSERT INTO audit_log (ts, username, role, action, target, allowed)"
+            " VALUES (?, ?, ?, ?, ?, ?)",
+            ("2020-01-01T00:00:00", "old_user", "dentist", "update_field", "MRRS800010150100", 1),
+        )
+        legacy_conn.commit()
+        legacy_conn.close()
+
+        migrated = init_db(legacy_path)
+        legacy_columns = {row["name"] for row in migrated.execute("PRAGMA table_info(audit_log)")}
+        assert "ip" in legacy_columns, "1: legacy audit_log did not gain the ip column"
+
+        old_row = migrated.execute(
+            "SELECT * FROM audit_log WHERE username = 'old_user'"
+        ).fetchone()
+        assert old_row is not None, "1: pre-existing audit_log row was lost by the migration"
+        assert old_row["allowed"] == 1, "1: pre-existing row's other columns must be untouched"
+        assert old_row["ip"] is None, "1: pre-existing row's new ip column should be NULL"
+
+        _ensure_audit_ip_column(migrated)
+        legacy_columns_again = {row["name"] for row in migrated.execute("PRAGMA table_info(audit_log)")}
+        assert legacy_columns_again == legacy_columns, "1: re-running the ip migration changed columns"
+
         # users.role is DB-enforced to exactly the three fixed roles
         try:
             conn.execute(

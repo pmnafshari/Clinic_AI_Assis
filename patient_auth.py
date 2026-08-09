@@ -546,6 +546,25 @@ def selftest():
         remaining9 = conn.execute("SELECT COUNT(*) c FROM patient_login_attempts").fetchone()["c"]
         assert remaining9 == 0, "9: the throttle check should sweep stale rows, not just skip them"
 
+        # 9b. the store is SQLite, not an in-memory dict - attempts recorded
+        # on one connection must still be there, and still throttle, once
+        # that connection is closed and a new one opens the same db file
+        # (D-04, D-05: "survives a process restart")
+        db_path9 = str(Path(tmp) / "clinic.sqlite")
+        writer9 = storage.connect(db_path9)
+        writer9.execute("DELETE FROM patient_login_attempts")
+        writer9.commit()
+        for _ in range(PATIENT_IP_ATTEMPT_THRESHOLD):
+            _record_login_attempt(writer9, ip_a, now9)
+        writer9.close()
+
+        reopened9 = storage.connect(db_path9)
+        assert _ip_throttled(reopened9, ip_a, now9) is True, \
+            "9b: attempts recorded before closing the connection must still throttle after reopening the db"
+        reopened9.execute("DELETE FROM patient_login_attempts")
+        reopened9.commit()
+        reopened9.close()
+
         # 10. the oracle is closed (D-01). a locked account probed with the
         # wrong pin must read exactly like an unknown codice fiscale, and the
         # 17-01 property survives: a correct pin during lockout still returns
