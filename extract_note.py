@@ -1,7 +1,9 @@
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from dental_notes_schema import KNOWN_PROCEDURES, DentalNote
 
@@ -174,8 +176,38 @@ def selftest():
     # 6c. sigillatura is a sealant, not a filling - it has its own code so a
     # preventive procedure never lands on the record as a restorative one
     assert "seal" in KNOWN_PROCEDURES, "6c: seal should be in the glossary"
-    assert KNOWN_PROCEDURES["seal"] != KNOWN_PROCEDURES.get("filling"), \
+    assert KNOWN_PROCEDURES["seal"]["gloss"] != KNOWN_PROCEDURES["filling"]["gloss"], \
         "6c: seal and filling must stay distinct"
+    assert "sigillatura" in KNOWN_PROCEDURES["seal"]["synonyms"], \
+        "6c: sigillatura should map to seal"
+
+    # 6e. the glossary shape the generator and the trainer both depend on. a flat
+    # code -> string map cannot carry a second input term, which is what kept the
+    # dataset english-only - so the shape itself is worth pinning.
+    for code, entry in KNOWN_PROCEDURES.items():
+        assert isinstance(entry, dict), f"6e: {code} should be an object, got {type(entry)}"
+        assert isinstance(entry.get("gloss"), str) and entry["gloss"], \
+            f"6e: {code} needs a non-empty gloss"
+        assert isinstance(entry.get("synonyms"), list), f"6e: {code} needs a synonyms list"
+        for syn in entry["synonyms"]:
+            assert syn == syn.lower(), f"6e: synonym {syn!r} should be lowercase"
+
+    # 6f. a synonym must not collide with a code or with another code's synonym -
+    # an ambiguous surface term would train the model toward two different answers
+    seen_terms = {}
+    for code, entry in KNOWN_PROCEDURES.items():
+        for term in [code] + entry["synonyms"]:
+            assert term not in seen_terms or seen_terms[term] == code, \
+                f"6f: {term!r} claimed by both {seen_terms.get(term)} and {code}"
+            seen_terms[term] = code
+
+    # 6g. an italian term in the model's OUTPUT means it failed to translate, so
+    # it must flag - synonyms are input vocabulary, not valid output codes
+    untranslated = ('{"patient_name": "anna bianchi", "codice_fiscale": "BNCA850010150300", '
+                    '"procedures": ["otturazione 47"], "invoices": [], '
+                    '"clinical_notes": "", "next_appointment": null}')
+    assert parse_reply(untranslated).unknown_procedures() == ["otturazione"], \
+        "6g: an untranslated italian term should be flagged, not accepted"
 
     # 6d. case and stray whitespace do not smuggle a code past the check
     messy = ('{"patient_name": "anna bianchi", "codice_fiscale": "BNCA850010150300", '
@@ -183,6 +215,31 @@ def selftest():
              '"clinical_notes": "", "next_appointment": null}')
     assert parse_reply(messy).unknown_procedures() == ["banana"], \
         "6d: matching should be case- and whitespace-insensitive"
+
+    # 7. the Modelfile SYSTEM prompt and the training notebook's SYSTEM_PROMPT
+    # must be byte-identical. train and inference conditioning have to match, and
+    # this pair has silently drifted twice - once dropping next_appointment from
+    # the weights entirely. lives here because this is the file that owns the
+    # model contract, and because run_selftests.sh runs it.
+    root = Path(__file__).resolve().parent
+    mf = re.search(r'SYSTEM """(.*?)"""', (root / "Modelfile").read_text(), re.S)
+    assert mf, "7: no SYSTEM block in Modelfile"
+    nb = json.loads((root / "notebooks" / "train_notes_lora.ipynb").read_text())
+    nb_prompts = []
+    for cell in nb["cells"]:
+        found = re.search(r'SYSTEM_PROMPT = """(.*?)"""', "".join(cell["source"]), re.S)
+        if found:
+            nb_prompts.append(found.group(1))
+    assert len(nb_prompts) == 1, f"7: expected 1 SYSTEM_PROMPT in the notebook, got {len(nb_prompts)}"
+    assert mf.group(1) == nb_prompts[0], \
+        "7: Modelfile SYSTEM and notebook SYSTEM_PROMPT have drifted apart"
+
+    # 7b. the prompt has to name the italian mapping, or the training data teaches
+    # a translation the inference prompt never asks for
+    assert "otturazione -> filling" in mf.group(1), "7b: prompt should map otturazione"
+    assert "sigillatura -> seal" in mf.group(1), "7b: prompt should map sigillatura"
+    assert "English dental note" not in mf.group(1), \
+        "7b: the english-only constraint should be gone"
 
     # 5. unreachable Ollama gives a clear, distinct error
     def boom(*a, **k):
