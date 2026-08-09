@@ -6,6 +6,10 @@ from extract_note import OllamaUnreachable, extract_note
 
 TEST_FILE = "notes_test.jsonl"
 THRESHOLD = 0.85
+# procedures is patient-safety critical (wrong procedure type = wrong treatment on
+# record) - gated on its own so a handful of easy notes can't dilute it under the
+# aggregate threshold and let a translation-blind model through.
+PROCEDURES_THRESHOLD = 0.85
 CF_RE = re.compile(r'^[A-Z]{4}[0-9]{12}$')
 
 GATE_FIELDS = [
@@ -150,7 +154,13 @@ def main():
         print(" ", f, rate)
     cn_avg = cn_total / n if n else 0.0
     print("clinical_notes overlap (not gated):", round(cn_avg, 2))
-    sys.exit(0 if avg >= THRESHOLD else 1)
+
+    procedures_rate = field_hits["procedures"] / n if n else 0.0
+    passed = avg >= THRESHOLD and procedures_rate >= PROCEDURES_THRESHOLD
+    if avg >= THRESHOLD and procedures_rate < PROCEDURES_THRESHOLD:
+        print(f"\nFAIL: procedures rate {round(procedures_rate, 2)} below {PROCEDURES_THRESHOLD}"
+              " (aggregate passed but procedures did not - gated separately, patient-safety field)")
+    sys.exit(0 if passed else 1)
 
 
 if __name__ == "__main__":
