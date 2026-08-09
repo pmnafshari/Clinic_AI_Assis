@@ -13,6 +13,10 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "llama3.2"
 TARGET = 180
 SEED = 42
+# how often a procedure that has an italian synonym is written in italian rather
+# than as the code. the clinic writes italian, the model has to answer in codes,
+# so the training set needs both sides represented.
+ITALIAN_SHARE = 0.5
 
 FIRST_NAMES = [
     "Marco", "Luca", "Matteo", "Andrea", "Lorenzo", "Alessandro", "Davide",
@@ -37,6 +41,22 @@ NEXT_APPT_RAW = {"7d": "1wk", "14d": "2wk", "21d": "3wk", "30d": "1mo"}
 def load_glossary():
     with open(GLOSSARY_FILE) as f:
         return json.load(f)
+
+
+def surface_for(code, glossary, rng):
+    # what the dentist actually wrote. the gold answer is always the code; the
+    # note may carry an italian synonym instead, and learning that mapping is
+    # the whole point of the synonyms list. codes with no synonym yet always
+    # render as the code.
+    #
+    # two draws either way, so adding a synonym to one entry does not shift
+    # every later sample in the run.
+    pick = rng.random()
+    idx = rng.randrange(4)
+    synonyms = glossary[code]["synonyms"]
+    if synonyms and pick < ITALIAN_SHARE:
+        return synonyms[idx % len(synonyms)]
+    return code
 
 
 def pick_profile(rng):
@@ -71,45 +91,58 @@ def build_structured(rng, glossary, profile):
     tooth1 = rng.choice(TOOTH_NUMS)
     tooth2 = rng.choice(TOOTH_NUMS)
 
+    # surfaces mirror procedures one for one - same tooth, possibly italian term
+    surface1 = surface_for(selected[0], glossary, rng)
+    surface2 = surface_for(selected[1], glossary, rng)
+
     if profile["empty_proc"]:
         procedures = []
+        surfaces = []
     elif profile["multi_proc"]:
         procedures = [f"{selected[0]} {tooth1}", f"{selected[1]} {tooth2}"]
+        surfaces = [f"{surface1} {tooth1}", f"{surface2} {tooth2}"]
     else:
         procedures = [f"{selected[0]} {tooth1}"]
+        surfaces = [f"{surface1} {tooth1}"]
 
     # invoice amounts - always consume same rng calls
     amount1 = rng.randint(3, 20) * 10
     amount2 = rng.randint(3, 20) * 10
 
+    # invoice descriptions follow the same split: gold carries the code, the note
+    # carries whatever the procedure was written as
     if profile["empty_inv"] or not procedures:
         invoices = []
+        inv_surfaces = []
     elif profile["multi_inv"] and len(procedures) >= 2:
         invoices = [
             {"amount": float(amount1), "description": procedures[0]},
             {"amount": float(amount2), "description": procedures[1]},
         ]
+        inv_surfaces = [surfaces[0], surfaces[1]]
     else:
         invoices = [{"amount": float(amount1), "description": procedures[0]}]
+        inv_surfaces = [surfaces[0]]
 
     # next appointment - always consume same rng calls
     appt_choice = rng.choice(NEXT_APPT_OPTIONS)
     next_appt = appt_choice if not profile["null_next"] else None
 
-    return phone, visit_date, procedures, invoices, next_appt
+    return phone, visit_date, procedures, invoices, next_appt, surfaces, inv_surfaces
 
 
-def build_template(name, cf, phone, visit_date, procedures, invoices, next_appt):
+def build_template(name, cf, phone, visit_date, surfaces, invoices, next_appt, inv_surfaces):
+    # the note is written the way the dentist writes it - surfaces, not codes
     parts = [f"{name} {cf}"]
     if phone:
         parts.append(f"tel {phone}")
     if visit_date:
         parts.append(visit_date)
-    if procedures:
-        parts.append(", ".join(procedures))
+    if surfaces:
+        parts.append(", ".join(surfaces))
     if invoices:
-        for inv in invoices:
-            parts.append(f"paid {int(inv['amount'])} for {inv['description']}")
+        for inv, desc in zip(invoices, inv_surfaces):
+            parts.append(f"paid {int(inv['amount'])} for {desc}")
     if next_appt:
         parts.append(f"fu {NEXT_APPT_RAW[next_appt]}")
     return ", ".join(parts)
@@ -188,11 +221,13 @@ def main():
             cf = make_cf(first, last)
             profile = pick_profile(rng)
 
-            phone, visit_date, procedures, invoices, next_appt = build_structured(
-                rng, glossary, profile
+            phone, visit_date, procedures, invoices, next_appt, surfaces, inv_surfaces = (
+                build_structured(rng, glossary, profile)
             )
 
-            template = build_template(name, cf, phone, visit_date, procedures, invoices, next_appt)
+            template = build_template(
+                name, cf, phone, visit_date, surfaces, invoices, next_appt, inv_surfaces
+            )
 
             prompt = build_messify_prompt(template, profile)
             reply = call_ollama(prompt)

@@ -3,7 +3,7 @@ import re
 import sys
 from datetime import date as date_type
 
-from dental_notes_schema import DentalNote
+from dental_notes_schema import KNOWN_PROCEDURES, DentalNote
 
 RAW_FILE = "notes_raw_v2.jsonl"
 TRAIN_FILE = "notes_train.jsonl"
@@ -32,6 +32,25 @@ def _date_in_raw(date_str, raw):
             return True
     except (ValueError, TypeError):
         pass
+    return False
+
+
+def _grounded(value, raw):
+    # gold always carries the code ("filling 47"), but the note carries whatever
+    # the dentist wrote ("otturazione 47"). requiring a literal match would drop
+    # every italian sample as ungrounded - which is what kept this dataset
+    # english-only. a code's own synonyms count as grounding for that code.
+    if value.lower() in raw.lower():
+        return True
+    parts = value.split(" ", 1)
+    entry = KNOWN_PROCEDURES.get(parts[0].lower())
+    if not entry:
+        return False
+    rest = parts[1] if len(parts) > 1 else ""
+    for syn in entry["synonyms"]:
+        candidate = (syn + " " + rest).strip()
+        if candidate.lower() in raw.lower():
+            return True
     return False
 
 
@@ -64,7 +83,7 @@ def validate_sample(raw, gold):
             return False, f"visit_date not in raw: {d_str!r}"
 
     for proc in gold.get('procedures', []):
-        if proc.lower() not in raw.lower():
+        if not _grounded(proc, raw):
             return False, f"procedure not in raw: {proc!r}"
         if MONEY_PATTERN.search(proc) or MONEY_PATTERN2.search(proc):
             return False, f"procedure has money token: {proc!r}"
@@ -83,7 +102,7 @@ def validate_sample(raw, gold):
             amount_str = str(amount_val)
         if amount_str not in raw:
             return False, f"invoice amount not in raw: {amount_str!r}"
-        if desc.lower() not in raw.lower():
+        if not _grounded(desc, raw):
             return False, f"invoice desc not in raw: {desc!r}"
 
     next_appt = gold.get('next_appointment')
