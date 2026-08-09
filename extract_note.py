@@ -3,7 +3,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from dental_notes_schema import DentalNote
+from dental_notes_schema import KNOWN_PROCEDURES, DentalNote
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "dental-notes"
@@ -40,9 +40,13 @@ def parse_reply(reply, fallback_cf=None):
     if fallback_cf and not obj.get("codice_fiscale"):
         obj["codice_fiscale"] = fallback_cf
     try:
-        return DentalNote(**obj)
+        note = DentalNote(**obj)
     except Exception as e:
         raise ValueError("model output failed schema validation: " + str(e))
+    unknown = note.unknown_procedures()
+    if unknown:
+        print("unknown procedure code, needs review:", ", ".join(unknown))
+    return note
 
 
 def call_model(note, urlopen=urllib.request.urlopen):
@@ -134,14 +138,51 @@ def selftest():
     # 4. semantic hallucination: the note has no phone but the output invents one.
     # Pydantic CANNOT catch this - the value has the right type, so it validates.
     # This is intentional and out of scope per 02-CONTEXT.md: the defenses are the
-    # prompt-level guard (Modelfile SYSTEM) plus the aggregate 85% eval gate, NOT
-    # per-call rejection. Asserting it validates documents the limitation so no one
-    # assumes this self-test catches semantic hallucination.
+    # prompt-level guard (Modelfile SYSTEM) plus the eval gate, NOT per-call
+    # rejection. Asserting it validates documents the limitation so no one assumes
+    # this self-test catches semantic hallucination.
+    #
+    # section 6 narrows this for one field only: an invented *procedure code* is
+    # now flagged (not rejected). Everything else here still stands - an invented
+    # phone, name or date passes exactly as before.
     hallucinated = ('{"patient_name": "luca verdi", "codice_fiscale": "VRDL900010150100", '
                     '"phone": "333 0000000", "visit_date": null, "procedures": [], '
                     '"invoices": [], "clinical_notes": "", "next_appointment": null}')
     note = parse_reply(hallucinated)
     assert note.phone == "333 0000000"  # passes validation despite being invented
+
+    # 6. an unknown procedure code is flagged for review, never rejected. a note
+    # with a code nobody recognises is more likely a model invention than a new
+    # treatment, but refusing it would lose a real clinical record over a
+    # vocabulary gap - so it validates and the caller gets something to show a
+    # human. written first, observed failing.
+    invented = ('{"patient_name": "luca verdi", "codice_fiscale": "VRDL900010150100", '
+                '"procedures": ["banana 38", "filling 47"], "invoices": [], '
+                '"clinical_notes": "", "next_appointment": null}')
+    note = parse_reply(invented)
+    assert note.procedures == ["banana 38", "filling 47"], "6: the note must still validate"
+    assert note.unknown_procedures() == ["banana"], \
+        f"6: expected banana flagged, got {note.unknown_procedures()}"
+
+    # 6b. every code in the glossary is recognised, tooth number or not
+    known = ('{"patient_name": "anna bianchi", "codice_fiscale": "BNCA850010150300", '
+             '"procedures": ["rct 26", "x-ray 16", "prophy", "seal 16"], "invoices": [], '
+             '"clinical_notes": "", "next_appointment": null}')
+    assert parse_reply(known).unknown_procedures() == [], \
+        "6b: glossary codes must not be flagged"
+
+    # 6c. sigillatura is a sealant, not a filling - it has its own code so a
+    # preventive procedure never lands on the record as a restorative one
+    assert "seal" in KNOWN_PROCEDURES, "6c: seal should be in the glossary"
+    assert KNOWN_PROCEDURES["seal"] != KNOWN_PROCEDURES.get("filling"), \
+        "6c: seal and filling must stay distinct"
+
+    # 6d. case and stray whitespace do not smuggle a code past the check
+    messy = ('{"patient_name": "anna bianchi", "codice_fiscale": "BNCA850010150300", '
+             '"procedures": ["  RCT 26", "Banana"], "invoices": [], '
+             '"clinical_notes": "", "next_appointment": null}')
+    assert parse_reply(messy).unknown_procedures() == ["banana"], \
+        "6d: matching should be case- and whitespace-insensitive"
 
     # 5. unreachable Ollama gives a clear, distinct error
     def boom(*a, **k):
