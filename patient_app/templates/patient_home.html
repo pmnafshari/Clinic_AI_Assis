@@ -2,4 +2,5 @@
 {% block content %}
 <h1 class="mb-3">{{ t('home_heading', lang) }}</h1>
 <p class="text-secondary mb-0">{{ t('home_body', lang) }}</p>
+<a href="{{ url_for('patient.chat') }}" class="btn btn-primary mt-4">{{ t('home_cta', lang) }}</a>
 {% endblock %}
