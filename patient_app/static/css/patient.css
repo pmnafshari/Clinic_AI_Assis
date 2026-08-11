@@ -75,3 +75,37 @@ h1 {
 .patient-card .form-control {
   min-height: 48px;
 }
+
+/* additive - .patient-card's 420px default above is untouched. same
+   specificity as .patient-card (one class selector each), so this rule must
+   come after it in the file or the 640px override silently loses. */
+.patient-card--wide {
+  max-width: 640px;
+}
+
+/* the UI-SPEC only widens the card; it says nothing about the language/
+   logout bar sitting directly above it, which would otherwise stay at 420px
+   and visibly misalign with a 640px card on the one page that uses both -
+   addition beyond the spec's literal text, kept at the same 640px */
+.patient-lang--wide {
+  max-width: 640px;
+}
+
+/* the four response-state icon colours (WCAG 1.4.1 - states are told apart
+   by icon glyph and heading text, not colour alone; no fifth semantic
+   colour is introduced). answer and refusal share the neutral default. */
+.chat-response-icon {
+  color: #6c757d;
+}
+
+.chat-response--deflection .chat-response-icon {
+  color: var(--bs-primary);
+}
+
+.chat-response--error {
+  border-color: var(--bs-danger);
+}
+
+.chat-response--error .chat-response-icon {
+  color: var(--bs-danger);
+}

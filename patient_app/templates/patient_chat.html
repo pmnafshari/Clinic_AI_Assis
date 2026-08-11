@@ -1,0 +1,65 @@
+{% extends "patient_base.html" %}
+{% block card_class %}patient-card--wide{% endblock %}
+{% block lang_class %}patient-lang--wide{% endblock %}
+{% block content %}
+<h1 class="mb-3">{{ t('chat_heading', lang) }}</h1>
+<p class="text-secondary mb-4">{{ t('chat_intro', lang) }}</p>
+
+<p class="fw-medium mb-2">{{ t('chat_examples_heading', lang) }}</p>
+<div class="d-flex flex-wrap gap-2 mb-4">
+  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_1', lang) }}"
+          class="btn btn-outline-secondary">{{ t('chat_example_1', lang) }}</button>
+  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_2', lang) }}"
+          class="btn btn-outline-secondary">{{ t('chat_example_2', lang) }}</button>
+  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_3', lang) }}"
+          class="btn btn-outline-secondary">{{ t('chat_example_3', lang) }}</button>
+  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_4', lang) }}"
+          class="btn btn-outline-secondary">{{ t('chat_example_4', lang) }}</button>
+</div>
+
+<form id="chat-form" method="post" action="{{ url_for('patient.chat') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3">
+    <label for="question" class="form-label">{{ t('question_label', lang) }}</label>
+    <input type="text" id="question" name="question" class="form-control"
+           placeholder="{{ t('question_placeholder', lang) }}" maxlength="500" required>
+  </div>
+  <button type="submit" id="chat-submit" class="btn btn-primary"
+          data-pending-label="{{ t('chat_pending_cta', lang) }}">
+    <span class="chat-submit-label">{{ t('chat_cta', lang) }}</span>
+    <span class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
+  </button>
+  <p id="chat-pending-help" class="text-secondary small mt-2 mb-0 d-none">{{ t('chat_pending_help', lang) }}</p>
+</form>
+
+{# exactly one response region, rendered only when a POST produced a state -
+   a reload with no state returns to the empty state above, per D-03 #}
+{% if state %}
+<div class="card chat-response chat-response--{{ state }} mt-4 p-4" role="status" aria-live="polite">
+  <h2 class="chat-response-heading h5 mb-2" id="chat-response-heading" tabindex="-1">
+    {% if state == 'answer' %}
+    <i class="bi bi-chat-left-text chat-response-icon" aria-hidden="true"></i> {{ t('answer_heading', lang) }}
+    {% elif state == 'refusal' %}
+    <i class="bi bi-info-circle chat-response-icon" aria-hidden="true"></i> {{ t('refusal_heading', lang) }}
+    {% elif state == 'deflection' %}
+    <i class="bi bi-telephone chat-response-icon" aria-hidden="true"></i> {{ t('deflect_heading', lang) }}
+    {% elif state == 'error' %}
+    <i class="bi bi-exclamation-octagon chat-response-icon" aria-hidden="true"></i> {{ t('chat_error_heading', lang) }}
+    {% endif %}
+  </h2>
+  <p class="mb-0">
+    {% if state == 'answer' %}
+    {{ body }}
+    {% elif state == 'refusal' %}
+    {{ t('refusal_body', lang) }}
+    {% elif state == 'deflection' %}
+    {{ t('deflect_body', lang) }}
+    {% elif state == 'error' %}
+    {{ t('chat_error_body', lang) }}
+    {% endif %}
+  </p>
+</div>
+{% endif %}
+
+<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+{% endblock %}

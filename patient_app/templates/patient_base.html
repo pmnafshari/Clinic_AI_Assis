@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Studio dentistico{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('vendor', filename='bootstrap/5.3.3/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('vendor', filename='bootstrap-icons/1.11.3/bootstrap-icons.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/patient.css') }}">
 </head>
 <body>
@@ -14,7 +15,11 @@
      is true on every screen that has a session, including the forced
      change-pin screen where FORCED_CHANGE_ALLOWED already keeps it open. #}
   <main class="patient-shell">
-    <div class="patient-lang">
+    {# lang_class/card_class default to empty, so login, change-pin and home
+       render at exactly today's width. the chat page is the one screen that
+       fills them, to widen its card without touching this default or the
+       .patient-card/.patient-lang rules login and change-pin depend on. #}
+    <div class="patient-lang {% block lang_class %}{% endblock %}">
       {% if patient %}
       <form method="post" action="{{ url_for('patient.logout') }}" class="d-inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -27,7 +32,7 @@
          class="patient-lang-link{{ ' active' if lang == 'en' else '' }}">EN</a>
     </div>
 
-    <div class="card patient-card p-4">
+    <div class="card patient-card {% block card_class %}{% endblock %} p-4">
       {% if error %}
       <div class="alert alert-danger" role="alert">{{ error }}</div>
       {% endif %}
