@@ -10,11 +10,17 @@ the gate always runs before the accessor and the accessor always runs before the
 model.
 """
 
+import ast
+import inspect
 import json
 import re
+import sqlite3
+import sys
+import tempfile
 import unicodedata
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 import patient_accessor
 from auth import log_audit
@@ -258,3 +264,265 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
 # parameter and no module-level state carrying anything from one call into
 # the next - a follow-up like "and the one before that?" will not resolve,
 # and that tradeoff is accepted by decision, not by accident.
+
+
+def selftest():
+    with tempfile.TemporaryDirectory() as tmp:
+        conn = sqlite3.connect(str(Path(tmp) / "clinic.sqlite"))
+        conn.row_factory = sqlite3.Row
+        conn.executescript("""
+            CREATE TABLE patients (
+                codice_fiscale TEXT PRIMARY KEY,
+                patient_name TEXT NOT NULL,
+                phone TEXT
+            );
+            CREATE TABLE visits (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codice_fiscale TEXT NOT NULL,
+                visit_date TEXT,
+                procedures TEXT,
+                clinical_notes TEXT,
+                next_appointment TEXT,
+                source_path TEXT UNIQUE NOT NULL
+            );
+            CREATE TABLE invoices (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codice_fiscale TEXT NOT NULL,
+                visit_id INTEGER NOT NULL,
+                line_index INTEGER NOT NULL,
+                amount REAL NOT NULL,
+                description TEXT
+            );
+            CREATE TABLE audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target TEXT,
+                allowed INTEGER NOT NULL,
+                ip TEXT
+            );
+        """)
+        conn.commit()
+
+        # 0. fixture: two patients, each with a visit, a next appointment
+        # and an invoice, so every route has real data for patient A and a
+        # distinct set of values for patient B (section 7's leak check).
+        cf_a = "AAAA800010150100"
+        cf_b = "BBBB850315150200"
+        missing_cf = "ZZZZ000000000000"
+
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            (cf_a, "anna alfa", "111000111"),
+        )
+        conn.execute(
+            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
+            (cf_b, "bruno beta", "222000222"),
+        )
+        conn.execute(
+            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
+            (cf_a, "2026-06-01", json.dumps(["filling 14"]), "note a", "2026-09-01", "a/n1.json"),
+        )
+        conn.execute(
+            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
+            (cf_b, "2026-06-02", json.dumps(["cleaning"]), "note b", "2026-09-02", "b/n1.json"),
+        )
+        visit_id_a = conn.execute(
+            "SELECT id FROM visits WHERE source_path = ?", ("a/n1.json",)
+        ).fetchone()["id"]
+        visit_id_b = conn.execute(
+            "SELECT id FROM visits WHERE source_path = ?", ("b/n1.json",)
+        ).fetchone()["id"]
+        conn.execute(
+            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (cf_a, visit_id_a, 0, 80.0, "filling 14"),
+        )
+        conn.execute(
+            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            " VALUES (?, ?, ?, ?, ?)",
+            (cf_b, visit_id_b, 0, 40.0, "cleaning"),
+        )
+        conn.commit()
+
+        def _fake_response(text):
+            class FakeResponse:
+                def __enter__(self):
+                    return self
+
+                def __exit__(self, *exc_info):
+                    return False
+
+                def read(self):
+                    return json.dumps({"response": text}).encode()
+
+            return FakeResponse()
+
+        def canned_urlopen(req, timeout=120):
+            return _fake_response("your next visit is on record")
+
+        def not_in_records_urlopen(req, timeout=120):
+            return _fake_response("NOT_IN_RECORDS")
+
+        def raising_urlopen(req, timeout=120):
+            raise AssertionError("model reached")
+
+        def unreachable_urlopen(req, timeout=120):
+            raise urllib.error.URLError("connection refused")
+
+        class _RaisingAccessor:
+            def __getattr__(self, name):
+                def _raise(*args, **kwargs):
+                    raise AssertionError("accessor reached")
+                return _raise
+
+        global patient_accessor
+
+        # 1. ordering - binding property 4. an advice-shaped question is
+        # deflected before any accessor call, any retrieval and any model
+        # call, in each of the three categories, in both languages.
+        advice_questions = {
+            "advice": ("Dovrei preoccuparmi?", "Should I be worried?"),
+            "symptom": ("Ho dolore al dente", "I have pain in my tooth"),
+            "treatment": ("Posso prendere un antibiotico?", "What should I take for this?"),
+        }
+        real_accessor = patient_accessor
+        patient_accessor = _RaisingAccessor()
+        try:
+            for category, (it_q, en_q) in advice_questions.items():
+                for q in (it_q, en_q):
+                    result = answer_question(q, cf_a, conn, "it", urlopen=raising_urlopen)
+                    assert result["state"] == "deflection", (
+                        "1: an advice-shaped question must be deflected before any "
+                        f"accessor call, any retrieval and any model call - {q!r} gave "
+                        f"{result['state']!r}"
+                    )
+                    assert result["target"] == category, f"1: {q!r} target was {result['target']}"
+        finally:
+            patient_accessor = real_accessor
+
+        # 2. deflection audit (D-05) - one row per deflection, allowed=0, and
+        # no patient_query row, since the every-question audit is phase 19's.
+        deflect_rows = conn.execute(
+            "SELECT * FROM audit_log WHERE action = 'patient_deflect'"
+        ).fetchall()
+        assert len(deflect_rows) == 6, f"2: expected 6 deflection rows, got {len(deflect_rows)}"
+        for row in deflect_rows:
+            assert row["role"] == "patient", f"2: role was {row['role']}"
+            assert row["allowed"] == 0, "2: deflection row should be allowed=0"
+        query_count = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_query'"
+        ).fetchone()["c"]
+        assert query_count == 0, "2: patient_query rows are phase 19 scope, none should exist yet"
+
+        # 3. unroutable (D-04) - an off-surface question refuses, distinct
+        # from a deflection, and neither stub is ever reached.
+        patient_accessor = _RaisingAccessor()
+        try:
+            for q in ("qual e la capitale della Francia", "what's the weather"):
+                result = answer_question(q, cf_a, conn, "it", urlopen=raising_urlopen)
+                assert result["state"] == "refusal", f"3: {q!r} state was {result['state']}"
+                assert result["target"] == "unrouted", f"3: {q!r} target was {result['target']}"
+        finally:
+            patient_accessor = real_accessor
+
+        # 4. routed but empty (SC4) - a missing patient gives an empty
+        # result on every route, refusing without ever reaching the model.
+        empty_questions = {
+            "next_appointment": "Quando e il mio prossimo appuntamento?",
+            "invoices": "Quanto devo pagare?",
+            "demographics": "Che numero di telefono avete per me?",
+            "visits": "Che visite ho fatto?",
+        }
+        for route, q in empty_questions.items():
+            result = answer_question(q, missing_cf, conn, "it", urlopen=raising_urlopen)
+            assert result["state"] == "refusal", f"4: {route} state was {result['state']}"
+            assert result["target"] == f"{route}:empty", f"4: {route} target was {result['target']}"
+
+        # 5. served answer, and the NOT_IN_RECORDS sentinel refusing after a
+        # real model call.
+        result5 = answer_question("Che visite ho fatto?", cf_a, conn, "it", urlopen=canned_urlopen)
+        assert result5["state"] == "answer", f"5: state was {result5['state']}"
+        assert result5["body"] == "your next visit is on record", f"5: body was {result5['body']!r}"
+
+        result5b = answer_question(
+            "Che visite ho fatto?", cf_a, conn, "it", urlopen=not_in_records_urlopen
+        )
+        assert result5b["state"] == "refusal", f"5b: state was {result5b['state']}"
+
+        # 6. model unreachable gives the error state, not a raised exception.
+        result6 = answer_question(
+            "Che visite ho fatto?", cf_a, conn, "it", urlopen=unreachable_urlopen
+        )
+        assert result6["state"] == "error", f"6: state was {result6['state']}"
+        assert result6["target"] == "model_unreachable", f"6: target was {result6['target']}"
+
+        # 7. cross-patient (CHAT-04 at this layer) - the prompt built for
+        # patient A carries none of patient B's values.
+        captured = {}
+
+        def capturing_urlopen(req, timeout=120):
+            captured["prompt"] = json.loads(req.data)["prompt"]
+            return canned_urlopen(req, timeout=timeout)
+
+        answer_question("Che visite ho fatto?", cf_a, conn, "it", urlopen=capturing_urlopen)
+        prompt = captured["prompt"]
+        for leak in ("bruno beta", "222000222", "2026-06-02", "cleaning", "40.0", "40,00"):
+            assert leak not in prompt, f"7: patient B's {leak!r} leaked into A's prompt"
+
+        # 8. static guards - the import graph, the write-verb scan and the
+        # resolve_cf ban, same technique as patient_accessor's own selftest.
+        source = inspect.getsource(sys.modules[__name__])
+        tree = ast.parse(source)
+        lines = source.splitlines()
+        docstring = ast.get_docstring(tree)
+        excluded_names = {"selftest", "main"}
+        excluded_ranges = [
+            (node.lineno, node.end_lineno) for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name in excluded_names
+        ]
+
+        def in_excluded_range(lineno):
+            return any(start <= lineno <= end for start, end in excluded_ranges)
+
+        scannable_lines = []
+        for idx, line in enumerate(lines, start=1):
+            if line.lstrip()[:1] == "#":
+                continue
+            if docstring and docstring in line:
+                continue
+            if in_excluded_range(idx):
+                continue
+            scannable_lines.append(line)
+        scannable = "\n".join(scannable_lines)
+
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(a.name.split(".")[0] for a in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module.split(".")[0])
+        forbidden_imports = {"storage", "ask", "app", "web_auth", "web_session", "extract_note"}
+        assert not (forbidden_imports & imported), \
+            f"8: patient_app/chat.py must not import {forbidden_imports & imported}"
+        assert "resolve_cf" not in scannable, \
+            "8: resolve_cf is ask.py's inverse operation, patient code must never call it"
+        assert re.search(r"(?i)\b(insert|update|delete|drop|alter|replace)\b", scannable) is None, \
+            "8: patient_app/chat.py holds no write path either"
+
+    print("selftest ok")
+
+
+def main():
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
+        selftest()
+        return
+    print("usage: python -m patient_app.chat --selftest")
+
+
+if __name__ == "__main__":
+    main()
