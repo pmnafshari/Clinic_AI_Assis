@@ -338,6 +338,8 @@ shipping, since this behaviour has changed across chromadb versions before:
 | empty dict (`{}`) | raises `ValueError` | yes |
 | omitted entirely | every chunk in the collection, every patient | **no** |
 
+**Re-verified 2026-08-11 against chromadb==1.3.7 by `chroma_scope_selftest.py` — all four fail-safe rows still hold.**
+
 The live risk is omitting the `where` clause, not malforming it. A non-matching value, a
 typo'd key, and an empty dict all fail safe on this pinned version; only omitting `where`
 altogether returns everything. `ask.py:184`, inside `answer_meaning()`, calls
