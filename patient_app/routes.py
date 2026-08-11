@@ -13,6 +13,7 @@ import patient_auth
 import storage
 from auth import log_audit
 
+from . import chat
 from .strings import current_language, t
 
 patient_bp = Blueprint("patient", __name__)
@@ -199,3 +200,45 @@ def change_pin():
         httponly=True, samesite="Strict", secure=current_app.config["SESSION_COOKIE_SECURE"],
     )
     return resp
+
+
+# neither NO_SESSION_ALLOWED nor FORCED_CHANGE_ALLOWED lists this endpoint,
+# so require_patient_session gates it by default - the whole point of that
+# whitelist being a whitelist (§5.4's default-deny guard)
+@patient_bp.route("/chat", methods=["GET", "POST"], endpoint="chat")
+def chat_page():
+    if request.method == "GET":
+        return render_template("patient_chat.html")
+
+    # the example chips are submit buttons named "question" living outside
+    # the form's text input, so a chip click posts two fields both named
+    # "question" - the empty text input and the clicked chip. .get would
+    # return whichever field the browser lists first and silently drop the
+    # chip's text, so take the first non-empty value instead.
+    question = ""
+    for value in request.form.getlist("question"):
+        value = value.strip()
+        if value:
+            question = value
+            break
+
+    # unbounded form text would reach the keyword gate and then a language
+    # model on a machine that also has to hold that model - same reasoning
+    # as the 128-character pin cap above (WR-06). 500 is chosen here, not
+    # locked. truncating rather than refusing avoids inventing a fifth
+    # response state beyond the four the design contract locks.
+    question = question[:500]
+
+    # the session row is the only source of cf for this call, never the
+    # submitted form (§3.2, D-08)
+    cf = g.patient["codice_fiscale"]
+
+    conn = get_db()
+    result = chat.answer_question(question, cf, conn, current_language(), ip=request.remote_addr)
+
+    # no audit call is added here on purpose. the deflection row is written
+    # inside chat.answer_question and the scope-mismatch row inside
+    # patient_accessor, both already on this code path - a per-question row
+    # here would pull CHAT-07's every-interaction audit forward out of
+    # Phase 19, against D-05.
+    return render_template("patient_chat.html", state=result["state"], body=result["body"])
