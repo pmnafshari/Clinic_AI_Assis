@@ -1,3 +1,4 @@
+import json
 import re
 import sqlite3
 import sys
@@ -6,7 +7,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from flask import url_for
+from markupsafe import escape as html_escape
 
+import patient_accessor
 import patient_app
 import patient_auth
 import storage
@@ -837,7 +840,12 @@ def selftest():
                 r"FROM\s+pending_actions\b", r"UPDATE\s+pending_actions\b",
             )
         ]
-        patient_side_files = list(Path("patient_app").rglob("*.py")) + [Path("patient_auth.py")]
+        # patient_accessor.py is a new top-level file section 27 needs on this
+        # same list - the patient_app/**/*.py glob does not reach it, since it
+        # lives outside that package.
+        patient_side_files = list(Path("patient_app").rglob("*.py")) + [
+            Path("patient_auth.py"), Path("patient_accessor.py"),
+        ]
         offenders = []
         for path in patient_side_files:
             text = path.read_text()
@@ -846,6 +854,192 @@ def selftest():
                     offenders.append((str(path), pattern.pattern))
         assert not offenders, \
             f"23f: patient-side SQL must never name a staff table, found {offenders}"
+
+        # ==================================================================
+        # sections 24-27: the chat surface proven at the request level - two
+        # live sessions, real cookies, real csrf. plans 01 and 03 proved these
+        # properties inside their own modules with stubs; this is the
+        # automated counterpart to the live two-login walk in plan 18-06.
+        # ==================================================================
+
+        def rendered(key, lang, **kwargs):
+            # jinja's autoescape turns an apostrophe into &#39; - several
+            # english copies below carry one (deflect_body, refusal_body,
+            # refusal_heading, chat_error_heading), so a raw t(key, lang)
+            # can never be found inside rendered html for those keys. this
+            # mirrors what jinja actually emits, so an "in resp.text" check
+            # stays a real assertion instead of failing on punctuation.
+            return str(html_escape(t(key, lang, **kwargs)))
+
+        def seed_visit(cf, visit_date, procedures, next_appointment, source_path):
+            c = raw_db()
+            c.execute(
+                "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                " next_appointment, source_path) VALUES (?, ?, ?, ?, ?)",
+                (cf, visit_date, json.dumps(procedures), next_appointment, source_path),
+            )
+            c.commit()
+            visit_id = c.execute(
+                "SELECT id FROM visits WHERE source_path = ?", (source_path,)
+            ).fetchone()["id"]
+            c.close()
+            return visit_id
+
+        def seed_invoice(cf, visit_id, amount, description, line_index=0):
+            c = raw_db()
+            c.execute(
+                "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (cf, visit_id, line_index, amount, description),
+            )
+            c.commit()
+            c.close()
+
+        def activate(client, pin, new_pin):
+            # drives the forced first-login change so the returned client
+            # holds a session past FORCED_CHANGE_ALLOWED, same shape sections
+            # 12/16/20/21 already use one call at a time
+            change_page = client.get("/change-pin")
+            client.post("/change-pin", data={
+                "pin": new_pin, "confirm": new_pin, "csrf_token": _csrf_from(change_page.text),
+            })
+
+        # the stub every section below reuses so none of them needs a running
+        # ollama - captures the built prompt and returns fixed canned text.
+        # restored to the real function once section 26c is done with it.
+        captured_prompts = []
+
+        def _stub_call_model(prompt, urlopen=None):
+            captured_prompts.append(prompt)
+            return "risposta di prova"
+
+        original_call_model = patient_app.chat._call_model
+        patient_app.chat._call_model = _stub_call_model
+
+        reset24 = raw_db()
+        reset24.execute("DELETE FROM patient_login_attempts")
+        reset24.commit()
+        reset24.close()
+
+        # 24 fixture: one patient, a name, a phone, two visits each carrying
+        # visit_date/procedures/next_appointment, and one invoice - enough
+        # real data for every route to answer rather than refuse.
+        cf24 = "QRRC970010153000"
+        pin24 = seed_and_issue(cf24, name="quirino quercia")
+        c24 = raw_db()
+        c24.execute("UPDATE patients SET phone = ? WHERE codice_fiscale = ?", ("3315551000", cf24))
+        c24.commit()
+        c24.close()
+        seed_visit(cf24, "2031-01-10", ["seal 11"], "2031-06-01", "24/n1.json")
+        visit24b = seed_visit(cf24, "2031-02-15", ["crown 22"], "2031-06-01", "24/n2.json")
+        seed_invoice(cf24, visit24b, 120.0, "porcelain crown consult")
+
+        client24, _ = sign_in(cf24, pin24)
+        activate(client24, pin24, "84610237")
+
+        # 24. GET /chat with a live session renders the empty state - the
+        # four example chips are present, no response region yet. GET /chat
+        # with no session cookie hits the default-deny whitelist, not a
+        # per-route check.
+        chat_get24 = client24.get("/chat")
+        assert chat_get24.status_code == 200, "24: GET /chat with a live session should return 200"
+        for key in ("chat_example_1", "chat_example_2", "chat_example_3", "chat_example_4"):
+            assert t(key, "it") in chat_get24.text, f"24: expected the {key} chip on the empty chat page"
+        assert 'role="status"' not in chat_get24.text, \
+            "24: the empty chat state should render no role=status element"
+
+        anon_chat = app.test_client().get("/chat")
+        assert anon_chat.status_code == 302 and "/login" in anon_chat.headers["Location"], \
+            "24: GET /chat with no session should redirect to /login via the default-deny whitelist"
+
+        # 24a. a typed question posts successfully with the extracted csrf
+        # token and returns exactly one role=status element - the no-
+        # accumulation property stated as a count, not an eyeball.
+        page24a = client24.get("/chat")
+        resp24a = client24.post("/chat", data={
+            "question": t("chat_example_2", "it"), "csrf_token": _csrf_from(page24a.text),
+        })
+        assert resp24a.status_code == 200, "24a: a typed question POST should return 200"
+        count24a = resp24a.text.count('role="status"')
+        assert count24a == 1, f"24a: expected exactly one role=status element, got {count24a}"
+
+        # 24b. a chip click posts two fields both named "question" - the
+        # empty text input first, the clicked chip second. this fails red
+        # against a request.form.get("question") implementation, which would
+        # read whichever field the browser lists first and silently drop the
+        # chip's text.
+        page24b = client24.get("/chat")
+        chip_text24b = t("chat_example_1", "it")
+        resp24b = client24.post("/chat", data={
+            "question": ["", chip_text24b], "csrf_token": _csrf_from(page24b.text),
+        })
+        assert resp24b.status_code == 200, "24b: a chip click should return 200"
+        assert t("answer_heading", "it") in resp24b.text, \
+            "24b: the chip's own question should be answered, not refused as empty"
+        assert t("refusal_heading", "it") not in resp24b.text, \
+            "24b: a chip click must not be treated as an empty question"
+
+        # 24c. D-03, no history. the second response on the same session
+        # carries its own answer and none of the first question's text or the
+        # first answer's text. a reload afterwards returns to the empty state.
+        # the first question is typed, not one of the four example chips -
+        # those render on every page load regardless of state, so a chip's
+        # own text would still be present on the second response and could
+        # never prove this property either way.
+        first_page24c = client24.get("/chat")
+        first_q24c = "Quando torno?"
+        first_resp24c = client24.post("/chat", data={
+            "question": first_q24c, "csrf_token": _csrf_from(first_page24c.text),
+        })
+        assert t("answer_heading", "it") in first_resp24c.text, \
+            "24c: setup - the first question should be answered"
+
+        second_page24c = client24.get("/chat")
+        second_resp24c = client24.post("/chat", data={
+            "question": "qual e la capitale della Francia",
+            "csrf_token": _csrf_from(second_page24c.text),
+        })
+        assert first_q24c not in second_resp24c.text, \
+            "24c: the second response must not carry the first question's text"
+        assert "risposta di prova" not in second_resp24c.text, \
+            "24c: the second response must not carry the first answer's text"
+
+        reload24c = client24.get("/chat")
+        assert 'role="status"' not in reload24c.text, \
+            "24c: a reload with no new POST should return to the empty state with no response region"
+
+        # 24d. no |safe filter, and a seeded value with a raw <b> comes back
+        # html-escaped. no live model needed: a dedicated echo-stub returns
+        # the built prompt itself as the answer body, so the seeded invoice
+        # description that reaches the prompt also reaches the rendered page.
+        chat_template_text = Path("patient_app/templates/patient_chat.html").read_text()
+        assert "|safe" not in chat_template_text, "24d: patient_chat.html must contain no |safe filter"
+
+        def _echo_call_model(prompt, urlopen=None):
+            captured_prompts.append(prompt)
+            # the built prompt carries the "reply with exactly NOT_IN_RECORDS"
+            # instruction verbatim - echoing it unmodified would trip step 8's
+            # sentinel check and turn this into a refusal instead of an
+            # answer, so that one substring is swapped out before echoing
+            return prompt.replace("NOT_IN_RECORDS", "ECHOED_CONTEXT")
+
+        cf24d = "XSSC980010153100"
+        pin24d = seed_and_issue(cf24d, name="xss patient")
+        visit24d = seed_visit(cf24d, "2031-01-01", ["seal 33"], "2031-05-01", "24d/n1.json")
+        seed_invoice(cf24d, visit24d, 10.0, "<b>bold</b> filling")
+        client24d, _ = sign_in(cf24d, pin24d)
+        activate(client24d, pin24d, "15935780")
+
+        page24d = client24d.get("/chat")
+        patient_app.chat._call_model = _echo_call_model
+        resp24d = client24d.post("/chat", data={
+            "question": t("chat_example_3", "it"), "csrf_token": _csrf_from(page24d.text),
+        })
+        patient_app.chat._call_model = _stub_call_model
+        assert "<b>bold</b>" not in resp24d.text, \
+            "24d: a seeded <b> value must come back HTML-escaped, not raw"
+        assert "&lt;b&gt;bold&lt;/b&gt;" in resp24d.text, \
+            "24d: expected the escaped form of the seeded <b> value in the response"
 
     print("selftest ok")
 
