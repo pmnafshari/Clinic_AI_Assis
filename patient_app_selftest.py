@@ -1041,6 +1041,139 @@ def selftest():
         assert "&lt;b&gt;bold&lt;/b&gt;" in resp24d.text, \
             "24d: expected the escaped form of the seeded <b> value in the response"
 
+        # ---- section 25: the two-session cross-patient regression (CHAT-04/SC2) ----
+
+        reset25 = raw_db()
+        reset25.execute("DELETE FROM patient_login_attempts")
+        reset25.commit()
+        reset25.close()
+        captured_prompts.clear()
+
+        def seed_route_patient(cf, name, phone, visit_date, next_appointment, procedure,
+                                invoice_amount, invoice_description, source_tag):
+            pin = seed_and_issue(cf, name=name)
+            c = raw_db()
+            c.execute("UPDATE patients SET phone = ? WHERE codice_fiscale = ?", (phone, cf))
+            c.commit()
+            c.close()
+            visit_id = seed_visit(cf, visit_date, [procedure], next_appointment, f"{source_tag}/n1.json")
+            seed_invoice(cf, visit_id, invoice_amount, invoice_description)
+            return pin
+
+        def login_and_activate(cf, pin, new_pin):
+            client = app.test_client()
+            page = client.get("/login")
+            client.post("/login", data={
+                "codice_fiscale": cf, "pin": pin, "csrf_token": _csrf_from(page.text),
+            })
+            activate(client, pin, new_pin)
+            return client
+
+        # distinctiveness is the whole assertion here - two patients sharing a
+        # name token, a phone digit sequence, a procedure marker or an
+        # invoice description would make a leak invisible.
+        cf_p1 = "BRTL990010153200"
+        cf_p2 = "SNMR000010153300"
+
+        pin_p1 = seed_route_patient(
+            cf_p1, "elio bertorelli", "3311110001", "2031-07-04", "2031-09-14",
+            "seal 60614", 245.50, "reline appliance batch 71829", "p1chat",
+        )
+        pin_p2 = seed_route_patient(
+            cf_p2, "nadia sanmarco", "3477770002", "2031-08-19", "2031-10-25",
+            "crown 97701", 318.75, "retainer fitting batch 84523", "p2chat",
+        )
+
+        # the tooth-number markers stand in for "procedure code" - the raw
+        # code word itself does not survive render_procedure's glossary
+        # phrasing in every language, but the tooth number always does
+        leak_values_p1 = ("bertorelli", "3311110001", "2031-07-04", "60614", "71829")
+        leak_values_p2 = ("sanmarco", "3477770002", "2031-08-19", "97701", "84523")
+
+        client_p1 = login_and_activate(cf_p1, pin_p1, "13571113")
+        client_p2 = login_and_activate(cf_p2, pin_p2, "24682246")
+
+        route_questions = {
+            "next_appointment": t("chat_example_1", "it"),
+            "invoices": t("chat_example_3", "it"),
+            "demographics": t("chat_example_4", "it"),
+            "visits": t("chat_example_2", "it"),
+        }
+
+        def ask_all_routes(client):
+            responses = {}
+            for route, question in route_questions.items():
+                page = client.get("/chat")
+                resp = client.post("/chat", data={
+                    "question": question, "csrf_token": _csrf_from(page.text),
+                })
+                responses[route] = resp.text
+            return responses
+
+        # 25. each client asks the same four questions, one per route. quoting
+        # roadmap SC2: two different patient accounts asking the same style of
+        # question never see each other's data.
+        resp_p1 = ask_all_routes(client_p1)
+        resp_p2 = ask_all_routes(client_p2)
+
+        for route, body in resp_p1.items():
+            for leak in leak_values_p2:
+                assert leak not in body, (
+                    f"25: SC2 - patient one's {route} response must not carry patient two's "
+                    f"{leak!r} (two different patient accounts asking the same style of "
+                    "question never see each other's data)"
+                )
+        for route, body in resp_p2.items():
+            for leak in leak_values_p1:
+                assert leak not in body, (
+                    f"25: SC2 - patient two's {route} response must not carry patient one's {leak!r}"
+                )
+
+        # 25a. the prompt capture - the assertion that matters most. the
+        # accessor is what guarantees the scoping; this proves the guarantee
+        # survives all the way to the string the model is actually handed.
+        assert len(captured_prompts) == 8, \
+            f"25a: expected 8 captured prompts (4 routes x 2 patients), got {len(captured_prompts)}"
+        prompts_p1 = captured_prompts[:4]
+        prompts_p2 = captured_prompts[4:]
+        for prompt in prompts_p1:
+            for leak in leak_values_p2:
+                assert leak not in prompt, \
+                    f"25a: patient two's {leak!r} leaked into a prompt built for patient one"
+        for prompt in prompts_p2:
+            for leak in leak_values_p1:
+                assert leak not in prompt, \
+                    f"25a: patient one's {leak!r} leaked into a prompt built for patient two"
+
+        # 25b. neither client's request wrote a patient_scope_violation row -
+        # a row here would mean the D-09 return assertion fired on a
+        # correctly scoped query, a real defect and not a reassurance.
+        violations25b = count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_scope_violation'"
+        )
+        assert violations25b == 0, (
+            "25b: a patient_scope_violation row exists after correctly scoped queries - "
+            f"got {violations25b} rows"
+        )
+
+        # 25c. negative control. without this, 25b's zero-count assertion
+        # could pass simply because the mechanism does not work - this proves
+        # the counter can move.
+        mismatched_rows25c = [{"codice_fiscale": cf_p2, "value": "should be dropped"}]
+        conn25c = raw_db()
+        kept25c = patient_accessor._scope_rows(mismatched_rows25c, cf_p1, conn25c, "negative_control")
+        conn25c.close()
+        assert kept25c == [], f"25c: a mismatched row must be dropped, got {kept25c}"
+        violations25c = count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_scope_violation'"
+        )
+        assert violations25c == 1, \
+            f"25c: the negative control must write exactly one patient_scope_violation row, got {violations25c}"
+        violation_row25c = raw_db().execute(
+            "SELECT * FROM audit_log WHERE action = 'patient_scope_violation' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert violation_row25c["allowed"] == 0, "25c: the violation row must be allowed=0"
+
     print("selftest ok")
 
 
