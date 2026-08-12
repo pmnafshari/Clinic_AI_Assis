@@ -1174,6 +1174,251 @@ def selftest():
         ).fetchone()
         assert violation_row25c["allowed"] == 0, "25c: the violation row must be allowed=0"
 
+        # ---- section 26: three distinguishable non-answer states (D-02/D-04/SC4) ----
+
+        reset26 = raw_db()
+        reset26.execute("DELETE FROM patient_login_attempts")
+        reset26.commit()
+        reset26.close()
+
+        cf26 = "DFLC010010153400"
+        pin26 = seed_and_issue(cf26, name="dario deflezione")
+        client26 = app.test_client()
+        page26 = client26.get("/login")
+        client26.post("/login", data={
+            "codice_fiscale": cf26, "pin": pin26, "csrf_token": _csrf_from(page26.text),
+        })
+        activate(client26, pin26, "97536802")
+
+        # 26. deflection (D-02), three categories, both languages.
+        advice_questions26 = {
+            "advice": ("Dovrei preoccuparmi?", "Should I be worried?"),
+            "symptom": ("Ho dolore al dente", "I have pain in my tooth"),
+            "treatment": ("Posso prendere un antibiotico?", "What should I take for this?"),
+        }
+        before_count26 = len(captured_prompts)
+        for category, (it_q, en_q) in advice_questions26.items():
+            for lang_code, question in (("it", it_q), ("en", en_q)):
+                client26.get(f"/lang/{lang_code}", follow_redirects=True)
+                page = client26.get("/chat")
+                resp = client26.post("/chat", data={
+                    "question": question, "csrf_token": _csrf_from(page.text),
+                })
+                assert rendered("deflect_heading", lang_code) in resp.text, \
+                    f"26: {question!r} should render the deflection heading"
+                assert rendered("deflect_body", lang_code) in resp.text, \
+                    f"26: {question!r} should render the deflection body"
+                assert rendered("refusal_heading", lang_code) not in resp.text, \
+                    f"26: {question!r} must not render the refusal heading"
+                assert rendered("chat_error_heading", lang_code) not in resp.text, \
+                    f"26: {question!r} must not render the error heading"
+            deflect_rows26 = raw_db().execute(
+                "SELECT * FROM audit_log WHERE action = 'patient_deflect' AND username = ? AND target = ?",
+                (cf26, category),
+            ).fetchall()
+            assert len(deflect_rows26) == 2, \
+                f"26: D-05 - expected 2 patient_deflect rows (it/en) for {category}, got {len(deflect_rows26)}"
+            for row in deflect_rows26:
+                assert row["role"] == "patient" and row["allowed"] == 0, \
+                    f"26: patient_deflect row for {category} should be role=patient, allowed=0"
+        client26.get("/lang/it", follow_redirects=True)
+        after_count26 = len(captured_prompts)
+        assert after_count26 == before_count26, (
+            "26: no advice-shaped question may reach the model - captured_prompts grew "
+            f"from {before_count26} to {after_count26} across six deflection posts"
+        )
+
+        deflect_sample_page = client26.get("/chat")
+        deflect_sample_resp = client26.post("/chat", data={
+            "question": "Dovrei preoccuparmi?", "csrf_token": _csrf_from(deflect_sample_page.text),
+        })
+        target_check26 = patient_app.chat.answer_question("Dovrei preoccuparmi?", cf26, raw_db(), "it")
+        assert target_check26["target"] == "advice", f"26: target was {target_check26['target']}"
+
+        # 26a. unroutable (D-04) - a capability hint, never a deflection, and
+        # the model is never reached either.
+        before_count26a = len(captured_prompts)
+        unroutable_questions26a = {"it": "qual e la capitale della Francia", "en": "what's the weather"}
+        resp26a = {}
+        for lang_code, question in unroutable_questions26a.items():
+            client26.get(f"/lang/{lang_code}", follow_redirects=True)
+            page = client26.get("/chat")
+            resp = client26.post("/chat", data={
+                "question": question, "csrf_token": _csrf_from(page.text),
+            })
+            resp26a[lang_code] = resp.text
+            assert rendered("refusal_heading", lang_code) in resp.text, \
+                f"26a: {question!r} should render the refusal heading"
+            assert rendered("refusal_body", lang_code) in resp.text, \
+                f"26a: {question!r} should render the refusal body naming all four routes"
+            assert rendered("deflect_heading", lang_code) not in resp.text, \
+                f"26a: {question!r} must not render the deflection heading"
+        client26.get("/lang/it", follow_redirects=True)
+        after_count26a = len(captured_prompts)
+        assert after_count26a == before_count26a, (
+            "26a: D-04 - an unroutable question must never reach the model - captured_prompts "
+            f"grew from {before_count26a} to {after_count26a}"
+        )
+        target_check26a = patient_app.chat.answer_question(
+            "qual e la capitale della Francia", cf26, raw_db(), "it"
+        )
+        assert target_check26a["target"] == "unrouted", f"26a: target was {target_check26a['target']}"
+
+        # 26b. routed but empty (SC4) - a third patient with no visits and no
+        # invoices. a question with no matching record data must not cost a
+        # generation.
+        before_count26b = len(captured_prompts)
+        cf26b = "VUOT020010153500"
+        pin26b = seed_and_issue(cf26b, name="valeria vuoto")
+        client26b, _ = sign_in(cf26b, pin26b)
+        activate(client26b, pin26b, "62481357")
+        page26b = client26b.get("/chat")
+        resp26b = client26b.post("/chat", data={
+            "question": t("chat_example_1", "it"), "csrf_token": _csrf_from(page26b.text),
+        })
+        assert t("refusal_heading", "it") in resp26b.text, \
+            "26b: SC4 - a routed question with no matching record data should refuse structurally"
+        assert t("refusal_body", "it") in resp26b.text, "26b: expected the refusal body"
+        after_count26b = len(captured_prompts)
+        assert after_count26b == before_count26b, (
+            "26b: SC4 - a question with no matching record data must not cost a generation - "
+            f"captured_prompts grew from {before_count26b} to {after_count26b}"
+        )
+        # this response and 26a's are the same state (refusal) but reached
+        # through different targets - recorded as separate proofs
+        target_check26b = patient_app.chat.answer_question(
+            t("chat_example_1", "it"), cf26b, raw_db(), "it"
+        )
+        assert target_check26b["target"] == "next_appointment:empty", \
+            f"26b: target was {target_check26b['target']}"
+        assert target_check26["target"] != target_check26a["target"] != target_check26b["target"], \
+            "26b: sections 26/26a/26b must each land on a different target value"
+
+        # 26c. the three states are distinguishable: deflection, refusal
+        # (which both the unroutable and the routed-but-empty questions above
+        # reach - 26b already states they are the same state, reached through
+        # different targets) and answer each carry a heading the other two do
+        # not.
+        deflect_heading_it = t("deflect_heading", "it")
+        refusal_heading_it = t("refusal_heading", "it")
+        answer_heading_it = t("answer_heading", "it")
+        assert len({deflect_heading_it, refusal_heading_it, answer_heading_it}) == 3, \
+            "26c: the deflection, refusal and answer headings must be mutually distinct"
+
+        answer_page26c = client24.get("/chat")
+        answer_resp26c = client24.post("/chat", data={
+            "question": t("chat_example_2", "it"), "csrf_token": _csrf_from(answer_page26c.text),
+        })
+        assert answer_heading_it in answer_resp26c.text, "26c: setup - expected a genuine answer response"
+
+        assert deflect_heading_it in deflect_sample_resp.text, \
+            "26c: the deflection response must carry the deflection heading"
+        assert refusal_heading_it not in deflect_sample_resp.text, \
+            "26c: the deflection response must not carry the refusal heading"
+        assert answer_heading_it not in deflect_sample_resp.text, \
+            "26c: the deflection response must not carry the answer heading"
+
+        assert refusal_heading_it in resp26a["it"], \
+            "26c: the unroutable response must carry the refusal heading"
+        assert deflect_heading_it not in resp26a["it"] and answer_heading_it not in resp26a["it"], \
+            "26c: the unroutable response must carry only the refusal heading"
+
+        assert refusal_heading_it in resp26b.text, \
+            "26c: the empty-data response must carry the refusal heading"
+        assert deflect_heading_it not in resp26b.text and answer_heading_it not in resp26b.text, \
+            "26c: the empty-data response must carry only the refusal heading"
+
+        assert answer_heading_it in answer_resp26c.text, \
+            "26c: the answer response must carry the answer heading"
+        assert deflect_heading_it not in answer_resp26c.text and \
+            refusal_heading_it not in answer_resp26c.text, \
+            "26c: the answer response must carry only the answer heading"
+
+        # every model-facing stub this plan installed is done being needed -
+        # restore the real function so nothing later is silently stubbed
+        patient_app.chat._call_model = original_call_model
+
+        # 27. the toolset write-verb scan (SC3, CHAT-05). two carve-outs, each
+        # named with its own reason so a third exclusion cannot be added
+        # quietly: patient_auth.py legitimately writes credential and session
+        # rows and is not part of the Q&A toolset CHAT-05 constrains; each
+        # module's own selftest/main bodies seed their fixtures and are not
+        # reachable from a request. this section pins today's clean state
+        # against a regression, it is not expected to fail red (23f's own
+        # framing, reused verbatim).
+        carve_out_files27 = {"patient_auth.py"}
+        carve_out_functions27 = {"selftest", "main"}
+        assert carve_out_files27 == {"patient_auth.py"}, \
+            "27: the file-level carve-out list must be exactly what this comment says it is"
+        assert carve_out_functions27 == {"selftest", "main"}, \
+            "27: the function-level carve-out list must be exactly what this comment says it is"
+
+        patient_side_names27 = {p.name for p in patient_side_files}
+        assert "patient_accessor.py" in patient_side_names27, \
+            "27: patient_accessor.py must be in the scanned file list"
+        for expected27 in ("chat.py", "render.py", "routes.py", "strings.py", "__init__.py"):
+            assert expected27 in patient_side_names27, \
+                f"27: {expected27} missing from the patient_app/**/*.py glob"
+
+        write_statement_pattern27 = re.compile(
+            r"(?i)\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|DROP\s+TABLE|ALTER\s+TABLE)\b"
+        )
+        write_prefixes27 = (
+            "insert_", "update_", "add_", "set_", "delete_", "remove_",
+            "append_", "write_", "save_", "create_",
+        )
+
+        def has_conn_param27(node):
+            # every real write function in this codebase - and every
+            # accessor it must never grow one of - takes conn explicitly
+            # (get_visits(cf, conn), issue_pin(cf, conn, ...), and so on).
+            # without this, the write-verb-prefix check also trips on
+            # patient_app/__init__.py's create_patient_app (the flask app
+            # factory) and set_language (a cookie-only route) - neither
+            # touches the database, and matching "create_"/"set_" by name
+            # alone is a false positive against the toolset this section
+            # actually has to police.
+            names = (
+                [a.arg for a in node.args.args]
+                + [a.arg for a in node.args.posonlyargs]
+                + [a.arg for a in node.args.kwonlyargs]
+            )
+            return "conn" in names
+
+        offenders27 = []
+        for path in patient_side_files:
+            if path.name in carve_out_files27:
+                continue
+            text = path.read_text()
+            tree27 = ast.parse(text, filename=str(path))
+            excluded_ranges27 = [
+                (node.lineno, node.end_lineno) for node in ast.walk(tree27)
+                if isinstance(node, ast.FunctionDef) and node.name in carve_out_functions27
+            ]
+
+            def in_excluded27(lineno, ranges=excluded_ranges27):
+                return any(start <= lineno <= end for start, end in ranges)
+
+            lines27 = text.splitlines()
+            scannable_lines27 = [
+                line for idx, line in enumerate(lines27, start=1)
+                if line.lstrip()[:1] != "#" and not in_excluded27(idx)
+            ]
+            scannable27 = "\n".join(scannable_lines27)
+
+            if write_statement_pattern27.search(scannable27):
+                offenders27.append((str(path), "write-statement"))
+            for node in ast.walk(tree27):
+                if isinstance(node, ast.FunctionDef) and node.name not in carve_out_functions27:
+                    if node.name.startswith(write_prefixes27) and not in_excluded27(node.lineno) \
+                            and has_conn_param27(node):
+                        offenders27.append((str(path), f"write-verb function {node.name}"))
+
+        assert not offenders27, (
+            "27: CHAT-05/roadmap SC3 - the patient-side toolset must hold no write verb and no "
+            f"write statement, found {offenders27}"
+        )
+
     print("selftest ok")
 
 
