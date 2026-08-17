@@ -963,21 +963,34 @@ def selftest():
         count24a = resp24a.text.count('role="status"')
         assert count24a == 1, f"24a: expected exactly one role=status element, got {count24a}"
 
-        # 24b. a chip click posts two fields both named "question" - the
-        # empty text input first, the clicked chip second. this fails red
-        # against a request.form.get("question") implementation, which would
-        # read whichever field the browser lists first and silently drop the
-        # chip's text.
+        # 24b. a chip click posts one field named "question" carrying the
+        # chip's text - chat.js fills the input and submits the form.
+        #
+        # this used to post two fields both named "question" (an empty text
+        # input first, the chip second) because the chips were submit buttons
+        # named "question". the 18-06 browser walk proved that shape was never
+        # reachable: the required input failed constraint validation and a chip
+        # click posted nothing at all (DEF-2), while enter in the field posted
+        # the first chip's value over the typed one (DEF-3). section 28 now
+        # pins the markup invariant that keeps it single-valued.
         page24b = client24.get("/chat")
         chip_text24b = t("chat_example_1", "it")
         resp24b = client24.post("/chat", data={
-            "question": ["", chip_text24b], "csrf_token": _csrf_from(page24b.text),
+            "question": chip_text24b, "csrf_token": _csrf_from(page24b.text),
         })
         assert resp24b.status_code == 200, "24b: a chip click should return 200"
         assert t("answer_heading", "it") in resp24b.text, \
             "24b: the chip's own question should be answered, not refused as empty"
         assert t("refusal_heading", "it") not in resp24b.text, \
             "24b: a chip click must not be treated as an empty question"
+
+        # 24b-i. an empty question still refuses rather than reaching a route
+        page24bi = client24.get("/chat")
+        resp24bi = client24.post("/chat", data={
+            "question": "   ", "csrf_token": _csrf_from(page24bi.text),
+        })
+        assert t("refusal_heading", "it") in resp24bi.text, \
+            "24b-i: a blank question must refuse, not route"
 
         # 24c. D-03, no history. the second response on the same session
         # carries its own answer and none of the first question's text or the
@@ -1418,6 +1431,46 @@ def selftest():
             "27: CHAT-05/roadmap SC3 - the patient-side toolset must hold no write verb and no "
             f"write statement, found {offenders27}"
         )
+
+        # ---- section 28: the chat form serialises exactly one question (DEF-2/DEF-3) ----
+
+        # this asserts on rendered markup, not on a POST, on purpose. both
+        # defects live in what the *browser* serialises, and every other chat
+        # test here builds a form body in python and posts it directly - which
+        # is why sections 24-27 were green while the 18-06 browser walk found
+        # both. a post-based test cannot see either one.
+        #
+        # DEF-2: the chips were submit buttons attached to a form whose
+        # #question input is required, so a chip click failed constraint
+        # validation and posted nothing at all.
+        # DEF-3: they were also named "question", so pressing enter serialised
+        # question twice - chip 1 first, in dom order - and the route took the
+        # chip's value instead of what the patient typed.
+        chat_html28 = client24.get("/chat").text
+
+        named_question28 = re.findall(r"<(\w+)([^>]*\bname=[\"']question[\"'][^>]*)>", chat_html28)
+        assert len(named_question28) == 1, (
+            "28: DEF-3 - exactly one element in the rendered chat page may carry "
+            "name=\"question\". more than one and the browser serialises the field twice on "
+            f"implicit submission, and the route answers the wrong question. found {named_question28}"
+        )
+        assert named_question28[0][0] == "input" and 'id="question"' in named_question28[0][1], (
+            "28: the single name=\"question\" element must be the text input itself, found "
+            f"{named_question28[0]}"
+        )
+
+        chip_buttons28 = re.findall(r"<button([^>]*\bform=[\"']chat-form[\"'][^>]*)>", chat_html28)
+        for attrs28 in chip_buttons28:
+            assert " name=" not in attrs28, (
+                "28: DEF-2 - a button attached to chat-form must not carry a name attribute. a "
+                "named submit button outside the form is blocked by the required #question input "
+                f"and submits nothing at all, found {attrs28!r}"
+            )
+
+        # the chips must still be reachable as controls - the fix turns them
+        # into type=button, it does not delete them
+        for key in ("chat_example_1", "chat_example_2", "chat_example_3", "chat_example_4"):
+            assert t(key, "it") in chat_html28, f"28: the {key} chip must survive the DEF-2 fix"
 
     print("selftest ok")
 

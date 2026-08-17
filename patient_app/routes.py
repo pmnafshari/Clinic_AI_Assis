@@ -210,17 +210,10 @@ def chat_page():
     if request.method == "GET":
         return render_template("patient_chat.html")
 
-    # the example chips are submit buttons named "question" living outside
-    # the form's text input, so a chip click posts two fields both named
-    # "question" - the empty text input and the clicked chip. .get would
-    # return whichever field the browser lists first and silently drop the
-    # chip's text, so take the first non-empty value instead.
-    question = ""
-    for value in request.form.getlist("question"):
-        value = value.strip()
-        if value:
-            question = value
-            break
+    # exactly one field is named "question" - the text input. the example
+    # chips fill it from javascript rather than submitting their own value,
+    # so there is no second value here to pick between.
+    question = request.form.get("question", "").strip()
 
     # unbounded form text would reach the keyword gate and then a language
     # model on a machine that also has to hold that model - same reasoning

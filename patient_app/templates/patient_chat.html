@@ -6,15 +6,16 @@
 <p class="text-secondary mb-4">{{ t('chat_intro', lang) }}</p>
 
 <p class="fw-medium mb-2">{{ t('chat_examples_heading', lang) }}</p>
+{# type=button, unnamed, not attached to the form. as submit buttons named
+   "question" they were unusable in a browser two different ways: a click
+   failed the required input's validation and posted nothing, and enter in the
+   field submitted the first chip's value instead of what was typed. chat.js
+   fills the field from the chip text instead. #}
 <div class="d-flex flex-wrap gap-2 mb-4">
-  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_1', lang) }}"
-          class="btn btn-outline-secondary">{{ t('chat_example_1', lang) }}</button>
-  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_2', lang) }}"
-          class="btn btn-outline-secondary">{{ t('chat_example_2', lang) }}</button>
-  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_3', lang) }}"
-          class="btn btn-outline-secondary">{{ t('chat_example_3', lang) }}</button>
-  <button type="submit" form="chat-form" name="question" value="{{ t('chat_example_4', lang) }}"
-          class="btn btn-outline-secondary">{{ t('chat_example_4', lang) }}</button>
+  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_1', lang) }}</button>
+  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_2', lang) }}</button>
+  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_3', lang) }}</button>
+  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_4', lang) }}</button>
 </div>
 
 <form id="chat-form" method="post" action="{{ url_for('patient.chat') }}">

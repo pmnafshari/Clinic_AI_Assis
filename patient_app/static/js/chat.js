@@ -4,6 +4,21 @@
 
 document.addEventListener("DOMContentLoaded", function () {
   var form = document.getElementById("chat-form");
+
+  // the example chips fill the field and submit it. they are plain buttons -
+  // nothing but the input is named "question", so the browser can only ever
+  // serialise one value for it
+  var chips = document.querySelectorAll(".chat-example");
+  for (var i = 0; i < chips.length; i++) {
+    chips[i].addEventListener("click", function () {
+      var field = document.getElementById("question");
+      if (field && form) {
+        field.value = this.textContent.trim();
+        form.requestSubmit();
+      }
+    });
+  }
+
   if (form) {
     form.addEventListener("submit", function () {
       var button = document.getElementById("chat-submit");
