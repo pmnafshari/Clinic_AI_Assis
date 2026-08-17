@@ -159,6 +159,19 @@ STRINGS = {
               "clinic.",
     },
 
+    # --- chat context labels (Lead A) ---
+    # prefixed onto the model's context per route so a bare rendered value
+    # (a single date, a name plus a phone number) states what it is instead
+    # of relying on the model to infer it - see chat.py step 6.
+    "ctx_next_appointment": {"it": "Prossimo appuntamento", "en": "Next appointment"},
+    "ctx_invoices": {"it": "Fatture", "en": "Invoices"},
+    "ctx_demographics": {"it": "Dati anagrafici", "en": "Personal details"},
+    "ctx_visits": {"it": "Visite", "en": "Visits"},
+    "ctx_name": {"it": "Nome", "en": "Name"},
+    "ctx_phone": {"it": "Telefono", "en": "Phone"},
+    "ctx_visit_date": {"it": "Data", "en": "Date"},
+    "ctx_procedure": {"it": "Procedura", "en": "Procedure"},
+
     # --- glossary phrase templates, one per dental_shorthand_glossary.json code ---
     # [ASSUMED] italian phrasing not yet native-speaker reviewed, same standing
     # caveat as the rest of this file and the phase 13-02 intent-gate

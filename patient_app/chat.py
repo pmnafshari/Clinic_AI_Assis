@@ -25,7 +25,14 @@ from pathlib import Path
 import patient_accessor
 from auth import log_audit
 
-from .render import render_demographics, render_invoices, render_next_appointment, render_visits
+from .render import (
+    format_date,
+    render_demographics,
+    render_invoices,
+    render_next_appointment,
+    render_procedure,
+)
+from .strings import t
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 # llama3.2:3b, not dental-notes - dental-notes is tuned for note-to-JSON
@@ -34,6 +41,15 @@ OLLAMA_URL = "http://localhost:11434/api/generate"
 ANSWER_MODEL = "llama3.2:3b"
 
 ROUTES = ("next_appointment", "invoices", "demographics", "visits")
+
+# Lead A (chat-answer-infidelity, 2026-08-17): a field label per route,
+# prefixed onto the context handed to the model - see step 6 below.
+CONTEXT_LABEL_KEYS = {
+    "next_appointment": "ctx_next_appointment",
+    "invoices": "ctx_invoices",
+    "demographics": "ctx_demographics",
+    "visits": "ctx_visits",
+}
 
 # --- the D-02 pre-retrieval gate ---
 #
@@ -156,6 +172,23 @@ ANSWER_PROMPT = (
 )
 
 
+def visit_context_lines(rows, lang):
+    # render_visits packs a whole visit onto one line, "04/03/2026:
+    # otturazione al dente 47", and the model reliably drops the tooth number
+    # out of that compound form. splitting the date and the procedure onto
+    # their own labelled lines recovers it. render.py is left alone - its
+    # output is used elsewhere and is proven correct - so the same formatting
+    # helpers are called directly here.
+    lines = []
+    for row in rows:
+        lines.append(f"{t('ctx_visit_date', lang)}: {format_date(row['visit_date'], lang)}")
+        procedures = [render_procedure(p, lang) for p in row["procedures"]]
+        procedures = [p for p in procedures if p]
+        if procedures:
+            lines.append(f"{t('ctx_procedure', lang)}: {', '.join(procedures)}")
+    return lines
+
+
 def _call_model(prompt, urlopen):
     payload = {
         "model": ANSWER_MODEL,
@@ -235,8 +268,26 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     elif route == "demographics":
         lines = render_demographics(data, lang)
     else:
-        lines = render_visits(data, lang)
-    context = "\n".join(lines)
+        lines = visit_context_lines(data, lang)
+
+    # each route wants a different context shape. this is measured against
+    # eval_chat.py, not guessed - the per-route split and the shapes below
+    # are recorded in .planning/debug/chat-answer-infidelity.md.
+    #
+    # demographics is the one route that wants per-field labels and NO
+    # heading: render_demographics returns [name, phone], two bare values a
+    # "Dati anagrafici" heading does not describe, and with the heading the
+    # model answers NOT_IN_RECORDS to "what is my phone number" even when the
+    # line above reads "Telefono: 3331110001". visits wants the opposite -
+    # heading AND per-field labels - and drops the tooth number without them.
+    if route == "demographics":
+        keys = ("ctx_name", "ctx_phone")
+        context = "\n".join(
+            f"{t(k, lang)}: {v}" for k, v in zip(keys, lines) if v
+        )
+    else:
+        label = t(CONTEXT_LABEL_KEYS[route], lang)
+        context = label + ":\n" + "\n".join(lines)
 
     # 7. build the prompt and call the model. there is nothing about another
     # patient anywhere in this prompt to reveal - §6.1's T1 mitigation.
