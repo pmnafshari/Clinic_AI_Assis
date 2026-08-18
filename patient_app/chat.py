@@ -161,14 +161,24 @@ LANGUAGE_NAMES = {"it": "Italian", "en": "English"}
 # §7.1 are explicit that a system-prompt instruction does not satisfy it.
 # answer_question's step 2, the advice_category gate, is what does; this line
 # is only a second, non-load-bearing layer on top of it.
+# the envelope block goes LAST, after the context and the question. measured,
+# not stylistic: with it sitting between "answer only using the context below"
+# and the context itself, the model stopped reading the context for invoices
+# and answered from its own knowledge instead - "il costo puo variare tra
+# € 200 e € 500" against a context stating € 340,00, five times out of five.
+# moving the block below the question restored it, five out of five. keep the
+# grounding rule adjacent to the thing it governs.
 ANSWER_PROMPT = (
     "Answer only using the context below, in {language}.\n"
-    "If the context does not contain the answer, reply with exactly NOT_IN_RECORDS"
-    " and nothing else.\n"
     "Give no clinical advice, opinion or recommendation.\n"
     "Context:\n"
     "{context}\n"
     "---\n"
+    "Reply with one JSON object and nothing else, in one of these two forms:\n"
+    '{{"status": "answer", "text": "<the answer, in {language}>"}}\n'
+    '{{"status": "not_in_records"}}\n'
+    "Use not_in_records if and only if the context does not contain the answer.\n"
+    "Copy the values from the context exactly. Do not add anything not in the context.\n"
     "Patient question: {question}"
 )
 
@@ -208,6 +218,33 @@ def invoice_context_lines(rows, lang):
         total = round(sum(row["amount"] for row in rows), 2)
         lines.append(f"{t('ctx_total', lang)}: {format_amount(total, lang)}")
     return lines
+
+
+def parse_reply(reply):
+    """-> (state, text) where state is 'answer', 'not_in_records' or 'invalid'.
+
+    the reply is validated as a structure, never searched for a phrase. a
+    paraphrase denylist loses against an open set of model outputs - the model
+    produced "Non sono in registri." unprompted, and case alone was enough to
+    slip past the old literal check. so anything that is not a well-formed
+    envelope comes back 'invalid' and the caller refuses. fail closed: an
+    unvalidated string is never handed to a patient.
+    """
+    try:
+        envelope = json.loads(reply)
+    except (ValueError, TypeError):
+        return "invalid", None
+    if not isinstance(envelope, dict):
+        return "invalid", None
+    status = envelope.get("status")
+    if status == "not_in_records":
+        return "not_in_records", None
+    if status != "answer":
+        return "invalid", None
+    text = envelope.get("text")
+    if not isinstance(text, str) or not text.strip():
+        return "invalid", None
+    return "answer", text.strip()
 
 
 def _call_model(prompt, urlopen):
@@ -318,11 +355,21 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     if reply is None:
         return {"state": "error", "body": None, "target": "model_unreachable"}
 
-    # 8. the sentinel, not a natural-language phrase - an italian answer
-    # would not reliably carry the english words "not in records"
-    if "NOT_IN_RECORDS" in reply:
+    # 8. validate the envelope. the old check was an unanchored substring
+    # search for NOT_IN_RECORDS, so a paraphrased or re-cased denial fell
+    # through and reached the patient verbatim, and a real answer that
+    # happened to contain the token was forced to a refusal (DEF-4). both
+    # directions go away once the shape is validated instead of the prose.
+    #
+    # the two refusal reasons stay distinct in the target: the model saying
+    # "no data" is a different event from the model drifting off the envelope,
+    # and only the second one means something is wrong.
+    state, text = parse_reply(reply)
+    if state == "not_in_records":
         return {"state": "refusal", "body": None, "target": f"{route}:empty"}
-    return {"state": "answer", "body": reply.strip(), "target": route}
+    if state == "invalid":
+        return {"state": "refusal", "body": None, "target": f"{route}:invalid_reply"}
+    return {"state": "answer", "body": text, "target": route}
 
 
 # audit scope, stated deliberately: this module writes exactly one kind of
@@ -435,10 +482,12 @@ def selftest():
             return FakeResponse()
 
         def canned_urlopen(req, timeout=120):
-            return _fake_response("your next visit is on record")
+            return _fake_response(
+                '{"status": "answer", "text": "your next visit is on record"}'
+            )
 
         def not_in_records_urlopen(req, timeout=120):
-            return _fake_response("NOT_IN_RECORDS")
+            return _fake_response('{"status": "not_in_records"}')
 
         def raising_urlopen(req, timeout=120):
             raise AssertionError("model reached")
@@ -545,6 +594,85 @@ def selftest():
         prompt = captured["prompt"]
         for leak in ("bruno beta", "222000222", "2026-06-02", "cleaning", "40.0", "40,00"):
             assert leak not in prompt, f"7: patient B's {leak!r} leaked into A's prompt"
+
+        # 9. DEF-4 - the response envelope, and it fails closed. the reply is
+        # validated as a structure rather than searched for a phrase: a
+        # denylist of paraphrases is a losing game against an open set of
+        # model outputs. anything that is not a well-formed answer envelope
+        # is a refusal, including the paraphrased and re-cased denials that
+        # used to be served to the patient as normal answers.
+        def replying(text):
+            def _urlopen(req, timeout=120):
+                return _fake_response(text)
+            return _urlopen
+
+        must_refuse = [
+            '{"status": "not_in_records"}',      # the declared no-data reply
+            "Non sono in registri.",             # llama3.2:3b said this unprompted
+            "That is not in your records.",
+            "not_in_records",                    # case alone used to break it
+            "NOT_IN_RECORDS",                    # the old bare sentinel
+            "",                                  # empty reply
+            "   ",
+            "I could not find anything.",        # prose, no envelope
+            '{"status": "answer"}',              # no text
+            '{"status": "answer", "text": ""}',  # empty text
+            '{"status": "answer", "text": "   "}',
+            '{"status": "answer", "text": 42}',  # text not a string
+            '{"status": "elsewhere", "text": "x"}',
+            '["not", "an", "object"]',
+            '{"status": "answer", "text": "x"',  # truncated json
+        ]
+        for reply in must_refuse:
+            result = answer_question(
+                "Che visite ho fatto?", cf_a, conn, "it", urlopen=replying(reply)
+            )
+            assert result["state"] == "refusal", (
+                f"9: {reply!r} must fail closed to a refusal, got {result['state']!r} "
+                f"with body {result['body']!r}"
+            )
+            assert result["body"] is None, f"9: a refusal must carry no body, got {result['body']!r}"
+
+        # a valid envelope is served, and only its text reaches the patient -
+        # never the envelope itself
+        result9 = answer_question(
+            "Che visite ho fatto?", cf_a, conn, "it",
+            urlopen=replying('{"status": "answer", "text": "Hai fatto una visita il 01/06/2026."}'),
+        )
+        assert result9["state"] == "answer", f"9: state was {result9['state']}"
+        assert result9["body"] == "Hai fatto una visita il 01/06/2026.", \
+            f"9: body was {result9['body']!r}"
+        assert "status" not in result9["body"], "9: the envelope must not reach the patient"
+
+        # the inverse consequence in the DEF-4 write-up: the old unanchored
+        # substring test forced a genuine answer to a refusal if it happened to
+        # contain the token anywhere. a validated envelope does not care what
+        # the text says.
+        result9b = answer_question(
+            "Che visite ho fatto?", cf_a, conn, "it",
+            urlopen=replying(
+                '{"status": "answer", "text": "La sigla NOT_IN_RECORDS non compare qui."}'
+            ),
+        )
+        assert result9b["state"] == "answer", (
+            "9: an answer containing the old sentinel token must still be served - "
+            f"got {result9b['state']!r}"
+        )
+
+        # the two refusal reasons stay distinguishable in the audit/debug
+        # label: the model saying "no data" is not the same event as the model
+        # emitting something unparseable, and a spike in the latter means it
+        # has drifted off the envelope.
+        said_no = answer_question(
+            "Che visite ho fatto?", cf_a, conn, "it",
+            urlopen=replying('{"status": "not_in_records"}'),
+        )
+        assert said_no["target"] == "visits:empty", f"9: target was {said_no['target']}"
+        malformed = answer_question(
+            "Che visite ho fatto?", cf_a, conn, "it", urlopen=replying("Non sono in registri.")
+        )
+        assert malformed["target"] == "visits:invalid_reply", \
+            f"9: target was {malformed['target']}"
 
         # 8. static guards - the import graph, the write-verb scan and the
         # resolve_cf ban, same technique as patient_accessor's own selftest.

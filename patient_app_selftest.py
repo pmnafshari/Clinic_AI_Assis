@@ -911,7 +911,9 @@ def selftest():
 
         def _stub_call_model(prompt, urlopen=None):
             captured_prompts.append(prompt)
-            return "risposta di prova"
+            # step 8 validates the reply envelope (DEF-4), so a stub returning
+            # bare prose is now a refusal, not an answer
+            return json.dumps({"status": "answer", "text": "risposta di prova"})
 
         original_call_model = patient_app.chat._call_model
         patient_app.chat._call_model = _stub_call_model
@@ -1030,11 +1032,13 @@ def selftest():
 
         def _echo_call_model(prompt, urlopen=None):
             captured_prompts.append(prompt)
-            # the built prompt carries the "reply with exactly NOT_IN_RECORDS"
-            # instruction verbatim - echoing it unmodified would trip step 8's
-            # sentinel check and turn this into a refusal instead of an
-            # answer, so that one substring is swapped out before echoing
-            return prompt.replace("NOT_IN_RECORDS", "ECHOED_CONTEXT")
+            # echoes the whole prompt back as the answer text so the seeded
+            # <b> value reaches the template and its escaping can be checked.
+            # this used to need the sentinel swapped out first, because an
+            # unanchored substring search would have turned the echo into a
+            # refusal - DEF-4's second consequence, and it is gone now that
+            # the envelope is validated rather than the prose searched.
+            return json.dumps({"status": "answer", "text": prompt})
 
         cf24d = "XSSC980010153100"
         pin24d = seed_and_issue(cf24d, name="xss patient")
