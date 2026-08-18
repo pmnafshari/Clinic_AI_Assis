@@ -171,6 +171,7 @@ STRINGS = {
     "ctx_phone": {"it": "Telefono", "en": "Phone"},
     "ctx_visit_date": {"it": "Data", "en": "Date"},
     "ctx_procedure": {"it": "Procedura", "en": "Procedure"},
+    "ctx_total": {"it": "Totale", "en": "Total"},
 
     # --- glossary phrase templates, one per dental_shorthand_glossary.json code ---
     # [ASSUMED] italian phrasing not yet native-speaker reviewed, same standing

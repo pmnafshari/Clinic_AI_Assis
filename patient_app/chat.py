@@ -26,6 +26,7 @@ import patient_accessor
 from auth import log_audit
 
 from .render import (
+    format_amount,
     format_date,
     render_demographics,
     render_invoices,
@@ -189,6 +190,26 @@ def visit_context_lines(rows, lang):
     return lines
 
 
+def invoice_context_lines(rows, lang):
+    # python does the arithmetic, the model only restates it. over three
+    # invoice lines the model answered with the first line alone and called it
+    # the amount owed; over two it summed them itself and got it right. neither
+    # is something to rely on for a patient's bill.
+    #
+    # the total goes in only above one line. repeated under a single invoice it
+    # measurably harms - "€ 120,50 - otturazione" then "Totale: € 120,50" and
+    # the model stops giving the amount at all, reading the repeat as a
+    # relationship between two facts. one line is already its own total.
+    #
+    # rounded before formatting: these are floats, and 0.1 + 0.2 must not reach
+    # format_amount as 0.30000000000000004.
+    lines = render_invoices(rows, lang)
+    if len(rows) > 1:
+        total = round(sum(row["amount"] for row in rows), 2)
+        lines.append(f"{t('ctx_total', lang)}: {format_amount(total, lang)}")
+    return lines
+
+
 def _call_model(prompt, urlopen):
     payload = {
         "model": ANSWER_MODEL,
@@ -264,7 +285,7 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     if route == "next_appointment":
         lines = [render_next_appointment(data, lang)]
     elif route == "invoices":
-        lines = render_invoices(data, lang)
+        lines = invoice_context_lines(data, lang)
     elif route == "demographics":
         lines = render_demographics(data, lang)
     else:

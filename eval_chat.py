@@ -2,6 +2,8 @@ import json
 import sqlite3
 import sys
 
+import patient_accessor
+
 from patient_app.chat import answer_question
 
 TEST_FILE = "chat_test.jsonl"
@@ -12,6 +14,36 @@ THRESHOLD = 0.85
 # invoice is a patient-safety-adjacent failure (SC1), not a rounding error an
 # aggregate average can hide.
 ANSWER_THRESHOLD = 1.0
+
+
+def patient_visits(p):
+    # a fixture declares its visits one of two ways: the original flat shape,
+    # which is one visit and at most one invoice spread across top-level keys,
+    # or a "visits" list for the multi-visit patients. both normalise to the
+    # same list here so build_db has a single insert path and the single-visit
+    # cases keep producing exactly the rows they produced before.
+    if "visits" in p:
+        return [
+            {
+                "visit_date": v["visit_date"],
+                "procedures": v["procedures"],
+                "next_appointment": v["next_appointment"],
+                "invoices": v.get("invoices") or [],
+            }
+            for v in p["visits"]
+        ]
+    if p.get("visit_date") is None:
+        return []
+    invoices = []
+    if p.get("invoice_amount") is not None:
+        invoices.append({"amount": p["invoice_amount"],
+                         "description": p["invoice_description"]})
+    return [{
+        "visit_date": p["visit_date"],
+        "procedures": p["procedures"],
+        "next_appointment": p["next_appointment"],
+        "invoices": invoices,
+    }]
 
 
 def build_db(patients):
@@ -56,25 +88,23 @@ def build_db(patients):
             "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
             (p["cf"], p["name"], p["phone"]),
         )
-        if p.get("visit_date") is None:
-            continue
-        source_path = f"eval/{i}.json"
-        conn.execute(
-            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
-            " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
-            (p["cf"], p["visit_date"], json.dumps(p["procedures"]), "", p["next_appointment"],
-             source_path),
-        )
-        if p.get("invoice_amount") is None:
-            continue
-        visit_id = conn.execute(
-            "SELECT id FROM visits WHERE source_path = ?", (source_path,)
-        ).fetchone()["id"]
-        conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
-            " VALUES (?, ?, 0, ?, ?)",
-            (p["cf"], visit_id, p["invoice_amount"], p["invoice_description"]),
-        )
+        for j, visit in enumerate(patient_visits(p)):
+            source_path = f"eval/{i}-{j}.json"
+            conn.execute(
+                "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+                " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
+                (p["cf"], visit["visit_date"], json.dumps(visit["procedures"]), "",
+                 visit["next_appointment"], source_path),
+            )
+            visit_id = conn.execute(
+                "SELECT id FROM visits WHERE source_path = ?", (source_path,)
+            ).fetchone()["id"]
+            for k, invoice in enumerate(visit["invoices"]):
+                conn.execute(
+                    "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount,"
+                    " description) VALUES (?, ?, ?, ?, ?)",
+                    (p["cf"], visit_id, k, invoice["amount"], invoice["description"]),
+                )
     conn.commit()
     return conn
 
@@ -114,13 +144,23 @@ def date_variants(iso_date, lang):
 def amount_variants(amount):
     # same idea for money - comma or dot decimal, with or without the euro
     # sign, generated from the one canonical float in the fixture.
-    dot = f"{amount:.2f}"
-    comma = dot.replace(".", ",")
+    #
+    # the thousands-separated forms matter now that the invoices context
+    # carries a python-computed total (chat.invoice_context_lines): a total
+    # crosses 1000 far more easily than a single line does, and format_amount
+    # renders 1234.5 as "€ 1.234,50" in italian and "€1,234.50" in english. a
+    # scorer that only knew "1234,50" would score a perfectly faithful answer
+    # as a fidelity failure - exactly the mis-scoring this function was
+    # written to stop.
+    plain_dot = f"{amount:.2f}"
+    plain_comma = plain_dot.replace(".", ",")
+    grouped_dot = f"{amount:,.2f}"
+    grouped_comma = grouped_dot.replace(",", "X").replace(".", ",").replace("X", ".")
     variants = []
-    for v in (dot, comma):
-        variants.append(v)
-        variants.append(f"€{v}")
-        variants.append(f"€ {v}")
+    for v in (plain_dot, plain_comma, grouped_dot, grouped_comma):
+        for form in (v, f"€{v}", f"€ {v}"):
+            if form not in variants:
+                variants.append(form)
     return variants
 
 
@@ -189,12 +229,71 @@ def selftest():
     ok, detail = score_case(result, case)
     assert not ok, "4: wrong amount must still fail"
 
+    # 4b. a four-figure total rendered the way format_amount renders it must
+    # pass. under 1000 the grouped and plain forms are identical, so this gap
+    # only opens once a total is in play.
+    result = {"state": "answer", "body": "Il totale è € 1.234,50."}
+    case = {"expect_state": "answer", "lang": "it",
+            "expect_contains": [{"amount": 1234.5}]}
+    ok, detail = score_case(result, case)
+    assert ok, f"4b: thousands-separated total should pass, got: {detail}"
+
+    result = {"state": "answer", "body": "Il totale è € 1.230,50."}
+    ok, detail = score_case(result, case)
+    assert not ok, "4b: a wrong four-figure total must still fail"
+
     # 5. bare identifiers (tooth number, phone) stay exact-match - a
     # close-but-wrong tooth number must still fail.
     result = {"state": "answer", "body": "hai fatto un intervento sul dente 47."}
     case = {"expect_state": "answer", "lang": "it", "expect_contains": ["46"]}
     ok, detail = score_case(result, case)
     assert not ok, "5: wrong tooth number must still fail"
+
+    # 6. the fixture builder itself. the flat single-visit shape must still
+    # produce exactly the rows it produced before the multi-visit change -
+    # nine of the eleven original cases depend on it.
+    flat = {"cf": "AAAA850010150301", "name": "Anna Verdi", "phone": "3331110001",
+            "visit_date": "2026-03-04", "procedures": ["filling 47"],
+            "next_appointment": "2026-09-15", "invoice_amount": 120.5,
+            "invoice_description": "otturazione"}
+    conn = build_db([flat])
+    assert conn.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"] == 1, \
+        "6: the flat shape must still insert exactly one visit"
+    assert conn.execute("SELECT COUNT(*) c FROM invoices").fetchone()["c"] == 1, \
+        "6: the flat shape must still insert exactly one invoice"
+    empty = {"cf": "CCCC850010150303", "name": "Carla Bianchi", "phone": "3495550003",
+             "visit_date": None, "procedures": [], "next_appointment": None,
+             "invoice_amount": None, "invoice_description": None}
+    assert patient_visits(empty) == [], "6: a patient with no visit_date has no visits"
+
+    # 7. the multi-visit shape. rows land in fixture order, every invoice
+    # across every visit is inserted, and get_next_appointment resolves to the
+    # LAST visit's value - that last part is the compound condition a
+    # single-visit fixture cannot exercise at all, because with one visit
+    # every ordering rule gives the same answer.
+    multi = {"cf": "DDDD850010150304", "name": "Dario Costa", "phone": "3386660004",
+             "visits": [
+                 {"visit_date": "2025-11-12", "procedures": ["filling 36"],
+                  "next_appointment": "2026-01-20",
+                  "invoices": [{"amount": 90.0, "description": "otturazione"}]},
+                 {"visit_date": "2026-01-20", "procedures": ["rct 24", "ext 38"],
+                  "next_appointment": "2026-04-08",
+                  "invoices": [{"amount": 340.0, "description": "cura canalare"},
+                               {"amount": 150.0, "description": "estrazione"}]},
+                 {"visit_date": "2026-04-08", "procedures": ["seal 16"],
+                  "next_appointment": "2026-10-05", "invoices": []},
+             ]}
+    conn = build_db([multi])
+    dates = [r["visit_date"] for r in
+             conn.execute("SELECT visit_date FROM visits ORDER BY id").fetchall()]
+    assert dates == ["2025-11-12", "2026-01-20", "2026-04-08"], f"7: visit order was {dates}"
+    amounts = [r["amount"] for r in
+               conn.execute("SELECT amount FROM invoices ORDER BY id").fetchall()]
+    assert amounts == [90.0, 340.0, 150.0], f"7: invoice rows were {amounts}"
+    visits = patient_accessor.get_visits(multi["cf"], conn)
+    assert [v["visit_date"] for v in visits] == dates, "7: accessor lost or reordered a visit"
+    assert patient_accessor.get_next_appointment(multi["cf"], conn) == "2026-10-05", \
+        "7: next appointment must come from the last visit, not the first"
 
     print("selftest ok")
 
