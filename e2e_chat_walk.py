@@ -107,13 +107,14 @@ def cleanup():
     conn = sqlite3.connect(DB_PATH)
     cfs = (ANNA, BRUNO, CARLA, DARIO)
     marks = ",".join("?" * len(cfs))
-    # child-first, same order the manual walk's task 3 used
-    for table in ("invoices", "visits", "patient_sessions", "patient_login_attempts",
+    # child-first, same order the manual walk's task 3 used. every table here
+    # is keyed by codice_fiscale - patient_login_attempts deliberately is not
+    # on the list, because it is keyed by ip and holds no patient rows to
+    # delete. no try/except: a delete that cannot run is a cleanup that did
+    # not happen, and it should be loud.
+    for table in ("invoices", "visits", "patient_sessions",
                   "patient_credentials", "patients"):
-        try:
-            conn.execute(f"DELETE FROM {table} WHERE codice_fiscale IN ({marks})", cfs)
-        except sqlite3.OperationalError:
-            pass
+        conn.execute(f"DELETE FROM {table} WHERE codice_fiscale IN ({marks})", cfs)
     conn.commit()
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", cfs
