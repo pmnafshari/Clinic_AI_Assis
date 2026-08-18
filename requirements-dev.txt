@@ -1,0 +1,7 @@
+# development and test only - never installed on the clinic machine.
+# the runtime deps live in requirements.txt.
+
+# drives the e2e browser walk (e2e_chat_walk.py). needs a one-off browser
+# download after install:
+#     .venv/bin/python -m playwright install chromium
+playwright==1.62.0
