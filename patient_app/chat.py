@@ -54,8 +54,14 @@ CONTEXT_LABEL_KEYS = {
 # --- the D-02 pre-retrieval gate ---
 #
 # [ASSUMED] this italian vocabulary has had no native-speaker review. §7.1
-# marks gate vocabulary and thresholds as explicitly non-binding, and phase 19
-# tunes it against the patient_deflect rows this phase starts writing.
+# marks gate vocabulary and thresholds as explicitly non-binding. a
+# model-assisted extension pass ran on 2026-08-19 under phase 19 D-05 and
+# added the clinical symptom vocabulary the §4.2 table missed - gum, abscess,
+# fracture and infection terms - plus the reflexive and passato-prossimo
+# phrasings the \b-anchored patterns could not reach. that pass is the same
+# class of source that produced this list, so it does not discharge §4.2:
+# human review by a native or fluent speaker, clinical staff qualifying,
+# is still outstanding and this is still not a reviewed enforcement control.
 #
 # checked in the order below, not the order a reader might expect from §4.2's
 # table: "what should i take" (treatment) and "should i" (advice) overlap as
@@ -71,16 +77,44 @@ ADVICE_TRIGGERS = {
     # only the multi-word advice phrasings below are safe.
     "advice": (
         r"dovrei", r"cosa devo fare", r"devo fare", r"e normale", r"e' normale",
-        r"va bene se", r"should i", r"is this normal", r"do i need",
+        r"va bene se", r"cosa mi consiglia", r"mi consiglia di",
+        r"should i", r"is this normal", r"do i need", r"what do you recommend",
     ),
+    # no "carie" and no "decay" here. proc_caries renders as "carie
+    # individuata al dente {n}" / "tooth decay found on tooth {n}", so both
+    # words are procedure names a patient reads in an answer and may quote
+    # back as a records question. decay-symptom phrasing still deflects
+    # through the generic vocabulary below ("ho un buco nel dente che fa
+    # male"), and english gets "cavity"/"cavities", which appear in no
+    # rendered phrase. same rule for every other proc_* word - otturazione,
+    # estrazione, corona, radiografia, parodontale, pulizia, ablazione,
+    # tartaro, sigillatura, filling, extraction, crown, x-ray, cleaning,
+    # scaling, sealant, root canal - none of them belongs in this tuple.
     "symptom": (
         r"dolore", r"fa male", r"mi fa male", r"gonfiore", r"gonfio", r"sanguina",
         r"sangue", r"infiammazione", r"ascesso", r"febbre",
+        r"gengiv\w*", r"sanguinamento", r"mi sanguina", r"mi sanguinano",
+        r"pus", r"infezione", r"infett\w*", r"frattura", r"fratturat\w*",
+        r"scheggiat\w*", r"si e rotto", r"si e' rotto", r"mi si e rotto",
+        r"mi si e' rotto", r"mi sono rotto", r"si e gonfiat\w*",
+        r"si e' gonfiat\w*", r"ho male", r"sto male", r"mi ha fatto male",
+        r"ho avuto dolore", r"sensibilita", r"brucia", r"pulsa",
         r"pain", r"hurts?", r"swelling", r"swollen", r"bleeding", r"abscess", r"fever",
+        r"gum", r"gums", r"cavity", r"cavities", r"broken tooth", r"cracked",
+        r"chipped", r"sore", r"toothache", r"throbbing", r"infected",
+        r"infection", r"sensitive", r"sensitivity",
     ),
     # do not add a bare "cura" here - "cura canalare" is a rendered procedure
     # name, and "quando ho fatto la cura canalare?" is a legitimate records
     # question, not a treatment request.
+    #
+    # "antibiotico"/"antibiotic" do collide with proc_abx ("prescrizione di
+    # antibiotico"), so a patient quoting that phrase back deflects. this is
+    # pre-existing and accepted: §4.5 says deflect when uncertain, and a
+    # question about an antibiotic prescription is the one place that posture
+    # costs a records answer. it is the single allowed exception, pinned as
+    # such in selftest section 10 - the fix for any other phrase that starts
+    # deflecting is to remove the trigger, never to widen the exception.
     "treatment": (
         r"antibiotico", r"antidolorifico", r"medicina", r"farmaco", r"cosa posso prendere",
         r"antibiotic", r"painkiller", r"medicine", r"medication", r"what should i take",
@@ -726,6 +760,135 @@ def selftest():
         )
         assert malformed["target"] == "visits:invalid_reply", \
             f"9: target was {malformed['target']}"
+
+        # 10. the gate, both directions (D-06). §7.1 makes the gate binding
+        # but leaves its vocabulary explicitly non-binding, so a later edit can
+        # narrow it until an advice question walks through, or widen it until
+        # the four routes stop answering. both failure modes are pinned here.
+        from .strings import STRINGS
+
+        # direction one: every trigger added by the 2026-08-19 pass, in
+        # natural patient phrasing rather than the bare keyword, asserted on
+        # the category and not merely on non-None - a term landing in the
+        # wrong bucket is a real defect, not a near miss.
+        gate_deflects = {
+            "gengiv\\w*": ("Mi sanguinano le gengive quando lavo i denti", "symptom"),
+            "sanguinamento": ("Ho un sanguinamento che non si ferma", "symptom"),
+            "mi sanguina": ("Mi sanguina la bocca da stamattina", "symptom"),
+            "mi sanguinano": ("Mi sanguinano le gengive da giorni", "symptom"),
+            "pus": ("Vedo del pus vicino al dente", "symptom"),
+            "infezione": ("Ho un'infezione alla gengiva", "symptom"),
+            "infett\\w*": ("Il dente sembra infettato", "symptom"),
+            "frattura": ("Ho una frattura al dente davanti", "symptom"),
+            "fratturat\\w*": ("Il dente si e fratturato mangiando", "symptom"),
+            "scheggiat\\w*": ("Mi sono scheggiato un dente", "symptom"),
+            "si e rotto": ("Il dente si e rotto ieri sera", "symptom"),
+            "si e' rotto": ("Il dente si e' rotto ieri sera", "symptom"),
+            "mi si e rotto": ("Mi si e rotto un dente", "symptom"),
+            "mi si e' rotto": ("Mi si e' rotto un dente", "symptom"),
+            "mi sono rotto": ("Mi sono rotto un dente masticando", "symptom"),
+            "si e gonfiat\\w*": ("La guancia si e gonfiata stanotte", "symptom"),
+            "si e' gonfiat\\w*": ("La guancia si e' gonfiata stanotte", "symptom"),
+            "ho male": ("Ho male da due giorni", "symptom"),
+            "sto male": ("Sto male da quando sono tornato", "symptom"),
+            "mi ha fatto male": ("Mi ha fatto male tutta la notte", "symptom"),
+            "ho avuto dolore": ("Ho avuto dolore per una settimana", "symptom"),
+            "sensibilita": ("Ho sensibilita al freddo", "symptom"),
+            "brucia": ("Mi brucia la gengiva", "symptom"),
+            "pulsa": ("Mi pulsa il dente da ieri", "symptom"),
+            "gum": ("My gum is swollen near the back", "symptom"),
+            "gums": ("My gums bleed when I brush", "symptom"),
+            "cavity": ("I have a cavity that hurts", "symptom"),
+            "cavities": ("Do I have cavities that need looking at", "symptom"),
+            "broken tooth": ("I have a broken tooth", "symptom"),
+            "cracked": ("I cracked a tooth last night", "symptom"),
+            "chipped": ("I chipped a tooth last night", "symptom"),
+            "sore": ("My mouth is sore this morning", "symptom"),
+            "toothache": ("I have a toothache", "symptom"),
+            "throbbing": ("It's throbbing since yesterday", "symptom"),
+            "infected": ("I think it's infected", "symptom"),
+            "infection": ("I might have an infection", "symptom"),
+            "sensitive": ("My tooth is sensitive to cold", "symptom"),
+            "sensitivity": ("I get sensitivity when I drink water", "symptom"),
+            "cosa mi consiglia": ("Cosa mi consiglia per questo problema?", "advice"),
+            "mi consiglia di": ("Mi consiglia di togliere il dente?", "advice"),
+            "what do you recommend": ("What do you recommend for this?", "advice"),
+        }
+        for trigger, (q, expected) in gate_deflects.items():
+            got = advice_category(q)
+            assert got == expected, \
+                f"10: {trigger!r} - {q!r} gave {got!r}, expected {expected!r}"
+
+        # the decay pair. the italian one carries no decay-specific trigger by
+        # design - "carie" is proc_caries's rendered phrase and cannot be a
+        # trigger - so it has to deflect through the generic symptom
+        # vocabulary instead. asserting it is what makes that trade-off a
+        # verified behaviour rather than an argument.
+        assert advice_category("Ho un buco nel dente che fa male") == "symptom", \
+            "10: italian decay-symptom phrasing must deflect through the generic vocabulary"
+        assert advice_category("I have a cavity that hurts") == "symptom", \
+            "10: english decay-symptom phrasing must deflect through cavity/cavities"
+
+        # and the additions reach the real gate and its audit row, not just
+        # the pure function - accessor and model both raise if either is hit.
+        real_accessor = patient_accessor
+        patient_accessor = _RaisingAccessor()
+        try:
+            for q in ("Mi sanguinano le gengive quando lavo i denti", "I have a toothache"):
+                before = conn.execute(
+                    "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_deflect'"
+                ).fetchone()["c"]
+                result = answer_question(q, cf_a, conn, "it", urlopen=raising_urlopen)
+                assert result["state"] == "deflection", \
+                    f"10: {q!r} state was {result['state']}"
+                row = conn.execute(
+                    "SELECT * FROM audit_log WHERE action = 'patient_deflect'"
+                    " ORDER BY rowid DESC LIMIT 1"
+                ).fetchone()
+                after = conn.execute(
+                    "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_deflect'"
+                ).fetchone()["c"]
+                assert after == before + 1, f"10: {q!r} wrote {after - before} deflect rows"
+                assert row["allowed"] == 0, "10: a deflection row must be allowed=0"
+        finally:
+            patient_accessor = real_accessor
+
+        # direction two, sweep 1: the four UI chips. chip 3 is "Quanto devo
+        # pagare?", which is why no bare "devo" may ever enter the advice
+        # tuple - it would deflect a pure invoice question.
+        for i in (1, 2, 3, 4):
+            for lang in ("it", "en"):
+                chip = t(f"chat_example_{i}", lang)
+                assert advice_category(chip) is None, \
+                    f"10: example chip {i}/{lang} must not deflect - {chip!r} (the bare-devo trap)"
+
+        # sweep 2: every rendered procedure phrase a patient can read off an
+        # answer and quote back. discovered by prefix, not listed here, so a
+        # procedure added later falls under this check by itself. proc_abx is
+        # the single accepted exception - if any other phrase starts
+        # deflecting, remove the responsible trigger, never widen this set.
+        proc_deflectors = set()
+        for key in STRINGS:
+            if not key.startswith("proc_"):
+                continue
+            for lang in ("it", "en"):
+                if advice_category(t(key, lang, n=47)) is not None:
+                    proc_deflectors.add(key)
+        assert proc_deflectors == {"proc_abx"}, \
+            f"10: rendered procedure phrases that deflect must be exactly {{'proc_abx'}}, got {proc_deflectors}"
+        for lang in ("it", "en"):
+            assert advice_category(t("proc_abx", lang)) == "treatment", \
+                f"10: proc_abx/{lang} is the recorded exception and must still deflect as treatment"
+
+        # sweep 3: the exact strings the four routes depend on.
+        for route, q in empty_questions.items():
+            assert advice_category(q) is None, \
+                f"10: the {route} route question must not deflect - {q!r}"
+
+        # the marker itself. removing it would claim the §4.2 human review
+        # happened; it has not.
+        assert "[ASSUMED]" in inspect.getsource(sys.modules[__name__]), \
+            "10: the [ASSUMED] marker records that §4.2's human review is still outstanding"
 
         # 8. static guards - the import graph, the write-verb scan and the
         # resolve_cf ban, same technique as patient_accessor's own selftest.
