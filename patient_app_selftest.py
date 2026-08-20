@@ -9,6 +9,7 @@ from pathlib import Path
 from flask import url_for
 from markupsafe import escape as html_escape
 
+import auth
 import patient_accessor
 import patient_app
 import patient_auth
@@ -1350,6 +1351,77 @@ def selftest():
         assert deflect_heading_it not in answer_resp26c.text and \
             refusal_heading_it not in answer_resp26c.text, \
             "26c: the answer response must carry only the answer heading"
+
+        # 26d. CHAT-07 at route level. this sits inside the stubbed region on
+        # purpose - after the restore below it would make a real ollama call
+        # and the fast suite does not touch the network.
+        before_q26d = count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?",
+            (cf24,),
+        )
+        page26d = client24.get("/chat")
+        question26d = t("chat_example_2", "it")
+        client24.post("/chat", data={
+            "question": question26d, "csrf_token": _csrf_from(page26d.text),
+        })
+        after_q26d = count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?",
+            (cf24,),
+        )
+        assert after_q26d == before_q26d + 1, (
+            "26d: an answered POST /chat must leave exactly one patient_query row - "
+            f"count went {before_q26d} -> {after_q26d}"
+        )
+        row26d = raw_db().execute(
+            "SELECT * FROM audit_log WHERE action = 'patient_query' AND username = ?"
+            " ORDER BY rowid DESC LIMIT 1", (cf24,)
+        ).fetchone()
+        assert row26d["role"] == "patient", f"26d: role was {row26d['role']}"
+        assert row26d["allowed"] == 1, "26d: a served answer must be allowed=1"
+        assert row26d["target"] == "visits", f"26d: target was {row26d['target']}"
+
+        # a deflecting POST writes the other action, and only that one
+        before_d26d = count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_deflect' AND username = ?",
+            (cf26,),
+        )
+        before_dq26d = count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?",
+            (cf26,),
+        )
+        page26d2 = client26.get("/chat")
+        question26d2 = "Dovrei preoccuparmi?"
+        client26.post("/chat", data={
+            "question": question26d2, "csrf_token": _csrf_from(page26d2.text),
+        })
+        assert count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_deflect' AND username = ?",
+            (cf26,),
+        ) == before_d26d + 1, "26d: a deflected POST must leave one patient_deflect row"
+        assert count(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?"
+            " AND allowed = 1", (cf26,),
+        ) == 0, "26d: a deflection must not also write an allowed patient_query row"
+        deflect_row26d = raw_db().execute(
+            "SELECT * FROM audit_log WHERE action = 'patient_deflect' AND username = ?"
+            " ORDER BY rowid DESC LIMIT 1", (cf26,)
+        ).fetchone()
+        assert deflect_row26d["allowed"] == 0, "26d: a deflection row must be allowed=0"
+
+        # D-04 at route level - no row anywhere carries what the patient typed
+        for target26d, in raw_db().execute("SELECT target FROM audit_log").fetchall():
+            for posted in (question26d, question26d2):
+                assert posted not in (target26d or ""), \
+                    f"26d: an audit target carries question text: {target26d!r}"
+
+        # §5.5's corollary, §7.1 property 1. writing role="patient" into
+        # audit_log is legal because audit_log.role carries no CHECK constraint
+        # while users.role does - it is not a licence to make patient a staff
+        # role, and these two asserts are what stop that drifting.
+        assert "patient" not in auth.VALID_ROLES, \
+            "26d: patient must stay out of auth.VALID_ROLES (§7.1 property 1)"
+        assert "patient" not in auth.PERMISSIONS, \
+            "26d: patient must stay out of auth.PERMISSIONS (§7.1 property 1)"
 
         # every model-facing stub this plan installed is done being needed -
         # restore the real function so nothing later is silently stubbed

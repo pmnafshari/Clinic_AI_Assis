@@ -623,8 +623,20 @@ of what the tunnel logs.
 The column mapping for a patient row: `username` carries the authenticated codice_fiscale;
 `role` carries the literal string `role="patient"`; `action` names the interaction — for
 example `patient_query`, `patient_deflect`, `patient_login`, `patient_scope_violation`;
-`target` names the accessor function or the deflection category; `allowed` is 1 for a served
-answer and 0 for a deflection or a scope violation.
+`target` names the route outcome — the matched route (`visits`, `invoices`, `demographics`,
+`next_appointment`), the route with its outcome suffix (`visits:empty`,
+`visits:invalid_reply`), `unrouted`, `model_unreachable`, the deflection category on a
+deflection, or the accessor function name on a scope violation; `allowed` is 1 for a served
+answer and 0 for a deflection, a refusal, an error and a scope violation. The route-outcome
+vocabulary is deliberately richer than the accessor name: it separates the model saying it has
+no data from the model drifting off the reply envelope, which an accessor name cannot. Refusals
+and errors are denials in this section's sense, which is why they share the deflection's
+`allowed=0`.
+
+The raw question text is never written to any column, and no column is to be added for it. An
+audit row carrying what the patient typed would rebuild, one row at a time, the transcript
+CHAT-03's D-03 forbids; §4.5's measurable trigger rate is already served by the category in
+`target`.
 
 The schema fact that makes this legal: `audit_log.role` (`storage.py:50-58`) carries no CHECK
 constraint. `users.role` (`storage.py:46`) does —

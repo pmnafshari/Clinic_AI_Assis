@@ -5,9 +5,8 @@ with no model anywhere in the routing decision, and calls a model only to phrase
 rows that have already been fetched and scoped. §3.5 of the architecture doc puts
 the intent gate at step 3 and the accessor call at step 4 - that ordering is a
 binding security property (§7.1), not a style choice, and it is enforced here by
-plain code structure: each step in answer_question is a separate early return, so
-the gate always runs before the accessor and the accessor always runs before the
-model.
+plain code structure: each step in _answer is a separate early return, so the gate
+always runs before the accessor and the accessor always runs before the model.
 """
 
 import ast
@@ -266,12 +265,8 @@ def _call_model(prompt, urlopen):
     return body.get("response", "")
 
 
-def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.urlopen):
-    """-> {"state": "answer"|"refusal"|"deflection"|"error",
-           "body": str|None,        # generated prose, only when state == "answer"
-           "target": str}           # audit/debug label: route name, ':empty',
-                                     # 'unrouted', the deflection category, or
-                                     # 'model_unreachable'
+def _answer(question, cf, conn, lang, ip, urlopen):
+    """the routing body. writes nothing - answer_question owns the audit row.
 
     each step below is a separate early return so the ordering is visible in
     one screen of code: the gate (step 2) always runs before the accessor
@@ -287,7 +282,6 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     # it, so no prompt is ever built for a deflected question.
     category = advice_category(question)
     if category is not None:
-        log_audit(conn, cf, "patient", "patient_deflect", category, allowed=0, ip=ip)
         return {"state": "deflection", "body": None, "target": category}
 
     # 3. D-04: an unroutable question refuses with a capability hint (the
@@ -372,12 +366,38 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     return {"state": "answer", "body": text, "target": route}
 
 
-# audit scope, stated deliberately: this module writes exactly one kind of
-# row, the patient_deflect row in step 2 above. it does not write a row per
-# served answer - D-05 keeps CHAT-07's every-interaction audit in phase 19,
-# and the D-09 scope-mismatch row is already written inside patient_accessor
-# itself. the absence of a per-answer row here is a decision, not an
-# omission, so phase 19 knows exactly what it is adding.
+def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.urlopen):
+    """-> {"state": "answer"|"refusal"|"deflection"|"error",
+           "body": str|None,        # generated prose, only when state == "answer"
+           "target": str}           # audit/debug label: route name, ':empty',
+                                     # 'unrouted', the deflection category, or
+                                     # 'model_unreachable'
+
+    _answer does the routing, this writes the row. one call site, reached by
+    every return path there is.
+    """
+    result = _answer(question, cf, conn, lang, ip, urlopen)
+    if result["state"] == "deflection":
+        action = "patient_deflect"
+        allowed = 0
+    else:
+        action = "patient_query"
+        allowed = 1 if result["state"] == "answer" else 0
+    log_audit(conn, cf, "patient", action, result["target"], allowed=allowed, ip=ip)
+    return result
+
+
+# audit scope: one row per call, written by the answer_question wrapper. a
+# deflection writes patient_deflect with allowed=0, every other state writes
+# patient_query, and allowed=1 only for a served answer - a refusal and an
+# error are denials. the wrapper exists so a new terminal return added to
+# _answer cannot escape its row (§5.5's log-before-respond rule); with a
+# log_audit at each early return, the ninth one silently would.
+#
+# target carries the route label and never the question text - an audit row
+# holding what the patient typed would rebuild the transcript phase 17 D-03
+# forbids, one row at a time. the D-09 scope-mismatch row is still written
+# inside patient_accessor itself.
 #
 # D-03: each call to answer_question is self-contained. there is no
 # parameter and no module-level state carrying anything from one call into
@@ -526,8 +546,9 @@ def selftest():
         finally:
             patient_accessor = real_accessor
 
-        # 2. deflection audit (D-05) - one row per deflection, allowed=0, and
-        # no patient_query row, since the every-question audit is phase 19's.
+        # 2. the audit row (CHAT-07) - every call leaves exactly one row, and
+        # the four states are each checked, since the wrapper is only worth
+        # having if the state it never sees is the one that still logs.
         deflect_rows = conn.execute(
             "SELECT * FROM audit_log WHERE action = 'patient_deflect'"
         ).fetchall()
@@ -535,10 +556,42 @@ def selftest():
         for row in deflect_rows:
             assert row["role"] == "patient", f"2: role was {row['role']}"
             assert row["allowed"] == 0, "2: deflection row should be allowed=0"
+
+        audit_questions = {
+            "unrouted": ("qual e la capitale del Giappone", cf_a, raising_urlopen, 0),
+            "visits:empty": ("Che visite ho fatto?", missing_cf, raising_urlopen, 0),
+            "visits": ("Che visite ho fatto?", cf_a, canned_urlopen, 1),
+            "model_unreachable": ("Quali interventi ho avuto?", cf_a, unreachable_urlopen, 0),
+        }
+        for expected_target, (q, who, stub, expected_allowed) in audit_questions.items():
+            result = answer_question(q, who, conn, "it", urlopen=stub)
+            assert result["target"] == expected_target, \
+                f"2: {q!r} target was {result['target']}, expected {expected_target}"
+            row = conn.execute(
+                "SELECT * FROM audit_log WHERE action = 'patient_query'"
+                " ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+            assert row["target"] == expected_target, f"2: row target was {row['target']}"
+            assert row["role"] == "patient", f"2: role was {row['role']}"
+            assert row["allowed"] == expected_allowed, \
+                f"2: {expected_target} row allowed was {row['allowed']}"
+
         query_count = conn.execute(
             "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_query'"
         ).fetchone()["c"]
-        assert query_count == 0, "2: patient_query rows are phase 19 scope, none should exist yet"
+        assert query_count == 4, f"2: expected 4 patient_query rows, got {query_count}"
+        deflect_count = conn.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_deflect'"
+        ).fetchone()["c"]
+        assert deflect_count == 6, f"2: deflection count moved to {deflect_count}"
+
+        # D-04 - no row carries what the patient typed. asserted, not assumed:
+        # a target that quietly started carrying the question would rebuild the
+        # transcript phase 17 D-03 forbids.
+        targets = [r["target"] for r in conn.execute("SELECT target FROM audit_log").fetchall()]
+        for q, _, _, _ in audit_questions.values():
+            for target in targets:
+                assert q not in (target or ""), f"2: audit target carries question text: {target!r}"
 
         # 3. unroutable (D-04) - an off-surface question refuses, distinct
         # from a deflection, and neither stub is ever reached.

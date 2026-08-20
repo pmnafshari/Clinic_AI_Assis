@@ -229,9 +229,8 @@ def chat_page():
     conn = get_db()
     result = chat.answer_question(question, cf, conn, current_language(), ip=request.remote_addr)
 
-    # no audit call is added here on purpose. the deflection row is written
-    # inside chat.answer_question and the scope-mismatch row inside
-    # patient_accessor, both already on this code path - a per-question row
-    # here would pull CHAT-07's every-interaction audit forward out of
-    # Phase 19, against D-05.
+    # no audit call here on purpose. CHAT-07's per-interaction row is written
+    # inside chat.answer_question's wrapper, on this same code path, and the
+    # scope-mismatch row inside patient_accessor - a call here would just
+    # double-count what those already record.
     return render_template("patient_chat.html", state=result["state"], body=result["body"])
