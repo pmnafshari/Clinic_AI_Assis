@@ -16,26 +16,26 @@ from auth import log_audit
 # own row. there is no write function here by construction, not by policy.
 
 
-def get_demographics(cf, conn):
+def get_demographics(cf, conn, ip=None):
     row = conn.execute(
         "SELECT codice_fiscale, patient_name, phone FROM patients"
         " WHERE codice_fiscale = ?", (cf,)
     ).fetchone()
     if row is None:
         return None
-    rows = _scope_rows([row], cf, conn, "get_demographics")
+    rows = _scope_rows([row], cf, conn, "get_demographics", ip=ip)
     if not rows:
         return None
     row = rows[0]
     return {"patient_name": row["patient_name"], "phone": row["phone"]}
 
 
-def get_visits(cf, conn):
+def get_visits(cf, conn, ip=None):
     rows = conn.execute(
         "SELECT codice_fiscale, visit_date, procedures, next_appointment FROM visits"
         " WHERE codice_fiscale = ? ORDER BY id", (cf,)
     ).fetchall()
-    rows = _scope_rows(rows, cf, conn, "get_visits")
+    rows = _scope_rows(rows, cf, conn, "get_visits", ip=ip)
     return [
         {
             "visit_date": row["visit_date"],
@@ -46,40 +46,45 @@ def get_visits(cf, conn):
     ]
 
 
-def get_next_appointment(cf, conn):
+def get_next_appointment(cf, conn, ip=None):
     row = conn.execute(
         "SELECT codice_fiscale, next_appointment FROM visits"
         " WHERE codice_fiscale = ? ORDER BY id DESC LIMIT 1", (cf,)
     ).fetchone()
     if row is None:
         return None
-    rows = _scope_rows([row], cf, conn, "get_next_appointment")
+    rows = _scope_rows([row], cf, conn, "get_next_appointment", ip=ip)
     if not rows:
         return None
     return rows[0]["next_appointment"]
 
 
-def get_invoices(cf, conn):
+def get_invoices(cf, conn, ip=None):
     rows = conn.execute(
         "SELECT codice_fiscale, amount, description FROM invoices"
         " WHERE codice_fiscale = ? ORDER BY id", (cf,)
     ).fetchall()
-    rows = _scope_rows(rows, cf, conn, "get_invoices")
+    rows = _scope_rows(rows, cf, conn, "get_invoices", ip=ip)
     return [{"amount": row["amount"], "description": row["description"]} for row in rows]
 
 
+# ip rides along so the mismatch row records where the request came from.
+# this is the most security-relevant of the three patient rows, and a sweep
+# with no source recorded is invisible after the fact. it defaults to None,
+# so a caller that passes nothing still gets its row with ip NULL.
+#
 # on the sqlite path a parameterised WHERE codice_fiscale = ? cannot return
 # another patient's row - this check is defence-in-depth against a future
 # JOIN widening the result set. it does not catch a note ingested under the
 # wrong CF at write time, because a correctly scoped query and a wrongly
 # attributed row read the same column.
-def _scope_rows(rows, cf, conn, fn_name):
+def _scope_rows(rows, cf, conn, fn_name, ip=None):
     kept = []
     for row in rows:
         if row["codice_fiscale"] == cf:
             kept.append(row)
         else:
-            log_audit(conn, cf, "patient", "patient_scope_violation", fn_name, allowed=0)
+            log_audit(conn, cf, "patient", "patient_scope_violation", fn_name, allowed=0, ip=ip)
     return kept
 
 
@@ -224,6 +229,25 @@ def selftest():
             f"5: denial action was {denial['action']}"
         assert denial["allowed"] == 0, "5: denial should be allowed=0"
         assert denial["target"] == "get_demographics", f"5: denial target was {denial['target']}"
+        # the four-positional call above passes no ip. that default is what
+        # keeps patient_app_selftest's negative control and eval_chat.py
+        # working unedited, so it is pinned rather than assumed.
+        assert denial["ip"] is None, f"5: a call with no ip must leave ip NULL, got {denial['ip']}"
+
+        # D-07: the same drop, with a source address, records it. TEST-NET-3
+        # so the fixture can never be confused for a real client.
+        before_ip = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+        kept_ip = _scope_rows(fake_rows, cf_a, conn, "get_visits", ip="203.0.113.9")
+        assert len(kept_ip) == 1, f"5: _scope_rows kept {kept_ip}"
+        after_ip = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+        assert after_ip == before_ip + 1, "5: exactly one denial row should be written"
+        denial_ip = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
+        assert denial_ip["action"] == "patient_scope_violation", \
+            f"5: denial action was {denial_ip['action']}"
+        assert denial_ip["allowed"] == 0, "5: denial should be allowed=0"
+        assert denial_ip["target"] == "get_visits", f"5: denial target was {denial_ip['target']}"
+        assert denial_ip["ip"] == "203.0.113.9", \
+            f"5: the scope-violation row must carry the source address, got {denial_ip['ip']}"
 
         # --- static sections: the §3.1 mandated invariant, and the
         # mechanical answer to roadmap SC3 ("no write function exists").

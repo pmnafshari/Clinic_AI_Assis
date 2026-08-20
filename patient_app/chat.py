@@ -331,13 +331,13 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     # lookup ask.py uses for staff Q&A is the inverse operation and is not
     # available here.
     if route == "next_appointment":
-        data = patient_accessor.get_next_appointment(cf, conn)
+        data = patient_accessor.get_next_appointment(cf, conn, ip=ip)
     elif route == "invoices":
-        data = patient_accessor.get_invoices(cf, conn)
+        data = patient_accessor.get_invoices(cf, conn, ip=ip)
     elif route == "demographics":
-        data = patient_accessor.get_demographics(cf, conn)
+        data = patient_accessor.get_demographics(cf, conn, ip=ip)
     else:
-        data = patient_accessor.get_visits(cf, conn)
+        data = patient_accessor.get_visits(cf, conn, ip=ip)
 
     # 5. an empty result refuses before the model is ever called - this is
     # roadmap SC4's exact case, and a question with no matching record data
@@ -889,6 +889,57 @@ def selftest():
         # happened; it has not.
         assert "[ASSUMED]" in inspect.getsource(sys.modules[__name__]), \
             "10: the [ASSUMED] marker records that §4.2's human review is still outstanding"
+
+        # 11. D-07 - every accessor call on the chat path carries the
+        # request's source address. asserted once per route, so a single
+        # missed call site fails instead of being averaged away by the
+        # other three. the recorder returns an empty result, which refuses
+        # at step 5, so no model call is made and no stub is needed.
+        class _RecordingAccessor:
+            def __init__(self):
+                self.calls = []
+
+            def __getattr__(self, name):
+                empty = None if name in ("get_next_appointment", "get_demographics") else []
+
+                def _call(cf, conn, ip=None):
+                    self.calls.append((name, ip))
+                    return empty
+                return _call
+
+        recorder = _RecordingAccessor()
+        saved_accessor = patient_accessor
+        patient_accessor = recorder
+        try:
+            for route, q in empty_questions.items():
+                result = answer_question(
+                    q, cf_a, conn, "it", ip="203.0.113.9", urlopen=raising_urlopen
+                )
+                assert result["target"] == f"{route}:empty", \
+                    f"11: {route} target was {result['target']}"
+            assert len(recorder.calls) == 4, \
+                f"11: expected one accessor call per route, got {recorder.calls}"
+            for name, seen in recorder.calls:
+                assert seen == "203.0.113.9", \
+                    f"11: {name} received ip={seen!r} - a call site is not forwarding it"
+
+            # the no-ip default still works. eval_chat.py calls
+            # answer_question(question, cf, conn, lang) with four positional
+            # arguments, so this path must stay usable and pass None through.
+            del recorder.calls[:]
+            before_ip = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+            result = answer_question("Che visite ho fatto?", cf_a, conn, "it")
+            assert result["target"] == "visits:empty", f"11: target was {result['target']}"
+            assert recorder.calls == [("get_visits", None)], \
+                f"11: a call with no ip must pass None through, got {recorder.calls}"
+            after_ip = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+            assert after_ip == before_ip + 1, "11: the no-ip call still writes its audit row"
+            row_ip = conn.execute(
+                "SELECT * FROM audit_log ORDER BY rowid DESC LIMIT 1"
+            ).fetchone()
+            assert row_ip["ip"] is None, f"11: the no-ip row must be NULL, got {row_ip['ip']}"
+        finally:
+            patient_accessor = saved_accessor
 
         # 8. static guards - the import graph, the write-verb scan and the
         # resolve_cf ban, same technique as patient_accessor's own selftest.
