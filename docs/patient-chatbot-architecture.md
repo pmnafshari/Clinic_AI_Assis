@@ -571,6 +571,32 @@ ingress:
 No hostname or port for the staff app appears anywhere in this file — the catch-all
 `http_status:404` rule at the bottom is what makes an omission fail closed rather than open.
 
+**Isolation versus attribution (added 2026-08-22, Phase 22).** The sentence above about
+forwarded-header inspection is about *isolation*, and it stands unchanged: isolation is the
+separate listening socket, and no header is consulted to decide which app a request reached.
+*Attribution* — deciding whose address a request came from — is a different question, and it
+cannot be answered by the socket once a proxy is in front of it. `cloudflared` runs on this same
+host and connects over loopback, so `request.remote_addr` is `127.0.0.1` for every patient once
+the tunnel is open.
+
+Attribution is therefore resolved in `patient_app/net.py`, behind three gates that must all pass
+before a forwarded header is believed: an explicit opt-in flag `PATIENT_TRUST_FORWARDED_IP`
+(default **off**), a loopback peer, and a value that parses as an IP address. The header read is
+`CF-Connecting-IP` and never `X-Forwarded-For` — Cloudflare sets the former to a single client IP
+on every request through its edge and overwrites any client-supplied value, whereas the latter is
+an appended list requiring trusted-hop counting.
+
+The default-off is load-bearing: on a host with no tunnel in front, honouring the header would let
+any local caller choose its own address and its own throttle bucket, which is worse than the
+collapse it fixes. `tunnel_guard.guard_or_exit` refuses to start when the ingress maps the patient
+port and the flag is off, so the two settings cannot drift apart in production.
+
+The residual is stated rather than softened: because `cloudflared` is on the same host, its
+connections are loopback and are indistinguishable from any other local process, so a malicious
+**local** process can forge `CF-Connecting-IP` and choose its own attribution. No header check can
+close that. It is accepted because such a process already has direct read access to
+`db/clinic.sqlite`. Carried as **T15** in section 6.
+
 ### 5.3 GDPR processor statement and the offline-first exception
 
 **D-14 control 2:** Cloudflare is a data processor under GDPR for patient traffic transiting
@@ -598,7 +624,7 @@ to offline storage plus encryption has happened. Development and UAT run on fake
 
 | Control | What it does | Why it is not outsourced to the tunnel |
 |---|---|---|
-| Login throttling | Per-account and per-source-IP throttling in `patient_auth.py`: threshold 5, cooldown 15 minutes, timed auto-unlock, same numbers as `web_auth.py:9-10`'s tested constants (section 2.1) | The D-05 lockout must not depend on infrastructure this repo does not control; granular rate-limiting rules are historically a paid Cloudflare WAF feature, so the free tier may not provide equivalent throttling at all |
+| Login throttling | Per-account and per-source-IP throttling in `patient_auth.py`: threshold 5, cooldown 15 minutes, timed auto-unlock, same numbers as `web_auth.py:9-10`'s tested constants (section 2.1). **Qualified 2026-08-22:** the per-source half is only genuinely per-source when attribution is on (§5.2). With it off behind a tunnel every patient collapses into one bucket, so 20 failures from any one source would throttle the whole clinic — and that check runs ahead of the codice-fiscale shape check, so no valid CF is needed to drive it. `tunnel_guard` now refuses to boot into that state. The per-account lockout is unaffected either way and remains the independent second brake | The D-05 lockout must not depend on infrastructure this repo does not control; granular rate-limiting rules are historically a paid Cloudflare WAF feature, so the free tier may not provide equivalent throttling at all |
 | GDPR processor / DPA | Cloudflare is named as a processor and a DPA is required before real traffic — see 5.3 | The tunnel provider's own terms of service are not a substitute for the clinic's own GDPR obligations as controller |
 | No-real-data precondition | The tunnel carries fake data only until the offline+encryption milestone switch — see 5.3 | The tunnel's TLS and access controls do not change what the clinic is permitted to expose while real data is not yet protected at rest |
 | Tunnel-independent audit | Every interaction is logged at the app layer via `log_audit` — see 5.5 | Tunnel access logs live with the provider, expire on their schedule, and cannot be joined to a patient session |
@@ -632,6 +658,12 @@ vocabulary is deliberately richer than the accessor name: it separates the model
 no data from the model drifting off the reply envelope, which an accessor name cannot. Refusals
 and errors are denials in this section's sense, which is why they share the deflection's
 `allowed=0`.
+
+`ip` carries the source address behind the row. The patient surface sets it on login, logout,
+chat and scope-violation rows; staff paths still pass `None`. It is resolved through §5.2's
+trust boundary, so it is the patient's own address only when attribution is enabled — otherwise
+it is the socket peer, which behind a tunnel is the tunnel itself. It is evidence, never identity,
+and never a control input: the per-codice-fiscale lockout is what actually bounds brute force.
 
 The raw question text is never written to any column, and no column is to be added for it. An
 audit row carrying what the patient typed would rebuild, one row at a time, the transcript
@@ -695,6 +727,7 @@ is the enforcement choke point — the same role `authorize()` plays for staff.
 | T12 | Weak or guessable staff-set PIN | Spoofing | Staff issues a short or sequential PIN that is easy to guess or shoulder-surf | Minimum PIN policy enforced at issuance in patient_auth.py (§2.1): at least 8 characters, reject all-same-digit and sequential-digit PINs, hashed with werkzeug scrypt (§2.1), never compared with == | Policy strength is a document-time choice; a determined guesser with unlimited attempts is still bounded by D-05's lockout (§2.1), not by PIN strength alone | — |
 | T13 | Expired or reissued credential still accepting a login, or a stale patient session surviving a staff revocation | Spoofing | Patient's temp PIN passes 7 days unused but the expiry check is skipped, or staff revokes a patient's access but an already-issued session keeps working | D-04's expires_at check and D-05's active flag (§2.1, §2.3) at login, plus deletion of the patient's patient_sessions rows on revocation | Revocation is only as fast as the next request the patient's existing session makes — a session already mid-request when revoked completes that one request | — |
 | T14 | A future maintainer adds a shared session helper parameterised by table name, or adds "patient" to VALID_ROLES | Elevation of Privilege | A later change collapses the structural separation D-06 requires, for code-reuse convenience | D-06 (§2.4) and the §7 deviation policy, plus a selftest asserting "patient" is absent from auth.VALID_ROLES | Relies on the deviation policy being followed and the selftest being run; not prevented by a database constraint | 1 |
+| T15 | A local process forges the client-IP header the patient app trusts | Spoofing | A process on the clinic machine connects directly to the patient app's loopback port and sets CF-Connecting-IP to an address of its choosing, taking another patient's throttle bucket or writing a false address into audit_log | Attribution is gated on an explicit opt-in flag plus a loopback peer plus a parseable address (§5.2); tunnel_guard refuses to boot the tunnel-facing configuration with attribution off | **Not closable at this layer.** cloudflared runs on the same host, so its connections are loopback and indistinguishable from any other local process — no header check can separate them. Accepted because a local process already has direct read access to db/clinic.sqlite and is therefore past this boundary regardless | — |
 
 The table above covers all four of criterion 3's graded categories: T4 (read-only), T3 (no
 clinical advice), T2 (no cross-patient visibility), T9 (mandatory per-interaction logging).
@@ -753,6 +786,11 @@ column names, accessor function signatures, the idle-expiry and lockout numbers 
 document itself. The line is explicit: schemas and function surfaces may change; the five
 security properties above may not change silently. This is D-17's rule stated as a working
 line an implementer can apply without re-reading the whole document.
+
+**Phase 22 check (2026-08-22).** Client-IP attribution was added without touching any of the five.
+Property 5 is separation by process and port; attribution reads a header for logging and
+throttling and changes nothing about which socket serves which app. §7.2 therefore requires no
+deviation record for it — stated here so the next reader does not have to re-derive it.
 
 ### 7.2 How to record a deviation
 
@@ -859,10 +897,16 @@ working default, that default is recorded here as reversible, not as a settled d
    and left undecided in discussion. Decides: CHAT-03 planning, with a GDPR review. Answerable
    during CHAT-03 planning.
 
-4. **Behaviour when the tunnel is down.** Known: the patient surface becomes unreachable; the
-   staff app and all local processing are unaffected. Unclear: the patient-facing degradation
-   story. Default: none — operational rather than architectural. Decides: CHAT-03 planning.
-   Answerable during CHAT-03 planning.
+4. **Behaviour when the tunnel is down. ANSWERED 2026-08-22 (Phase 22, CHAT-10).** Known: the
+   patient surface becomes unreachable; the staff app and all local processing are unaffected.
+   **Answer: no in-app degradation story, by decision.** When the tunnel is down the app is
+   unreachable, so it cannot serve its own error page — anything a patient sees at that moment is
+   served by Cloudflare, not by this system. Patients see Cloudflare's default error, and the
+   clinic's telephone number is the fallback channel, which is the channel patients already use.
+   A branded Cloudflare error page was considered and rejected for now: it is dashboard
+   configuration outside this repo, and its free-tier availability is unconfirmed — the same open
+   question that affects the DPA (§5.3). Revisit if tunnel outages turn out to be frequent enough
+   for patients to notice.
 
 5. **Direct database access versus a narrower local service boundary.** Known: §3.1 states
    the patient app opens `db/clinic.sqlite` directly with `patient_accessor.py` as the only
