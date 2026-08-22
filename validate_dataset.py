@@ -8,6 +8,11 @@ from dental_notes_schema import KNOWN_PROCEDURES, DentalNote
 RAW_FILE = "notes_raw_v2.jsonl"
 TRAIN_FILE = "notes_train.jsonl"
 TEST_FILE = "notes_test.jsonl"
+# the italian adversarial cases (bf52ef1) live in their own file because the
+# split below writes TEST_FILE with mode 'w'. they were hand-written to make the
+# procedures gate able to FAIL - a resplit that silently dropped them would turn
+# a green gate into evidence of nothing.
+ADVERSARIAL_FILE = "notes_adversarial_it.jsonl"
 NEEDED = 180
 TRAIN_COUNT = 150
 
@@ -166,9 +171,25 @@ def main():
 
     train = valid[:TRAIN_COUNT]
     test = valid[TRAIN_COUNT:NEEDED]
+
+    # re-attach the hand-written adversarial cases, always. not optional: the
+    # gate is only meaningful while these are in the test set.
+    try:
+        with open(ADVERSARIAL_FILE) as f:
+            adversarial = [json.loads(line) for line in f if line.strip()]
+    except FileNotFoundError:
+        print(f"REFUSING: {ADVERSARIAL_FILE} is missing - the italian adversarial")
+        print("cases are what let the procedures gate fail. restore it before splitting.")
+        sys.exit(1)
+    if not adversarial:
+        print(f"REFUSING: {ADVERSARIAL_FILE} is empty")
+        sys.exit(1)
+    test = test + adversarial
+
     write_lines(TRAIN_FILE, train)
     write_lines(TEST_FILE, test)
-    print(f"wrote {len(train)} to {TRAIN_FILE} and {len(test)} to {TEST_FILE}")
+    print(f"wrote {len(train)} to {TRAIN_FILE} and {len(test)} to {TEST_FILE}"
+          f" ({len(adversarial)} adversarial cases re-attached)")
 
 
 if __name__ == "__main__":
