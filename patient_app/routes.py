@@ -13,7 +13,7 @@ import patient_auth
 import storage
 from auth import log_audit
 
-from . import chat
+from . import chat, net
 from .strings import current_language, t
 
 patient_bp = Blueprint("patient", __name__)
@@ -113,9 +113,11 @@ def login():
         return render_template("patient_login.html", error=error)
 
     conn = get_db()
-    # remote_addr is recorded as evidence for the throttle and the audit row, not
-    # trusted as identity - see the residual note in patient_auth.verify_pin
-    status, _row = patient_auth.verify_pin(cf, pin, conn, ip=request.remote_addr)
+    # evidence for the throttle and the audit row, never identity - see the
+    # residual note in patient_auth.verify_pin. resolved through net's trust
+    # boundary now, so behind the tunnel this is the patient's address rather
+    # than cloudflared's; without the flag it is still just the socket peer.
+    status, _row = patient_auth.verify_pin(cf, pin, conn, ip=net.from_request(request))
 
     if status != "ok":
         # fail closed on the generic refusal - it's also the safe enumeration
@@ -128,7 +130,7 @@ def login():
     token = patient_auth.create_patient_session(conn, cf)
     # a name that is not "login" so patient and staff sign-ins are
     # distinguishable in one audit trail (phase 16-01 precedent)
-    log_audit(conn, cf, "patient", "patient_login", cf, allowed=1, ip=request.remote_addr)
+    log_audit(conn, cf, "patient", "patient_login", cf, allowed=1, ip=net.from_request(request))
 
     resp = redirect(url_for("home"))
     resp.set_cookie(
@@ -146,7 +148,7 @@ def logout():
         session = patient_auth.load_patient_session(conn, token)
         if session:
             log_audit(conn, session["codice_fiscale"], "patient", "patient_logout",
-                       session["codice_fiscale"], allowed=1, ip=request.remote_addr)
+                       session["codice_fiscale"], allowed=1, ip=net.from_request(request))
         patient_auth.destroy_patient_session(conn, token)
 
     resp = redirect(url_for("patient.login"))
@@ -227,7 +229,7 @@ def chat_page():
     cf = g.patient["codice_fiscale"]
 
     conn = get_db()
-    result = chat.answer_question(question, cf, conn, current_language(), ip=request.remote_addr)
+    result = chat.answer_question(question, cf, conn, current_language(), ip=net.from_request(request))
 
     # no audit call here on purpose. CHAT-07's per-interaction row is written
     # inside chat.answer_question's wrapper, on this same code path, and the
