@@ -22,8 +22,13 @@ def authorize(role, action):
 
 
 def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None):
-    # ip: the source address behind the row, set only by the patient login
-    # surface - a sweep with no source recorded is invisible after the fact
+    # ip: the source address behind the row. the patient surface sets it on
+    # login, logout, chat and scope-violation rows; staff paths still pass None.
+    # it is resolved through patient_app/net.py, so it is the patient's own
+    # address only when that app is configured to trust the tunnel's forwarded
+    # header - otherwise it is the socket peer, which behind a tunnel is the
+    # tunnel itself. evidence either way, never identity.
+    # a sweep with no source recorded is invisible after the fact
     if ts is None:
         ts = datetime.now().isoformat()
     conn.execute(
