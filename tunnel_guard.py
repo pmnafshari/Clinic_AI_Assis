@@ -21,6 +21,40 @@ ENV_VAR = "TUNNEL_CONFIG_PATH"
 # closed rather than open, so its absence is a finding in its own right.
 CATCH_ALL_SERVICE = "http_status:404"
 
+# patient_app/net.py owns this name. re-declared here rather than imported:
+# importing patient_app.net would execute patient_app/__init__.py, which pulls
+# in flask, flask_wtf, patient_auth and storage - and this guard has to decide
+# whether the app may boot at all before any of that loads. same reason
+# STAFF_PORT is a local constant instead of an import from run.py.
+# the duplication is pinned against the real module in selftest section 11.
+TRUST_ENV_VAR = "PATIENT_TRUST_FORWARDED_IP"
+TRUST_OFF_VALUES = frozenset({"", "0", "false", "no", "off"})
+
+
+def trust_enabled():
+    return os.environ.get(TRUST_ENV_VAR, "").strip().lower() not in TRUST_OFF_VALUES
+
+
+def patient_port_rule(config_path, patient_port):
+    # the first hostname rule that maps the patient app, or None. pure, and
+    # deliberately forgiving - check_ingress has already rejected anything
+    # malformed by the time guard_or_exit calls this.
+    path = Path(config_path)
+    if not path.exists():
+        return None
+    try:
+        doc = yaml.safe_load(path.read_text())
+    except (yaml.YAMLError, OSError, UnicodeDecodeError):
+        return None
+    if not isinstance(doc, dict) or not isinstance(doc.get("ingress"), list):
+        return None
+    for i, rule in enumerate(doc["ingress"], start=1):
+        if not isinstance(rule, dict):
+            continue
+        if rule.get("hostname") and service_port(rule.get("service", "")) == patient_port:
+            return describe(i, rule)
+    return None
+
 
 def service_port(service):
     # port from a url-shaped service, else None. matches the parsed port, not
@@ -111,6 +145,20 @@ def guard_or_exit(patient_port):
 
     violations = check_ingress(config_path, patient_port)
     if not violations:
+        # the ingress is correct - which means a tunnel really is in front of
+        # the patient app. that is exactly when attribution has to be on, or
+        # every patient row records cloudflared and the per-source login
+        # throttle becomes one shared bucket for the whole clinic (CHAT-09).
+        rule = patient_port_rule(config_path, patient_port)
+        if rule and not trust_enabled():
+            print(f"TUNNEL GUARD REFUSED TO START - {config_path}:", file=sys.stderr)
+            print(
+                f"  {rule}, but {TRUST_ENV_VAR} is not set - every patient audit row "
+                f"would record the tunnel's own address, and the per-source login "
+                f"throttle would collapse into one shared bucket",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         print(f"tunnel guard: {config_path} ok - patient port {patient_port} only")
         return
 
@@ -226,6 +274,102 @@ def selftest():
                 os.environ[ENV_VAR] = saved
         assert "5000" in captured.getvalue(), \
             f"10: the refusal must name the offending rule, got {captured.getvalue()!r}"
+
+        # 11. CHAT-09. the ingress is CORRECT here - which is exactly when
+        # attribution has to be on. armed at a good config with the trust flag
+        # unset must refuse, or the tunnel opens in front of an app that
+        # records cloudflared as every patient.
+        # NOTE: sections 11-13 are also the first unit coverage of
+        # guard_or_exit's SUCCESS path. before this plan the function was
+        # exercised only disarmed (9) and against a bad config (10), so a
+        # change to the armed-and-clean branch could not fail this suite.
+        def armed(config, trust, port=5001):
+            saved_cfg = os.environ.get(ENV_VAR)
+            saved_trust = os.environ.get(TRUST_ENV_VAR)
+            os.environ[ENV_VAR] = str(config)
+            if trust is None:
+                os.environ.pop(TRUST_ENV_VAR, None)
+            else:
+                os.environ[TRUST_ENV_VAR] = trust
+            captured_out, captured_err = io.StringIO(), io.StringIO()
+            real_out, real_err = sys.stdout, sys.stderr
+            sys.stdout, sys.stderr = captured_out, captured_err
+            exited = None
+            try:
+                guard_or_exit(port)
+            except SystemExit as e:
+                exited = e.code
+            finally:
+                sys.stdout, sys.stderr = real_out, real_err
+                if saved_cfg is None:
+                    os.environ.pop(ENV_VAR, None)
+                else:
+                    os.environ[ENV_VAR] = saved_cfg
+                if saved_trust is None:
+                    os.environ.pop(TRUST_ENV_VAR, None)
+                else:
+                    os.environ[TRUST_ENV_VAR] = saved_trust
+            return exited, captured_out.getvalue(), captured_err.getvalue()
+
+        code11, _out11, err11 = armed(good, None)
+        assert code11 == 1, f"11: a clean ingress with attribution off must refuse, got {code11}"
+        assert TRUST_ENV_VAR in err11, \
+            f"11: the refusal must name the flag that would fix it, got {err11!r}"
+        assert "throttle" in err11, \
+            f"11: the refusal must say what it costs, got {err11!r}"
+
+        # 12. the same config with the flag set boots
+        code12, out12, _err12 = armed(good, "1")
+        assert code12 is None, f"12: a clean ingress with attribution on must not exit, got {code12}"
+        assert "ok" in out12, f"12: the passing guard should still confirm on stdout, got {out12!r}"
+
+        # 13. disarmed never consults the flag - a local run with no tunnel is
+        # unaffected by any of this
+        saved13 = os.environ.pop(ENV_VAR, None)
+        saved13t = os.environ.pop(TRUST_ENV_VAR, None)
+        captured13 = io.StringIO()
+        real13 = sys.stderr
+        sys.stderr = captured13
+        try:
+            guard_or_exit(5001)
+        finally:
+            sys.stderr = real13
+            if saved13 is not None:
+                os.environ[ENV_VAR] = saved13
+            if saved13t is not None:
+                os.environ[TRUST_ENV_VAR] = saved13t
+        assert "DISARMED" in captured13.getvalue(), \
+            "13: a disarmed boot must still just announce itself, flag or no flag"
+
+        # 14. the duplicated flag name cannot drift. imported HERE and nowhere
+        # else - the production path must not pull patient_app in (see the
+        # comment on TRUST_ENV_VAR).
+        from patient_app import net as _net
+        assert TRUST_ENV_VAR == _net.TRUST_ENV_VAR, \
+            f"14: flag name drifted - {TRUST_ENV_VAR!r} here vs {_net.TRUST_ENV_VAR!r} in patient_app/net.py"
+        for probe in ("", "0", "false", "off", "1", "true"):
+            saved14 = os.environ.get(TRUST_ENV_VAR)
+            os.environ[TRUST_ENV_VAR] = probe
+            try:
+                assert trust_enabled() == _net.trust_enabled(), \
+                    f"14: the two trust readers disagree on {probe!r}"
+            finally:
+                if saved14 is None:
+                    os.environ.pop(TRUST_ENV_VAR, None)
+                else:
+                    os.environ[TRUST_ENV_VAR] = saved14
+
+        # 15. the over-fire guard. a clean config that routes NOTHING to the
+        # patient app means no tunnel is in front of it, so attribution is not
+        # required and the new check must stay quiet. without this, section 11
+        # could be satisfied by a check that refuses every armed boot.
+        catch_only = write("catchonly.yml", "ingress:\n  - service: http_status:404\n")
+        assert check_ingress(catch_only, 5001) == [], \
+            "15: a catch-all-only ingress is a valid config"
+        code15, out15, err15 = armed(catch_only, None)
+        assert code15 is None, \
+            f"15: a config with no patient-port rule must not refuse on attribution, got {code15} / {err15!r}"
+        assert "ok" in out15, f"15: it should confirm normally, got {out15!r}"
 
     print("selftest ok")
 
