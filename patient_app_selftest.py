@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -16,6 +17,7 @@ import patient_auth
 import storage
 import web_session
 from patient_app import create_patient_app
+from patient_app import net as patient_net
 from patient_app import routes as patient_routes
 from patient_app.strings import DEFAULT_LANGUAGE, LANG_COOKIE_NAME, LANGUAGES, STRINGS, t
 
@@ -1547,6 +1549,104 @@ def selftest():
         # into type=button, it does not delete them
         for key in ("chat_example_1", "chat_example_2", "chat_example_3", "chat_example_4"):
             assert t(key, "it") in chat_html28, f"28: the {key} chip must survive the DEF-2 fix"
+
+        # 29. CHAT-09 - the trust boundary at route level. patient_app/net.py
+        # proves the resolver in isolation; this proves the four call sites
+        # actually reach it, and that the login throttle buckets by whatever
+        # the boundary returns. the env var is saved and restored around the
+        # whole block, mirroring tunnel_guard's idiom.
+        TRUST = patient_net.TRUST_ENV_VAR
+        saved29 = os.environ.pop(TRUST, None)
+        try:
+            def login29(cf, pin, header=None, peer=None):
+                c = app.test_client()
+                page = c.get("/login")
+                kwargs = {"data": {
+                    "codice_fiscale": cf, "pin": pin, "csrf_token": _csrf_from(page.text),
+                }}
+                if header is not None:
+                    kwargs["headers"] = {patient_net.FORWARDED_HEADER: header}
+                if peer is not None:
+                    kwargs["environ_base"] = {"REMOTE_ADDR": peer}
+                return c.post("/login", **kwargs)
+
+            def last_login_ip(cf):
+                c = raw_db()
+                row = c.execute(
+                    "SELECT ip FROM audit_log WHERE username = ? AND action = 'patient_login'"
+                    " ORDER BY rowid DESC LIMIT 1", (cf,)
+                ).fetchone()
+                c.close()
+                return row["ip"] if row else None
+
+            patient_ip29 = "203.0.113.44"
+
+            # 29a. trust OFF - the header is ignored, the row records the peer.
+            # this is the today-behaviour pin: with the flag unset nothing about
+            # this app changes.
+            os.environ.pop(TRUST, None)
+            cf29a = "AAAA010010150001"
+            pin29a = seed_and_issue(cf29a)
+            assert login29(cf29a, pin29a, header=patient_ip29).status_code == 302, \
+                "29a: the login should succeed"
+            assert last_login_ip(cf29a) == "127.0.0.1", \
+                f"29a: with trust off the row must record the peer, got {last_login_ip(cf29a)!r}"
+
+            # 29b. trust ON, loopback peer, valid header - the patient's own
+            # address reaches the audit row. this is the defect being fixed.
+            os.environ[TRUST] = "1"
+            cf29b = "BBBB010010150002"
+            pin29b = seed_and_issue(cf29b)
+            assert login29(cf29b, pin29b, header=patient_ip29).status_code == 302, \
+                "29b: the login should succeed"
+            assert last_login_ip(cf29b) == patient_ip29, \
+                f"29b: behind the tunnel the row must record the patient, got {last_login_ip(cf29b)!r}"
+
+            # 29c. trust ON but the peer is NOT loopback - a forged header from
+            # something that did not come through cloudflared is ignored.
+            cf29c = "CCCC010010150003"
+            pin29c = seed_and_issue(cf29c)
+            assert login29(cf29c, pin29c, header=patient_ip29, peer="198.51.100.9").status_code == 302, \
+                "29c: the login should succeed"
+            assert last_login_ip(cf29c) == "198.51.100.9", \
+                f"29c: a forged header from a non-loopback peer must be ignored, got {last_login_ip(cf29c)!r}"
+
+            # 29d. the throttle buckets by the resolved address. two different
+            # patients behind the tunnel must not share one bucket - that
+            # collapse is what would let 20 failures lock out the whole clinic.
+            reset29 = raw_db()
+            reset29.execute("DELETE FROM patient_login_attempts")
+            reset29.commit()
+            reset29.close()
+
+            cf29d = "DDDD010010150004"
+            pin29d = seed_and_issue(cf29d)
+            for forged in ("198.51.100.21", "198.51.100.22"):
+                login29(cf29d, "000000", header=forged)
+
+            bucket29 = raw_db()
+            buckets = {r["ip"] for r in bucket29.execute(
+                "SELECT DISTINCT ip FROM patient_login_attempts"
+            ).fetchall()}
+            bucket29.close()
+            assert buckets == {"198.51.100.21", "198.51.100.22"}, \
+                f"29d: two sources must occupy two throttle buckets, got {buckets!r}"
+
+            # 29e. trust ON but no header at all - falls back to the peer
+            # rather than recording None or raising.
+            cf29e = "EEEE010010150005"
+            pin29e = seed_and_issue(cf29e)
+            assert login29(cf29e, pin29e).status_code == 302, "29e: the login should succeed"
+            assert last_login_ip(cf29e) == "127.0.0.1", \
+                f"29e: a missing header must fall back to the peer, got {last_login_ip(cf29e)!r}"
+        finally:
+            if saved29 is None:
+                os.environ.pop(TRUST, None)
+            else:
+                os.environ[TRUST] = saved29
+
+        assert os.environ.get(patient_net.TRUST_ENV_VAR) is None, \
+            "29: the trust flag must not leak out of section 29"
 
     print("selftest ok")
 
