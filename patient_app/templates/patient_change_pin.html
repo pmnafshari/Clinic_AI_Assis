@@ -1,7 +1,11 @@
 {% extends "patient_base.html" %}
 {% block content %}
 <h1 class="mb-3">{{ t('change_heading', lang) }}</h1>
+{% if patient.must_change_pin %}
 <p class="text-secondary mb-4">{{ t('change_body', lang) }}</p>
+{% else %}
+<p class="text-secondary mb-4">{{ t('change_body_voluntary', lang) }}</p>
+{% endif %}
 <form method="post" action="{{ url_for('patient.change_pin') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if not patient.must_change_pin %}

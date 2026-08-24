@@ -43,6 +43,13 @@ STRINGS = {
         "it": "Per la tua sicurezza, scegli un nuovo PIN prima di continuare.",
         "en": "For your security, choose a new PIN before continuing.",
     },
+    # two bodies because one sentence cannot be true for both paths: the forced
+    # change gates the patient, the voluntary one does not, so "prima di
+    # continuare" is simply false when they chose to come here from the menu
+    "change_body_voluntary": {
+        "it": "Scegli un nuovo PIN per il tuo account.",
+        "en": "Choose a new PIN for your account.",
+    },
     "change_cta": {"it": "Salva il nuovo PIN", "en": "Save new PIN"},
     "confirm_label": {"it": "Conferma il PIN", "en": "Confirm PIN"},
     "logout_cta": {"it": "Esci", "en": "Sign out"},

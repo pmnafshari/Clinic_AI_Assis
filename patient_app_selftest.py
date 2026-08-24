@@ -1648,6 +1648,70 @@ def selftest():
         assert os.environ.get(patient_net.TRUST_ENV_VAR) is None, \
             "29: the trust flag must not leak out of section 29"
 
+        # 30. GUI-11 - the forced and voluntary change-PIN screens must not
+        # share a body sentence. the forced path gates the patient, so "prima
+        # di continuare" is true; the voluntary path does not, so it is not.
+        # strings imported, never retyped, so a wording change cannot leave
+        # this test asserting copy the app no longer uses.
+        from patient_app.strings import STRINGS as S30
+
+        cf30 = "RSSM800010150130"
+        pin30 = seed_and_issue(cf30)
+
+        for lang30 in ("it", "en"):
+            forced_body = S30["change_body"][lang30]
+            voluntary_body = S30["change_body_voluntary"][lang30]
+            heading30 = S30["change_heading"][lang30]
+
+            # forced: must_change_pin is set straight after issue
+            client30, _ = sign_in(cf30, pin30)
+            client30.get(f"/lang/{lang30}", follow_redirects=True)
+            forced_page = client30.get("/change-pin")
+            assert forced_page.status_code == 200, f"30 [{lang30}]: forced change-pin should render"
+            assert forced_body in forced_page.text, \
+                f"30 [{lang30}]: the forced screen must carry the gated wording"
+            assert voluntary_body not in forced_page.text, \
+                f"30 [{lang30}]: the forced screen must not carry the voluntary wording"
+            assert heading30 in forced_page.text, \
+                f"30 [{lang30}]: the shared heading must render on the forced path"
+
+            # clear the flag by completing the change, then come back voluntarily
+            new_pin30 = "24681357"
+            done30 = client30.post("/change-pin", data={
+                "pin": new_pin30, "confirm": new_pin30,
+                "csrf_token": _csrf_from(forced_page.text),
+            })
+            assert done30.status_code == 302, f"30 [{lang30}]: the forced change should complete"
+
+            voluntary_page = client30.get("/change-pin")
+            assert voluntary_page.status_code == 200, \
+                f"30 [{lang30}]: voluntary change-pin should render"
+            assert voluntary_body in voluntary_page.text, \
+                f"30 [{lang30}]: the voluntary screen must carry its own wording"
+            assert forced_body not in voluntary_page.text, \
+                f"30 [{lang30}]: the voluntary screen must NOT claim the change gates anything"
+            assert heading30 in voluntary_page.text, \
+                f"30 [{lang30}]: the shared heading must render on the voluntary path too"
+
+            # re-arm for the next language pass
+            pin30 = seed_and_issue(cf30)
+
+        # the specific clause the UAT flagged on 2026-08-08, in both languages
+        client30b, _ = sign_in(cf30, pin30)
+        client30b.get("/lang/it", follow_redirects=True)
+        vp_it = client30b.get("/change-pin")
+        client30b.post("/change-pin", data={
+            "pin": "35792468", "confirm": "35792468",
+            "csrf_token": _csrf_from(vp_it.text),
+        })
+        vol_it = client30b.get("/change-pin").text
+        assert "prima di continuare" not in vol_it, \
+            "30: the voluntary italian screen must not say 'prima di continuare'"
+        client30b.get("/lang/en", follow_redirects=True)
+        vol_en = client30b.get("/change-pin").text
+        assert "before continuing" not in vol_en, \
+            "30: the voluntary english screen must not say 'before continuing'"
+
     print("selftest ok")
 
 
