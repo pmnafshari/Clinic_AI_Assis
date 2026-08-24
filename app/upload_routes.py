@@ -128,6 +128,26 @@ def submit_dashboard():
     return redirect(url_for("dashboard.index"))
 
 
+def _intake_state(row):
+    # needs_review is tested BEFORE allowed on purpose. a file that fails
+    # extraction is still an authorised upload, so allowed=1, and the old
+    # ordering is exactly what made a failed note render the Sorted badge.
+    # the needs_review test matches a path SEGMENT, not a substring - a
+    # patient file legitimately named needs_review.txt must not false-positive.
+    target = row["target"] or ""
+    if row["action"] == "queue_upload":
+        return "queued"
+    if target.startswith("routed by watcher:"):
+        return "external"
+    if "needs_review" in Path(target).parts[:-1]:
+        return "needs_review"
+    if row["allowed"]:
+        return "sorted"
+    if row["action"] == "sync_note":
+        return "not_searchable"
+    return "rejected"
+
+
 def _user_recent_intake(conn, username, limit=10):
     # per-user scoping (D-19) - reads audit_log only, never the shared
     # operational log, which has no user field and would leak clinic-wide
@@ -137,7 +157,7 @@ def _user_recent_intake(conn, username, limit=10):
     # backfill row out of a per-user list structurally (D-11), independent
     # of what any real account happens to be named.
     rows = conn.execute(
-        "SELECT ts, target, action, allowed FROM audit_log"
+        "SELECT ts, target, action, allowed, reason FROM audit_log"
         " WHERE username = ? AND action IN ('queue_upload', 'upload_file', 'sync_note')"
         " AND role != 'system' AND target IS NOT NULL"
         " ORDER BY id DESC LIMIT ?",
@@ -157,7 +177,14 @@ def _user_recent_intake(conn, username, limit=10):
         if name in seen:
             continue
         seen.add(name)
-        collapsed.append(row)
+        collapsed.append({
+            "ts": row["ts"],
+            "target": row["target"],
+            "action": row["action"],
+            "allowed": row["allowed"],
+            "state": _intake_state(row),
+            "reason": row["reason"],
+        })
         if len(collapsed) == limit:
             break
     return collapsed

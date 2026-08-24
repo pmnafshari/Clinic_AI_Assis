@@ -9,6 +9,7 @@ from pathlib import Path
 
 from werkzeug.security import generate_password_hash
 
+import sort_files
 from auth import log_audit
 import app.db as app_db
 import app.upload_routes as upload_routes
@@ -328,6 +329,52 @@ def selftest():
         resp11d = client11d.get("/upload/recent")
         assert resp11d.status_code == 200
         assert "Rejected" in resp11d.text, "11d: a rejected upload should still show Rejected"
+
+        # 11f - GUI-10. a note filed to needs_review is an AUTHORISED upload
+        # (allowed=1), so before this phase it fell through to Sorted.
+        _seed_user(db_path, "unote5", "goodpass", "assistant")
+        client11f = _login(app, "unote5", "goodpass")
+        log_audit(conn11, "unote5", "assistant", "upload_file",
+                  "sorted/needs_review/broken11f.txt", allowed=1,
+                  reason=sort_files.REASON_EXTRACT_FAILED)
+        resp11f = client11f.get("/upload/recent")
+        assert resp11f.status_code == 200
+        assert "Needs Review" in resp11f.text, "11f: a needs_review note should show Needs Review"
+        assert "Sorted" not in resp11f.text, "11f: a needs_review note must never show Sorted"
+        assert sort_files.REASON_EXTRACT_FAILED in resp11f.text, \
+            "11f: the badge should carry the stored reason as a tooltip"
+
+        # 11g - an older row predating the reason column still reads honestly
+        _seed_user(db_path, "unote6", "goodpass", "assistant")
+        client11g = _login(app, "unote6", "goodpass")
+        log_audit(conn11, "unote6", "assistant", "upload_file",
+                  "sorted/needs_review/legacy11g.txt", allowed=1)
+        resp11g = client11g.get("/upload/recent")
+        assert "Needs Review" in resp11g.text, "11g: a reasonless needs_review row still shows Needs Review"
+        assert "Sorted" not in resp11g.text, "11g: a reasonless needs_review row must never show Sorted"
+        assert "open the file to see why" in resp11g.text, \
+            "11g: a NULL reason should fall back to the generic tooltip, never an empty title"
+
+        # 11h - the watcher won the race, so provenance is unknown. an honest
+        # neutral beats a false success (D-10/D-12).
+        _seed_user(db_path, "unote7", "goodpass", "assistant")
+        client11h = _login(app, "unote7", "goodpass")
+        log_audit(conn11, "unote7", "assistant", "upload_file",
+                  "routed by watcher: raced11h.txt", allowed=1)
+        resp11h = client11h.get("/upload/recent")
+        assert "External" in resp11h.text, "11h: a watcher-raced row should show External"
+        assert "Sorted" not in resp11h.text, "11h: a watcher-raced row must never show Sorted"
+
+        # 11i - the needs_review test matches a path SEGMENT. a patient file
+        # legitimately named needs_review.txt filed under a CF is Sorted.
+        _seed_user(db_path, "unote8", "goodpass", "assistant")
+        client11i = _login(app, "unote8", "goodpass")
+        log_audit(conn11, "unote8", "assistant", "upload_file",
+                  f"sorted/{VALID_CF}/notes/needs_review.txt", allowed=1)
+        resp11i = client11i.get("/upload/recent")
+        assert "Sorted" in resp11i.text, \
+            "11i: a file merely NAMED needs_review.txt must not trip the segment test"
+        assert "Needs Review" not in resp11i.text, "11i: filename must not false-positive as needs_review"
 
         # 11e - D-11/D-19 leak guard. a plain `username = ?` filter alone
         # would leak watcher rows to any account literally named "system",

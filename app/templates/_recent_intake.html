@@ -6,11 +6,15 @@
       <small class="text-secondary d-block">{{ row.ts }}</small>
       <span>{{ row.target }}</span>
     </div>
-    {% if row.action == 'queue_upload' %}
+    {% if row.state == 'queued' %}
     <span class="badge text-bg-secondary">Queued</span>
-    {% elif row.allowed %}
+    {% elif row.state == 'external' %}
+    <span class="badge text-bg-secondary">External</span>
+    {% elif row.state == 'needs_review' %}
+    <span class="badge text-bg-dark" title="{{ row.reason or 'open the file to see why' }}">Needs Review</span>
+    {% elif row.state == 'sorted' %}
     <span class="badge text-bg-primary">Sorted</span>
-    {% elif row.action == 'sync_note' %}
+    {% elif row.state == 'not_searchable' %}
     <span class="badge text-bg-warning">Not searchable</span>
     {% else %}
     <span class="badge text-bg-danger">Rejected</span>
