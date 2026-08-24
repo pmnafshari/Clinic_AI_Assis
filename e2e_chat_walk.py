@@ -20,6 +20,7 @@ a finally block, so it never touches fixtures another walk is holding.
 """
 
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -31,7 +32,10 @@ from eval_chat import date_variants
 from patient_app.strings import t
 
 STAFF_URL = "http://127.0.0.1:5000"
-PATIENT_URL = "http://127.0.0.1:5001"
+# overridable so the SAME 13 steps run locally and over a tunnel - a second
+# copy of this script would drift from this one. staff_url deliberately does
+# not move: it is only the pre-flight check, and the staff app is never exposed.
+PATIENT_URL = os.environ.get("PATIENT_BASE_URL", "http://127.0.0.1:5001")
 DB_PATH = "db/clinic.sqlite"
 
 # codici fiscali must match ^[A-Z]{4}[0-9]{12}$ - ZZE* keeps this script's rows
