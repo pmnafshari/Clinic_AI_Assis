@@ -474,7 +474,8 @@ def selftest():
                 action TEXT NOT NULL,
                 target TEXT,
                 allowed INTEGER NOT NULL,
-                ip TEXT
+                ip TEXT,
+                reason TEXT
             );
         """)
         conn.commit()

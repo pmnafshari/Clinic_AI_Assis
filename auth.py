@@ -21,7 +21,7 @@ def authorize(role, action):
     return action in PERMISSIONS.get(role, set())
 
 
-def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None):
+def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, reason=None):
     # ip: the source address behind the row. the patient surface sets it on
     # login, logout, chat and scope-violation rows; staff paths still pass None.
     # it is resolved through patient_app/net.py, so it is the patient's own
@@ -29,12 +29,16 @@ def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None):
     # header - otherwise it is the socket peer, which behind a tunnel is the
     # tunnel itself. evidence either way, never identity.
     # a sweep with no source recorded is invisible after the fact
+    # reason: a closed-vocabulary category explaining why a file was routed
+    # where it was, surfaced to staff on the intake list. NEVER raw exception
+    # text - extract_note's ValueError can carry a codice fiscale. sort_files
+    # owns the vocabulary.
     if ts is None:
         ts = datetime.now().isoformat()
     conn.execute(
-        "INSERT INTO audit_log (ts, username, role, action, target, allowed, ip)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (ts, username, role, action, target, allowed, ip),
+        "INSERT INTO audit_log (ts, username, role, action, target, allowed, ip, reason)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (ts, username, role, action, target, allowed, ip, reason),
     )
     conn.commit()
 
@@ -118,6 +122,34 @@ def selftest():
 
         audit_columns = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)")}
         assert "ip" in audit_columns, "7: audit_log should have an ip column"
+
+        # 8. log_audit takes an optional reason (GUI-10). it is the last
+        # parameter on purpose - anywhere earlier would shift ts/ip for the
+        # positional callers above.
+        log_audit(conn, "u2", "assistant", "upload_file", "sorted/needs_review/x.txt",
+                  allowed=1, reason="the model could not read this note")
+        reason_row = conn.execute(
+            "SELECT * FROM audit_log WHERE username = 'u2' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert reason_row["reason"] == "the model could not read this note", \
+            "8: reason should round-trip exactly"
+
+        log_audit(conn, "u3", "assistant", "upload_file", "sorted/CF/notes/y.txt", allowed=1)
+        no_reason_row = conn.execute(
+            "SELECT * FROM audit_log WHERE username = 'u3' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert no_reason_row["reason"] is None, "8: a call with no reason= must store NULL"
+
+        # the new trailing parameter must not have shifted ip for a caller
+        # using the pre-existing positional+ip= style
+        log_audit(conn, "u4", "patient", "patient_pin_check", "CF", allowed=0, ip="198.51.100.7")
+        shift_row = conn.execute(
+            "SELECT * FROM audit_log WHERE username = 'u4' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert shift_row["ip"] == "198.51.100.7", "8: adding reason must not shift ip"
+        assert shift_row["reason"] is None, "8: that caller supplied no reason"
+
+        assert "reason" in audit_columns, "8: audit_log should have a reason column"
 
     print("selftest passed")
 

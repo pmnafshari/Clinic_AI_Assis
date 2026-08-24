@@ -68,7 +68,8 @@ def init_db(db_path):
             action TEXT NOT NULL,
             target TEXT,
             allowed INTEGER NOT NULL,
-            ip TEXT
+            ip TEXT,
+            reason TEXT
         );
         CREATE TABLE IF NOT EXISTS sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,6 +90,7 @@ def init_db(db_path):
     """)
     _ensure_lockout_columns(conn)
     _ensure_audit_ip_column(conn)
+    _ensure_audit_reason_column(conn)
     conn.commit()
 
     # patient credential/session tables. deferred import because patient_auth
@@ -116,6 +118,14 @@ def _ensure_audit_ip_column(conn):
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
     if "ip" not in existing:
         conn.execute("ALTER TABLE audit_log ADD COLUMN ip TEXT")
+
+
+def _ensure_audit_reason_column(conn):
+    # same reason as the ip column above - the live clinic database predates
+    # this one too, and CREATE TABLE IF NOT EXISTS never reaches it
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
+    if "reason" not in existing:
+        conn.execute("ALTER TABLE audit_log ADD COLUMN reason TEXT")
 
 
 def upsert_note_sql(note, source_path, conn):
@@ -517,6 +527,50 @@ def selftest():
         _ensure_audit_ip_column(migrated)
         legacy_columns_again = {row["name"] for row in migrated.execute("PRAGMA table_info(audit_log)")}
         assert legacy_columns_again == legacy_columns, "1: re-running the ip migration changed columns"
+
+        # audit_log.reason migrates the same way, on a database that already
+        # has ip but predates reason - the realistic shape of this machine's
+        # db/clinic.sqlite after phase 22 and before phase 23
+        legacy2_path = str(Path(tmp) / "legacy_reason.sqlite")
+        legacy2_conn = sqlite3.connect(legacy2_path)
+        legacy2_conn.execute("""
+            CREATE TABLE audit_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ts TEXT NOT NULL,
+                username TEXT NOT NULL,
+                role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                target TEXT,
+                allowed INTEGER NOT NULL,
+                ip TEXT
+            )
+        """)
+        legacy2_conn.execute(
+            "INSERT INTO audit_log (ts, username, role, action, target, allowed, ip)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?)",
+            ("2021-02-02T00:00:00", "pre23_user", "assistant", "upload_file",
+             "sorted/needs_review/old.txt", 1, "127.0.0.1"),
+        )
+        legacy2_conn.commit()
+        legacy2_conn.close()
+
+        migrated2 = init_db(legacy2_path)
+        legacy2_columns = {row["name"] for row in migrated2.execute("PRAGMA table_info(audit_log)")}
+        assert "reason" in legacy2_columns, "1: legacy audit_log did not gain the reason column"
+
+        old_row2 = migrated2.execute(
+            "SELECT * FROM audit_log WHERE username = 'pre23_user'"
+        ).fetchone()
+        assert old_row2 is not None, "1: pre-existing audit_log row was lost by the reason migration"
+        assert old_row2["target"] == "sorted/needs_review/old.txt", \
+            "1: pre-existing row's other columns must be untouched by the reason migration"
+        assert old_row2["allowed"] == 1, "1: pre-existing row's allowed must survive the reason migration"
+        assert old_row2["ip"] == "127.0.0.1", "1: pre-existing row's ip must survive the reason migration"
+        assert old_row2["reason"] is None, "1: pre-existing row's new reason column should be NULL"
+
+        _ensure_audit_reason_column(migrated2)
+        legacy2_columns_again = {row["name"] for row in migrated2.execute("PRAGMA table_info(audit_log)")}
+        assert legacy2_columns_again == legacy2_columns, "1: re-running the reason migration changed columns"
 
         # users.role is DB-enforced to exactly the three fixed roles
         try:

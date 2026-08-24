@@ -80,7 +80,8 @@ def build_db(patients):
             action TEXT NOT NULL,
             target TEXT,
             allowed INTEGER NOT NULL,
-            ip TEXT
+            ip TEXT,
+            reason TEXT
         );
     """)
     for i, p in enumerate(patients):
