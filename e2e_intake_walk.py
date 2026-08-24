@@ -1,4 +1,4 @@
-"""staff intake walk - six notes through the real upload path, unstubbed model.
+"""staff intake walk - seven notes through the real upload path, unstubbed model.
 
 closes FLOW-2: eval_notes.py scores the model against a jsonl file and the fast
 suite stubs it entirely. neither has ever put a note through
@@ -47,7 +47,8 @@ CF_FILL = "ZZIB850010150402"
 CF_EXT = "ZZIC850010150403"
 CF_SEAL = "ZZID850010150404"
 CF_IGIENE = "ZZIE850010150405"
-ALL_CFS = (CF_RCT, CF_FILL, CF_EXT, CF_SEAL, CF_IGIENE)
+CF_IGIENE_MULTI = "ZZIF850010150406"
+ALL_CFS = (CF_RCT, CF_FILL, CF_EXT, CF_SEAL, CF_IGIENE, CF_IGIENE_MULTI)
 
 # case 6 carries no codice fiscale on purpose - extract_note raises and
 # sort_files routes it to needs_review
@@ -62,6 +63,11 @@ NOTES = [
     # SAFE - what must never happen is it silently becoming a different
     # treatment. asserted as a membership test, not an equality one.
     ("zzi_igiene.txt", f"{CF_IGIENE} Davide Costa, igiene 43, fu 1mo", None),
+    # the FAILING shape. igiene is context-dependent: it maps correctly alone
+    # and fails alongside another procedure. mirrors notes_test.jsonl row 12.
+    ("zzi_igiene_multi.txt",
+     f"{CF_IGIENE_MULTI} Giulia Fontana, comp 20, igiene 43, paid 100 for comp 20, fu 3wk",
+     None),
     (BAD_NOTE_NAME, "qwtpz nessun codice qui, solo rumore 8834 %%%", None),
 ]
 
@@ -206,7 +212,7 @@ def walk(browser, note_paths):
 
     # assert the server actually took them, rather than trusting the click
     posted = upload_audit_count(time.time() + 60.0, len(note_paths))
-    check("2 six notes reached the server",
+    check(f"2 all {len(note_paths)} notes reached the server",
           posted == len(note_paths),
           f"{posted}/{len(note_paths)} upload_file audit rows")
 
@@ -228,6 +234,28 @@ def walk(browser, note_paths):
     check("4 igiene did not become a different treatment",
           safe,
           f"got {ig} (prophy = fixed, igiene = known defect, anything else = unsafe)")
+
+    # case 5b: the FAILING igiene shape. case 5 above uses a single-procedure
+    # note, which the model gets right - so on its own it is not igiene
+    # coverage. this is the multi-procedure form that actually reproduces.
+    igm = procedures_for(CF_IGIENE_MULTI, deadline)
+    igm_l = [p.lower() for p in (igm or [])]
+
+    # hard safety property: whatever happens to the igiene term, the OTHER
+    # procedure must survive intact and no third treatment may appear
+    check("5b multi-procedure note kept its other procedure",
+          igm is not None and "comp 20" in igm_l and len(igm_l) == 2,
+          f"got {igm}")
+
+    # characterisation: this PINS the known defect. it is expected to fail the
+    # mapping. if this check fails, igiene may have been FIXED - verify against
+    # notes_test.jsonl row 12 and update the records rather than assuming a
+    # regression.
+    reproduced = any(p.startswith("igiene") for p in igm_l)
+    check("5c known igiene defect still reproduces (pinned)",
+          reproduced,
+          f"got {igm} - if this FAILS, igiene may be fixed; re-check eval row 12 "
+          f"and update the docs rather than treating it as a regression")
 
     # case 6: unreadable note -> needs_review -> phase 23's badge
     row = needs_review_row(deadline)
