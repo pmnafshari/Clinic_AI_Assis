@@ -8,6 +8,23 @@ from dental_notes_schema import CF_PATTERN
 from extract_note import extract_note, OllamaUnreachable
 from action_log import log_action
 
+# the reason carried into audit_log and shown to staff on the intake list.
+# a CLOSED vocabulary on purpose: extract_note's ValueError text can contain a
+# codice fiscale (dental_notes_schema raises "got {v!r}"), and this value is
+# stored per-user and rendered into HTML. log.txt keeps the detailed reason;
+# this one never interpolates an exception.
+REASON_EXTRACT_FAILED = "the model could not read this note"
+REASON_MODEL_UNREACHABLE = "the local model was unreachable"
+REASON_SYMLINK = "skipped: the file was a shortcut, not a real file"
+REASON_UNSUPPORTED_TYPE = "unsupported file type"
+
+NEEDS_REVIEW_REASONS = frozenset({
+    REASON_EXTRACT_FAILED,
+    REASON_MODEL_UNREACHABLE,
+    REASON_SYMLINK,
+    REASON_UNSUPPORTED_TYPE,
+})
+
 
 def _move(src, dest_dir, reason, sorted_root, log_path=None):
     dest_dir.mkdir(parents=True, exist_ok=True)
@@ -33,29 +50,40 @@ def find_cf_in_name(filename):
     return None
 
 
-def route_note(src, sorted_root, log_path=None, extract=extract_note):
+def route_note_reasoned(src, sorted_root, log_path=None, extract=extract_note):
+    # returns (dest, reason). reason is None on the success path and a constant
+    # from NEEDS_REVIEW_REASONS otherwise. the log_path reason stays detailed.
     # symlink guard — never follow
     if src.is_symlink():
-        return _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        return dest, REASON_SYMLINK
     try:
         note = extract(src.read_text())
         cf = note.codice_fiscale  # already validated by DentalNote
         dest = _move(src, sorted_root / cf / "notes", "matched CF", sorted_root, log_path)
         dest.with_suffix(".json").write_text(note.model_dump_json())
-        return dest
+        return dest, None
     except OllamaUnreachable as e:
-        return _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
+        return dest, REASON_MODEL_UNREACHABLE
     except ValueError as e:
-        return _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
+        return dest, REASON_EXTRACT_FAILED
 
 
-def route_file(src, sorted_root, log_path=None, extract=extract_note):
+def route_note(src, sorted_root, log_path=None, extract=extract_note):
+    return route_note_reasoned(src, sorted_root, log_path, extract=extract)[0]
+
+
+def route_file_reasoned(src, sorted_root, log_path=None, extract=extract_note):
+    # returns (dest, reason). see route_note_reasoned.
     # symlink guard — never follow, for any file type
     if src.is_symlink():
-        return _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        return dest, REASON_SYMLINK
     ext = src.suffix.lower()
     if ext == ".txt":
-        return route_note(src, sorted_root, log_path, extract=extract)
+        return route_note_reasoned(src, sorted_root, log_path, extract=extract)
     cf = find_cf_in_name(src.name)
     if ext == ".xlsx":
         sub = "records"
@@ -64,14 +92,19 @@ def route_file(src, sorted_root, log_path=None, extract=extract_note):
     elif ext in (".jpg", ".jpeg", ".png"):
         sub = "images"
     else:
-        return _move(src, sorted_root / "needs_review", "unknown type", sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", "unknown type", sorted_root, log_path)
+        return dest, REASON_UNSUPPORTED_TYPE
     if cf:
         dest_dir = sorted_root / cf / sub
         reason = f"type:{ext.lstrip('.')} cf:{cf}"
     else:
         dest_dir = sorted_root / sub
         reason = f"type:{ext.lstrip('.')} no-cf"
-    return _move(src, dest_dir, reason, sorted_root, log_path)
+    return _move(src, dest_dir, reason, sorted_root, log_path), None
+
+
+def route_file(src, sorted_root, log_path=None, extract=extract_note):
+    return route_file_reasoned(src, sorted_root, log_path, extract=extract)[0]
 
 
 def selftest():
@@ -228,6 +261,52 @@ def selftest():
         dest18 = route_file(f18, sorted_, log_path, extract=make_extractor(cf=VALID_CF))
         assert dest18 == sorted_ / VALID_CF / "notes" / f18.name, "18: route_file did not forward extract to route_note"
         assert dest18.with_suffix(".json").exists(), "18: route_file's extract seam did not reach route_note's json write"
+
+        # 19. the reasoned variants return a constant from the closed vocabulary,
+        # never interpolated exception text. this is a privacy guard, not style:
+        # dental_notes_schema raises "got {v!r}" carrying the codice fiscale,
+        # and this value reaches audit_log and the staff UI.
+        f19a = root / "note19a.txt"
+        f19a.write_text("patient note")
+        _, r19a = route_note_reasoned(
+            f19a, sorted_, log_path=log_path,
+            extract=make_extractor(error=ValueError(
+                f"model output failed schema validation: codice_fiscale must match, got {VALID_CF!r}")),
+        )
+        assert r19a == REASON_EXTRACT_FAILED, "19: a rejected extraction should report REASON_EXTRACT_FAILED"
+        assert VALID_CF not in r19a, "19: the reason must not carry the codice fiscale from the exception"
+        assert "ValueError" not in r19a, "19: the reason must not carry exception type text"
+        assert "schema validation" not in r19a, "19: the reason must not carry the exception message"
+
+        f19b = root / "note19b.txt"
+        f19b.write_text("patient note")
+        _, r19b = route_note_reasoned(
+            f19b, sorted_, log_path=log_path,
+            extract=make_extractor(error=OllamaUnreachable("offline")),
+        )
+        assert r19b == REASON_MODEL_UNREACHABLE, "19: an unreachable model should report REASON_MODEL_UNREACHABLE"
+
+        f19c = root / "note19c.txt"
+        f19c.write_text("patient note")
+        _, r19c = route_note_reasoned(
+            f19c, sorted_, log_path=log_path, extract=make_extractor(cf=VALID_CF))
+        assert r19c is None, "19: a successful route should report no reason"
+
+        f19d = root / "archive19d.zip"
+        f19d.write_text("not a real zip")
+        _, r19d = route_file_reasoned(f19d, sorted_, log_path)
+        assert r19d == REASON_UNSUPPORTED_TYPE, "19: an unknown type should report REASON_UNSUPPORTED_TYPE"
+
+        link19 = root / "link19.txt"
+        link19.symlink_to(root / "note19a.txt")
+        _, r19e = route_file_reasoned(link19, sorted_, log_path)
+        assert r19e == REASON_SYMLINK, "19: a symlink should report REASON_SYMLINK"
+
+        # every reason is drawn from the closed set or is None - a future branch
+        # cannot quietly introduce a fifth free-text reason
+        for r in (r19a, r19b, r19c, r19d, r19e):
+            assert r is None or r in NEEDS_REVIEW_REASONS, \
+                f"19: reason {r!r} is not in the closed vocabulary"
 
     print("selftest ok")
 

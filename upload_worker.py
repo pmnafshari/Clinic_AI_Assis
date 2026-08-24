@@ -118,8 +118,8 @@ def _process_one(path, username, role):
     conn = storage.connect(DB_PATH)
     try:
         if src.exists():
-            dest = sort_files.route_file(src, SORTED_ROOT, LOG_PATH, extract=_extract)
-            log_audit(conn, username, role, "upload_file", str(dest), allowed=1)
+            dest, reason = sort_files.route_file_reasoned(src, SORTED_ROOT, LOG_PATH, extract=_extract)
+            log_audit(conn, username, role, "upload_file", str(dest), allowed=1, reason=reason)
 
             json_path = dest.with_suffix(".json")
             # the sibling json is what decides syncability - route_note only
@@ -163,6 +163,11 @@ def selftest():
 
     def _fake_unreachable(text):
         raise OllamaUnreachable("offline")
+
+    def _fake_reject(text):
+        # mirrors the real failure: the message carries the codice fiscale
+        raise ValueError(
+            f"model output failed schema validation: codice_fiscale must match, got {VALID_CF!r}")
 
     orig_sorted_root, orig_drop_dir, orig_log_path, orig_db_path, orig_chroma_path, orig_extract = (
         SORTED_ROOT, DROP_DIR, LOG_PATH, DB_PATH, CHROMA_PATH, _extract
@@ -500,6 +505,56 @@ def selftest():
                 ).fetchall()
                 assert not visit8, f"8: {stray.suffix} landed a visits row"
             conn.close()
+
+            # 9. the routing reason reaches audit_log.reason (GUI-10). the
+            # constants are imported, not retyped, so a wording change cannot
+            # silently desynchronise this test from the source.
+            def _wait_reason(username):
+                deadline9 = time.time() + 5.0
+                while time.time() < deadline9:
+                    c = storage.connect(db_path)
+                    r = c.execute(
+                        "SELECT * FROM audit_log WHERE username=? AND action='upload_file'"
+                        " ORDER BY id DESC LIMIT 1",
+                        (username,),
+                    ).fetchone()
+                    c.close()
+                    if r:
+                        return r
+                    time.sleep(0.1)
+                return None
+
+            # 9a. a note the model cannot read
+            _extract = _fake_reject
+            txt9a = root / "note9a.txt"
+            txt9a.write_text("patient note")
+            enqueue(txt9a, "u9a", "assistant")
+            row9a = _wait_reason("u9a")
+            assert row9a is not None, "9a: no upload_file row for the rejected note"
+            assert row9a["reason"] == sort_files.REASON_EXTRACT_FAILED, \
+                f"9a: expected REASON_EXTRACT_FAILED, got {row9a['reason']!r}"
+            assert "needs_review" in row9a["target"], "9a: a rejected note should file under needs_review"
+            assert VALID_CF not in (row9a["reason"] or ""), \
+                "9a: the stored reason must not carry the codice fiscale"
+
+            # 9b. a note that files correctly carries no reason
+            _extract = _fake_ok
+            txt9b = root / "note9b.txt"
+            txt9b.write_text("patient note")
+            enqueue(txt9b, "u9b", "assistant")
+            row9b = _wait_reason("u9b")
+            assert row9b is not None, "9b: no upload_file row for the good note"
+            assert row9b["reason"] is None, \
+                f"9b: a successfully filed note should store NULL reason, got {row9b['reason']!r}"
+
+            # 9c. an unsupported type
+            zip9c = root / "archive9c.zip"
+            zip9c.write_text("not a real zip")
+            enqueue(zip9c, "u9c", "assistant")
+            row9c = _wait_reason("u9c")
+            assert row9c is not None, "9c: no upload_file row for the zip"
+            assert row9c["reason"] == sort_files.REASON_UNSUPPORTED_TYPE, \
+                f"9c: expected REASON_UNSUPPORTED_TYPE, got {row9c['reason']!r}"
     finally:
         storage.get_shared_collection = orig_get_shared_collection
         _process_one = orig_process_one
