@@ -1,4 +1,4 @@
-FROM ./dental_notes.gguf
+FROM ./dental_notes_24Aug.gguf
 
 PARAMETER temperature 0
 PARAMETER top_p 0.9
