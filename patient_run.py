@@ -1,3 +1,4 @@
+import disk_guard
 import tunnel_guard
 from patient_app import create_patient_app
 
@@ -14,5 +15,8 @@ if __name__ == "__main__":
     # app.run, so a refusal never leaves a socket listening on the port. after
     # create_patient_app, so a config error and a construction error cannot
     # mask each other - construction is the cheaper failure.
+    # disk first: encryption at rest is the more fundamental precondition, so
+    # on a misconfigured host it should be the first refusal the operator sees.
+    disk_guard.guard_or_exit()
     tunnel_guard.guard_or_exit(PATIENT_PORT)
     app.run(host="127.0.0.1", port=PATIENT_PORT, threaded=True)
