@@ -620,6 +620,50 @@ assumption at document time.
 recommendation: the tunnel must not carry real patient data until the milestone-level switch
 to offline storage plus encryption has happened. Development and UAT run on fake data only.
 
+**D-14 control 3 — SATISFIED 2026-08-24 (Phase 26). How, and what was rejected.**
+
+The control is met by **full-disk encryption (FileVault) plus an enforced startup guard**.
+`disk_guard.py` runs at both entry points and refuses to boot unless it can prove FileVault is on;
+an output it cannot parse is treated as unknown and refuses, not as probably-fine. The disarm path
+is explicit, named, and prints a loud warning.
+
+Full-disk encryption was chosen because it covers the **entire** data-at-rest surface, which is
+wider than `clinic.sqlite`: `db/chroma/` (embeddings *and* note text, in Chroma's own
+`chroma.sqlite3`), `db/undo_log.jsonl` (codici fiscali, field values, phone numbers), `log.txt`,
+and the filed notes plus their JSON siblings under `sorted/`.
+
+**SQLCipher was rejected.** Measured at Phase 26 planning: 91 `sqlite3.connect()` call sites across
+19 files. It cannot reach `db/chroma/chroma.sqlite3`, which Chroma opens itself, and it leaves
+`sorted/`, `log.txt` and `undo_log.jsonl` in plaintext. Decisively, **T15 (§6.2) already concedes
+the threat an encrypted database would address**: a local process has direct read access to
+`db/clinic.sqlite` and is past that boundary regardless. The application must hold the key, so
+anything running as the application holds it too. High cost, partial coverage, near-zero gain
+against the threat model this document already accepts.
+
+**Application-layer field encryption was rejected.** It breaks `WHERE codice_fiscale = ?`, which is
+the mechanism of binding property 2 — query-layer scoping (§3.2). Trading a proven scoping guarantee
+for defence against an already-accepted threat is a bad exchange.
+
+**Residual, stated rather than implied.** FileVault protects a powered-off machine. A running host
+with the volume unlocked exposes the same data to any local process. This is not a new exposure —
+it is the same boundary T15 already records — but it means "encrypted at rest" here should be read
+as *at rest*, not *while running*.
+
+**Backups are out of scope for this control and are Phase 28's** (DEPLOY-05). An unencrypted backup
+copied off this machine defeats everything above, and belongs with the cutover rehearsal rather than
+split across two phases.
+
+**Binding-property check (§7.1):** none of the five binding properties covers data at rest, so this
+change requires **no §7.2 deviation record**. Property 2 is *referenced* above as the reason
+application-layer encryption was rejected, but it is not modified.
+
+**Data minimisation, same phase.** `log.txt`'s reason column previously carried interpolated
+exception text, and `dental_notes_schema` raises `got {v!r}` — the codice fiscale itself. That
+identifier was already present in the same line's destination path, so the copy inside the exception
+text was duplication rather than diagnosis. The reason column now carries a categorical value from
+the same closed vocabulary `audit_log` has used since Phase 23. The destination path is unchanged:
+recording where a file went is the log's purpose.
+
 ### 5.4 App-layer controls
 
 | Control | What it does | Why it is not outsourced to the tunnel |

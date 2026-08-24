@@ -8,7 +8,9 @@ from dental_notes_schema import CF_PATTERN
 from extract_note import extract_note, OllamaUnreachable
 from action_log import log_action
 
-# the reason carried into audit_log and shown to staff on the intake list.
+# the reason carried into audit_log, shown to staff on the intake list, AND
+# written to log.txt (since phase 26 - it used to get the raw exception text).
+# both sinks now share this vocabulary; do not reintroduce free text on either.
 # a CLOSED vocabulary on purpose: extract_note's ValueError text can contain a
 # codice fiscale (dental_notes_schema raises "got {v!r}"), and this value is
 # stored per-user and rendered into HTML. log.txt keeps the detailed reason;
@@ -55,7 +57,7 @@ def route_note_reasoned(src, sorted_root, log_path=None, extract=extract_note):
     # from NEEDS_REVIEW_REASONS otherwise. the log_path reason stays detailed.
     # symlink guard — never follow
     if src.is_symlink():
-        dest = _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", REASON_SYMLINK, sorted_root, log_path)
         return dest, REASON_SYMLINK
     try:
         note = extract(src.read_text())
@@ -63,11 +65,15 @@ def route_note_reasoned(src, sorted_root, log_path=None, extract=extract_note):
         dest = _move(src, sorted_root / cf / "notes", "matched CF", sorted_root, log_path)
         dest.with_suffix(".json").write_text(note.model_dump_json())
         return dest, None
-    except OllamaUnreachable as e:
-        dest = _move(src, sorted_root / "needs_review", str(e), sorted_root, log_path)
+    except OllamaUnreachable:
+        dest = _move(src, sorted_root / "needs_review", REASON_MODEL_UNREACHABLE, sorted_root, log_path)
         return dest, REASON_MODEL_UNREACHABLE
-    except ValueError as e:
-        dest = _move(src, sorted_root / "needs_review", "extract_note rejected: " + str(e), sorted_root, log_path)
+    except ValueError:
+        # NOT "extract_note rejected: " + str(e). dental_notes_schema raises
+        # "got {v!r}" carrying the codice fiscale, and this string lands in
+        # log.txt in plaintext. the CF is already in the dest column on the
+        # same line, so the interpolation was duplication, not diagnosis.
+        dest = _move(src, sorted_root / "needs_review", REASON_EXTRACT_FAILED, sorted_root, log_path)
         return dest, REASON_EXTRACT_FAILED
 
 
@@ -79,7 +85,7 @@ def route_file_reasoned(src, sorted_root, log_path=None, extract=extract_note):
     # returns (dest, reason). see route_note_reasoned.
     # symlink guard — never follow, for any file type
     if src.is_symlink():
-        dest = _move(src, sorted_root / "needs_review", "symlink skipped", sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", REASON_SYMLINK, sorted_root, log_path)
         return dest, REASON_SYMLINK
     ext = src.suffix.lower()
     if ext == ".txt":
@@ -92,7 +98,7 @@ def route_file_reasoned(src, sorted_root, log_path=None, extract=extract_note):
     elif ext in (".jpg", ".jpeg", ".png"):
         sub = "images"
     else:
-        dest = _move(src, sorted_root / "needs_review", "unknown type", sorted_root, log_path)
+        dest = _move(src, sorted_root / "needs_review", REASON_UNSUPPORTED_TYPE, sorted_root, log_path)
         return dest, REASON_UNSUPPORTED_TYPE
     if cf:
         dest_dir = sorted_root / cf / sub
@@ -140,14 +146,21 @@ def selftest():
         reloaded = DentalNote.model_validate_json(note1_json.read_text())
         assert reloaded.codice_fiscale == VALID_CF, "1b: reloaded json has wrong codice_fiscale"
 
-        # 2. ValueError → needs_review, reason in log
+        # 2. ValueError → needs_review, CATEGORY in log (not the exception text).
+        # changed in phase 26: this used to assert "bad json" reached log.txt.
+        # it did, and so did any codice fiscale the exception carried.
         f2 = root / "note2.txt"
         f2.write_text("bad note")
         route_note(f2, sorted_, log_path=log_path, extract=make_extractor(error=ValueError("bad json")))
         assert (sorted_ / "needs_review" / "note2.txt").exists(), "2: not in needs_review"
         with open(log_path) as f:
             lines = f.readlines()
-        assert any("bad json" in l for l in lines), "2: ValueError reason not logged"
+        note2_lines = [l for l in lines if "note2.txt" in l]
+        assert note2_lines, "2: no log line written for the rejected note"
+        assert any(REASON_EXTRACT_FAILED in l for l in note2_lines), \
+            "2: the categorical reason should be logged"
+        assert not any("bad json" in l for l in note2_lines), \
+            "2: the exception text must NOT reach log.txt"
         assert not (sorted_ / "needs_review" / "note2.json").exists(), "2: needs_review note must not get a json"
 
         # 3. OllamaUnreachable → needs_review, reason in log
@@ -157,7 +170,12 @@ def selftest():
         assert (sorted_ / "needs_review" / "note3.txt").exists(), "3: not in needs_review"
         with open(log_path) as f:
             lines = f.readlines()
-        assert any("offline" in l for l in lines), "3: OllamaUnreachable reason not logged"
+        note3_lines = [l for l in lines if "note3.txt" in l]
+        assert note3_lines, "3: no log line written for the unreachable-model note"
+        assert any(REASON_MODEL_UNREACHABLE in l for l in note3_lines), \
+            "3: the categorical reason should be logged"
+        assert not any("offline" in l for l in note3_lines), \
+            "3: the exception text must NOT reach log.txt"
 
         # 4. collision → second file becomes *_1.txt
         fa = root / "collision.txt"
@@ -171,7 +189,7 @@ def selftest():
         # 4b. collision-renamed note's json follows the renamed stem
         assert (sorted_ / VALID_CF / "notes" / "collision_1.json").exists(), "4b: collision json not renamed to _1"
 
-        # 5. symlink source → needs_review with "symlink skipped" in log
+        # 5. symlink source → needs_review with the symlink category in log
         real = root / "real.txt"
         real.write_text("real content")
         link = root / "symlink_note.txt"
@@ -180,7 +198,7 @@ def selftest():
         assert (sorted_ / "needs_review" / "symlink_note.txt").exists(), "5: symlink not in needs_review"
         with open(log_path) as f:
             lines = f.readlines()
-        assert any("symlink skipped" in l for l in lines), "5: 'symlink skipped' not logged"
+        assert any(REASON_SYMLINK in l for l in lines), "5: the symlink category not logged"
 
         # 6. all non-symlink files stay within sorted root
         sorted_abs = str(sorted_.resolve())
@@ -301,6 +319,29 @@ def selftest():
         link19.symlink_to(root / "note19a.txt")
         _, r19e = route_file_reasoned(link19, sorted_, log_path)
         assert r19e == REASON_SYMLINK, "19: a symlink should report REASON_SYMLINK"
+
+        # 19b. the same guard, but for what reaches DISK. phase 23 proved the
+        # RETURNED reason is clean; this proves log.txt is too. the exception
+        # here carries a codice fiscale exactly the way dental_notes_schema's
+        # "got {v!r}" does.
+        log19 = str(root / "leak_check.log")
+        f19f = root / "note19f.txt"
+        f19f.write_text("patient note")
+        route_note_reasoned(
+            f19f, sorted_, log_path=log19,
+            extract=make_extractor(error=ValueError(
+                f"model output failed schema validation: codice_fiscale must match, got {VALID_CF!r}")),
+        )
+        with open(log19) as f:
+            written = f.read()
+        assert VALID_CF not in written, \
+            "19b: a codice fiscale from exception text must never reach log.txt"
+        assert "schema validation" not in written, \
+            "19b: exception text must not reach log.txt"
+        assert REASON_EXTRACT_FAILED in written, \
+            "19b: the categorical reason must still be logged"
+        assert "note19f.txt" in written, \
+            "19b: the log must still record which file was routed"
 
         # every reason is drawn from the closed set or is None - a future branch
         # cannot quietly introduce a fifth free-text reason
