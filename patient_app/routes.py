@@ -174,7 +174,7 @@ def change_pin():
     conn = get_db()
     cf = g.patient["codice_fiscale"]
     try:
-        patient_auth.change_pin(cf, pin, conn, current_pin=current)
+        patient_auth.change_pin(cf, pin, conn, current_pin=current, ip=net.from_request(request))
     except ValueError as exc:
         reason = str(exc)
         if reason == "short":

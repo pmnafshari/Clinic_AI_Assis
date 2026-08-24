@@ -275,7 +275,7 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     return "ok", _credential(conn, cf)
 
 
-def change_pin(cf, new_pin, conn, now=None, current_pin=None):
+def change_pin(cf, new_pin, conn, now=None, current_pin=None, ip=None):
     # cheap checks first, credential check last - a typo in an unrelated
     # field should not be evaluated against the credential (D-07)
     _require_cf(cf)
@@ -311,7 +311,10 @@ def change_pin(cf, new_pin, conn, now=None, current_pin=None):
         (generate_password_hash(new_pin), cf),
     )
     conn.commit()
-    log_audit(conn, cf, "patient", "patient_change_pin", cf, allowed=1)
+    # a pin change is a security event and its source belongs in the row.
+    # phase 22 scoped attribution to login/logout/chat/scope-violation and this
+    # surface was missed - 44 of 44 rows had a null ip until 2026-08-24.
+    log_audit(conn, cf, "patient", "patient_change_pin", cf, allowed=1, ip=ip)
 
     # every session for this codice fiscale, including the one making the
     # change - the route's job is to hand that session a fresh token (D-09),

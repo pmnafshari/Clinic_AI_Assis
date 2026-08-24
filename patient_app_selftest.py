@@ -1696,6 +1696,32 @@ def selftest():
             # re-arm for the next language pass
             pin30 = seed_and_issue(cf30)
 
+        # 30b. a PIN change is a security event and must record its source.
+        # phase 22 scoped attribution to login/logout/chat/scope-violation;
+        # this surface was missed, and 44 of 44 rows carried a NULL ip until
+        # phase 27's live run surfaced it. asserted at ROUTE level because the
+        # defect was the route not passing the value, not the writer refusing it.
+        cf30b = "RSSM800010150131"
+        pin30b = seed_and_issue(cf30b)
+        client30b_ip, _ = sign_in(cf30b, pin30b)
+        page30b = client30b_ip.get("/change-pin")
+        client30b_ip.post("/change-pin", data={
+            "pin": "46813579", "confirm": "46813579",
+            "csrf_token": _csrf_from(page30b.text),
+        })
+        c30b = raw_db()
+        row30b = c30b.execute(
+            "SELECT ip FROM audit_log WHERE username = ? AND action = 'patient_change_pin'"
+            " ORDER BY id DESC LIMIT 1",
+            (cf30b,),
+        ).fetchone()
+        c30b.close()
+        assert row30b is not None, "30b: no patient_change_pin audit row was written"
+        assert row30b["ip"] is not None, \
+            "30b: a PIN change must record its source address, not NULL"
+        assert row30b["ip"] == "127.0.0.1", \
+            f"30b: the test client's peer is loopback, got {row30b['ip']!r}"
+
         # the specific clause the UAT flagged on 2026-08-08, in both languages
         client30b, _ = sign_in(cf30, pin30)
         client30b.get("/lang/it", follow_redirects=True)
