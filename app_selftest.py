@@ -486,6 +486,35 @@ def selftest():
         assert asst_ctx["intake_chart_labels"] is not None, \
             "18: an assistant may see intake status"
 
+        # 19. GUI-12 - the dashboard is the page most likely to break the
+        # no-CDN rule, because it is the only one that loads a charting
+        # library. section 10 already checks an authenticated page generally;
+        # this pins the dashboard specifically, and pins WHERE chart.js comes
+        # from rather than only that no external asset is present.
+        dash_assets = client_dent.get("/")
+        assert not re.search(
+            r'<(?:script|link)[^>]+(?:src|href)="https?://', dash_assets.text, re.IGNORECASE
+        ), "19: the dashboard must not reference any external http(s) asset"
+        assert b"/static/vendor/chartjs/chart.umd.min.js" in dash_assets.data, \
+            "19: chart.js must be served from /static, vendored offline"
+        assert b"<canvas" in dash_assets.data, \
+            "19: the dashboard should render at least one chart canvas"
+
+        # the undo history is the one pre-existing feature on this page and a
+        # restyle that drops it is a regression, not a redesign
+        assert b"Recent changes" in dash_assets.data, \
+            "19: the undo history must survive the dashboard restyle"
+
+        # withheld, not hidden, at the MARKUP layer this time: an assistant
+        # gets no canvas and no placeholder telling them a figure exists
+        asst_assets = client_asst.get("/")
+        assert b"visits-chart" not in asst_assets.data, \
+            "19: an assistant must not receive the visits canvas"
+        assert b"Visits per month" not in asst_assets.data, \
+            "19: an assistant must not even see the visits card heading"
+        assert b"intake-chart" in asst_assets.data, \
+            "19: an assistant may see intake status"
+
         # 17. CR-05 - the staff app's session cookie must not be left at
         # Flask's default, and must differ from the patient app's own choice.
         # importing patient_app here is fine - the binding rule is about what

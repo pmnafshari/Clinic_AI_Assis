@@ -118,69 +118,68 @@
 <script>
   // every value here is rendered by the server. the template computes nothing:
   // dashboard_routes shapes the label/value lists and decides, per role,
-  // whether a dataset exists at all.
+  // whether a dataset exists at all. a role that did not receive a dataset
+  // gets no canvas and no init code for it - not hidden code, none.
   (function () {
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = '#5a6675';
 
-    var intake = document.getElementById('intake-chart');
-    if (intake) {
-      // one colour per state, taken from the badge class phase 23 assigned it.
-      // the binding rule is that no two FAILURE domains share a hue - Needs
-      // Review, Not searchable and Rejected are all distinct below. Queued and
-      // External share grey because phase 23 gives them the same badge class,
-      // and neither is a failure.
-      new Chart(intake, {
-        type: 'doughnut',
-        data: {
-          labels: {{ intake_chart_labels | tojson }},
-          datasets: [{
-            data: {{ intake_chart_values | tojson }},
-            backgroundColor: [
-              '#2b6cb0',  // Sorted          - text-bg-primary
-              '#212529',  // Needs Review    - text-bg-dark
-              '#ffc107',  // Not searchable  - text-bg-warning
-              '#6c757d',  // Queued          - text-bg-secondary
-              '#adb5bd',  // External        - text-bg-secondary, lightened
-              '#c53030'   // Rejected        - text-bg-danger
-            ],
-            borderWidth: 0
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          cutout: '62%',
-          plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 14 } } }
-        }
-      });
-    }
+    {% if show_intake %}
+    // one colour per state, taken from the badge class phase 23 assigned it.
+    // the binding rule is that no two FAILURE domains share a hue - Needs
+    // Review, Not searchable and Rejected are all distinct below. Queued and
+    // External share grey because phase 23 gives them the same badge class,
+    // and neither is a failure.
+    new Chart(document.getElementById('intake-chart'), {
+      type: 'doughnut',
+      data: {
+        labels: {{ intake_chart_labels | tojson }},
+        datasets: [{
+          data: {{ intake_chart_values | tojson }},
+          backgroundColor: [
+            '#2b6cb0',  // Sorted          - text-bg-primary
+            '#212529',  // Needs Review    - text-bg-dark
+            '#ffc107',  // Not searchable  - text-bg-warning
+            '#6c757d',  // Queued          - text-bg-secondary
+            '#adb5bd',  // External        - text-bg-secondary, lightened
+            '#c53030'   // Rejected        - text-bg-danger
+          ],
+          borderWidth: 0
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '62%',
+        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 14 } } }
+      }
+    });
+    {% endif %}
 
-    var visits = document.getElementById('visits-chart');
-    if (visits) {
-      new Chart(visits, {
-        type: 'bar',
-        data: {
-          labels: {{ visit_months | tojson }},
-          datasets: [{
-            label: 'Visits',
-            data: {{ visit_counts | tojson }},
-            backgroundColor: '#2b6cb0',
-            borderRadius: 6,
-            maxBarThickness: 42
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: { grid: { display: false } },
-            y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#e3e8ef' } }
-          }
+    {% if show_clinical %}
+    new Chart(document.getElementById('visits-chart'), {
+      type: 'bar',
+      data: {
+        labels: {{ visit_months | tojson }},
+        datasets: [{
+          label: 'Visits',
+          data: {{ visit_counts | tojson }},
+          backgroundColor: '#2b6cb0',
+          borderRadius: 6,
+          maxBarThickness: 42
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false } },
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#e3e8ef' } }
         }
-      });
-    }
+      }
+    });
+    {% endif %}
   })();
 </script>
 {% endif %}
