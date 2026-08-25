@@ -585,6 +585,31 @@ def selftest():
         assert b"offcanvas-lg" not in login_shell.data, \
             "20: a chromeless page must not carry the offcanvas panel"
 
+        # 21. GUI-13/GUI-14 - the two rules phase 30 established, pinned so
+        # they cannot silently regress. the horizontal-scroll measurement
+        # itself needs a browser and lives in shot_pages.py; what belongs here
+        # is the markup that measurement depends on.
+        for path, who in (("/", client_dent), ("/patients", client_dent)):
+            page = who.get(path)
+            assert not re.search(rb'<[^>]+\sstyle="', page.data), \
+                f"21: {path} must carry no inline style= attribute"
+
+        adm_tbl = client_adm.get("/admin/users")
+        pat_tbl = client_dent.get("/patients")
+        assert b"table-responsive" in pat_tbl.data, \
+            "21: the patients table must be wrapped so it scrolls inside its card"
+        assert b"table-responsive" in adm_tbl.data, \
+            "21: the staff-accounts table must be wrapped too"
+
+        # a filename is user-supplied and unbounded. without min-w-0 the flex
+        # child cannot shrink and one long name drags the page sideways -
+        # measured at 1576px on a 390px viewport before this was fixed.
+        intake = client_dent.get("/upload/recent")
+        assert b"min-w-0" in intake.data, \
+            "21: the intake filename cell must be allowed to shrink"
+        assert b"text-break" in intake.data, \
+            "21: the intake filename must be allowed to break"
+
         # 17. CR-05 - the staff app's session cookie must not be left at
         # Flask's default, and must differ from the patient app's own choice.
         # importing patient_app here is fine - the binding rule is about what
