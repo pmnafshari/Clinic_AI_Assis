@@ -68,14 +68,50 @@ h1, h2, h3, h4, h5, h6 {
 .gap-6 { gap: 2rem; }
 
 /* app shell layout */
+/* below lg the rail is a bootstrap offcanvas panel; at lg and up it is the
+   fixed 240px rail phase 29 shipped. the two blocks below are split on that
+   breakpoint and must stay split. */
 .app-sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: 240px;
   background: var(--app-surface);
   border-right: 1px solid var(--app-border);
+}
+
+/* offcanvas panel width below the breakpoint - wider than the desktop rail so
+   touch targets are comfortable and a backdrop strip stays tappable at 390px */
+.app-sidebar.offcanvas-lg {
+  --bs-offcanvas-width: 280px;
+}
+
+@media (min-width: 992px) {
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 240px;
+    /* LANDMINE: bootstrap compiles
+         @media (min-width:992px){.offcanvas-lg{background-color:transparent!important}}
+       which beats the plain declaration above and leaves the rail transparent
+       against the grey ground. !important here is the only thing that wins. */
+    background: var(--app-surface) !important;
+  }
+}
+
+/* the below-breakpoint bar carrying the hamburger. static in flow, never
+   fixed, so it cannot overlay page content. */
+.app-topbar {
+  height: 56px;
+  padding: 0 0.75rem;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border);
+}
+
+.app-topbar-toggle {
+  color: #5a6675;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.25rem 0.5rem;
+  text-decoration: none;
 }
 
 .app-sidebar-brand {
@@ -115,8 +151,20 @@ h1, h2, h3, h4, h5, h6 {
   padding: 3rem 2rem;
 }
 
-.content-shifted {
-  margin-left: 240px;
+/* LANDMINE: this was unconditional. below the breakpoint it left a 240px void
+   with no rail in it - a second, independent cause of horizontal overflow.
+   fixing only the sidebar leaves the 390px measurement red. */
+@media (min-width: 992px) {
+  .content-shifted {
+    margin-left: 240px;
+  }
+}
+
+/* 2rem of side padding leaves ~326px usable at 390px */
+@media (max-width: 991.98px) {
+  .content {
+    padding: 1.5rem 1rem;
+  }
 }
 
 /* keeps the dashboard readable on a wide clinic monitor instead of

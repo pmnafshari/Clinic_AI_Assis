@@ -1,5 +1,15 @@
-<aside class="app-sidebar d-flex flex-column p-3">
-  <div class="app-sidebar-brand d-flex align-items-center gap-2">
+<aside class="app-sidebar offcanvas-lg offcanvas-start d-flex flex-column p-3"
+       id="app-nav" tabindex="-1" aria-label="Navigation">
+  <div class="offcanvas-header d-lg-none p-0 mb-3">
+    <div class="app-sidebar-brand d-flex align-items-center gap-2">
+      <i class="bi bi-clipboard2-pulse fs-5"></i>
+      <span class="h5 mb-0">Dental AI</span>
+    </div>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+            data-bs-target="#app-nav" aria-label="Close navigation"></button>
+  </div>
+
+  <div class="app-sidebar-brand d-none d-lg-flex align-items-center gap-2">
     <i class="bi bi-clipboard2-pulse fs-5"></i>
     <span class="h5 mb-0">Dental AI</span>
   </div>

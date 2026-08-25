@@ -12,6 +12,16 @@
   {% if not chromeless %}
     {% include "_sidebar.html" %}
   {% endif %}
+  {% if not chromeless %}
+    <div class="app-topbar d-lg-none d-flex align-items-center gap-2">
+      <button class="btn btn-link app-topbar-toggle" type="button"
+              data-bs-toggle="offcanvas" data-bs-target="#app-nav"
+              aria-controls="app-nav" aria-label="Open navigation">
+        <i class="bi bi-list"></i>
+      </button>
+      <span class="app-sidebar-brand h6 mb-0">Dental AI</span>
+    </div>
+  {% endif %}
   <main class="content{{ '' if chromeless else ' content-shifted' }}">
     <div class="content-inner">
       {% with messages = get_flashed_messages(with_categories=true) %}
