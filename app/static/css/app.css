@@ -16,6 +16,39 @@
   --app-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
                      0 6px 18px rgba(16, 24, 40, 0.06);
   --app-content-max: 1360px;
+
+  /* darker steps of --bs-primary, for button hover/active states */
+  --app-accent-hover: #24598f;
+  --app-accent-active: #1f4d7d;
+}
+
+/* bootstrap compiles #0d6efd into .btn-primary and the focus ring, so the
+   --bs-primary override above never reached them - the sidebar was accented
+   and every button was stock blue. bind them to the token instead. */
+.btn-primary {
+  --bs-btn-bg: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+  --bs-btn-hover-bg: var(--app-accent-hover);
+  --bs-btn-hover-border-color: var(--app-accent-hover);
+  --bs-btn-active-bg: var(--app-accent-active);
+  --bs-btn-active-border-color: var(--app-accent-active);
+  --bs-btn-disabled-bg: var(--bs-primary);
+  --bs-btn-disabled-border-color: var(--bs-primary);
+}
+
+.btn-outline-primary {
+  --bs-btn-color: var(--bs-primary);
+  --bs-btn-border-color: var(--bs-primary);
+  --bs-btn-hover-bg: var(--bs-primary);
+  --bs-btn-hover-border-color: var(--bs-primary);
+  --bs-btn-active-bg: var(--app-accent-active);
+  --bs-btn-active-border-color: var(--app-accent-active);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: rgba(var(--bs-primary-rgb), 0.5);
+  box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.15);
 }
 
 h1, h2, h3, h4, h5, h6 {
