@@ -515,6 +515,76 @@ def selftest():
         assert b"intake-chart" in asst_assets.data, \
             "19: an assistant may see intake status"
 
+        # 20. GUI-14 - the shell collapses below the lg breakpoint. the fast
+        # suite has no browser, so it cannot measure scrollWidth; what it CAN
+        # pin is the markup contract the collapse depends on. the measurement
+        # itself lives in shot_pages.py.
+        shell = client_dent.get("/")
+
+        assert b"offcanvas-lg" in shell.data, \
+            "20: the sidebar must be an offcanvas panel below the lg breakpoint"
+        assert b'id="app-nav"' in shell.data, \
+            "20: the offcanvas panel needs the id the toggle targets"
+        assert b"app-topbar" in shell.data, \
+            "20: an authenticated screen must carry the below-breakpoint top bar"
+
+        # the toggle and the panel must actually refer to the same element. a
+        # typo here leaves a hamburger that opens nothing while every other
+        # assertion in this section still passes.
+        #
+        # scope this to the TOGGLE's own tag. a document-wide search for
+        # data-bs-target matches the panel's close button first (_sidebar.html
+        # is included above the top bar), which always names a real id - so the
+        # naive version passed a deliberately broken hamburger. found by
+        # mutation, not by review.
+        toggle = re.search(rb'<button[^>]*data-bs-toggle="offcanvas"[^>]*>', shell.data)
+        assert toggle, "20: the top bar must carry an offcanvas toggle button"
+        tag = toggle.group(0)
+        tgt = re.search(rb'data-bs-target="#([^"]+)"', tag)
+        ctl = re.search(rb'aria-controls="([^"]+)"', tag)
+        assert tgt, "20: the hamburger must declare a data-bs-target"
+        assert ctl, "20: the hamburger must declare aria-controls"
+        assert tgt.group(1) == ctl.group(1), \
+            f"20: hamburger data-bs-target #{tgt.group(1).decode()} disagrees with " \
+            f"aria-controls {ctl.group(1).decode()}"
+        assert b'id="' + tgt.group(1) + b'"' in shell.data, \
+            f"20: hamburger targets #{tgt.group(1).decode()}, which names no element on the page"
+
+        assert b'aria-label="Open navigation"' in shell.data, \
+            "20: the hamburger must be labelled for screen readers"
+        assert b'aria-label="Close navigation"' in shell.data, \
+            "20: the panel's close control must be labelled for screen readers"
+
+        # the offcanvas wrapper must not have eaten a link, and the role filter
+        # must still bite. counts are PER ROLE, not the 7 in the template
+        # source: 'Staff accounts' is behind manage_users, so a dentist sees 6
+        # and an admin sees a different 4. asserting the source count here
+        # would pass even if authorize() had been stripped out entirely.
+        assert shell.data.count(b'class="nav-link') == 6, \
+            f'20: a dentist should see 6 sidebar links, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        assert b"Staff accounts" not in shell.data, \
+            "20: a dentist must not be offered the admin link"
+
+        client_adm = app.test_client()
+        csrf_m = _csrf_from(client_adm.get("/login").text)
+        _seed_user(db_path, "zadmin", "goodpass", "admin")
+        client_adm.post("/login", data={
+            "username": "zadmin", "password": "goodpass", "csrf_token": csrf_m,
+        })
+        adm_shell = client_adm.get("/admin/users")
+        assert b"Staff accounts" in adm_shell.data, \
+            "20: an admin must be offered the admin link"
+        assert b"Patients" not in adm_shell.data.split(b"</aside>")[0], \
+            "20: an admin holds no read_notes and must not be offered Patients"
+
+        # login renders no sidebar, so it must render no hamburger either - a
+        # toggle for a panel that was never included opens nothing
+        login_shell = app.test_client().get("/login")
+        assert b"app-topbar" not in login_shell.data, \
+            "20: a chromeless page must not carry the top bar"
+        assert b"offcanvas-lg" not in login_shell.data, \
+            "20: a chromeless page must not carry the offcanvas panel"
+
         # 17. CR-05 - the staff app's session cookie must not be left at
         # Flask's default, and must differ from the patient app's own choice.
         # importing patient_app here is fine - the binding rule is about what
