@@ -11,6 +11,7 @@ import agent
 import app.dashboard_routes as dashboard_routes
 import app.db as app_db
 from app import create_app
+from auth import log_audit
 from web_auth import MIN_PASSWORD_LENGTH
 from web_session import SESSION_IDLE_MINUTES, _hash_token
 
@@ -346,6 +347,144 @@ def selftest():
         assert count_rows(
             "SELECT must_change_password FROM users WHERE username = ?", ("forced",)
         ) == 0, "16: completing the change must clear must_change_password"
+
+        # 18. GUI-12 / RBAC-03/04 - the dashboard's new KPI and chart data is
+        # WITHHELD from a role that may not see it, not hidden from it. the
+        # gate decides whether the query RUNS, so an assistant's response
+        # carries no trace of the clinical figures. this is the D-09/D-10
+        # pattern patients_routes.detail_view already uses for the clinical
+        # card, applied to aggregates.
+        #
+        # NOTE on what is asserted where. the context assertions below are the
+        # ones that BITE today: 29-03 owns dashboard.html and has not run yet,
+        # so the template ignores these variables entirely and a body-only
+        # assertion would pass whether the route withheld the data or handed
+        # it over. the body assertions are kept alongside because they are the
+        # ones that catch a template leaking the data once 29-03 renders it.
+        # the two check different failure modes - the route computing what it
+        # must not, and the template printing what it was not given.
+        from flask import template_rendered
+
+        _seed_user(db_path, "aneri", "goodpass", "assistant")
+
+        seed_conn = sqlite3.connect(db_path)
+        for cf, name in [
+            ("KPIA800010150100", "Kpi Uno"),
+            ("KPIB800010150100", "Kpi Due"),
+            ("KPIC800010150100", "Kpi Tre"),
+        ]:
+            seed_conn.execute(
+                "INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                " VALUES (?, ?, ?)", (cf, name, None),
+            )
+        # two distinct months so the series has a shape, and the month labels
+        # are distinctive enough to grep an assistant's response body for
+        for i, (cf, date) in enumerate([
+            ("KPIA800010150100", "2031-03-04"),
+            ("KPIB800010150100", "2031-03-19"),
+            ("KPIC800010150100", "2031-07-22"),
+        ]):
+            seed_conn.execute(
+                "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                " clinical_notes, next_appointment, source_path)"
+                " VALUES (?, ?, ?, ?, ?, ?)",
+                (cf, date, "[]", None, None, f"sorted/kpi_{i}.txt"),
+            )
+        seed_conn.commit()
+        seed_conn.close()
+
+        # one file per intake state that a per-user view can reach, filed
+        # under each role so both dashboards have counts of their own
+        audit_conn = sqlite3.connect(db_path)
+        for who, role in [("drossi", "dentist"), ("aneri", "assistant")]:
+            log_audit(audit_conn, who, role, "upload_file",
+                      f"sorted/{who}_ok.txt", allowed=1)
+            log_audit(audit_conn, who, role, "upload_file",
+                      f"sorted/needs_review/{who}_bad.txt", allowed=1)
+            log_audit(audit_conn, who, role, "upload_file",
+                      f"{who}_nope.exe", allowed=0)
+        audit_conn.close()
+
+        def _dashboard_context(client):
+            seen = []
+            def _record(sender, template, context, **extra):
+                seen.append(context)
+            template_rendered.connect(_record, app)
+            try:
+                resp = client.get("/")
+            finally:
+                template_rendered.disconnect(_record, app)
+            assert seen, "18: the dashboard should have rendered a template"
+            return resp, seen[-1]
+
+        client_dent = app.test_client()
+        csrf_d = _csrf_from(client_dent.get("/login").text)
+        client_dent.post("/login", data={
+            "username": "drossi", "password": "goodpass", "csrf_token": csrf_d,
+        })
+        dent_resp, dent_ctx = _dashboard_context(client_dent)
+
+        client_asst = app.test_client()
+        csrf_s = _csrf_from(client_asst.get("/login").text)
+        client_asst.post("/login", data={
+            "username": "aneri", "password": "goodpass", "csrf_token": csrf_s,
+        })
+        asst_resp, asst_ctx = _dashboard_context(client_asst)
+
+        # -- the dentist holds read_clinical, so the figures are computed
+        assert dent_ctx["show_clinical"] is True, \
+            "18: a dentist holds read_clinical and should see the clinical figures"
+        assert dent_ctx["patient_total"] == 3, \
+            f"18: dentist patient_total should be 3, got {dent_ctx['patient_total']}"
+        assert dent_ctx["visit_months"] == ["2031-03", "2031-07"], \
+            f"18: dentist visit months wrong: {dent_ctx['visit_months']}"
+        assert dent_ctx["visit_counts"] == [2, 1], \
+            f"18: dentist visit counts wrong: {dent_ctx['visit_counts']}"
+
+        # -- the assistant does NOT hold read_clinical. the query never ran,
+        # so the context carries None - not a zero, not an empty list, and
+        # certainly not the real figure behind a template condition
+        # the withholding assertions come FIRST, ahead of the show_clinical
+        # flag. the flag is the weaker property: a route can report
+        # show_clinical=False and still compute and hand over the figures for
+        # a template to hide, which is precisely the bug D-10 forbids. put the
+        # flag first and it shadows these under mutation.
+        assert asst_ctx["patient_total"] is None, \
+            "18: WITHHELD - an assistant's context must carry no patient total"
+        assert asst_ctx["visit_months"] is None, \
+            "18: WITHHELD - an assistant's context must carry no visit months"
+        assert asst_ctx["visit_counts"] is None, \
+            "18: WITHHELD - an assistant's context must carry no visit counts"
+        assert asst_ctx["show_clinical"] is False, \
+            "18: an assistant must not hold read_clinical"
+
+        # -- and nothing of it reaches the wire either
+        assert b"2031-03" not in asst_resp.data and b"2031-07" not in asst_resp.data, \
+            "18: an assistant's response body must carry no visit-month label"
+
+        # -- intake status is non-clinical (filenames and states), so both
+        # roles that reach the dashboard get it, each scoped to their own files
+        assert dent_ctx["show_intake"] is True and asst_ctx["show_intake"] is True, \
+            "18: both dashboard-reaching roles hold upload_file"
+        for who, ctx in [("dentist", dent_ctx), ("assistant", asst_ctx)]:
+            counts = ctx["intake_counts"]
+            assert counts["sorted"] == 1, f"18: {who} sorted count wrong: {counts}"
+            assert counts["needs_review"] == 1, f"18: {who} needs_review count wrong: {counts}"
+            assert counts["rejected"] == 1, f"18: {who} rejected count wrong: {counts}"
+
+        # -- per-user scoping: the counts are the acting user's own files, so
+        # the KPI row cannot contradict the intake list on the same screen
+        assert sum(dent_ctx["intake_counts"].values()) == 3, \
+            "18: intake counts must be per-user, not clinic-wide"
+
+        # -- chart series arrive as plain parallel lists, shaped in python
+        assert dent_ctx["intake_chart_labels"] == [
+            "Sorted", "Needs Review", "Not searchable", "Queued", "External", "Rejected",
+        ], "18: chart labels should mirror the badge labels in _recent_intake.html"
+        assert dent_ctx["intake_chart_values"] == [1, 1, 0, 0, 0, 1], \
+            f"18: chart values wrong: {dent_ctx['intake_chart_values']}"
+        assert asst_ctx["intake_chart_labels"] is not None, \
+            "18: an assistant may see intake status"
 
         # 17. CR-05 - the staff app's session cookie must not be left at
         # Flask's default, and must differ from the patient app's own choice.
