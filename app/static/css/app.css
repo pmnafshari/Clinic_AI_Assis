@@ -199,6 +199,27 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid var(--app-border);
 }
 
+/* the two chromeless auth pages (login, change_password) centre a narrow card
+   in the viewport. named here rather than inlined per template so the pair
+   cannot drift apart. */
+.auth-shell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 360px;
+}
+
+/* the patients search box - narrow on desktop, full width once the content
+   column itself is narrow */
+.search-field {
+  max-width: 400px;
+}
+
 /* KPI stat cards - one number, one label, nothing else */
 .kpi-card .card-body {
   display: flex;
