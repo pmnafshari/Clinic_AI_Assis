@@ -13,7 +13,10 @@
     {% else %}
     <i class="bi bi-x-circle-fill text-danger me-2"></i>
     {% endif %}
-    <strong class="me-auto">{{ r.filename }}</strong>
+    {# same unbounded input as the intake list: .toast is width:350px but a
+       non-shrinking flex child overrides it, pushing the close button off
+       a 390px screen - and a rejection toast is autohide="false". #}
+    <strong class="me-auto min-w-0 text-break">{{ r.filename }}</strong>
     <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
   </div>
   <div class="toast-body">{{ r.message }}</div>

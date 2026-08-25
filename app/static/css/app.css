@@ -220,6 +220,13 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 400px;
 }
 
+/* bootstrap 5.3 ships no .min-w-0. a flex child defaults to min-width:auto,
+   which refuses to shrink below its content - so one long unbroken filename
+   widens the whole page. needed wherever user-supplied text sits in a flex row. */
+.min-w-0 {
+  min-width: 0;
+}
+
 /* KPI stat cards - one number, one label, nothing else */
 .kpi-card .card-body {
   display: flex;

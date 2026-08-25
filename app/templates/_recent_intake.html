@@ -1,10 +1,13 @@
 {% if rows %}
 <div class="list-group">
   {% for row in rows %}
-  <div class="list-group-item d-flex justify-content-between align-items-center">
-    <div>
+  <div class="list-group-item d-flex justify-content-between align-items-center gap-2">
+    <div class="min-w-0">
       <small class="text-secondary d-block">{{ row.ts }}</small>
-      <span>{{ row.target }}</span>
+      {# upload filenames are user-supplied and unbounded. without min-w-0 on
+         this flex child the span cannot shrink, and a long name pushes the
+         whole page sideways - measured at 1576px on a 390px viewport. #}
+      <span class="text-break">{{ row.target }}</span>
     </div>
     {% if row.state == 'queued' %}
     <span class="badge text-bg-secondary">Queued</span>
