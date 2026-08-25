@@ -13,15 +13,17 @@
     {% include "_sidebar.html" %}
   {% endif %}
   <main class="content{{ '' if chromeless else ' content-shifted' }}">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          {% set css_cat = 'primary' if category == 'message' else category %}
-          <div class="alert alert-{{ css_cat }}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
+    <div class="content-inner">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            {% set css_cat = 'primary' if category == 'message' else category %}
+            <div class="alert alert-{{ css_cat }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      {% block content %}{% endblock %}
+    </div>
   </main>
   <script src="{{ url_for('static', filename='vendor/bootstrap/5.3.3/bootstrap.bundle.min.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/htmx/1.9.12/htmx.min.js') }}"></script>
