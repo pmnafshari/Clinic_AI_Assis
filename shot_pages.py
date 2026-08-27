@@ -7,6 +7,10 @@ the fix can be proven with one command instead of a third rewrite.
 the check is document.documentElement.scrollWidth <= window.innerWidth + 1,
 evaluated in a real browser. the +1 absorbs sub-pixel rounding.
 
+exits 1 if any page-width overflows, or if the fixture cleanup leaves rows
+behind. this is the only automated check on the no-horizontal-scroll rule -
+app_selftest.py can see the markup that usually causes it, not the measurement.
+
     ollama serve                                       # not needed, no model here
     .venv/bin/python run.py                            # staff app, port 5000
     .venv/bin/python -m playwright install chromium    # once
@@ -206,10 +210,13 @@ def main():
     else:
         print(f"\nall {len(RESULTS)} page-widths fit - no horizontal scroll")
 
-    # reporting a measurement is not the same as gating on it. this exits 0 with
-    # a red baseline on purpose so it can land before the fix; 30-03 gates.
+    # a failed cleanup and a horizontal scroll are both failures. the baseline
+    # was red when this tool landed, so it exited 0 on overflow to stay
+    # committable; that is no longer true and the gate 30-01 promised is here.
     if users_left or pats_left:
         print("CLEANUP FAILED - ZZS rows survived")
+        return 1
+    if over:
         return 1
     return 0
 
