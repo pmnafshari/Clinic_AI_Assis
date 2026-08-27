@@ -105,14 +105,22 @@ def cleanup():
         conn.execute("DELETE FROM audit_log WHERE username = ?", (name,))
         conn.execute("DELETE FROM users WHERE username = ?", (name,))
     conn.commit()
+    conn.execute("DELETE FROM audit_log WHERE target = ?", (CF,))
+    conn.commit()
     users_left = conn.execute(
         "SELECT COUNT(*) FROM users WHERE username LIKE 'zzs%'"
     ).fetchone()[0]
     pats_left = conn.execute(
         "SELECT COUNT(*) FROM patients WHERE codice_fiscale LIKE 'ZZS%'"
     ).fetchone()[0]
+    # this deleted from audit_log without ever counting what survived, so a
+    # partial cleanup there was silent where a user or patient leak was loud.
+    audit_left = conn.execute(
+        "SELECT COUNT(*) FROM audit_log"
+        " WHERE username LIKE 'zzs%' OR username LIKE 'ZZS%' OR target LIKE 'ZZS%'"
+    ).fetchone()[0]
     conn.close()
-    return users_left, pats_left
+    return users_left, pats_left, audit_left
 
 
 # --- the walk -------------------------------------------------------------
@@ -198,11 +206,12 @@ def main():
             finally:
                 browser.close()
     finally:
-        users_left, pats_left = cleanup()
+        users_left, pats_left, audit_left = cleanup()
 
     over = [r for r in RESULTS if not r[5]]
     print(f"\nshots: {out_dir}")
-    print(f"fixtures left behind: {users_left} user(s), {pats_left} patient(s)")
+    print(f"fixtures left behind: {users_left} user(s), {pats_left} patient(s), "
+          f"{audit_left} audit row(s)")
     if over:
         print(f"\n{len(over)} of {len(RESULTS)} page-widths scroll horizontally:")
         for width, role, path, scroll, inner, _ in over:
@@ -213,7 +222,7 @@ def main():
     # a failed cleanup and a horizontal scroll are both failures. the baseline
     # was red when this tool landed, so it exited 0 on overflow to stay
     # committable; that is no longer true and the gate 30-01 promised is here.
-    if users_left or pats_left:
+    if users_left or pats_left or audit_left:
         print("CLEANUP FAILED - ZZS rows survived")
         return 1
     if over:

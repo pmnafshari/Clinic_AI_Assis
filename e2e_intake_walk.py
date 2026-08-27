@@ -108,10 +108,20 @@ def cleanup():
     for table in ("invoices", "visits", "patients"):
         conn.execute(f"DELETE FROM {table} WHERE codice_fiscale IN ({marks})", ALL_CFS)
     conn.execute("DELETE FROM audit_log WHERE username = ?", (STAFF_USER,))
+    # the staff user is not the only key these rows carry: sort_files and the
+    # sync audit under other actors with the cf in target. delete on both or
+    # the fixtures survive in the audit trail after the patients are gone.
+    conn.execute(f"DELETE FROM audit_log WHERE username IN ({marks})", ALL_CFS)
+    conn.execute(f"DELETE FROM audit_log WHERE target IN ({marks})", ALL_CFS)
     conn.execute("DELETE FROM users WHERE username = ?", (STAFF_USER,))
     conn.commit()
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS
+    ).fetchone()[0]
+    audit_left = conn.execute(
+        f"SELECT COUNT(*) FROM audit_log WHERE username = ?"
+        f" OR username IN ({marks}) OR target IN ({marks})",
+        (STAFF_USER,) + tuple(ALL_CFS) + tuple(ALL_CFS)
     ).fetchone()[0]
     conn.close()
 
@@ -129,7 +139,7 @@ def cleanup():
     for cf in ALL_CFS:
         if (SORTED_ROOT / cf).exists():
             files_left += 1
-    return left, files_left
+    return left, files_left, audit_left
 
 
 def procedures_for(cf, deadline):
@@ -314,11 +324,11 @@ def main():
                 finally:
                     browser.close()
         finally:
-            left, files_left = cleanup()
+            left, files_left, audit_left = cleanup()
 
     check("9 fixtures cleaned up",
-          left == 0 and files_left == 0,
-          f"{left} row(s), {files_left} file(s) left behind")
+          left == 0 and files_left == 0 and audit_left == 0,
+          f"{left} row(s), {files_left} file(s), {audit_left} audit row(s) left behind")
 
     failed = [s for s, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

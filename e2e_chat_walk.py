@@ -119,12 +119,22 @@ def cleanup():
     for table in ("invoices", "visits", "patient_sessions",
                   "patient_credentials", "patients"):
         conn.execute(f"DELETE FROM {table} WHERE codice_fiscale IN ({marks})", cfs)
+    # audit rows land under two different keys. the patient app logs with
+    # username = codice fiscale, but seed()'s issue_pin logs under the dentist
+    # with the cf in target. deleting on username alone leaves the second set
+    # behind - 61 of them had piled up by 2026-08-27.
+    conn.execute(f"DELETE FROM audit_log WHERE username IN ({marks})", cfs)
+    conn.execute(f"DELETE FROM audit_log WHERE target IN ({marks})", cfs)
     conn.commit()
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", cfs
     ).fetchone()[0]
+    audit_left = conn.execute(
+        f"SELECT COUNT(*) FROM audit_log"
+        f" WHERE username IN ({marks}) OR target IN ({marks})", cfs + cfs
+    ).fetchone()[0]
     conn.close()
-    return left
+    return left, audit_left
 
 
 def scope_violations():
@@ -504,15 +514,18 @@ def main():
             finally:
                 browser.close()
     finally:
-        left = cleanup()
+        # read this BEFORE cleanup. cleanup deletes audit rows by target, and a
+        # real scope violation is logged against a fixture cf - deleting it
+        # first would make check 14 pass no matter what the walk did.
+        after = scope_violations()
+        left, audit_left = cleanup()
 
-    after = scope_violations()
     check("14 no scope violations logged during the walk",
           after == before,
           f"patient_scope_violation {before} -> {after}")
     check("15 fixtures cleaned up",
-          left == 0,
-          f"{left} throwaway patient row(s) left behind")
+          left == 0 and audit_left == 0,
+          f"{left} patient row(s), {audit_left} audit row(s) left behind")
 
     failed = [s for s, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
