@@ -50,7 +50,14 @@
     <div class="card h-100">
       <div class="card-header">Your intake</div>
       <div class="card-body">
+        {% if intake_has_data %}
         <div class="chart-box"><canvas id="intake-chart"></canvas></div>
+        {% else %}
+        <div class="chart-empty">
+          <i class="bi bi-pie-chart"></i>
+          <p class="mb-0">Nothing filed yet. Your uploads will appear here, broken down by state.</p>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -60,7 +67,14 @@
     <div class="card h-100">
       <div class="card-header">Visits per month</div>
       <div class="card-body">
+        {% if visits_have_data %}
         <div class="chart-box"><canvas id="visits-chart"></canvas></div>
+        {% else %}
+        <div class="chart-empty">
+          <i class="bi bi-bar-chart"></i>
+          <p class="mb-0">No dated visits yet. Visits appear here once a note carries a visit date.</p>
+        </div>
+        {% endif %}
       </div>
     </div>
   </div>
@@ -113,18 +127,22 @@
   {% endif %}
 </div>
 
-{% if show_intake or show_clinical %}
+{% if intake_has_data or visits_have_data %}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
   // every value here is rendered by the server. the template computes nothing:
   // dashboard_routes shapes the label/value lists and decides, per role,
   // whether a dataset exists at all. a role that did not receive a dataset
   // gets no canvas and no init code for it - not hidden code, none.
+  //
+  // the guards below are the has-data verdicts, not the permission flags. an
+  // empty series renders copy instead of a canvas, so initialising it here
+  // would hand new Chart() a null element - a console error, not a chart.
   (function () {
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = '#5a6675';
 
-    {% if show_intake %}
+    {% if intake_has_data %}
     // one colour per state, taken from the badge class phase 23 assigned it.
     // the binding rule is that no two FAILURE domains share a hue - Needs
     // Review, Not searchable and Rejected are all distinct below. Queued and
@@ -156,7 +174,7 @@
     });
     {% endif %}
 
-    {% if show_clinical %}
+    {% if visits_have_data %}
     new Chart(document.getElementById('visits-chart'), {
       type: 'bar',
       data: {

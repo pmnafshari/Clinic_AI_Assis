@@ -486,6 +486,67 @@ def selftest():
         assert asst_ctx["intake_chart_labels"] is not None, \
             "18: an assistant may see intake status"
 
+        # 18a. GUI-15 - a chart with nothing to draw renders copy, not an
+        # empty canvas. chart.js draws no arcs for an all-zero doughnut and
+        # reports nothing, so the card looked identical to a broken one
+        # (30-AUDIT F-2). the verdict is computed in dashboard_routes, NOT in
+        # jinja - the template still computes nothing (29 D-01).
+        #
+        # has-data and permitted are DIFFERENT questions and this section
+        # exists to keep them from collapsing into one flag. three states:
+        # not permitted -> no canvas and no empty state; permitted with no
+        # data -> empty state; permitted with data -> canvas.
+        assert dent_ctx["intake_has_data"] is True, \
+            "18a: the dentist has three intake rows, so the doughnut has data"
+        assert dent_ctx["visits_have_data"] is True, \
+            "18a: the dentist has two visit months, so the bar chart has data"
+
+        # the assistant is permitted intake and withheld clinical. the clinical
+        # verdict must be False because the query never ran - not because the
+        # figure happened to be empty.
+        assert asst_ctx["intake_has_data"] is True, \
+            "18a: an assistant's own intake rows still count"
+        assert asst_ctx["visits_have_data"] is False, \
+            "18a: WITHHELD - an assistant gets no visits verdict, the query never ran"
+
+        # a permitted role with no rows of its own. seeded fresh with no audit
+        # rows at all, so intake is genuinely zero - the reproduction case from
+        # 31-BASELINE. still a dentist, so visits (clinic-wide) stay populated:
+        # that is the point, the two verdicts are independent.
+        _seed_user(db_path, "zerodent", "goodpass", "dentist")
+        client_zero = app.test_client()
+        csrf_z = _csrf_from(client_zero.get("/login").text)
+        client_zero.post("/login", data={
+            "username": "zerodent", "password": "goodpass", "csrf_token": csrf_z,
+        })
+        zero_resp, zero_ctx = _dashboard_context(client_zero)
+
+        assert zero_ctx["show_intake"] is True, \
+            "18a: a dentist holds upload_file - this is the permitted-but-empty case"
+        assert zero_ctx["intake_chart_values"] == [0, 0, 0, 0, 0, 0], \
+            f"18a: a fresh user's chart values should be all zero: {zero_ctx['intake_chart_values']}"
+        assert zero_ctx["intake_has_data"] is False, \
+            "18a: an all-zero series has no data to draw"
+        assert zero_ctx["visits_have_data"] is True, \
+            "18a: visits are clinic-wide - a fresh user still sees them, verdicts are independent"
+
+        # the canvas must be ABSENT, not hidden. a canvas in the body with no
+        # arcs on it is the defect; asserting only on the context would pass
+        # against a template that emitted it anyway.
+        assert b'id="intake-chart"' not in zero_resp.data, \
+            "18a: an empty series must emit no canvas at all"
+        assert b"Nothing filed yet" in zero_resp.data, \
+            "18a: the empty intake card must say so"
+        assert b'id="visits-chart"' in zero_resp.data, \
+            "18a: the visits chart still has data and must still render"
+
+        # and the withheld role gets NEITHER a canvas nor an empty state for
+        # the figure it may not see - no trace, per D-10
+        assert b'id="visits-chart"' not in asst_resp.data, \
+            "18a: WITHHELD - an assistant gets no visits canvas"
+        assert b"No dated visits yet" not in asst_resp.data, \
+            "18a: WITHHELD - an assistant gets no visits empty state either"
+
         # 19. GUI-12 - the dashboard is the page most likely to break the
         # no-CDN rule, because it is the only one that loads a charting
         # library. section 10 already checks an authenticated page generally;

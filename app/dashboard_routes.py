@@ -119,6 +119,18 @@ def index():
         visit_counts = None
         patient_total = None
 
+    # whether a chart has anything to draw is decided here too, for the same
+    # reason the series is (D-01). chart.js draws nothing for an all-zero
+    # doughnut and an empty bar chart, and reports neither - so an empty card
+    # looks exactly like a broken one. the template needs a verdict, not a sum.
+    #
+    # this is NOT the same question as show_intake/show_clinical. those decide
+    # whether the query runs at all; a role that may not see a figure gets no
+    # canvas and no empty state either. permitted-with-no-data and
+    # not-permitted are different renders and must not collapse into one flag.
+    intake_has_data = show_intake and any(intake_counts.values())
+    visits_have_data = show_clinical and bool(visit_months)
+
     # chart series are shaped here, not in jinja: the template renders what
     # it is given and computes nothing (D-01, as phase 23 did for the badge)
     return render_template(
@@ -131,8 +143,10 @@ def index():
         intake_chart_values=(
             [intake_counts[state] for state, _ in INTAKE_LABELS] if show_intake else None
         ),
+        intake_has_data=intake_has_data,
         show_clinical=show_clinical,
         visit_months=visit_months,
         visit_counts=visit_counts,
+        visits_have_data=visits_have_data,
         patient_total=patient_total,
     )
