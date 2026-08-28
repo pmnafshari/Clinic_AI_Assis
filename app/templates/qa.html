@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">Ask a question</h1>
+<h1 class="page-title">Ask a question</h1>
 <div class="card p-4">
   {% if not question %}
   <p class="text-secondary">Ask about a patient's appointments, treatments, or contact details.</p>
@@ -11,7 +11,7 @@
   <form method="post" action="{{ url_for('qa.qa_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
-      <label for="question" class="form-label">question</label>
+      <label for="question" class="form-label">Question</label>
       <input type="text" id="question" name="question" value="{{ question or '' }}" class="form-control" autofocus>
     </div>
     {% if candidates %}
@@ -26,7 +26,7 @@
       </div>
     </div>
     {% endif %}
-    <button type="submit" class="btn btn-primary">ask</button>
+    <button type="submit" class="btn btn-primary">Ask</button>
     <div class="form-text">Answers can take up to a minute — please wait after submitting.</div>
   </form>
   {% if answer %}

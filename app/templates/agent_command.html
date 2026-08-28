@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">Run a command</h1>
+<h1 class="page-title">Run a command</h1>
 <div class="card p-4">
   {% if error %}
   <p class="text-danger">{{ error }}</p>
@@ -8,7 +8,7 @@
   <form method="post" action="{{ url_for('agent.command_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
-      <label for="command" class="form-label">command</label>
+      <label for="command" class="form-label">Command</label>
       <textarea id="command" name="command" rows="4" class="form-control" autofocus>{{ command or '' }}</textarea>
     </div>
     <button type="submit" class="btn btn-primary">Run command</button>

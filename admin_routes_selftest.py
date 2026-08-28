@@ -10,7 +10,7 @@ import app.db as app_db
 import web_session
 from app import create_app
 
-CLINICAL_STRINGS = ("Ask a question", "Add a note", "Edit a record", "Run a command")
+CLINICAL_STRINGS = ("Ask a question", "Add note", "Edit a record", "Run a command")
 
 
 def _seed_user(db_path, username, password, role, must_change=0):

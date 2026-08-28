@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">Dashboard</h1>
+<h1 class="page-title">Dashboard</h1>
 
 {% if show_clinical or show_intake %}
 <div class="row g-3 mb-4">
@@ -86,25 +86,25 @@
   <p>Logged in as <strong>{{ user.username }}</strong> ({{ user.role }})</p>
   <div class="d-flex gap-2 flex-wrap">
     <a href="{{ url_for('qa.qa_page') }}" class="btn btn-outline-secondary btn-sm">Ask a question</a>
-    <a href="{{ url_for('notes.new_note') }}" class="btn btn-outline-secondary btn-sm">Add a note</a>
+    <a href="{{ url_for('notes.new_note') }}" class="btn btn-primary btn-sm">Add note</a>
     <a href="{{ url_for('agent.edit_page') }}" class="btn btn-outline-secondary btn-sm">Edit a record</a>
     <a href="{{ url_for('agent.command_page') }}" class="btn btn-outline-secondary btn-sm">Run a command</a>
   </div>
 </div>
 
 <div class="card p-4 mb-4">
-  <h2 class="fs-5 mb-3">Upload files</h2>
+  <h2 class="section-title">Upload files</h2>
   {% with cf=None %}{% include "_upload_zone.html" %}{% endwith %}
   <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 </div>
 
 <div class="card p-4 mb-4">
-  <h2 class="fs-5 mb-3">Recent uploads</h2>
+  <h2 class="section-title">Recent uploads</h2>
   <div hx-get="{{ url_for('upload.recent_intake') }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
 </div>
 
 <div class="card p-4">
-  <h2 class="fs-5 mb-3">Recent changes</h2>
+  <h2 class="section-title">Recent changes</h2>
   {% if history %}
   <div class="list-group">
     {% for entry in history %}
@@ -116,7 +116,7 @@
       {% if loop.first %}
       <form method="post" action="{{ url_for('agent.undo_change') }}" class="mb-0">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-primary btn-sm">Undo change</button>
+        <button type="submit" class="btn btn-outline-secondary btn-sm">Undo change</button>
       </form>
       {% endif %}
     </div>

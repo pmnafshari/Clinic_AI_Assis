@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">{% if locked %}Add a note for {{ locked.patient_name }}{% else %}Add a note{% endif %}</h1>
+<h1 class="page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
 <div class="card p-4">
   {% if error %}
   <p class="text-danger">{{ error }}</p>
@@ -9,7 +9,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
     <div class="mb-3">
-      <label for="raw_note" class="form-label">paste note</label>
+      <label for="raw_note" class="form-label">Paste note</label>
       <textarea id="raw_note" name="raw_note" rows="6" class="form-control" autofocus></textarea>
     </div>
     <button type="submit" class="btn btn-primary">Extract note</button>
@@ -24,7 +24,7 @@
     <div class="alert alert-warning" role="alert">{{ mismatch }}</div>
     {% endif %}
     <div class="mb-3">
-      <label for="patient_name" class="form-label">patient name</label>
+      <label for="patient_name" class="form-label">Patient name</label>
       {% if locked %}
       <input type="text" id="patient_name" name="patient_name" value="{{ locked.patient_name }}" class="form-control bg-body-secondary" readonly>
       {% else %}
@@ -32,7 +32,7 @@
       {% endif %}
     </div>
     <div class="mb-3">
-      <label for="codice_fiscale" class="form-label">codice fiscale</label>
+      <label for="codice_fiscale" class="form-label">Codice fiscale</label>
       {% if locked %}
       <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ locked.cf }}" class="form-control bg-body-secondary" readonly>
       {% else %}
@@ -40,28 +40,28 @@
       {% endif %}
     </div>
     <div class="mb-3">
-      <label for="phone" class="form-label">phone</label>
+      <label for="phone" class="form-label">Phone</label>
       <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="visit_date" class="form-label">visit date</label>
+      <label for="visit_date" class="form-label">Visit date</label>
       <input type="text" id="visit_date" name="visit_date" value="{{ preview.visit_date or '' }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="clinical_notes" class="form-label">clinical notes</label>
+      <label for="clinical_notes" class="form-label">Clinical notes</label>
       <input type="text" id="clinical_notes" name="clinical_notes" value="{{ preview.clinical_notes }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="procedures" class="form-label">procedures</label>
+      <label for="procedures" class="form-label">Procedures</label>
       <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="next_appointment" class="form-label">next appointment</label>
+      <label for="next_appointment" class="form-label">Next appointment</label>
       <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}" class="form-control">
     </div>
     {% if preview.invoices %}
     <div class="mb-3">
-      <p class="form-label mb-1">invoices</p>
+      <p class="form-label mb-1">Invoices</p>
       <ul class="list-group">
         {% for inv in preview.invoices %}
         <li class="list-group-item">

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">Staff accounts</h1>
+<h1 class="page-title">Staff accounts</h1>
 
 <div class="card p-4">
   <div class="table-responsive">
@@ -23,7 +23,7 @@
 </div>
 
 <div class="card p-4 mt-6">
-  <h2 class="fs-5 mb-3">Add a staff account</h2>
+  <h2 class="section-title">Add a staff account</h2>
   <form method="post" action="{{ url_for('admin.create') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="d-flex flex-column gap-3">

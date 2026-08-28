@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title mb-4">Edit a record</h1>
+<h1 class="page-title">Edit a record</h1>
 <div class="card p-4">
   {% if error %}
   <p class="text-danger">{{ error }}</p>
@@ -8,11 +8,11 @@
   <form method="post" action="{{ url_for('agent.edit_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="mb-3">
-      <label for="patient" class="form-label">patient</label>
+      <label for="patient" class="form-label">Patient</label>
       <input type="text" id="patient" name="patient" value="{{ patient or '' }}" class="form-control" autofocus>
     </div>
     <div class="mb-3">
-      <label for="field" class="form-label">field</label>
+      <label for="field" class="form-label">Field</label>
       <select id="field" name="field" class="form-select">
         {% for f in fields %}
         <option value="{{ f }}" {% if f == field %}selected{% endif %}>{{ f }}</option>
@@ -20,7 +20,7 @@
       </select>
     </div>
     <div class="mb-3">
-      <label for="value" class="form-label">new value</label>
+      <label for="value" class="form-label">New value</label>
       <input type="text" id="value" name="value" value="{{ value or '' }}" class="form-control">
     </div>
     <button type="submit" class="btn btn-primary">Preview change</button>

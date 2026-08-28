@@ -59,6 +59,36 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 28px;
   font-weight: 600;
   line-height: 1.2;
+  margin-bottom: 1.5rem;
+}
+
+/* the two heading levels below .page-title. both were inlined as bootstrap
+   size classes on every card - fs-5 mb-3 nine times, fs-6 mt-4 mb-2 three
+   times. a class string repeated that often is a token that was never
+   declared, so declare it. */
+.section-title {
+  font-size: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.subsection-title {
+  font-size: 1rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+/* page title paired with the page's one primary action. patients_list and
+   patients_detail both built this inline as the same four utilities. */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.page-header .page-title {
+  margin-bottom: 0;
 }
 
 /* xl (32px / 2rem) spacing step - bootstrap's stock scale stops at

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h1 class="page-title mb-0">{{ patient.patient_name }}</h1>
+<div class="page-header">
+  <h1 class="page-title">{{ patient.patient_name }}</h1>
   {% if authorize(g.user.role, 'append_note') %}
   <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-primary btn-sm">Add note</a>
   {% endif %}
@@ -9,7 +9,7 @@
 
 <div class="card p-4 mb-4">
   <div class="d-flex justify-content-between align-items-start mb-3">
-    <h2 class="fs-5 mb-0">Demographics</h2>
+    <h2 class="section-title mb-0">Demographics</h2>
     <button type="button" class="btn btn-outline-secondary btn-sm"
       data-bs-toggle="modal" data-bs-target="#editModal"
       hx-get="{{ url_for('patients.edit_form_fragment', cf=cf, field='phone') }}"
@@ -46,7 +46,7 @@
   </div>
   {% endif %}
 
-  <h3 class="fs-6 mt-4 mb-2">Visit dates</h3>
+  <h3 class="subsection-title">Visit dates</h3>
   {% if patient.visit_dates %}
   <ul class="mb-0">
     {% for d in patient.visit_dates %}
@@ -57,7 +57,7 @@
   <p class="text-secondary mb-0">No visits on record.</p>
   {% endif %}
 
-  <h3 class="fs-6 mt-4 mb-2">Invoices</h3>
+  <h3 class="subsection-title">Invoices</h3>
   {% if patient.invoices %}
   <ul class="mb-0">
     {% for inv in patient.invoices %}
@@ -69,14 +69,14 @@
   {% endif %}
 
   {% if show_clinical %}
-  <h3 class="fs-6 mt-4 mb-2">Files</h3>
+  <h3 class="subsection-title">Files</h3>
   <div hx-get="{{ url_for('patients.files_fragment', cf=cf) }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
   {% endif %}
 </div>
 
 {% if authorize(g.user.role, 'upload_file') %}
 <div class="card p-4 mb-4">
-  <h2 class="fs-5 mb-3">Upload files</h2>
+  <h2 class="section-title">Upload files</h2>
   {% with cf=cf %}{% include "_upload_zone.html" %}{% endwith %}
   <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
 </div>
@@ -84,7 +84,7 @@
 
 {% if show_clinical %}
 <div class="card p-4">
-  <h2 class="fs-5 mb-3">Clinical history</h2>
+  <h2 class="section-title">Clinical history</h2>
   {% if clinical %}
   <div class="list-group">
     {% for visit in clinical %}
