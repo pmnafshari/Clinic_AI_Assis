@@ -87,10 +87,24 @@ def init_db(db_path):
             payload TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
+            dentist TEXT NOT NULL,
+            starts_at TEXT NOT NULL,
+            minutes INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'booked',
+            note TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_appointments_day
+            ON appointments (starts_at);
     """)
     _ensure_lockout_columns(conn)
     _ensure_audit_ip_column(conn)
     _ensure_audit_reason_column(conn)
+    _ensure_appointments_table(conn)
     conn.commit()
 
     # patient credential/session tables. deferred import because patient_auth
@@ -126,6 +140,18 @@ def _ensure_audit_reason_column(conn):
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(audit_log)").fetchall()}
     if "reason" not in existing:
         conn.execute("ALTER TABLE audit_log ADD COLUMN reason TEXT")
+
+
+def _ensure_appointments_table(conn):
+    # CREATE TABLE IF NOT EXISTS above already reaches an old database for the
+    # table itself. this is here for the columns it will grow later - the same
+    # job the two audit_log helpers do, and the reason they had to be written
+    # after the fact rather than before.
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(appointments)").fetchall()}
+    if not existing:
+        return
+    if "note" not in existing:
+        conn.execute("ALTER TABLE appointments ADD COLUMN note TEXT")
 
 
 def upsert_note_sql(note, source_path, conn):
