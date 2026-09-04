@@ -1,18 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 <h1 class="page-title">Confirm change</h1>
-<div class="card p-4">
-  {% if error %}
-  <p class="text-danger">{{ error }}</p>
-  <p><a href="{{ url_for('dashboard.index') }}">Back to dashboard</a></p>
-  {% else %}
-  <p class="fs-5 mb-3">{{ diff_line }}</p>
-  <form method="post" action="{{ url_for('agent.confirm_change') }}" class="d-inline">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="token" value="{{ token }}">
-    <button type="submit" class="btn btn-primary">Confirm change</button>
-  </form>
-  <a href="{{ url_for('dashboard.index') }}" class="btn btn-link text-secondary">Discard change</a>
-  {% endif %}
+<div class="ds-card">
+  <div class="ds-card-body">
+    {% if error %}
+    <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+    <p><a href="{{ url_for('dashboard.index') }}">Back to dashboard</a></p>
+    {% else %}
+    {# the frozen diff. it is the whole point of this screen, so it gets the
+       weight - and the two actions are visually distinct, because "write
+       this to a patient record" and "throw it away" must never look alike. #}
+    <p class="section-title">{{ diff_line }}</p>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <form method="post" action="{{ url_for('agent.confirm_change') }}" class="d-inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="ds-btn ds-btn-primary">Confirm change</button>
+      </form>
+      <a href="{{ url_for('dashboard.index') }}" class="ds-btn ds-btn-ghost">Discard change</a>
+    </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}

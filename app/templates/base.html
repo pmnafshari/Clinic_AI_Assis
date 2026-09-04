@@ -5,6 +5,8 @@
   <title>Dental AI Assistant</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/5.3.3/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/1.11.3/bootstrap-icons.css') }}">
+  <link rel="stylesheet" href="{{ url_for('shared', filename='css/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('shared', filename='css/components.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
@@ -22,7 +24,11 @@
       <span class="app-sidebar-brand h6 mb-0">Dental AI</span>
     </div>
   {% endif %}
-  <main class="content{{ '' if chromeless else ' content-shifted' }}">
+  {# the login is the one full-bleed screen: its split panel reaches the
+     viewport edge, so it opts out of .content's padding rather than
+     cancelling it with a negative margin that cannot track the responsive
+     override at 992px. #}
+  <main class="content{{ '' if chromeless else ' content-shifted' }}{{ ' content-flush' if request.endpoint == 'auth.login' else '' }}">
     <div class="content-inner">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}

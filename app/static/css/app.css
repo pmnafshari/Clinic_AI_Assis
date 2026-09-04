@@ -16,31 +16,22 @@
   --app-card-shadow: 0 1px 2px rgba(16, 24, 40, 0.04),
                      0 6px 18px rgba(16, 24, 40, 0.06);
   --app-content-max: 1360px;
+  --app-content-pad-y: 3rem;
+  --app-content-pad-x: 2rem;
 
   /* darker steps of --bs-primary, for button hover/active states */
   --app-accent-hover: #24598f;
   --app-accent-active: #1f4d7d;
 }
 
-/* bootstrap compiles #0d6efd into .btn-primary and the focus ring, so the
-   --bs-primary override above never reached them - the sidebar was accented
-   and every button was stock blue. bind them to the token instead. */
+/* the .btn-primary / .btn-outline-primary bindings that lived here moved to
+   shared/static/css/components.css in phase 34 and were bound to each app's
+   own --bs-primary in phase 36, so the staff app and the patient app each
+   keep their identity from one definition. this app's named hover shades
+   live on below. */
 .btn-primary {
-  --bs-btn-bg: var(--bs-primary);
-  --bs-btn-border-color: var(--bs-primary);
   --bs-btn-hover-bg: var(--app-accent-hover);
   --bs-btn-hover-border-color: var(--app-accent-hover);
-  --bs-btn-active-bg: var(--app-accent-active);
-  --bs-btn-active-border-color: var(--app-accent-active);
-  --bs-btn-disabled-bg: var(--bs-primary);
-  --bs-btn-disabled-border-color: var(--bs-primary);
-}
-
-.btn-outline-primary {
-  --bs-btn-color: var(--bs-primary);
-  --bs-btn-border-color: var(--bs-primary);
-  --bs-btn-hover-bg: var(--bs-primary);
-  --bs-btn-hover-border-color: var(--bs-primary);
   --bs-btn-active-bg: var(--app-accent-active);
   --bs-btn-active-border-color: var(--app-accent-active);
 }
@@ -178,7 +169,7 @@ h1, h2, h3, h4, h5, h6 {
 .content {
   min-height: 100vh;
   background: var(--app-ground);
-  padding: 3rem 2rem;
+  padding: var(--app-content-pad-y) var(--app-content-pad-x);
 }
 
 /* LANDMINE: this was unconditional. below the breakpoint it left a 240px void
@@ -189,6 +180,15 @@ h1, h2, h3, h4, h5, h6 {
     margin-left: 240px;
   }
 }
+
+/* opts a screen out of the content padding entirely. the login's split
+   panel is full-bleed; cancelling the padding with a negative margin was
+   tried and is wrong, because the padding changes at 992px and a fixed
+   margin cannot follow it. */
+.content-flush { padding: 0; }
+/* and out of the readable-width cap: .content-inner centres content at
+   1360px, which left the full-bleed panel inset by 40px at 1440. */
+.content-flush .content-inner { max-width: none; }
 
 /* 2rem of side padding leaves ~326px usable at 390px */
 @media (max-width: 991.98px) {
@@ -345,3 +345,65 @@ strong {
   max-height: calc(100vh - 2rem);
   overflow-y: auto;
 }
+
+/* --- login (UX-10) ------------------------------------------------------ */
+
+.auth-split {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 100vh;
+}
+
+@media (min-width: 992px) {
+  .auth-split { grid-template-columns: 1fr 1fr; }
+}
+
+.auth-brand {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--ds-space-8);
+  background: var(--ds-navy-900);
+  color: var(--ds-text-on-dark);
+}
+
+@media (min-width: 992px) { .auth-brand { display: flex; } }
+
+.auth-brand-mark { font-size: var(--ds-h1); color: var(--ds-teal-400); margin-bottom: var(--ds-space-5); }
+.auth-brand-title { font-size: var(--ds-h2); font-weight: var(--ds-weight-semibold); margin: 0 0 var(--ds-space-3); }
+.auth-brand-body { max-width: 26rem; font-size: var(--ds-body-lg); color: var(--ds-border-strong); margin: 0; }
+
+.auth-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--ds-space-6) var(--ds-space-5);
+}
+
+.auth-form-card { width: 100%; max-width: 26rem; }
+
+/* the toggle sits inside the field, so the input keeps its full width and
+   the control cannot be mistaken for a second form field */
+.auth-pw { position: relative; }
+.auth-pw .ds-input { padding-right: var(--ds-space-8); }
+
+.auth-pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: var(--ds-space-2);
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  color: var(--ds-text-muted);
+  cursor: pointer;
+}
+
+.auth-pw-toggle:hover { color: var(--ds-text); }
+.auth-pw-toggle:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }

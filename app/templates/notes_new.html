@@ -3,7 +3,7 @@
 <h1 class="page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
 <div class="card p-4">
   {% if error %}
-  <p class="text-danger">{{ error }}</p>
+  <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
   {% endif %}
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

@@ -19,7 +19,7 @@
 <div class="card p-4">
   {% if patients %}
   <div class="table-responsive">
-  <table class="table">
+  <table class="table ds-table-cards">
     <thead>
       <tr>
         <th>Name</th>
@@ -33,12 +33,12 @@
     <tbody>
       {% for p in patients %}
       <tr>
-        <td>{{ p.patient_name }}</td>
-        <td>{{ p.codice_fiscale }}</td>
-        <td>{{ p.phone or "-" }}</td>
-        <td>{{ p.next_appointment or "-" }}</td>
-        <td>{{ p.last_visit or "-" }}</td>
-        <td><a href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}" class="link-secondary">View</a></td>
+        <td data-label="Name">{{ p.patient_name }}</td>
+        <td data-label="Codice Fiscale">{{ p.codice_fiscale }}</td>
+        <td data-label="Phone">{{ p.phone or "-" }}</td>
+        <td data-label="Next appointment">{{ p.next_appointment or "-" }}</td>
+        <td data-label="Last visit">{{ p.last_visit or "-" }}</td>
+        <td data-label=""><a href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}" class="link-secondary">View</a></td>
       </tr>
       {% endfor %}
     </tbody>

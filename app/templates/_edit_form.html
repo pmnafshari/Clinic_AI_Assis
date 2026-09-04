@@ -1,6 +1,6 @@
 <h2 class="section-title">Edit patient</h2>
 {% if error %}
-<p class="text-danger">{{ error }}</p>
+<div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% endif %}
 <form hx-post="{{ url_for('patients.edit_submit', cf=cf) }}" hx-target="#modal-body-target" hx-swap="innerHTML">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

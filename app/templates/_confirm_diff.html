@@ -1,6 +1,6 @@
 <h2 class="section-title">Confirm change</h2>
 {% if error %}
-<p class="text-danger">{{ error }}</p>
+<div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% else %}
 <p class="fs-5 mb-3">{{ diff_line }}</p>
 <form hx-post="{{ url_for('agent.confirm_change') }}" hx-target="#modal-body-target" hx-swap="innerHTML" class="d-inline">

@@ -1,20 +1,25 @@
 from pathlib import Path
 
-from flask import Flask, flash, g, redirect, request, url_for
+from flask import Flask, flash, g, redirect, request, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
 import web_session
 from auth import authorize
 from env_config import load_secret_key
+from shared import STATIC_ROOT as SHARED_STATIC_ROOT
 from storage import init_db
 
 from . import db
 
-WHITELIST_ENDPOINTS = {"static", "auth.login"}
+# "shared" serves the cross-app token/component css and the font. the login
+# page needs it before any session exists, which is the same reason "static"
+# is here. named explicitly - a prefix match would open anything starting
+# with "s".
+WHITELIST_ENDPOINTS = {"static", "shared", "auth.login"}
 
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave
-CHANGE_PW_ALLOWED = {"static", "auth.login", "auth.change_password", "auth.logout"}
+CHANGE_PW_ALLOWED = {"static", "shared", "auth.login", "auth.change_password", "auth.logout"}
 
 
 def create_app():
@@ -48,6 +53,7 @@ def create_app():
     from .notes_routes import notes_bp
     from .patients_routes import patients_bp
     from .qa_routes import qa_bp
+    from .reports_routes import reports_bp
     from .upload_routes import upload_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(agent_bp)
@@ -56,7 +62,12 @@ def create_app():
     app.register_blueprint(notes_bp)
     app.register_blueprint(patients_bp)
     app.register_blueprint(qa_bp)
+    app.register_blueprint(reports_bp)
     app.register_blueprint(upload_bp)
+
+    @app.route("/shared/<path:filename>")
+    def shared(filename):
+        return send_from_directory(SHARED_STATIC_ROOT, filename)
 
     @app.errorhandler(413)
     def too_large(e):

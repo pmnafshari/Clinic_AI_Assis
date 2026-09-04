@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Reports</h1>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  {# what this page deliberately does not show, said on the page rather than
+     only in a plan. invoices carry no status and there is no payments table,
+     so nothing here proves money was collected; there is no appointments
+     table; and patients carry no created date. #}
+  <div>
+    <strong class="ds-alert-title">What this page can and cannot show</strong>
+    Figures come from filed notes and their invoice lines. <strong>Amounts are billed, not
+    collected</strong> — this system records no payments. Appointment volume and new-patient
+    growth are not shown at all, because neither exists in the record.
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-12 col-xl-6">
+    <div class="card p-4 h-100">
+      <h2 class="section-title">Procedures</h2>
+      <p class="text-secondary small">How often each procedure code appears across all filed visits.</p>
+      {% if proc_has_data %}
+      <div class="chart-box"><canvas id="proc-chart"></canvas></div>
+      <p class="text-secondary small mb-0 mt-3">
+        A code the glossary does not recognise is flagged for review and still files, so it appears
+        here as itself rather than being folded away.
+      </p>
+      {% else %}
+      <div class="chart-empty">
+        <i class="bi bi-clipboard-data" aria-hidden="true"></i>
+        <p class="mb-0">No procedures yet. They appear here once a note is filed with a procedure on it.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-12 col-xl-6">
+    <div class="card p-4 h-100">
+      <h2 class="section-title">Billed by month</h2>
+      <p class="text-secondary small">Invoice lines totalled against the month of their visit.</p>
+      {% if billed_has_data %}
+      <div class="chart-box"><canvas id="billed-chart"></canvas></div>
+      <p class="text-secondary small mb-0 mt-3">
+        Billed, not collected. No invoice in this system carries a payment status.
+      </p>
+      {% else %}
+      <div class="chart-empty">
+        <i class="bi bi-receipt" aria-hidden="true"></i>
+        <p class="mb-0">Nothing billed yet. Amounts appear here once an invoice line is filed against a dated visit.</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+{% if proc_has_data or billed_has_data %}
+<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
+<script>
+  // every value here is passed from the route - nothing is summed in jinja
+  // and nothing is recomputed in js (D-01).
+  const dsAxis = getComputedStyle(document.documentElement).getPropertyValue('--ds-text-muted').trim();
+  const dsGrid = getComputedStyle(document.documentElement).getPropertyValue('--ds-border').trim();
+  const dsBar = getComputedStyle(document.documentElement).getPropertyValue('--ds-primary').trim();
+  const dsWarn = getComputedStyle(document.documentElement).getPropertyValue('--ds-warning').trim();
+  const baseOpts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color: dsAxis }, grid: { display: false } },
+      y: { beginAtZero: true, ticks: { color: dsAxis, precision: 0 }, grid: { color: dsGrid } }
+    }
+  };
+{% if proc_has_data %}
+  new Chart(document.getElementById('proc-chart'), {
+    type: 'bar',
+    data: {
+      labels: {{ proc_labels | tojson }},
+      datasets: [{
+        data: {{ proc_values | tojson }},
+        // an uncoded term is drawn in the warning colour AND named in the
+        // tooltip - colour is never the only signal (UX-17)
+        backgroundColor: {{ proc_uncoded | tojson }}.map(u => u ? dsWarn : dsBar)
+      }]
+    },
+    options: Object.assign({}, baseOpts, {
+      plugins: { legend: { display: false }, tooltip: { callbacks: {
+        afterLabel: (c) => {{ proc_uncoded | tojson }}[c.dataIndex] ? 'not in the procedure glossary' : ''
+      }}}
+    })
+  });
+{% endif %}
+{% if billed_has_data %}
+  new Chart(document.getElementById('billed-chart'), {
+    type: 'bar',
+    data: {
+      labels: {{ billed_months | tojson }},
+      datasets: [{ data: {{ billed_values | tojson }}, backgroundColor: dsBar }]
+    },
+    options: baseOpts
+  });
+{% endif %}
+</script>
+{% endif %}
+{% endblock %}

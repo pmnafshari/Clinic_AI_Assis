@@ -196,12 +196,97 @@ def selftest():
             r'<(?:script|link)[^>]+(?:src|href)="https?://', no_cdn_resp.text, re.IGNORECASE
         ), "10: authenticated pages must not reference any external http(s) asset"
 
+        # 10a. UX-01/UX-02 - the shared token layer resolves end to end. a
+        # <link> to a 404 is indistinguishable from a working one in markup,
+        # so request the file and look for a token in the body. served
+        # without a session because the login page needs it, same as /static.
+        tokens_resp = app.test_client().get("/shared/css/tokens.css")
+        assert tokens_resp.status_code == 200, \
+            "10a: the shared token stylesheet must serve without a session"
+        assert b"--ds-primary" in tokens_resp.data, \
+            "10a: the shared stylesheet must actually carry the design tokens"
+        assert app.test_client().get("/shared/fonts/InterVariable.woff2").status_code == 200, \
+            "10a: the vendored typeface must serve locally"
+        assert b"shared/css/tokens.css" in no_cdn_resp.data, \
+            "10a: an authenticated page must load the shared token layer"
+
+        # 10b. the whitelist grew by exactly one named endpoint. a prefix
+        # match here would open every route starting with the same letters.
+        from app import WHITELIST_ENDPOINTS
+        assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login"}, \
+            "10b: the no-session whitelist must hold exactly static, shared and login"
+        assert app.test_client().get("/patients").status_code == 302, \
+            "10b: every other route must still redirect to login without a session"
+
+        # 10c. UX-03/UX-04 - the component layer reads tokens and nothing
+        # else. a component that hardcodes a colour is the exact failure
+        # UX-01 exists to prevent, it is invisible by eye across 500 lines,
+        # and it is trivial to detect. comments are stripped first - they are
+        # prose, and the token names quoted in them are not rules.
+        components_src = (
+            Path(__file__).resolve().parent
+            / "shared" / "static" / "css" / "components.css"
+        ).read_text()
+        rules_only = re.sub(r"/\*.*?\*/", "", components_src, flags=re.S)
+        assert not re.search(r"#[0-9a-fA-F]{3,8}\b", rules_only), \
+            "10c: components.css must not hardcode a hex colour - use a --ds- token"
+        assert not re.search(r"\brgba?\([^)]*\)", rules_only), \
+            "10c: components.css must not hardcode an rgb/rgba colour - use a --ds- token"
+        assert not re.search(r"font-size:\s*[^;]*\d+px", rules_only), \
+            "10c: components.css must not set a raw px font-size - use a --ds- type token"
+        assert "var(--ds-" in rules_only, \
+            "10c: components.css must actually read the token layer"
+
+        # 10d. UX-10 - the login's behaviour contract, not its looks.
+        login_html = app.test_client().get("/login").text
+        assert re.search(r"<button[^>]+data-pw-toggle[^>]+aria-pressed", login_html) or \
+               re.search(r"<button[^>]+aria-pressed[^>]+data-pw-toggle", login_html), \
+            "10d: show/hide must be a button carrying aria-pressed, not a checkbox or a div"
+        assert login_html.count('name="password"') == 1, \
+            "10d: the password must exist once in the dom - a second input would hold it in clear"
+        # role comes from the authenticated identity and is never offered as
+        # a choice. a select or a role field here would be an escalation path.
+        assert "<select" not in login_html, "10d: no select on the login"
+        assert 'name="role"' not in login_html, "10d: role must never be a submitted field"
+        assert 'name="csrf_token"' in login_html, "10d: the csrf token must survive the restyle"
+        assert 'action="/login"' in login_html or "url_for" not in login_html, \
+            "10d: the form must still post to the login route"
+
+        # 10e. UX-15 - one error voice across the staff surface. an error
+        # rendered as a bare paragraph is both a different look and a weaker
+        # signal: ds-alert carries role="alert" and is announced.
+        staff_templates = (Path(__file__).resolve().parent / "app" / "templates")
+        bare = [f.name for f in staff_templates.glob("*.html")
+                if 'class="text-danger">{{ error' in f.read_text()]
+        assert not bare, \
+            f"10e: these still render an error as a bare paragraph, not an alert: {bare}"
+
+        # 10f. UX-16 - both data tables carry the card treatment, and every
+        # cell carries the label it shows on a phone. a data-label missing
+        # from one column produces a card with an unlabelled value, which is
+        # worse than a scrolling table.
+        for tpl, table_file in (("patients_list.html", "patients_list.html"),
+                                ("admin_users.html", "_user_row.html")):
+            src = (staff_templates / tpl).read_text()
+            assert "ds-table-cards" in src, f"10f: {tpl} table needs the card treatment"
+            body = (staff_templates / table_file).read_text()
+            tds = body.count("<td")
+            labelled = body.count("data-label=")
+            assert tds == labelled, \
+                f"10f: {table_file} has {tds} cells but {labelled} data-labels"
+
         # 11. D-05 - login opts out of the sidebar; an authenticated screen
         # keeps it
         login_page = app.test_client().get("/login")
-        assert b"<aside" not in login_page.data, "11: login must render without the sidebar"
+        def has_class(html, cls):
+            return any(cls in attr.split()
+                       for attr in re.findall(r'class="([^"]*)"', html))
+
+        assert not has_class(login_page.text, "app-sidebar"), \
+            "11: login must render without the sidebar"
         dash_with_shell = client_a.get("/")
-        assert b"<aside" in dash_with_shell.data, "11: an authenticated screen must render the sidebar"
+        assert has_class(dash_with_shell.text, "app-sidebar"), \
+            "11: an authenticated screen must render the sidebar"
 
         # ---- AUTH-05 staff password self-service ----
 
@@ -621,10 +706,34 @@ def selftest():
         # source: 'Staff accounts' is behind manage_users, so a dentist sees 6
         # and an admin sees a different 4. asserting the source count here
         # would pass even if authorize() had been stripped out entirely.
-        assert shell.data.count(b'class="nav-link') == 6, \
-            f'20: a dentist should see 6 sidebar links, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        # PROPERTY UNCHANGED: the role filter still bites, counted per role.
+        # 6 -> 7 because phase 39 added Reports behind read_clinical, which a
+        # dentist holds. The assertion below that an assistant does NOT gain
+        # it is what keeps this honest - a bare count going up could otherwise
+        # hide authorize() being stripped out.
+        assert shell.data.count(b'class="nav-link') == 7, \
+            f'20: a dentist should see 7 sidebar links, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        assert b"Reports" in shell.data, "20: a dentist holds read_clinical and is offered Reports"
         assert b"Staff accounts" not in shell.data, \
             "20: a dentist must not be offered the admin link"
+
+        # 20a. UX-19 - Reports sits behind read_clinical, the dentist-only
+        # capability. an assistant holds read_notes but NOT read_clinical, so
+        # it must get neither the link nor the page - withheld, not hidden.
+        client_asst = app.test_client()
+        csrf_a2 = _csrf_from(client_asst.get("/login").text)
+        _seed_user(db_path, "zasst2", "goodpass", "assistant")
+        client_asst.post("/login", data={
+            "username": "zasst2", "password": "goodpass", "csrf_token": csrf_a2,
+        })
+        asst_shell = client_asst.get("/")
+        assert b"Reports" not in asst_shell.data, \
+            "20a: an assistant must not be offered Reports"
+        asst_reports = client_asst.get("/reports")
+        assert asst_reports.status_code == 302, \
+            "20a: an assistant must be refused the reports route, not shown a hidden page"
+        assert b"chart" not in asst_reports.data.lower(), \
+            "20a: and the refusal must carry no trace of the figures"
 
         client_adm = app.test_client()
         csrf_m = _csrf_from(client_adm.get("/login").text)
@@ -635,6 +744,51 @@ def selftest():
         adm_shell = client_adm.get("/admin/users")
         assert b"Staff accounts" in adm_shell.data, \
             "20: an admin must be offered the admin link"
+
+        # 20b. UX-20 - what the reports page must NEVER claim. none of these
+        # exist in the schema: invoices carry no status and there is no
+        # payments table, there is no appointments table, and patients carry
+        # no created date. they are excluded outright - not shown empty.
+        rep = client_g.get("/reports")
+        assert rep.status_code == 200, "20b: a dentist should reach the reports page"
+        body = rep.data.lower()
+        for forbidden in (b"revenue", b"turnover", b"profit",
+                          b"appointments over time", b"new patients"):
+            assert forbidden not in body, \
+                f"20b: the reports page must not present {forbidden.decode()!r} - the schema cannot support it"
+        # "collected" is allowed ONLY as a denial. the page says "billed, not
+        # collected", which is the opposite of a claim - a flat ban on the
+        # word would forbid the very sentence that makes the page honest, and
+        # did, the first time this was written.
+        flat = re.sub(r"\s+", " ", body.decode())
+        for m in re.finditer(r"collected", flat):
+            before = flat[max(0, m.start() - 12):m.start()]
+            assert "not " in before, \
+                f"20b: 'collected' may appear only as a denial, found: ...{before}collected..."
+        assert b"billed" in body, \
+            "20b: and it must say billed, which is what the invoice lines actually are"
+
+        # 20c. every figure traces to a query. a sum computed in jinja is a
+        # second source of truth for a number the route already owns (D-01).
+        reports_tpl = (Path(__file__).resolve().parent / "app" / "templates" / "reports.html").read_text()
+        for jinja_math in ("|sum", "|length", "sum(", "count("):
+            assert jinja_math not in reports_tpl, \
+                f"20c: reports.html computes {jinja_math!r} - figures belong in the route"
+
+        # 20d. asserted per state, because the fixture db may hold no
+        # procedures and a bare containment check would then be vacuous.
+        # drawn: an uncoded term is NAMED, never distinguished by colour
+        # alone (UX-17, and this is a clinical surface).
+        # empty: phase 31's empty state, saying what will appear and why not.
+        if b'id="proc-chart"' in rep.data:
+            assert b"not in the procedure glossary" in rep.data, \
+                "20d: an uncoded term must be named, not only tinted"
+        else:
+            assert b"No procedures yet" in rep.data, \
+                "20d: an empty series must render the empty state, not a blank card"
+        if b'id="billed-chart"' not in rep.data:
+            assert b"Nothing billed yet" in rep.data, \
+                "20d: an empty billed series must render the empty state"
         assert b"Patients" not in adm_shell.data.split(b"</aside>")[0], \
             "20: an admin holds no read_notes and must not be offered Patients"
 

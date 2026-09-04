@@ -1,6 +1,6 @@
 <h2 class="section-title">Edit next appointment</h2>
 {% if error %}
-<p class="text-danger">{{ error }}</p>
+<div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% endif %}
 <p class="text-secondary">Visit of {{ visit_date or "no date" }}</p>
 <form hx-post="{{ url_for('patients.visit_edit_submit', cf=cf, visit_id=visit_id) }}" hx-target="#modal-body-target" hx-swap="innerHTML">
