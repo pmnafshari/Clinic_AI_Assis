@@ -3,8 +3,19 @@
    identity. */
 
 :root {
-  /* green, not the staff blue. this is the one visual signal that tells a
-     public surface apart from the internal clinic app at a glance. */
+  /* text-safe shades. the brand green and bootstrap's secondary grey both
+     measured just under 4.5:1 as 18px link text (4.31 and 4.45), so the
+     switcher uses darker variants. --bs-primary itself is deliberately
+     unchanged: it is this app's identity and check 08 asserts the deflection
+     icon at exactly rgb(47, 133, 90). */
+  --patient-link: #656e76;
+  --patient-link-active: #257b50;
+  /* green, not the staff navy. this is the one visual signal that tells a
+     public surface apart from the internal clinic app at a glance - kept
+     deliberately through the v3.0 redesign, because the brief asks the three
+     surfaces to share a language without looking identical.
+     components.css binds .btn-primary to --bs-primary, so this colour reaches
+     the buttons too rather than only the accents (fixed 36-01). */
   --bs-primary: #2f855a;
   --bs-primary-rgb: 47, 133, 90;
   /* an error is an error in both apps - inherited unchanged */
@@ -62,12 +73,12 @@ h1 {
   justify-content: center;
   min-width: 48px;
   min-height: 48px;
-  color: #6c757d;
+  color: var(--patient-link);
   text-decoration: none;
 }
 
 .patient-lang-link.active {
-  color: var(--bs-primary);
+  color: var(--patient-link-active);
   font-weight: 600;
 }
 
@@ -109,3 +120,106 @@ h1 {
 .chat-response--error .chat-response-icon {
   color: var(--bs-danger);
 }
+
+/* --- login split (UX-10) -------------------------------------------------
+   additive. .patient-shell's centred column and .patient-card's 420px are
+   both untouched - the split only applies when the login screen adds the
+   modifier, and the card stays narrow inside its column (e2e check 13). */
+
+.patient-shell--split { padding: 0; }
+
+@media (min-width: 992px) {
+  .patient-shell--split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .patient-shell--split .patient-brand { display: flex; }
+}
+
+.patient-brand {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  padding: var(--ds-space-8);
+  background: var(--ds-navy-900);
+  color: var(--ds-text-on-dark);
+}
+
+.patient-brand-mark { font-size: var(--ds-h1); color: var(--ds-teal-400); margin-bottom: var(--ds-space-5); }
+.patient-brand-line { margin: 0; max-width: 22rem; font-size: var(--ds-body-lg); color: var(--ds-border-strong); }
+
+.patient-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.patient-pw { position: relative; }
+.patient-pw .form-control { padding-right: 3.25rem; }
+
+.patient-pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: none;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  color: var(--ds-text-muted);
+  cursor: pointer;
+}
+
+.patient-pw-toggle:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+/* the reply keeps the card treatment and every class e2e_chat_walk asserts
+   on; only the corner facing the question is squared off so the pair reads
+   as one exchange. the turn itself is .ds-turn in the shared layer. */
+.ds-exchange .chat-response { border-bottom-left-radius: var(--ds-radius-sm); }
+
+/* the response heading carries tabindex="-1" so chat.js can move screen-reader
+   focus to the new answer. it is not keyboard-reachable, so the visible ring
+   chrome draws around it communicates nothing and reads as an input border.
+   the announcement - the whole point of the focus - is unaffected.
+   pre-existing since phase 18; found by inspection in 35-01. */
+.chat-response-heading:focus { outline: none; }
+
+/* --- portal shell (UX-13) ------------------------------------------------ */
+
+.patient-nav {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  gap: var(--ds-space-4);
+  margin-bottom: var(--ds-space-3);
+}
+
+.patient-nav--wide { max-width: 640px; }
+
+.patient-nav-link {
+  padding: var(--ds-space-2) 0;
+  border-bottom: 2px solid transparent;
+  color: var(--ds-text-muted);
+  text-decoration: none;
+  font-size: var(--ds-nav);
+}
+
+.patient-nav-link:hover { color: var(--ds-primary); }
+.patient-nav-link:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: var(--ds-radius-sm); }
+.patient-nav-link.active { color: var(--ds-primary); border-bottom-color: var(--ds-primary); font-weight: var(--ds-weight-medium); }
+
+.patient-facts { margin: 0 0 var(--ds-space-5); }
+.patient-facts dt { font-size: var(--ds-caption); text-transform: uppercase; letter-spacing: var(--ds-tracking-wide); color: var(--ds-text-muted); }
+.patient-facts dd { margin: 0 0 var(--ds-space-4); font-size: var(--ds-body-lg); color: var(--ds-text); }
+
+/* an unconnected surface is muted so it does not compete with what works */
+.patient-unconnected { background: var(--ds-surface-sunken); box-shadow: none; }

@@ -34,9 +34,18 @@
 </form>
 
 {# exactly one response region, rendered only when a POST produced a state -
-   a reload with no state returns to the empty state above, per D-03 #}
+   a reload with no state returns to the empty state above, per D-03.
+
+   35-01 renders the exchange as an exchange: the patient's own turn above
+   the assistant's. It is still ONE exchange, not a transcript - this app
+   keeps no conversation state, and inventing one client-side would
+   contradict the reload rule directly above. #}
 {% if state %}
-<div class="card chat-response chat-response--{{ state }} mt-4 p-4" role="status" aria-live="polite">
+<div class="ds-exchange mt-4">
+  {% if question %}
+  <p class="ds-turn ds-turn-user">{{ question }}</p>
+  {% endif %}
+<div class="card chat-response chat-response--{{ state }} p-4" role="status" aria-live="polite">
   <h2 class="chat-response-heading h5 mb-2" id="chat-response-heading" tabindex="-1">
     {% if state == 'answer' %}
     <i class="bi bi-chat-left-text chat-response-icon" aria-hidden="true"></i> {{ t('answer_heading', lang) }}
@@ -59,6 +68,7 @@
     {{ t('chat_error_body', lang) }}
     {% endif %}
   </p>
+</div>
 </div>
 {% endif %}
 

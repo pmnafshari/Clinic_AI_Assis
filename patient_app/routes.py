@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, g, redirect, render_template, request, url_for
 
+import patient_accessor
 import patient_auth
 import storage
 from auth import log_audit
@@ -32,12 +33,13 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = str(REPO_ROOT / "db" / "clinic.sqlite")
 
 # reachable with no patient session at all
-NO_SESSION_ALLOWED = {"static", "vendor", "patient.login", "set_language"}
+NO_SESSION_ALLOWED = {"static", "vendor", "shared", "patient.login", "set_language"}
 
 # reachable while must_change_pin is still set - mirrors CHANGE_PW_ALLOWED's
 # shape so the "don't trap the user" property is visible in one place
 FORCED_CHANGE_ALLOWED = {
-    "static", "vendor", "patient.change_pin", "set_language", "patient.logout",
+    "static", "vendor", "shared", "patient.change_pin", "set_language",
+    "patient.logout",
 }
 
 STATUS_TO_ERROR_KEY = {
@@ -140,6 +142,17 @@ def login():
     return resp
 
 
+@patient_bp.route("/profile")
+def profile():
+    # demographics come through patient_accessor, the same scope-checked path
+    # the chat uses - not a second query. a mismatched cf writes a
+    # patient_scope_violation row there and returns nothing, exactly as it
+    # does for the chat. no visit or invoice is read here.
+    cf = g.patient["codice_fiscale"]
+    demo = patient_accessor.get_demographics(cf, get_db(), ip=net.from_request(request))
+    return render_template("patient_profile.html", cf=cf, demo=demo)
+
+
 @patient_bp.route("/logout", methods=["POST"])
 def logout():
     token = request.cookies.get(patient_auth.PATIENT_COOKIE_NAME)
@@ -235,4 +248,10 @@ def chat_page():
     # inside chat.answer_question's wrapper, on this same code path, and the
     # scope-mismatch row inside patient_accessor - a call here would just
     # double-count what those already record.
-    return render_template("patient_chat.html", state=result["state"], body=result["body"])
+    # the question is passed back so the page can render the exchange as an
+    # exchange rather than a lone answer. presentational only - it is the
+    # value already read above, jinja-escaped on the way out, and capped at
+    # 500 characters by the truncation a few lines up.
+    return render_template(
+        "patient_chat.html", state=result["state"], body=result["body"], question=question
+    )

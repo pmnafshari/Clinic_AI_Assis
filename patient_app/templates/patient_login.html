@@ -1,4 +1,11 @@
 {% extends "patient_base.html" %}
+{% block shell_class %}patient-shell--split{% endblock %}
+{% block auth_brand %}
+<aside class="patient-brand">
+  <span class="patient-brand-mark" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+  <p class="patient-brand-line">{{ t('brand_line', lang) }}</p>
+</aside>
+{% endblock %}
 {% block content %}
 <h1 class="mb-3">{{ t('login_heading', lang) }}</h1>
 <p class="text-secondary mb-4">{{ t('login_body', lang) }}</p>
@@ -6,13 +13,25 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
     <label for="codice_fiscale" class="form-label">{{ t('cf_label', lang) }}</label>
-    <input type="text" id="codice_fiscale" name="codice_fiscale" class="form-control" autofocus required>
+    <input type="text" id="codice_fiscale" name="codice_fiscale" class="form-control"
+           autocomplete="username" autofocus required>
   </div>
   <div class="mb-4">
     <label for="pin" class="form-label">{{ t('pin_label', lang) }}</label>
-    <input type="password" id="pin" name="pin" class="form-control" inputmode="numeric" required>
+    <div class="patient-pw">
+      <input type="password" id="pin" name="pin" class="form-control" inputmode="numeric"
+             autocomplete="current-password" data-pw-input required>
+      {# same contract as the staff login: one input whose type flips, state
+         announced through aria-pressed, label in the patient's language #}
+      <button type="button" class="patient-pw-toggle" data-pw-toggle
+              aria-pressed="false" aria-label="{{ t('show_pin', lang) }}"
+              data-label-show="{{ t('show_pin', lang) }}" data-label-hide="{{ t('hide_pin', lang) }}">
+        <i class="bi bi-eye" aria-hidden="true"></i>
+      </button>
+    </div>
   </div>
   <button type="submit" class="btn btn-primary w-100">{{ t('login_cta', lang) }}</button>
 </form>
 <p class="text-secondary small mt-3 mb-0">{{ t('help_line', lang) }}</p>
+<script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>
 {% endblock %}

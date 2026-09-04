@@ -232,7 +232,12 @@ def walk(browser, pins):
           f"landed on {landed}")
 
     # 2. home card and its CTA
-    home_ok = t("home_heading", "it") in page.content()
+    # PROPERTY UNCHANGED: the home screen renders its own heading and its CTA
+    # reaches /chat. 36-01 made the heading a personalised greeting
+    # ("Ciao, {name}"), falling back to home_heading when no name is on file,
+    # so both spellings are live and either satisfies this.
+    _greeting = t("overview_heading", "it").split("{")[0]
+    home_ok = _greeting in page.content() or t("home_heading", "it") in page.content()
     page.click(f"text={t('home_cta', 'it')}")
     page.wait_for_load_state("networkidle")
     check("02 home card -> /chat",

@@ -33,6 +33,17 @@ def _strip_csrf(html):
     return re.sub(r'name="csrf_token" value="[^"]+"', "", html)
 
 
+def on_page(value, page_text):
+    """Is this translated string rendered on the page?
+
+    Compared in its ESCAPED form. Jinja autoescapes, so "Tramite l'assistente"
+    reaches the html as "Tramite l&#39;assistente" and a raw containment check
+    silently fails. Hit for real in phase 33 on the site app, and again here.
+    """
+    from markupsafe import escape
+    return str(escape(value)) in page_text
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
@@ -91,6 +102,42 @@ def selftest():
         ), "2: the patient surface must not reference any external asset"
         assert client.get("/vendor/bootstrap/5.3.3/bootstrap.min.css").status_code == 200, \
             "2: the vendored bootstrap should serve locally"
+
+        # 2a. UX-01/UX-02 - the same token file the staff app reads, from the
+        # same directory on disk. reachable with no session because the login
+        # screen needs it, exactly like /vendor.
+        tokens_resp = client.get("/shared/css/tokens.css")
+        assert tokens_resp.status_code == 200, \
+            "2a: the shared token stylesheet must serve without a session"
+        assert b"--ds-primary" in tokens_resp.data, \
+            "2a: the shared stylesheet must actually carry the design tokens"
+        assert client.get("/shared/fonts/InterVariable.woff2").status_code == 200, \
+            "2a: the vendored typeface must serve locally"
+        assert "shared/css/tokens.css" in login_page.text, \
+            "2a: the patient login page must load the shared token layer"
+
+        # 2b. UX-10 - same behaviour contract as the staff login, plus the
+        # bilingual one this surface carries.
+        assert re.search(r"<button[^>]+data-pw-toggle", login_page.text), \
+            "2b: show/hide must be a button, not a checkbox or a div"
+        assert "aria-pressed" in login_page.text, \
+            "2b: the toggle must announce its state"
+        assert login_page.text.count('name="pin"') == 1, \
+            "2b: the pin must exist once in the dom"
+        assert "<select" not in login_page.text and 'name="role"' not in login_page.text, \
+            "2b: this surface has no role concept and must not grow a selectable one"
+        assert 'name="csrf_token"' in login_page.text, "2b: the csrf token must survive the restyle"
+        # the toggle's labels are translated like everything else here
+        assert t("show_pin", "it") in login_page.text, "2b: the toggle label must be localised"
+        assert t("show_pin", "it") != t("show_pin", "en"), "2b: and actually differ per language"
+
+        # 2c. UX-11 - the exchange renders the patient's own turn, escaped,
+        # and only when there is a state to answer. a reload with no state
+        # must still return the empty page (D-03), so the turn cannot leak
+        # onto a GET.
+        empty_chat = client.get("/chat")
+        assert "ds-turn-user" not in empty_chat.text, \
+            "2c: a GET with no state must render no exchange at all"
 
         # 3. italian is the default, not a fallback
         assert DEFAULT_LANGUAGE == "it"
@@ -493,10 +540,45 @@ def selftest():
             "csrf_token": _csrf_from(home_change_page.text),
         })
         home_resp = home_client.get("/")
-        assert t("home_heading", "it") in home_resp.text, \
+        greeting = t("overview_heading", "it").split("{")[0]
+        assert greeting in home_resp.text or t("home_heading", "it") in home_resp.text, \
             "18: the home screen should carry its own heading"
         assert t("login_heading", "it") not in home_resp.text, \
             "18: the home screen must not read like the login screen"
+
+        # 18b. UX-14 - the overview names what is missing instead of drawing
+        # an empty table, and reads nothing clinical to do it.
+        assert on_page(t("not_connected", "it"), home_resp.text), \
+            "18b: a surface with no backend must be labelled as such"
+        # and one that IS reachable must not wear that label - visits and
+        # invoices exist, they are simply read through the assistant
+        assert on_page(t("via_assistant", "it"), home_resp.text), \
+            "18b: reachable-via-assistant must not be labelled unavailable"
+        assert home_resp.text.count(str(__import__("markupsafe").escape(t("not_connected", "it")))) == 1, \
+            "18b: exactly one surface here is genuinely absent"
+        assert on_page(t("overview_appt_body", "it"), home_resp.text), \
+            "18b: and must say why they are not there"
+        assert "<table" not in home_resp.text, \
+            "18b: an empty table reads as a page that failed to load"
+
+        # 18c. the shell is navigable, and only with a session
+        for key in ("nav_overview", "nav_chat", "nav_profile"):
+            assert on_page(t(key, "it"), home_resp.text), f"18c: {key} missing from the shell nav"
+        anon = app.test_client().get("/login")
+        assert not on_page(t("nav_profile", "it"), anon.text), \
+            "18c: the shell nav must not render for an unauthenticated visitor"
+
+        # 18d. the profile shows demographics through the accessor and
+        # nothing clinical. a visit date or an invoice amount here would mean
+        # a second data path had been opened.
+        prof = home_client.get("/profile")
+        assert prof.status_code == 200, "18d: the profile should render"
+        assert on_page(t("profile_cf", "it"), prof.text), "18d: the profile shows the codice fiscale"
+        assert on_page(t("profile_note", "it"), prof.text), \
+            "18d: and says these details are changed by the clinic, not here"
+        for clinical in ("visit_date", "procedures", "amount", "invoice"):
+            assert clinical not in prof.text.lower(), \
+                f"18d: the profile must not carry clinical field {clinical!r}"
 
         # WR-13: an unmapped verify_pin status fails closed, not 500
         original_verify_pin = patient_auth.verify_pin

@@ -1,6 +1,37 @@
 {% extends "patient_base.html" %}
+{% block card_class %}patient-card--wide{% endblock %}
+{% block lang_class %}patient-lang--wide{% endblock %}
+{% block nav_class %}patient-nav--wide{% endblock %}
 {% block content %}
-<h1 class="mb-3">{{ t('home_heading', lang) }}</h1>
-<p class="text-secondary mb-0">{{ t('home_body', lang) }}</p>
-<a href="{{ url_for('patient.chat') }}" class="btn btn-primary mt-4">{{ t('home_cta', lang) }}</a>
+<h1 class="mb-3">{{ t('overview_heading', lang).format(name=name) if name else t('home_heading', lang) }}</h1>
+<p class="text-secondary mb-4">{{ t('overview_body', lang) }}</p>
+
+<div class="ds-card mb-3">
+  <div class="ds-card-body">
+    <h2 class="ds-card-title">{{ t('overview_chat_title', lang) }}</h2>
+    <p class="text-secondary">{{ t('overview_chat_body', lang) }}</p>
+    <a href="{{ url_for('patient.chat') }}" class="btn btn-primary mt-2">{{ t('home_cta', lang) }}</a>
+  </div>
+</div>
+
+{# UX-14. Two different truths, and they must not share a label:
+   - appointments genuinely do not exist in this system
+   - visits and invoices DO exist and are reachable, through the assistant
+   Badging the second "not available" was inaccurate, and inaccuracy about
+   what the clinic holds is the one thing this surface must not do. #}
+<div class="ds-card patient-unconnected mb-3">
+  <div class="ds-card-body">
+    <span class="ds-badge ds-badge-neutral">{{ t('not_connected', lang) }}</span>
+    <h2 class="ds-card-title mt-2">{{ t('overview_appt_title', lang) }}</h2>
+    <p class="text-secondary mb-0">{{ t('overview_appt_body', lang) }}</p>
+  </div>
+</div>
+
+<div class="ds-card mb-3">
+  <div class="ds-card-body">
+    <span class="ds-badge ds-badge-info">{{ t('via_assistant', lang) }}</span>
+    <h2 class="ds-card-title mt-2">{{ t('overview_records_title', lang) }}</h2>
+    <p class="text-secondary mb-0">{{ t('overview_records_body', lang) }}</p>
+  </div>
+</div>
 {% endblock %}

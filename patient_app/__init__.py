@@ -13,6 +13,7 @@ from flask_wtf import CSRFProtect
 import patient_auth
 import storage
 from env_config import load_secret_key
+from shared import STATIC_ROOT as SHARED_STATIC_ROOT
 
 from . import routes
 from .routes import REPO_ROOT, patient_bp, require_patient_session
@@ -100,11 +101,31 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
     def vendor(filename):
         return send_from_directory(VENDOR_ROOT, filename)
 
+    @app.route("/shared/<path:filename>")
+    def shared(filename):
+        # same shape as /vendor above - one directory on disk, one route per
+        # app. the login screen needs it before a session exists, so it is in
+        # NO_SESSION_ALLOWED for the same reason "vendor" is.
+        return send_from_directory(SHARED_STATIC_ROOT, filename)
+
     @app.route("/")
     def home():
         # gated by require_patient_session above - reachable only with a
-        # session past the forced pin change. the real content is Phase 18's
-        # chat surface; this is still a placeholder landing page.
-        return render_template("patient_home.html")
+        # session past the forced pin change.
+        #
+        # the greeting name comes through patient_accessor, the same
+        # scope-checked path the chat uses. nothing clinical is read here.
+        from flask import request as _request
+
+        import patient_accessor
+
+        from . import net
+        from .routes import get_db
+
+        demo = patient_accessor.get_demographics(
+            g.patient["codice_fiscale"], get_db(), ip=net.from_request(_request)
+        )
+        name = demo["patient_name"].split()[0] if demo and demo.get("patient_name") else None
+        return render_template("patient_home.html", name=name)
 
     return app

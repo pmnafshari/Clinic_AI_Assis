@@ -1,0 +1,22 @@
+{% extends "patient_base.html" %}
+{% block card_class %}patient-card--wide{% endblock %}
+{% block lang_class %}patient-lang--wide{% endblock %}
+{% block nav_class %}patient-nav--wide{% endblock %}
+{% block content %}
+<h1 class="mb-3">{{ t('profile_heading', lang) }}</h1>
+
+{# read through patient_accessor, the same scope-checked path the chat uses.
+   nothing clinical is shown here - no visit, no invoice. #}
+<dl class="patient-facts">
+  <dt>{{ t('profile_name', lang) }}</dt>
+  <dd>{{ demo.patient_name if demo and demo.patient_name else t('profile_missing', lang) }}</dd>
+  <dt>{{ t('profile_phone', lang) }}</dt>
+  <dd>{{ demo.phone if demo and demo.phone else t('profile_missing', lang) }}</dd>
+  <dt>{{ t('profile_cf', lang) }}</dt>
+  <dd>{{ cf }}</dd>
+</dl>
+
+<p class="text-secondary small">{{ t('profile_note', lang) }}</p>
+
+<a href="{{ url_for('patient.change_pin') }}" class="btn btn-outline-secondary">{{ t('profile_change_pin', lang) }}</a>
+{% endblock %}

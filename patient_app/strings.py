@@ -23,6 +23,65 @@ def current_language():
     return lang if lang in LANGUAGES else DEFAULT_LANGUAGE
 
 STRINGS = {
+    # [ASSUMED] italian below written without native-speaker review, same
+    # caveat as the rest of this module
+    # --- portal shell (UX-13/UX-14) -----------------------------------
+    "nav_overview": {"it": "Riepilogo", "en": "Overview"},
+    "nav_chat": {"it": "Assistente", "en": "Assistant"},
+    "nav_profile": {"it": "Profilo", "en": "Profile"},
+
+    "overview_heading": {"it": "Ciao, {name}", "en": "Hello, {name}"},
+    "overview_body": {
+        "it": "Da qui puoi chiedere all'assistente delle tue visite, del prossimo appuntamento e delle tue fatture.",
+        "en": "From here you can ask the assistant about your visits, your next appointment and your invoices.",
+    },
+    "overview_chat_title": {"it": "Chiedi all'assistente", "en": "Ask the assistant"},
+    "overview_chat_body": {
+        "it": "Visite, appuntamenti, fatture e dati anagrafici: l'assistente risponde solo sui tuoi dati.",
+        "en": "Visits, appointments, invoices and your details - the assistant answers only about your own records.",
+    },
+
+    # UX-14: these say what is missing, and why, rather than showing an
+    # empty table that looks broken
+    "not_connected": {"it": "Non disponibile", "en": "Not available"},
+    # visits and invoices are NOT missing - they are reachable, through the
+    # assistant. badging them "not available" was inaccurate, and inaccuracy
+    # about what the clinic holds is the one thing this surface must not do.
+    "via_assistant": {"it": "Tramite l'assistente", "en": "Via the assistant"},
+    "overview_appt_title": {"it": "Prenotazioni", "en": "Appointments"},
+    "overview_appt_body": {
+        "it": "Le prenotazioni si gestiscono per telefono con la clinica: non sono ancora collegate a questo portale.",
+        "en": "Appointments are arranged by phone with the clinic - they are not connected to this portal yet.",
+    },
+    "overview_records_title": {"it": "Visite e fatture", "en": "Visits and invoices"},
+    "overview_records_body": {
+        "it": "I tuoi dati clinici si consultano tramite l'assistente, non come elenco su questa pagina.",
+        "en": "Your clinical records are read through the assistant, not as a list on this page.",
+    },
+
+    "profile_heading": {"it": "Il tuo profilo", "en": "Your profile"},
+    "profile_name": {"it": "Nome", "en": "Name"},
+    "profile_phone": {"it": "Telefono", "en": "Phone"},
+    "profile_cf": {"it": "Codice fiscale", "en": "Codice fiscale"},
+    "profile_missing": {"it": "Non registrato", "en": "Not on file"},
+    "profile_note": {
+        "it": "Per correggere questi dati contatta la clinica: non si modificano da qui.",
+        "en": "To correct these details, contact the clinic - they cannot be changed here.",
+    },
+    "profile_change_pin": {"it": "Cambia il PIN", "en": "Change your PIN"},
+
+    "brand_line": {
+        "it": "I tuoi dati clinici, quando ti servono.",
+        "en": "Your clinical records, when you need them.",
+    },
+    "show_pin": {
+        "it": "Mostra il PIN",
+        "en": "Show PIN",
+    },
+    "hide_pin": {
+        "it": "Nascondi il PIN",
+        "en": "Hide PIN",
+    },
     "login_heading": {
         "it": "Accedi ai tuoi dati",
         "en": "Access your records",
