@@ -1,0 +1,15 @@
+<section class="site-section" id="faq">
+  <div class="site-wrap site-wrap-narrow">
+    <h2 class="site-h2">{{ clinic.faq.heading }}</h2>
+    {# native disclosure: keyboard-operable and screen-reader announced with
+       no javascript, so there is no aria state to keep in step by hand #}
+    <div class="site-faq">
+      {% for item in clinic.faq.entries %}
+      <details class="site-faq-item">
+        <summary class="site-faq-q">{{ item.q }}</summary>
+        <p class="site-faq-a">{{ item.a }}</p>
+      </details>
+      {% endfor %}
+    </div>
+  </div>
+</section>

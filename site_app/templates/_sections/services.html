@@ -1,0 +1,19 @@
+<section class="site-section site-section-alt" id="services">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.services.heading }}</h2>
+    <p class="site-lede">{{ clinic.services.body }}</p>
+
+    <div class="site-grid site-grid-3">
+      {% for svc in clinic.services.entries %}
+      <article class="site-card" id="{{ svc.slug }}">
+        <span class="site-card-icon"><svg class="site-icon" aria-hidden="true"><use href="#i-{{ svc.icon }}"/></svg></span>
+        <h3 class="site-card-title">{{ svc.title }}</h3>
+        <p class="site-card-body">{{ svc.body }}</p>
+        <a class="site-card-link" href="/services#{{ svc.slug }}">
+          Learn more <svg class="site-icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+        </a>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>

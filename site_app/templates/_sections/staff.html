@@ -1,0 +1,24 @@
+<section class="site-section site-section-alt">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.staff.heading }}</h2>
+    <div class="site-grid site-grid-3">
+      {% for person in clinic.staff.entries %}
+      <article class="site-person site-person-row">
+        {% if has_image(person.photo) %}
+        <img class="site-photo site-person-avatar" src="{{ url_for('static', filename=person.photo) }}"
+             alt="" loading="lazy" decoding="async">
+        {% else %}
+        <div class="site-media site-person-avatar">
+          <svg class="site-icon" aria-hidden="true"><use href="#i-person"/></svg>
+        </div>
+        {% endif %}
+        <div class="site-person-body">
+          <h3 class="site-card-title">{{ person.name }}</h3>
+          <p class="site-person-role">{{ person.role }}</p>
+          <p class="site-card-body">{{ person.body }}</p>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </div>
+</section>

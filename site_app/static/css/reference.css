@@ -1,0 +1,102 @@
+/* Styling for the design-system reference page only. Documentation chrome,
+   not part of the shared layer - which is why it lives here and not in
+   components.css. Reads tokens like everything else; declares no colour of
+   its own. */
+
+body { background: var(--ds-ground); }
+
+.ref-page {
+  max-width: var(--ds-content-max);
+  margin: 0 auto;
+  padding: var(--ds-space-6) var(--ds-space-5) var(--ds-space-9);
+}
+
+.ref-head { margin-bottom: var(--ds-space-7); }
+
+.ref-title {
+  margin: 0 0 var(--ds-space-2);
+  font-size: var(--ds-h1);
+  line-height: var(--ds-h1-lh);
+  letter-spacing: var(--ds-tracking-tight);
+  font-weight: var(--ds-weight-semibold);
+}
+
+.ref-lede { margin: 0; max-width: 46rem; font-size: var(--ds-body-lg); color: var(--ds-text-muted); }
+
+.ref-section { margin-top: var(--ds-space-7); }
+
+.ref-section > h2 {
+  margin: 0 0 var(--ds-space-4);
+  padding-bottom: var(--ds-space-2);
+  border-bottom: 1px solid var(--ds-border);
+  font-size: var(--ds-h2);
+  line-height: var(--ds-h2-lh);
+  font-weight: var(--ds-weight-semibold);
+}
+
+.ref-note { margin: 0 0 var(--ds-space-4); max-width: 46rem; font-size: var(--ds-small); color: var(--ds-text-muted); }
+
+/* every specimen is labelled with the class you type to get it - the page is
+   only useful if it answers "what do I write" without reading the css */
+.ref-item { margin-bottom: var(--ds-space-5); }
+
+.ref-code {
+  display: inline-block;
+  margin-top: var(--ds-space-2);
+  font-family: var(--ds-font-mono);
+  font-size: var(--ds-caption);
+  color: var(--ds-text-muted);
+}
+
+.ref-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-3); }
+.ref-stack { display: flex; flex-direction: column; gap: var(--ds-space-3); }
+
+.ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+  gap: var(--ds-space-4);
+}
+
+.ref-swatch {
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+  overflow: hidden;
+  background: var(--ds-surface);
+}
+
+.ref-swatch-chip { height: 4rem; }
+.ref-swatch-name { padding: var(--ds-space-3); font-family: var(--ds-font-mono); font-size: var(--ds-caption); color: var(--ds-text-muted); }
+
+/* one rule per token rather than an inline style - the no-inline-style rule
+   applies to this page too, and a swatch is the obvious place to break it */
+.ref-c-primary { background: var(--ds-primary); }
+.ref-c-primary-hover { background: var(--ds-primary-hover); }
+.ref-c-accent { background: var(--ds-accent); }
+.ref-c-accent-soft { background: var(--ds-accent-soft); }
+.ref-c-ground { background: var(--ds-ground); }
+.ref-c-surface { background: var(--ds-surface); }
+.ref-c-surface-sunken { background: var(--ds-surface-sunken); }
+.ref-c-border { background: var(--ds-border); }
+.ref-c-border-strong { background: var(--ds-border-strong); }
+.ref-c-text { background: var(--ds-text); }
+.ref-c-text-muted { background: var(--ds-text-muted); }
+.ref-c-text-subtle { background: var(--ds-text-subtle); }
+.ref-c-info { background: var(--ds-info); }
+.ref-c-success { background: var(--ds-success); }
+.ref-c-warning { background: var(--ds-warning); }
+.ref-c-danger { background: var(--ds-danger); }
+.ref-c-neutral { background: var(--ds-neutral); }
+
+.ref-t-display { font-size: var(--ds-display); line-height: var(--ds-display-lh); letter-spacing: var(--ds-tracking-tight); font-weight: var(--ds-weight-semibold); }
+.ref-t-h1 { font-size: var(--ds-h1); line-height: var(--ds-h1-lh); letter-spacing: var(--ds-tracking-tight); font-weight: var(--ds-weight-semibold); }
+.ref-t-h2 { font-size: var(--ds-h2); line-height: var(--ds-h2-lh); font-weight: var(--ds-weight-semibold); }
+.ref-t-h3 { font-size: var(--ds-h3); line-height: var(--ds-h3-lh); font-weight: var(--ds-weight-semibold); }
+.ref-t-body-lg { font-size: var(--ds-body-lg); line-height: var(--ds-body-lg-lh); }
+.ref-t-body { font-size: var(--ds-body); line-height: var(--ds-body-lh); }
+.ref-t-small { font-size: var(--ds-small); line-height: var(--ds-small-lh); }
+.ref-t-caption { font-size: var(--ds-caption); line-height: var(--ds-caption-lh); color: var(--ds-text-muted); }
+
+/* the modal is shown inline here, not as an overlay - a reference page that
+   traps you behind a backdrop is not a reference page */
+.ref-modal-inline { position: static; padding: 0; background: none; display: block; }
+.ref-modal-inline .ds-modal { margin: 0; }

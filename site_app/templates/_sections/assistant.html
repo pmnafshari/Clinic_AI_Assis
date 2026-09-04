@@ -1,0 +1,53 @@
+<section class="site-section" id="assistant">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.assistant.heading }}</h2>
+    <p class="site-lede">{{ clinic.assistant.body }}</p>
+
+    <ol class="site-steps" id="how-it-works">
+      {% for step in clinic.assistant.steps %}
+      <li class="site-step">
+        <span class="site-step-n">{{ step.n }}</span>
+        <h3 class="site-step-title">{{ step.title }}</h3>
+        <p class="site-card-body">{{ step.body }}</p>
+      </li>
+      {% endfor %}
+    </ol>
+
+    {# the sentence that keeps this section honest. patient-specific data is
+       gated on codice fiscale + PIN in patient_auth - this states it rather
+       than implying the assistant knows you already. #}
+    <div class="ds-alert ds-alert-warning site-verify-note" role="note">
+      <svg class="site-icon" aria-hidden="true"><use href="#i-badge"/></svg>
+      <div>{{ clinic.assistant.verification_note }}</div>
+    </div>
+
+    <div class="site-preview">
+      <div class="site-preview-head">
+        {# D-05: a scripted transcript, labelled as one. there is no chat
+           endpoint on this app and no voice anywhere in this product. #}
+        <span class="ds-badge ds-badge-neutral">{{ clinic.assistant.preview.label }}</span>
+      </div>
+
+      <div class="site-preview-body ds-exchange">
+        {% for turn in clinic.assistant.preview.turns %}
+        <p class="ds-turn {{ 'ds-turn-user' if turn.who == 'patient' else 'ds-turn-agent' }}">{{ turn.text }}</p>
+        {% endfor %}
+      </div>
+
+      <div class="site-preview-foot">
+        <span class="site-voice" aria-hidden="true">
+          <svg class="site-icon"><use href="#i-mic-off"/></svg>
+        </span>
+        {# drawn as a disabled control with a reason, never as a button that
+           looks live. a microphone that does nothing is a fake success path. #}
+        <button class="ds-btn ds-btn-secondary ds-btn-sm" type="button" disabled>
+          Voice
+        </button>
+        <span class="site-voice-note">{{ clinic.assistant.preview.voice_note }}</span>
+        <a class="ds-btn ds-btn-primary ds-btn-sm site-preview-cta" href="{{ clinic.actions.assistant_href }}">
+          {{ clinic.assistant.preview.cta_label }}
+        </a>
+      </div>
+    </div>
+  </div>
+</section>

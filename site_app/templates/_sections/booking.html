@@ -1,0 +1,31 @@
+<section class="site-section site-section-alt" id="book">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.booking.heading }}</h2>
+    <p class="site-lede">{{ clinic.booking.body }}</p>
+
+    <div class="site-grid site-grid-2">
+      {% for opt in clinic.booking.options %}
+      <div class="site-card">
+        <h3 class="site-card-title">{{ opt.label }}</h3>
+        <p class="site-card-body">{{ opt.body }}</p>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div class="site-cta-row site-booking-actions">
+      {# D-06: there is no appointments table in this product. both of these
+         go to real destinations - a phone number and the assistant's login -
+         and neither one confirms anything. #}
+      <a class="ds-btn ds-btn-primary" href="{{ clinic.contact.phone_href }}">
+        <svg class="site-icon" aria-hidden="true"><use href="#i-phone"/></svg>
+        Call {{ clinic.contact.phone }}
+      </a>
+      <a class="ds-btn ds-btn-secondary" href="{{ clinic.actions.assistant_href }}">{{ clinic.actions.assistant_label }}</a>
+    </div>
+
+    <div class="ds-alert ds-alert-info site-booking-note" role="note">
+      <svg class="site-icon" aria-hidden="true"><use href="#i-clock"/></svg>
+      <div>{{ clinic.booking.note }}</div>
+    </div>
+  </div>
+</section>

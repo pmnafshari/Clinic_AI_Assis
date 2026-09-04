@@ -1,0 +1,10 @@
+{% extends "site_base.html" %}
+{% block title %}Contact — {{ clinic.clinic.name }}{% endblock %}
+{% block content %}
+{% set page_title = 'Contact' %}
+{% include "_page_head.html" %}
+{% set section_heading = false %}
+{% include "_sections/contact.html" %}
+{# carries id="book", which is where every "Book appointment" action points #}
+{% include "_sections/booking.html" %}
+{% endblock %}

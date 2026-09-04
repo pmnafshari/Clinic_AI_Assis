@@ -1,0 +1,12 @@
+{# shared page header for the secondary pages: breadcrumb, title, lede.
+   the landing page does not use it - it has a hero instead. #}
+<section class="site-page-head">
+  <div class="site-wrap">
+    <ol class="ds-breadcrumb">
+      <li><a href="/">Home</a></li>
+      <li aria-current="page">{{ page_title }}</li>
+    </ol>
+    <h1 class="site-page-title">{{ page_title }}</h1>
+    {% if page_lede %}<p class="site-lede">{{ page_lede }}</p>{% endif %}
+  </div>
+</section>

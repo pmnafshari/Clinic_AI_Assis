@@ -1,0 +1,16 @@
+<section class="site-section-tight">
+  <div class="site-wrap">
+    <div class="site-grid site-grid-4">
+      {% for stat in clinic.stats.entries %}
+      <div class="site-stat">
+        {# static values, not counters animating on scroll - the brief rules
+           out excessive animation and a spinning number on a clinic page
+           reads as marketing rather than information #}
+        <span class="site-stat-value">{{ stat.value }}</span>
+        <span class="site-stat-label">{{ stat.label }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    <p class="site-note">{{ clinic.stats.note }}</p>
+  </div>
+</section>

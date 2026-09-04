@@ -1,0 +1,19 @@
+{% extends "site_base.html" %}
+{% block title %}{{ clinic.clinic.name }} — {{ clinic.clinic.tagline }}{% endblock %}
+{% block content %}
+{# sections are partials, one file each: a single 900-line home.html is
+   unreviewable and phases 34-38 need to move these around #}
+{% include "_sections/hero.html" %}
+{% include "_sections/booking.html" %}
+{% include "_sections/stats.html" %}
+{% include "_sections/services.html" %}
+{% include "_sections/why_us.html" %}
+{% include "_sections/doctors.html" %}
+{% include "_sections/staff.html" %}
+{% include "_sections/assistant.html" %}
+{% include "_sections/journey.html" %}
+{% include "_sections/facility.html" %}
+{% include "_sections/testimonials.html" %}
+{% include "_sections/faq.html" %}
+{% include "_sections/contact.html" %}
+{% endblock %}

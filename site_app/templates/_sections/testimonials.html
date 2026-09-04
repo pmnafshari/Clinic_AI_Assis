@@ -1,0 +1,17 @@
+<section class="site-section site-section-alt">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.testimonials.heading }}</h2>
+    <div class="site-grid site-grid-3">
+      {% for t in clinic.testimonials.entries %}
+      <figure class="site-card site-quote">
+        <blockquote class="site-quote-text">{{ t.quote }}</blockquote>
+        <figcaption class="site-quote-by">
+          <strong>{{ t.author }}</strong><br>
+          <span class="site-quote-detail">{{ t.detail }}</span>
+        </figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    <p class="site-note">{{ clinic.testimonials.note }}</p>
+  </div>
+</section>

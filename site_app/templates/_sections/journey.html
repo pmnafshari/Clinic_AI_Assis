@@ -1,0 +1,14 @@
+<section class="site-section site-section-alt">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.journey.heading }}</h2>
+    <ol class="site-journey">
+      {% for step in clinic.journey.steps %}
+      <li class="site-journey-step">
+        <span class="site-journey-dot" aria-hidden="true"></span>
+        <h3 class="site-journey-title">{{ step.title }}</h3>
+        <p class="site-card-body">{{ step.body }}</p>
+      </li>
+      {% endfor %}
+    </ol>
+  </div>
+</section>

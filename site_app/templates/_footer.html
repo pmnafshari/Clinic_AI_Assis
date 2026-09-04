@@ -1,0 +1,35 @@
+<footer class="site-footer">
+  <div class="site-footer-inner">
+    <div class="site-footer-brand">
+      <a class="site-brand" href="/">
+        <svg class="site-icon site-brand-mark" aria-hidden="true"><use href="#i-tooth"/></svg>
+        <span class="site-brand-name">{{ clinic.clinic.name }}</span>
+      </a>
+      <p class="site-footer-note">{{ clinic.clinic.tagline }}</p>
+      <p class="site-footer-note">
+        {{ clinic.contact.address_line }}, {{ clinic.contact.city }}<br>
+        <a href="{{ clinic.contact.phone_href }}">{{ clinic.contact.phone }}</a>
+      </p>
+    </div>
+
+    {% for col in clinic.footer.columns %}
+    <div class="site-footer-col">
+      <h3 class="site-footer-heading">{{ col.heading }}</h3>
+      <ul>
+        {% for link in col.links %}
+        <li><a href="{{ link.href }}">{{ link.label }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="site-footer-legal">
+    <span>&copy; {{ clinic.clinic.legal_name }}</span>
+    <ul>
+      {% for link in clinic.footer.legal %}
+      <li><a href="{{ link.href }}">{{ link.label }}</a></li>
+      {% endfor %}
+    </ul>
+  </div>
+</footer>

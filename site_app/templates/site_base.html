@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Clinic{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('shared', filename='css/tokens.css') }}">
+  <link rel="stylesheet" href="{{ url_for('shared', filename='css/components.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/site.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+{% include "_icons.html" %}
+
+{% block chrome_header %}{% include "_header.html" %}{% endblock %}
+<main id="main" class="site-main">
+{% block content %}{% endblock %}
+</main>
+{% block chrome_footer %}{% include "_footer.html" %}{% endblock %}
+<script src="{{ url_for('static', filename='js/site.js') }}" defer></script>
+</body>
+</html>

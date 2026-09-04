@@ -1,0 +1,305 @@
+{% extends "site_base.html" %}
+{% block title %}Design system reference{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/reference.css') }}">{% endblock %}
+{# documentation, not a site page - no marketing header or footer #}
+{% block chrome_header %}{% endblock %}
+{% block chrome_footer %}{% endblock %}
+{% block content %}
+<div class="ref-page">
+
+  <header class="ref-head">
+    <h1 class="ref-title">Design system reference</h1>
+    <p class="ref-lede">Every token and component in <code>shared/static/css</code>, rendered from
+      the same stylesheets the product loads. Phases 33&ndash;38 copy markup from this page. If a
+      component is not here, it does not exist yet.</p>
+  </header>
+
+  <section class="ref-section">
+    <h2>Colour</h2>
+    <p class="ref-note">Declared in <code>tokens.css</code>. Nothing outside that file may name a
+      colour &mdash; <code>app_selftest.py</code> section 10c fails the suite if the component layer
+      hardcodes one.</p>
+    <div class="ref-grid">
+      {% set colours = [
+        ('primary', 'ref-c-primary'), ('primary-hover', 'ref-c-primary-hover'),
+        ('accent', 'ref-c-accent'), ('accent-soft', 'ref-c-accent-soft'),
+        ('ground', 'ref-c-ground'), ('surface', 'ref-c-surface'),
+        ('surface-sunken', 'ref-c-surface-sunken'), ('border', 'ref-c-border'),
+        ('border-strong', 'ref-c-border-strong'), ('text', 'ref-c-text'),
+        ('text-muted', 'ref-c-text-muted'), ('text-subtle', 'ref-c-text-subtle'),
+        ('info', 'ref-c-info'), ('success', 'ref-c-success'),
+        ('warning', 'ref-c-warning'), ('danger', 'ref-c-danger'),
+        ('neutral', 'ref-c-neutral')
+      ] %}
+      {% for name, cls in colours %}
+      <div class="ref-swatch">
+        <div class="ref-swatch-chip {{ cls }}"></div>
+        <div class="ref-swatch-name">--ds-{{ name }}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="ref-section">
+    <h2>Type</h2>
+    <p class="ref-note">InterVariable, vendored under OFL. Display and h1 use <code>clamp()</code>,
+      so they shrink with the viewport rather than needing a second rule at each breakpoint.</p>
+    {% set steps = [
+      ('display', 'ref-t-display', 'Your smile, handled simply'),
+      ('h1', 'ref-t-h1', 'Your smile, handled simply'),
+      ('h2', 'ref-t-h2', 'Modern dental care'),
+      ('h3', 'ref-t-h3', 'Next appointment'),
+      ('body-lg', 'ref-t-body-lg', 'Professional dental care combined with a modern digital experience.'),
+      ('body', 'ref-t-body', 'Professional dental care combined with a modern digital experience.'),
+      ('small', 'ref-t-small', 'Professional dental care combined with a modern digital experience.'),
+      ('caption', 'ref-t-caption', 'Last updated 3 September')
+    ] %}
+    {% for name, cls, sample in steps %}
+    <div class="ref-item">
+      <div class="{{ cls }}">{{ sample }}</div>
+      <code class="ref-code">--ds-{{ name }} &middot; .{{ cls }}</code>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="ref-section">
+    <h2>Buttons</h2>
+    <p class="ref-note">Hover, active and <code>:focus-visible</code> are interactive &mdash; tab
+      through this row to check the focus ring. <strong>Danger carries an inset ring on purpose:</strong>
+      primary and danger sit 6/255 apart in greyscale, so hue is the only thing separating them for a
+      viewer who cannot use it, and this is the button that deletes a record.</p>
+    {% set levels = ['primary', 'secondary', 'ghost', 'danger', 'success'] %}
+    {% for level in levels %}
+    <div class="ref-item">
+      <div class="ref-row">
+        <button type="button" class="ds-btn ds-btn-{{ level }}">Book appointment</button>
+        <button type="button" class="ds-btn ds-btn-{{ level }} ds-btn-sm">Small</button>
+        <button type="button" class="ds-btn ds-btn-{{ level }} ds-btn-lg">Large</button>
+        <button type="button" class="ds-btn ds-btn-{{ level }}" disabled>Disabled</button>
+      </div>
+      <code class="ref-code">.ds-btn .ds-btn-{{ level }} &middot; .ds-btn-sm .ds-btn-lg .ds-btn-block</code>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="ref-section">
+    <h2>Form controls</h2>
+    <p class="ref-note">An error is a sentence, not a red border. <code>.ds-error-text</code> is
+      required markup wherever <code>.ds-field-error</code> appears.</p>
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-field">
+        <label class="ds-label" for="ref-name">Full name</label>
+        <input class="ds-input" id="ref-name" type="text" placeholder="Maria Rossi">
+        <p class="ds-help">As it appears on your health card.</p>
+      </div>
+      <div class="ds-field">
+        <label class="ds-label" for="ref-note">Reason for visit</label>
+        <textarea class="ds-textarea" id="ref-note" placeholder="Tell us what you need"></textarea>
+      </div>
+      <div class="ds-field">
+        <label class="ds-label" for="ref-svc">Service</label>
+        <select class="ds-select" id="ref-svc">
+          <option>General dentistry</option>
+          <option>Dental hygiene</option>
+        </select>
+      </div>
+      <div class="ds-field ds-field-error">
+        <label class="ds-label" for="ref-tel">Phone</label>
+        <input class="ds-input" id="ref-tel" type="tel" value="12" aria-describedby="ref-tel-err">
+        <p class="ds-error-text" id="ref-tel-err">
+          Enter a phone number we can reach you on.
+        </p>
+      </div>
+      <div class="ds-field">
+        <label class="ds-check">
+          <input type="checkbox" checked>
+          <span>Send me a reminder the day before</span>
+        </label>
+      </div>
+      <div class="ds-field">
+        <label class="ds-label" for="ref-dis">Disabled</label>
+        <input class="ds-input" id="ref-dis" type="text" value="Not editable" disabled>
+      </div>
+      <code class="ref-code">.ds-field .ds-label .ds-input .ds-textarea .ds-select .ds-check .ds-help .ds-field-error .ds-error-text</code>
+    </div></div>
+  </section>
+
+  <section class="ref-section">
+    <h2>Card</h2>
+    <div class="ds-card">
+      <div class="ds-card-header">
+        <h3 class="ds-card-title">Next appointment</h3>
+        <span class="ds-badge ds-badge-info">Confirmed</span>
+      </div>
+      <div class="ds-card-body">
+        <p class="ref-t-body">Tuesday 15 September, 15:30 &mdash; Via Roma 12.</p>
+      </div>
+      <div class="ds-card-footer">
+        <code class="ref-code">.ds-card .ds-card-header .ds-card-title .ds-card-body .ds-card-footer</code>
+      </div>
+    </div>
+  </section>
+
+  <section class="ref-section">
+    <h2>Table</h2>
+    <p class="ref-note">Below 768px <code>.ds-table-cards</code> turns rows into cards, reading each
+      cell's <code>data-label</code>. Narrow this window to see it. Defined now so Phases 36&ndash;38
+      do not invent three of them.</p>
+    <div class="ds-card"><div class="ds-table-wrap">
+      <table class="ds-table ds-table-cards">
+        <thead><tr><th>Invoice</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr>
+            <td data-label="Invoice">0142</td><td data-label="Date">12 Aug 2026</td>
+            <td data-label="Amount">&euro; 180,00</td>
+            <td data-label="Status"><span class="ds-badge ds-badge-success">Paid</span></td>
+          </tr>
+          <tr>
+            <td data-label="Invoice">0143</td><td data-label="Date">28 Aug 2026</td>
+            <td data-label="Amount">&euro; 90,00</td>
+            <td data-label="Status"><span class="ds-badge ds-badge-warning">Pending</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div></div>
+    <code class="ref-code">.ds-table-wrap .ds-table .ds-table-cards &middot; each td needs data-label</code>
+  </section>
+
+  <section class="ref-section">
+    <h2>Badges</h2>
+    <p class="ref-note">Styling only. <strong>Which state gets which colour is Phase 23's contract</strong>
+      and is asserted in <code>upload_routes_selftest</code> 11&ndash;11i. No two failure domains may
+      share a colour.</p>
+    <div class="ref-row">
+      {% for kind, label in [('info','Sorted'), ('success','Paid'), ('warning','Not searchable'), ('danger','Rejected'), ('neutral','Queued')] %}
+      <span class="ds-badge ds-badge-{{ kind }}">{{ label }}</span>
+      {% endfor %}
+    </div>
+    <code class="ref-code">.ds-badge .ds-badge-info|success|warning|danger|neutral</code>
+  </section>
+
+  <section class="ref-section">
+    <h2>Alerts</h2>
+    <div class="ref-stack">
+      {% for kind, title, body in [
+        ('info','Appointment moved','Your 15:30 has been rescheduled to Thursday 11:00.'),
+        ('success','Payment received','Invoice 0142 is settled. A receipt is in your records.'),
+        ('warning','Verification needed','Confirm your identity to see appointment details.'),
+        ('danger','We could not save that','The record was not changed. Try again, or call the clinic.')
+      ] %}
+      <div class="ds-alert ds-alert-{{ kind }}" role="alert">
+        <div><strong class="ds-alert-title">{{ title }}</strong>{{ body }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <code class="ref-code">.ds-alert .ds-alert-info|success|warning|danger &middot; .ds-alert-title</code>
+  </section>
+
+  <section class="ref-section">
+    <h2>Tabs</h2>
+    <p class="ref-note"><code>aria-selected</code> drives the active look, so the accessible state
+      and the visible state cannot disagree.</p>
+    <div class="ds-tabs" role="tablist">
+      <button class="ds-tab" role="tab" aria-selected="true" type="button">Upcoming</button>
+      <button class="ds-tab" role="tab" aria-selected="false" type="button">Past</button>
+      <button class="ds-tab" role="tab" aria-selected="false" type="button">Cancelled</button>
+    </div>
+    <code class="ref-code">.ds-tabs .ds-tab[aria-selected]</code>
+  </section>
+
+  <section class="ref-section">
+    <h2>Modal</h2>
+    <p class="ref-note">Shown inline here rather than over a backdrop &mdash; a reference page that
+      traps you behind a scrim is not a reference page.</p>
+    <div class="ds-modal-backdrop ref-modal-inline">
+      <div class="ds-modal" role="dialog" aria-modal="true" aria-labelledby="ref-modal-t">
+        <div class="ds-modal-header">
+          <h3 class="ds-modal-title" id="ref-modal-t">Cancel this appointment?</h3>
+        </div>
+        <div class="ds-modal-body">
+          <p class="ref-t-body">Tuesday 15 September, 15:30. This cannot be undone from here &mdash;
+            you would need to book a new time.</p>
+        </div>
+        <div class="ds-modal-footer">
+          <button type="button" class="ds-btn ds-btn-secondary">Keep it</button>
+          <button type="button" class="ds-btn ds-btn-danger">Cancel appointment</button>
+        </div>
+      </div>
+    </div>
+    <code class="ref-code">.ds-modal-backdrop .ds-modal .ds-modal-header .ds-modal-title .ds-modal-body .ds-modal-footer</code>
+  </section>
+
+  <section class="ref-section">
+    <h2>Avatar, breadcrumb, status</h2>
+    <div class="ref-item">
+      <div class="ref-row">
+        <span class="ds-avatar ds-avatar-sm">MR</span>
+        <span class="ds-avatar">MR</span>
+        <span class="ds-avatar ds-avatar-lg">MR</span>
+      </div>
+      <code class="ref-code">.ds-avatar .ds-avatar-sm .ds-avatar-lg</code>
+    </div>
+    <div class="ref-item">
+      <ol class="ds-breadcrumb">
+        <li><a href="#">Patients</a></li>
+        <li><a href="#">Maria Rossi</a></li>
+        <li aria-current="page">Visit history</li>
+      </ol>
+      <code class="ref-code">.ds-breadcrumb &middot; [aria-current="page"] on the last item</code>
+    </div>
+    <div class="ref-item">
+      <p class="ref-note">The dot is never the only signal &mdash; the label is always text.</p>
+      <div class="ref-row">
+        <span class="ds-status ds-status-success">Confirmed</span>
+        <span class="ds-status ds-status-warning">Awaiting confirmation</span>
+        <span class="ds-status ds-status-danger">Cancelled</span>
+        <span class="ds-status ds-status-neutral">Draft</span>
+      </div>
+      <code class="ref-code">.ds-status .ds-status-success|warning|danger|neutral</code>
+    </div>
+  </section>
+
+  <section class="ref-section">
+    <h2>Exchange</h2>
+    <p class="ref-note">One question and one reply. Used by the patient chat, the staff Q&amp;A and
+      the assistant preview above &mdash; <strong>an exchange, not a transcript</strong>: neither app
+      keeps conversation state, so a history here would be a second source of truth.</p>
+    <div class="ds-card"><div class="ds-card-body">
+      <div class="ds-exchange">
+        <p class="ds-turn ds-turn-user">When was my last cleaning?</p>
+        <p class="ds-turn ds-turn-agent">Your most recent hygiene appointment was on 12 August 2026.</p>
+      </div>
+    </div></div>
+    <code class="ref-code">.ds-exchange .ds-turn .ds-turn-user .ds-turn-agent</code>
+  </section>
+
+  <section class="ref-section">
+    <h2>Loading, empty, error</h2>
+    <p class="ref-note">Each holds the height of what it replaces, so a card does not collapse and
+      the page does not jump as data arrives. An empty state says what will appear <em>and why it
+      has not yet</em>; an error says what failed and what to do.</p>
+    <div class="ref-stack">
+      <div class="ds-card"><div class="ds-state">
+        <div class="ds-spinner" role="status"><span class="ds-sr-only">Loading appointments</span></div>
+        <p class="ds-state-body">Loading appointments</p>
+      </div></div>
+
+      <div class="ds-card"><div class="ds-state">
+        <div class="ds-state-icon">&#9675;</div>
+        <h3 class="ds-state-title">No dated visits yet</h3>
+        <p class="ds-state-body">Visits appear here once a note carries a visit date.</p>
+      </div></div>
+
+      <div class="ds-card"><div class="ds-state ds-state-error">
+        <div class="ds-state-icon">&#9888;</div>
+        <h3 class="ds-state-title">Unable to load appointments</h3>
+        <p class="ds-state-body">The clinic system did not respond. Try again in a moment, or call
+          the clinic on 06 1234 5678.</p>
+        <button type="button" class="ds-btn ds-btn-secondary">Try again</button>
+      </div></div>
+    </div>
+    <code class="ref-code">.ds-state .ds-state-icon .ds-state-title .ds-state-body .ds-state-error .ds-spinner .ds-sr-only</code>
+  </section>
+
+</div>
+{% endblock %}

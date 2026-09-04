@@ -1,0 +1,19 @@
+<section class="site-section" id="clinic">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.facility.heading }}</h2>
+    <p class="site-lede">{{ clinic.facility.body }}</p>
+    <div class="site-grid site-grid-4">
+      {% for shot in clinic.facility.media %}
+      <figure class="site-figure">
+        {% if has_image(shot.src) %}
+        <img class="site-photo" src="{{ url_for('static', filename=shot.src) }}"
+             alt="" loading="lazy" decoding="async">
+        {% else %}
+        <div class="site-media">Photograph: {{ shot.src }}</div>
+        {% endif %}
+        <figcaption class="site-figcaption">{{ shot.caption }}</figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+  </div>
+</section>

@@ -1,0 +1,10 @@
+{% extends "site_base.html" %}
+{% block title %}Our clinic — {{ clinic.clinic.name }}{% endblock %}
+{% block content %}
+{% set page_title = 'Our clinic' %}
+{% set page_lede = clinic.facility.body %}
+{% include "_page_head.html" %}
+{% include "_sections/facility.html" %}
+{% include "_sections/why_us.html" %}
+{% include "_sections/journey.html" %}
+{% endblock %}

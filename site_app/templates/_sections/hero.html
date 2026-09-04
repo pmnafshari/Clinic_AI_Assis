@@ -1,0 +1,33 @@
+<section class="site-hero">
+  <div class="site-wrap">
+    <div class="site-hero-grid">
+      <div>
+        <span class="site-eyebrow">{{ clinic.hero.eyebrow }}</span>
+        <h1 class="site-hero-title">{{ clinic.hero.headline }}</h1>
+        <p class="site-hero-body">{{ clinic.hero.body }}</p>
+        <div class="site-cta-row">
+          <a class="ds-btn ds-btn-primary ds-btn-lg" href="{{ clinic.actions.book_href }}">{{ clinic.actions.book_label }}</a>
+          <a class="ds-btn ds-btn-secondary ds-btn-lg" href="#assistant">{{ clinic.actions.assistant_label }}</a>
+        </div>
+      </div>
+      <div class="site-hero-media">
+        {# a real <img> when the file exists, the proportioned placeholder
+           when it does not. decided server-side by has_image, so a missing
+           photograph is an honest gap and never a broken-image icon. #}
+        {% if has_image(clinic.hero.media) %}
+        <img class="site-photo site-photo-wide" src="{{ url_for('static', filename=clinic.hero.media) }}"
+             alt="" loading="eager" decoding="async">
+        {% else %}
+        <div class="site-media site-media-wide">Photograph: {{ clinic.hero.media }}</div>
+        {% endif %}
+        <div class="site-float-card">
+          <svg class="site-icon" aria-hidden="true"><use href="#i-chat"/></svg>
+          <span>
+            <span class="site-float-title">{{ clinic.hero.floating_card.title }}</span><br>
+            <span class="site-float-body">{{ clinic.hero.floating_card.body }}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

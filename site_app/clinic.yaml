@@ -1,0 +1,256 @@
+# Every piece of clinic content on the public site. Templates read this; no
+# name, figure, price or opening hour is written into markup (UX-07).
+#
+# PLACEHOLDER CONTENT. The people, statistics and testimonials below are
+# structural stand-ins so the pages can be built and reviewed. They are not
+# real and must be replaced before this site is shown to anyone as the
+# clinic's own. Image paths may point at files that do not exist yet - a
+# proportioned placeholder renders in their place.
+
+clinic:
+  name: "Studio Dentistico"
+  tagline: "Modern dental care"
+  legal_name: "Studio Dentistico S.r.l."
+
+contact:
+  address_line: "Largo Rosanna Benzi 10"
+  city: "16132 Genova"
+  country: "Italy"
+  place: "Ospedale Policlinico San Martino"
+  phone: "06 1234 5678"
+  phone_href: "tel:+390612345678"
+  email: "info@example-clinic.it"
+  emergency_phone: "06 1234 5679"
+  emergency_note: "Outside opening hours, call the emergency line for urgent dental pain or trauma."
+  directions_note: "On the San Martino hospital campus. Bus and parking on Largo Rosanna Benzi."
+  map_image: "img/clinic-map.jpg"
+  map_alt: "Map of the clinic location on the San Martino hospital campus, Genova"
+  # OpenStreetMap data is ODbL - the attribution below is required and is
+  # rendered under the map
+  map_credit: "Map data (c) OpenStreetMap contributors"
+  directions_url: "https://www.openstreetmap.org/?mlat=44.4094689&mlon=8.9730883#map=17/44.40947/8.97309"
+  directions_cta: "Get directions"
+
+hours:
+  - day: "Monday - Thursday"
+    open: "09:00 - 19:00"
+  - day: "Friday"
+    open: "09:00 - 17:00"
+  - day: "Saturday"
+    open: "09:00 - 13:00"
+  - day: "Sunday"
+    open: "Closed"
+
+nav:
+  - {label: "Home", href: "/"}
+  - {label: "Our clinic", href: "/clinic"}
+  - {label: "Doctors", href: "/doctors"}
+  - {label: "Services", href: "/services"}
+  - {label: "How it works", href: "/#how-it-works"}
+  - {label: "AI assistant", href: "/#assistant"}
+  - {label: "Contact", href: "/contact"}
+
+actions:
+  book_label: "Book appointment"
+  book_href: "/contact#book"
+  assistant_label: "Talk to our AI assistant"
+  # the patient app, a separate origin - this site gains no auth of its own
+  assistant_href: "http://127.0.0.1:5001/login"
+  login_label: "Login"
+  login_href: "http://127.0.0.1:5000/login"
+
+hero:
+  eyebrow: "Modern dental care"
+  headline: "Your smile, handled simply."
+  body: >-
+    Professional dental care combined with a modern digital experience. Our assistant helps you find
+    a time, answer questions about your treatment, and keep track of what happens next.
+  media: "img/hero-clinic.jpg"
+  floating_card:
+    title: "AI assistant"
+    body: "Available 24/7"
+
+booking:
+  heading: "Need an appointment?"
+  body: >-
+    Tell us whether you have been here before and we will point you the right way.
+  # There is no booking system in this product. Every path below is a real
+  # destination - a phone number or the assistant - and none of them confirms
+  # an appointment on this page.
+  note: >-
+    Appointments are arranged by phone or through the assistant. Nothing is confirmed on this page.
+  options:
+    - {label: "I am a new patient", body: "Call us and we will find a first appointment that suits you."}
+    - {label: "I am already a patient", body: "Sign in to the assistant to ask about your next visit."}
+
+stats:
+  note: "Placeholder figures. Replace with the clinic's own before publishing."
+  entries:
+    - {value: "10+", label: "Years of practice"}
+    - {value: "5,000+", label: "Patients treated"}
+    - {value: "6", label: "Specialists"}
+    - {value: "24/7", label: "Digital assistance"}
+
+services:
+  heading: "What we do"
+  body: "General and specialist dental care under one roof."
+  entries:
+    - slug: general
+      icon: tooth
+      title: "General dentistry"
+      body: "Check-ups, fillings and everyday dental care for adults and children."
+    - slug: hygiene
+      icon: sparkle
+      title: "Dental hygiene"
+      body: "Professional cleaning and advice on keeping your teeth healthy between visits."
+    - slug: implants
+      icon: implant
+      title: "Implants"
+      body: "Replacement of missing teeth, planned and placed in the clinic."
+    - slug: orthodontics
+      icon: align
+      title: "Orthodontics"
+      body: "Alignment treatment for children and adults, including clear aligners."
+    - slug: cosmetic
+      icon: smile
+      title: "Cosmetic dentistry"
+      body: "Whitening, veneers and reshaping, discussed before anything is agreed."
+    - slug: emergency
+      icon: urgent
+      title: "Emergency dental care"
+      body: "Same-day appointments for pain, swelling or a broken tooth."
+
+why_us:
+  heading: "Why patients choose us"
+  entries:
+    - {icon: badge, title: "Experienced professionals", body: "A settled team who see the same patients year after year."}
+    - {icon: tools, title: "Modern equipment", body: "Digital imaging and up-to-date treatment rooms."}
+    - {icon: heart, title: "Personalised care", body: "Treatment explained and agreed before it starts."}
+    - {icon: calendar, title: "Easy booking", body: "Call, or ask the assistant to find you a time."}
+    - {icon: chat, title: "24/7 digital assistant", body: "Answers about your own records, whenever you need them."}
+
+doctors:
+  heading: "Our dentists"
+  body: "Placeholder profiles. Replace with the clinic's own team before publishing."
+  entries:
+    - slug: lead-dentist
+      name: "Lead Dentist"
+      role: "General and restorative dentistry"
+      bio: "A short biography goes here - training, years in practice, and the treatments they focus on."
+      languages: ["Italian", "English"]
+      photo: "img/doctor-1.jpg"
+    - slug: orthodontist
+      name: "Orthodontist"
+      role: "Orthodontics"
+      bio: "A short biography goes here - training, years in practice, and the treatments they focus on."
+      languages: ["Italian", "English"]
+      photo: "img/doctor-2.jpg"
+    - slug: implantologist
+      name: "Implantologist"
+      role: "Oral surgery and implants"
+      bio: "A short biography goes here - training, years in practice, and the treatments they focus on."
+      languages: ["Italian"]
+      photo: "img/doctor-3.jpg"
+
+staff:
+  heading: "The rest of the team"
+  entries:
+    - {name: "Reception", role: "Front desk", body: "Booking, questions and anything to do with your appointment.", photo: "img/staff-1.jpg"}
+    - {name: "Dental assistants", role: "Clinical support", body: "Alongside the dentist through every treatment.", photo: "img/staff-2.jpg"}
+    - {name: "Administration", role: "Records and invoicing", body: "Invoices, insurance paperwork and your records.", photo: "img/staff-3.jpg"}
+
+assistant:
+  heading: "How the assistant works"
+  body: >-
+    A digital receptionist that answers questions about the clinic, and - once you have signed in -
+    about your own records.
+  steps:
+    - {n: "1", title: "Start a conversation", body: "Open the assistant from any page."}
+    - {n: "2", title: "Say what you need", body: "In your own words, in Italian or English."}
+    - {n: "3", title: "It checks your records", body: "Only after you have signed in and been verified."}
+    - {n: "4", title: "You get a clear answer", body: "With the detail it found, or an honest 'not in your records'."}
+    - {n: "5", title: "Follow up by phone", body: "Anything that changes an appointment is arranged with the clinic."}
+  verification_note: >-
+    Anything specific to you - visits, treatments, invoices - requires signing in with your codice
+    fiscale and the PIN the clinic issues you. The assistant will not discuss a patient's records
+    with anyone who has not verified their identity.
+  preview:
+    label: "Preview - not a live conversation"
+    turns:
+      - {who: "patient", text: "When was my last cleaning?"}
+      - {who: "assistant", text: "Your most recent hygiene appointment was on 12 August 2026."}
+      - {who: "patient", text: "And what do I still owe?"}
+      - {who: "assistant", text: "There is one open invoice of € 90,00 from that visit."}
+    voice_note: "Voice is not available yet."
+    cta_label: "Open the assistant"
+
+journey:
+  heading: "What happens, start to finish"
+  steps:
+    - {title: "Find the clinic", body: "Here, or by phone."}
+    - {title: "Ask the assistant", body: "Questions about treatment, times or your records."}
+    - {title: "Book a visit", body: "Arranged with reception."}
+    - {title: "See the dentist", body: "Treatment discussed and agreed first."}
+    - {title: "Get your invoice", body: "Itemised against the visit."}
+    - {title: "Keep track", body: "Ask the assistant what happened and what is next."}
+
+facility:
+  heading: "The clinic"
+  body: "Photographs of the practice go here."
+  media:
+    - {caption: "Reception", src: "img/clinic-reception.jpg"}
+    - {caption: "Treatment room", src: "img/clinic-treatment.jpg"}
+    - {caption: "Equipment", src: "img/clinic-equipment.jpg"}
+    - {caption: "Waiting area", src: "img/clinic-waiting.jpg"}
+
+testimonials:
+  heading: "What patients say"
+  note: "Placeholder text. Replace with real, attributed testimonials before publishing."
+  entries:
+    - {quote: "A patient's own words about their treatment go here.", author: "Patient initials", detail: "Treatment, year"}
+    - {quote: "A patient's own words about their treatment go here.", author: "Patient initials", detail: "Treatment, year"}
+    - {quote: "A patient's own words about their treatment go here.", author: "Patient initials", detail: "Treatment, year"}
+
+faq:
+  heading: "Common questions"
+  entries:
+    - q: "How do I book an appointment?"
+      a: "By phone, or by asking the assistant and then confirming with reception. Appointments are not booked on this website."
+    - q: "Can I reschedule or cancel?"
+      a: "Yes - call the clinic. Changes to an appointment are made by reception, not by the assistant."
+    - q: "Do I need an account?"
+      a: "Not to browse this site. To ask about your own records you sign in with your codice fiscale and a PIN the clinic issues you."
+    - q: "How does patient verification work?"
+      a: "Your PIN is issued by the clinic and changed on first use. Until you have signed in, the assistant answers only general questions about the clinic."
+    - q: "Can the assistant see my records?"
+      a: "Only your own, and only once you have signed in. If something is not in your records it says so rather than guessing."
+    - q: "How do I get my invoices?"
+      a: "Ask the assistant once you are signed in, or ask administration at the clinic."
+
+footer:
+  columns:
+    - heading: "Clinic"
+      links:
+        - {label: "Our clinic", href: "/clinic"}
+        - {label: "Doctors", href: "/doctors"}
+        - {label: "Contact", href: "/contact"}
+    - heading: "Services"
+      links:
+        - {label: "General dentistry", href: "/services#general"}
+        - {label: "Dental hygiene", href: "/services#hygiene"}
+        - {label: "Implants", href: "/services#implants"}
+        - {label: "Emergency care", href: "/services#emergency"}
+    - heading: "Patient"
+      links:
+        - {label: "How it works", href: "/#how-it-works"}
+        - {label: "Common questions", href: "/#faq"}
+        - {label: "Opening hours", href: "/contact"}
+    - heading: "AI assistant"
+      links:
+        - {label: "What it does", href: "/#assistant"}
+        - {label: "Open the assistant", href: "http://127.0.0.1:5001/login"}
+  legal:
+    - {label: "Privacy policy", href: "/contact"}
+    - {label: "Terms", href: "/contact"}
+    - {label: "Cookie policy", href: "/contact"}
+  note: "Placeholder legal links. Point these at real documents before publishing."

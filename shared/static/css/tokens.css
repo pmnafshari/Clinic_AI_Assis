@@ -1,0 +1,185 @@
+/* Design tokens for the whole product - staff app, patient app, public site.
+   One file, one directory on disk, served by a /shared route in each app.
+   Loaded AFTER vendored bootstrap and BEFORE each app's own stylesheet, so
+   these win over bootstrap and an app stylesheet can still read them.
+
+   Custom properties only. Component classes live in components.css. */
+
+@font-face {
+  font-family: "InterVariable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("../fonts/InterVariable.woff2") format("woff2");
+}
+
+:root {
+  /* ---- colour ------------------------------------------------------- */
+  /* deep navy carries identity and every primary action */
+  --ds-navy-900: #0b1c33;
+  --ds-navy-800: #12294a;
+  --ds-navy-700: #1a3a63;
+  --ds-navy-600: #21497c;
+  --ds-navy-500: #2a5c99;
+
+  /* soft teal is the accent - used for emphasis, never for a destructive act */
+  --ds-teal-600: #0f766e;
+  --ds-teal-500: #14958b;
+  --ds-teal-400: #2bb3a7;
+  --ds-teal-100: #d8f1ee;
+
+  --ds-primary: var(--ds-navy-700);
+  --ds-primary-hover: var(--ds-navy-800);
+  --ds-primary-active: var(--ds-navy-900);
+  --ds-accent: var(--ds-teal-600);
+  --ds-accent-soft: var(--ds-teal-100);
+
+  /* ---- ground and surface ------------------------------------------- */
+  --ds-ground: #f6f8fa;          /* warm off-white the content sits on */
+  --ds-surface: #ffffff;         /* raised cards, panels, modals */
+  --ds-surface-sunken: #eef2f6;  /* wells, table headers, inset areas */
+  --ds-border: #dfe5ec;
+  --ds-border-strong: #c3cddb;
+
+  /* ---- text ---------------------------------------------------------- */
+  --ds-text: #12233d;            /* dark navy, not black */
+  --ds-text-muted: #5b6b80;      /* slate - secondary copy, captions */
+  /* 5.2:1 on surface, 4.7:1 on the sunken surface. was #8494a6, which
+     measured 2.76:1 behind .site-media and .site-note - real copy below
+     AA, found by a11y_audit.py in phase 38. */
+  --ds-text-subtle: #5e6e80;     /* placeholders, disabled, muted captions */
+  --ds-text-on-dark: #f4f7fa;
+
+  /* ---- semantic states ------------------------------------------------ */
+  /* each carries a surface and a foreground, so a state never depends on
+     hue alone to be legible */
+  --ds-info: #1a5f9e;
+  --ds-info-surface: #e5f0fa;
+  --ds-success: #1c6b45;
+  --ds-success-surface: #e3f4ea;
+  --ds-warning: #8a5a09;
+  --ds-warning-surface: #fdf1dc;
+  --ds-danger: #a32020;
+  --ds-danger-surface: #fbe6e6;
+  --ds-neutral: #4a5766;
+  --ds-neutral-surface: #eceff3;
+
+  /* ---- focus ---------------------------------------------------------- */
+  /* one ring everywhere. UX-17 gates on a visible focus state across three
+     apps; defining it once is what makes that survivable. */
+  --ds-scrim: rgba(11, 28, 51, 0.45);   /* modal and drawer backdrop */
+  --ds-focus-ring: 0 0 0 3px rgba(26, 58, 99, 0.28);
+  --ds-focus-ring-danger: 0 0 0 3px rgba(163, 32, 32, 0.28);
+
+  /* ---- type ------------------------------------------------------------ */
+  --ds-font: "InterVariable", -apple-system, BlinkMacSystemFont, "Segoe UI",
+             Roboto, Helvetica, Arial, sans-serif;
+  --ds-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* size / line-height pairs. every step is readable at 390px - the display
+     and h1 steps clamp rather than shrinking by media query, so there is one
+     rule per step instead of two. */
+  --ds-display: clamp(2.25rem, 1.5rem + 3vw, 3.5rem);
+  --ds-display-lh: 1.08;
+  --ds-h1: clamp(1.75rem, 1.3rem + 1.8vw, 2.5rem);
+  --ds-h1-lh: 1.15;
+  --ds-h2: clamp(1.375rem, 1.15rem + 0.9vw, 1.75rem);
+  --ds-h2-lh: 1.25;
+  --ds-h3: 1.125rem;
+  --ds-h3-lh: 1.35;
+  --ds-body-lg: 1.0625rem;
+  --ds-body-lg-lh: 1.6;
+  --ds-body: 0.9375rem;
+  --ds-body-lh: 1.6;
+  --ds-small: 0.875rem;
+  --ds-small-lh: 1.5;
+  --ds-caption: 0.8125rem;
+  --ds-caption-lh: 1.45;
+  --ds-button: 0.9375rem;
+  --ds-nav: 0.9375rem;
+
+  --ds-weight-regular: 400;
+  --ds-weight-medium: 500;
+  --ds-weight-semibold: 600;
+  --ds-weight-bold: 700;
+
+  --ds-tracking-tight: -0.02em;   /* display and h1 only */
+  --ds-tracking-wide: 0.04em;     /* eyebrow labels, uppercase captions */
+
+  /* ---- spacing ---------------------------------------------------------- */
+  --ds-space-1: 0.25rem;
+  --ds-space-2: 0.5rem;
+  --ds-space-3: 0.75rem;
+  --ds-space-4: 1rem;
+  --ds-space-5: 1.5rem;
+  --ds-space-6: 2rem;
+  --ds-space-7: 3rem;
+  --ds-space-8: 4rem;
+  --ds-space-9: 6rem;             /* public-site section rhythm */
+
+  /* ---- radius ----------------------------------------------------------- */
+  /* restrained on purpose - the brief rules out rounding everything */
+  --ds-radius-sm: 4px;
+  --ds-radius: 8px;
+  --ds-radius-lg: 12px;
+  --ds-radius-pill: 999px;
+
+  /* ---- shadow ------------------------------------------------------------ */
+  --ds-shadow-sm: 0 1px 2px rgba(16, 30, 54, 0.06);
+  --ds-shadow: 0 1px 2px rgba(16, 30, 54, 0.05),
+               0 4px 12px rgba(16, 30, 54, 0.06);
+  --ds-shadow-lg: 0 2px 4px rgba(16, 30, 54, 0.05),
+                  0 12px 32px rgba(16, 30, 54, 0.10);
+
+  /* ---- motion ------------------------------------------------------------- */
+  --ds-ease: cubic-bezier(0.2, 0, 0.2, 1);
+  --ds-duration-fast: 120ms;
+  --ds-duration: 200ms;
+  --ds-duration-slow: 320ms;
+
+  /* ---- layout -------------------------------------------------------------- */
+  --ds-content-max: 1360px;   /* app shell */
+  --ds-site-max: 1200px;      /* public site reading width */
+
+  /* ---- bootstrap bridge ------------------------------------------------------ */
+  /* bootstrap compiles its blue into .btn-primary and the focus ring, so
+     overriding --bs-primary alone never reaches them - app.css already learned
+     this. bind the variables bootstrap actually reads. */
+  --bs-primary: var(--ds-primary);
+  --bs-primary-rgb: 26, 58, 99;
+  --bs-danger: var(--ds-danger);
+  --bs-danger-rgb: 163, 32, 32;
+  --bs-body-font-family: var(--ds-font);
+  --bs-body-color: var(--ds-text);
+  --bs-body-bg: var(--ds-ground);
+  --bs-border-color: var(--ds-border);
+}
+
+/* honoured product-wide, declared once. UX-17 gates on it in phase 38 and a
+   per-app copy would be three chances to forget. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Minimal reset. The staff and patient apps inherit border-box from
+   bootstrap; the site app loads no bootstrap and had nothing, so height:100%
+   plus padding overflowed every card past its grid row - found on the
+   testimonials section, but it applied to every sized box on that app.
+   Declared here so all three surfaces agree rather than two of them agreeing
+   by accident. */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: var(--ds-font);
+  font-size: var(--ds-body);
+  line-height: var(--ds-body-lh);
+  color: var(--ds-text);
+}

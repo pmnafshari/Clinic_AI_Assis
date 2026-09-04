@@ -1,0 +1,37 @@
+<a class="site-skip ds-sr-only" href="#main">Skip to content</a>
+<header class="site-header" data-site-header>
+  <div class="site-header-inner">
+    <a class="site-brand" href="/">
+      <svg class="site-icon site-brand-mark" aria-hidden="true"><use href="#i-tooth"/></svg>
+      <span class="site-brand-name">{{ clinic.clinic.name }}</span>
+    </a>
+
+    <nav class="site-nav" aria-label="Main">
+      <ul class="site-nav-list">
+        {% for item in clinic.nav %}
+        <li><a href="{{ item.href }}">{{ item.label }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+
+    <div class="site-header-actions">
+      <a class="ds-btn ds-btn-ghost site-login" href="{{ clinic.actions.login_href }}">{{ clinic.actions.login_label }}</a>
+      <a class="ds-btn ds-btn-primary" href="{{ clinic.actions.book_href }}">{{ clinic.actions.book_label }}</a>
+      <button class="site-menu-toggle" type="button"
+              data-menu-toggle aria-expanded="false" aria-controls="site-menu">
+        <svg class="site-icon" aria-hidden="true"><use href="#i-menu"/></svg>
+        <span class="ds-sr-only">Open menu</span>
+      </button>
+    </div>
+  </div>
+
+  {# the mobile panel is the same links, not a second nav to keep in step #}
+  <div class="site-menu" id="site-menu" data-menu hidden>
+    <ul class="site-menu-list">
+      {% for item in clinic.nav %}
+      <li><a href="{{ item.href }}">{{ item.label }}</a></li>
+      {% endfor %}
+      <li><a href="{{ clinic.actions.login_href }}">{{ clinic.actions.login_label }}</a></li>
+    </ul>
+  </div>
+</header>

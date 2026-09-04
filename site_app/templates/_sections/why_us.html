@@ -1,0 +1,14 @@
+<section class="site-section">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.why_us.heading }}</h2>
+    <div class="site-grid site-grid-3">
+      {% for item in clinic.why_us.entries %}
+      <div class="site-card">
+        <span class="site-card-icon"><svg class="site-icon" aria-hidden="true"><use href="#i-{{ item.icon }}"/></svg></span>
+        <h3 class="site-card-title">{{ item.title }}</h3>
+        <p class="site-card-body">{{ item.body }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>

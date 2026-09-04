@@ -1,0 +1,60 @@
+<section class="site-section site-section-alt" id="contact">
+  <div class="site-wrap">
+    {% if section_heading is not defined or section_heading %}
+    <h2 class="site-h2">Contact</h2>
+    {% endif %}
+    <div class="site-contact-grid">
+      <div>
+        <ul class="site-contact-list">
+          <li><svg class="site-icon" aria-hidden="true"><use href="#i-pin"/></svg>
+            <span>{% if clinic.contact.place %}{{ clinic.contact.place }}<br>{% endif %}
+              {{ clinic.contact.address_line }}<br>{{ clinic.contact.city }}, {{ clinic.contact.country }}</span></li>
+          <li><svg class="site-icon" aria-hidden="true"><use href="#i-phone"/></svg>
+            <a href="{{ clinic.contact.phone_href }}">{{ clinic.contact.phone }}</a></li>
+          <li><svg class="site-icon" aria-hidden="true"><use href="#i-mail"/></svg>
+            <a href="mailto:{{ clinic.contact.email }}">{{ clinic.contact.email }}</a></li>
+        </ul>
+
+        <h3 class="site-card-title site-contact-sub">Opening hours</h3>
+        <ul class="site-hours">
+          {% for h in clinic.hours %}
+          <li><span>{{ h.day }}</span><span>{{ h.open }}</span></li>
+          {% endfor %}
+        </ul>
+
+        <div class="ds-alert ds-alert-danger site-emergency" role="note">
+          <svg class="site-icon" aria-hidden="true"><use href="#i-urgent"/></svg>
+          <div>
+            <strong class="ds-alert-title">Emergency</strong>
+            {{ clinic.contact.emergency_note }}
+            <a href="tel:{{ clinic.contact.emergency_phone | replace(' ', '') }}">{{ clinic.contact.emergency_phone }}</a>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        {% if has_image(clinic.contact.map_image) %}
+        <figure class="site-map">
+          <img class="site-photo site-photo-wide" src="{{ url_for('static', filename=clinic.contact.map_image) }}"
+               alt="{{ clinic.contact.map_alt }}" loading="lazy" decoding="async">
+          {# rendered from OSM tiles once and vendored, so this page makes no
+             runtime request to a tile server - the same rule that keeps the
+             fonts and icons local. ODbL requires the credit. #}
+          <figcaption class="site-map-credit">{{ clinic.contact.map_credit }}</figcaption>
+        </figure>
+        {% else %}
+        <div class="site-media site-media-wide">{{ clinic.contact.map_alt }}</div>
+        {% endif %}
+        <p class="site-card-body site-contact-directions">{{ clinic.contact.directions_note }}</p>
+        <div class="site-cta-row">
+          <a class="ds-btn ds-btn-primary" href="{{ clinic.contact.phone_href }}">Call the clinic</a>
+          <a class="ds-btn ds-btn-secondary" href="{{ clinic.contact.directions_url }}"
+             target="_blank" rel="noopener noreferrer">
+            <svg class="site-icon" aria-hidden="true"><use href="#i-pin"/></svg>
+            {{ clinic.contact.directions_cta }}
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

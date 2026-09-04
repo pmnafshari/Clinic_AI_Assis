@@ -1,0 +1,39 @@
+<section class="site-section" id="doctors">
+  <div class="site-wrap">
+    <h2 class="site-h2">{{ clinic.doctors.heading }}</h2>
+    <p class="site-lede">{{ clinic.doctors.body }}</p>
+
+    {% if clinic.doctors.entries %}
+    <div class="site-grid site-grid-3">
+      {% for doc in clinic.doctors.entries %}
+      <article class="site-person" id="{{ doc.slug }}">
+        {# D-03/D-04: placeholder people, placeholder images. nothing here is
+           presented as a real person. #}
+        {% if has_image(doc.photo) %}
+        <img class="site-photo site-photo-portrait" src="{{ url_for('static', filename=doc.photo) }}"
+             alt="" loading="lazy" decoding="async">
+        {% else %}
+        <div class="site-media site-media-portrait">Photograph: {{ doc.photo }}</div>
+        {% endif %}
+        <div class="site-person-body">
+          <h3 class="site-card-title">{{ doc.name }}</h3>
+          <p class="site-person-role">{{ doc.role }}</p>
+          <p class="site-card-body">{{ doc.bio }}</p>
+          <p class="site-person-langs">
+            <svg class="site-icon" aria-hidden="true"><use href="#i-chat"/></svg>
+            {{ doc.languages | join(', ') }}
+          </p>
+          <a class="site-card-link" href="/doctors#{{ doc.slug }}">
+            View profile <svg class="site-icon" aria-hidden="true"><use href="#i-arrow"/></svg>
+          </a>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    {# an empty config renders an empty state rather than the section
+       vanishing silently - a missing team reads as a broken page #}
+    <div class="ds-state"><p class="ds-state-body">No profiles have been added yet.</p></div>
+    {% endif %}
+  </div>
+</section>
