@@ -156,7 +156,16 @@ h1 {
   align-items: center;
   justify-content: center;
   padding: 2rem;
+  /* a flex item's min-width defaults to auto, so this would not shrink below
+     its content and pushed 428px into a 390px viewport. */
+  width: 100%;
+  min-width: 0;
 }
+
+/* the split login gives .patient-shell padding: 0 and lets the column pad
+   itself. every other screen keeps the shell's padding, so the column must
+   not add a second one. */
+.patient-shell:not(.patient-shell--split) .patient-col { padding: 0; }
 
 .patient-pw { position: relative; }
 .patient-pw .form-control { padding-right: 3.25rem; }
@@ -223,3 +232,102 @@ h1 {
 
 /* an unconnected surface is muted so it does not compete with what works */
 .patient-unconnected { background: var(--ds-surface-sunken); box-shadow: none; }
+
+/* --- chat surface -------------------------------------------------------- */
+
+.chat-title { margin: 0 0 var(--ds-space-2); font-size: var(--ds-h2); line-height: var(--ds-h2-lh); font-weight: var(--ds-weight-semibold); }
+.chat-intro { margin: 0 0 var(--ds-space-6); color: var(--ds-text-muted); font-size: var(--ds-body); line-height: var(--ds-body-lh); }
+
+.chat-examples-heading {
+  margin: 0 0 var(--ds-space-3);
+  font-size: var(--ds-caption);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: var(--ds-tracking-wide);
+  text-transform: uppercase;
+  color: var(--ds-text-muted);
+}
+
+.chat-examples { display: flex; flex-direction: column; gap: var(--ds-space-2); margin-bottom: var(--ds-space-6); }
+
+/* a suggestion reads as something to pick, not as a form button. full width
+   so each sits on its own row - e2e check 11 measures exactly four rows at
+   390px, and two-per-row would fail it. */
+.chat-example {
+  width: 100%;
+  min-height: 48px;
+  padding: var(--ds-space-3) var(--ds-space-4);
+  text-align: left;
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius);
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  font-size: var(--ds-body);
+  cursor: pointer;
+  transition: border-color var(--ds-duration-fast) var(--ds-ease),
+              background-color var(--ds-duration-fast) var(--ds-ease);
+}
+
+.chat-example:hover { border-color: var(--bs-primary); background: var(--ds-surface-sunken); }
+.chat-example:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+.chat-thread { margin-bottom: var(--ds-space-6); }
+
+/* the composer is a single bar, not a labelled field with a button beneath -
+   the input and its send control are one object */
+.chat-composer { margin: 0; }
+
+.chat-composer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-2);
+  border: 1px solid var(--ds-border-strong);
+  border-radius: var(--ds-radius-pill);
+  background: var(--ds-surface);
+  transition: border-color var(--ds-duration-fast) var(--ds-ease),
+              box-shadow var(--ds-duration-fast) var(--ds-ease);
+}
+
+.chat-composer-bar:focus-within { border-color: var(--bs-primary); }
+
+.chat-input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 var(--ds-space-3);
+  border: none;
+  background: transparent;
+  font-family: var(--ds-font);
+  font-size: var(--ds-body);
+  color: var(--ds-text);
+}
+
+.chat-input:focus { outline: none; box-shadow: var(--ds-focus-ring); border-radius: var(--ds-radius-pill); }
+.chat-input::placeholder { color: var(--ds-text-subtle); }
+
+.chat-send {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--ds-space-5);
+  border: none;
+  border-radius: var(--ds-radius-pill);
+  background: var(--bs-primary);
+  color: #fff;
+  font-size: var(--ds-button);
+  font-weight: var(--ds-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.chat-send:hover:not(:disabled) { filter: brightness(0.92); }
+.chat-send:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.chat-send:disabled { opacity: 0.65; cursor: not-allowed; }
+
+.chat-pending-help { margin: var(--ds-space-3) 0 0; font-size: var(--ds-caption); color: var(--ds-text-muted); }
+
+/* the shared .ds-turn-user is navy, the design system's primary. on this app
+   the identity is green (--bs-primary), and a navy question bubble beside a
+   green send button is two primaries on one surface - the same defect phase
+   34 introduced on the buttons and phase 36 corrected. */
+.patient-card .ds-turn-user { background: var(--bs-primary); }

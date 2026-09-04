@@ -1,47 +1,36 @@
 {% extends "patient_base.html" %}
 {% block card_class %}patient-card--wide{% endblock %}
 {% block lang_class %}patient-lang--wide{% endblock %}
+{% block nav_class %}patient-nav--wide{% endblock %}
 {% block content %}
-<h1 class="mb-3">{{ t('chat_heading', lang) }}</h1>
-<p class="text-secondary mb-4">{{ t('chat_intro', lang) }}</p>
+<h1 class="chat-title">{{ t('chat_heading', lang) }}</h1>
+<p class="chat-intro">{{ t('chat_intro', lang) }}</p>
 
-<p class="fw-medium mb-2">{{ t('chat_examples_heading', lang) }}</p>
+{# suggestions belong to the empty state: once there is an exchange on the
+   page they are noise, and the composer is where attention should be. #}
+{% if not state %}
+<p class="chat-examples-heading">{{ t('chat_examples_heading', lang) }}</p>
 {# type=button, unnamed, not attached to the form. as submit buttons named
    "question" they were unusable in a browser two different ways: a click
    failed the required input's validation and posted nothing, and enter in the
    field submitted the first chip's value instead of what was typed. chat.js
    fills the field from the chip text instead. #}
-<div class="d-flex flex-wrap gap-2 mb-4">
-  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_1', lang) }}</button>
-  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_2', lang) }}</button>
-  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_3', lang) }}</button>
-  <button type="button" class="btn btn-outline-secondary chat-example">{{ t('chat_example_4', lang) }}</button>
+<div class="chat-examples">
+  <button type="button" class="chat-example">{{ t('chat_example_1', lang) }}</button>
+  <button type="button" class="chat-example">{{ t('chat_example_2', lang) }}</button>
+  <button type="button" class="chat-example">{{ t('chat_example_3', lang) }}</button>
+  <button type="button" class="chat-example">{{ t('chat_example_4', lang) }}</button>
 </div>
-
-<form id="chat-form" method="post" action="{{ url_for('patient.chat') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <div class="mb-3">
-    <label for="question" class="form-label">{{ t('question_label', lang) }}</label>
-    <input type="text" id="question" name="question" class="form-control"
-           placeholder="{{ t('question_placeholder', lang) }}" maxlength="500" required>
-  </div>
-  <button type="submit" id="chat-submit" class="btn btn-primary"
-          data-pending-label="{{ t('chat_pending_cta', lang) }}">
-    <span class="chat-submit-label">{{ t('chat_cta', lang) }}</span>
-    <span class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
-  </button>
-  <p id="chat-pending-help" class="text-secondary small mt-2 mb-0 d-none">{{ t('chat_pending_help', lang) }}</p>
-</form>
+{% endif %}
 
 {# exactly one response region, rendered only when a POST produced a state -
    a reload with no state returns to the empty state above, per D-03.
 
-   35-01 renders the exchange as an exchange: the patient's own turn above
-   the assistant's. It is still ONE exchange, not a transcript - this app
-   keeps no conversation state, and inventing one client-side would
-   contradict the reload rule directly above. #}
+   The exchange is ONE question and one reply, not a transcript: this app
+   keeps no conversation state, and a client-side history would contradict
+   the reload rule directly. #}
 {% if state %}
-<div class="ds-exchange mt-4">
+<div class="ds-exchange chat-thread">
   {% if question %}
   <p class="ds-turn ds-turn-user">{{ question }}</p>
   {% endif %}
@@ -71,6 +60,24 @@
 </div>
 </div>
 {% endif %}
+
+<form id="chat-form" class="chat-composer" method="post" action="{{ url_for('patient.chat') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {# the label stays in the dom and stays associated - it is read by a screen
+     reader and the placeholder is not a substitute for it #}
+  <label for="question" class="ds-sr-only">{{ t('question_label', lang) }}</label>
+  <div class="chat-composer-bar">
+    <input type="text" id="question" name="question" class="chat-input"
+           placeholder="{{ t('question_placeholder', lang) }}" maxlength="500"
+           autocomplete="off" required>
+    <button type="submit" id="chat-submit" class="chat-send"
+            data-pending-label="{{ t('chat_pending_cta', lang) }}">
+      <span class="chat-submit-label">{{ t('chat_cta', lang) }}</span>
+      <span class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
+    </button>
+  </div>
+  <p id="chat-pending-help" class="chat-pending-help d-none">{{ t('chat_pending_help', lang) }}</p>
+</form>
 
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}
