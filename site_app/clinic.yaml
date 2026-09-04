@@ -47,7 +47,7 @@ nav:
   - {label: "Doctors", href: "/doctors"}
   - {label: "Services", href: "/services"}
   - {label: "How it works", href: "/#how-it-works"}
-  - {label: "AI assistant", href: "/#assistant"}
+  - {label: "AI assistant", href: "/assistant"}
   - {label: "Contact", href: "/contact"}
 
 actions:
@@ -55,7 +55,14 @@ actions:
   book_href: "/contact#book"
   assistant_label: "Talk to our AI assistant"
   # the patient app, a separate origin - this site gains no auth of its own
-  assistant_href: "http://127.0.0.1:5001/login"
+  # the dedicated assistant page on this site. it is NOT the patient
+  # login: sending visitors straight to a form was the defect this
+  # replaces. the page itself links on to sign-in when a visitor needs
+  # their own records.
+  assistant_href: "/assistant"
+  # where the real, authenticated chat lives
+  assistant_signin_href: "http://127.0.0.1:5001/login"
+  assistant_signin_label: "Sign in to the assistant"
   login_label: "Login"
   login_href: "http://127.0.0.1:5000/login"
 
@@ -160,6 +167,39 @@ staff:
     - {name: "Administration", role: "Records and invoicing", body: "Invoices, insurance paperwork and your records.", photo: "img/staff-3.jpg"}
 
 assistant:
+  page_title: "AI assistant"
+  page_lede: >-
+    A digital receptionist for this clinic. It answers general questions about the practice, and -
+    once you have signed in - questions about your own visits, appointments and invoices.
+  # the assistant opens the conversation itself, so the page is never a
+  # blank form waiting to be filled
+  greeting: "Hi — how can I help you today?"
+  greeting_hint: "Ask about our hours, where we are, what we treat, or how booking works."
+  starters:
+    - "What are your opening hours?"
+    - "Where are you?"
+    - "What treatments do you offer?"
+    - "How do I book an appointment?"
+  thinking_label: "Checking the clinic information"
+  listening_label: "Listening"
+  speaking_label: "Speaking"
+  voice_start_label: "Start voice conversation"
+  voice_stop_label: "Stop"
+  voice_off_note: "Voice is switched off on this server."
+  mic_denied_note: "Microphone access was refused, so voice is unavailable. You can still type."
+  input_placeholder: "Ask about the clinic"
+  send_label: "Send"
+  capability_heading: "What it can do today"
+  can:
+    - "Answer questions about this clinic: opening hours, where we are, what we treat, our dentists"
+    - "Explain how booking works and how signing in to your own records works"
+    - "Say plainly when a question is outside what it knows, rather than guessing"
+    - "Take your question by voice and answer out loud, when voice is switched on"
+  cannot_heading: "What it cannot do yet"
+  cannot:
+    - "See any patient records - this page holds none. Sign in and the assistant answers from yours"
+    - "Book, move or cancel an appointment - those are arranged with the clinic by phone"
+    - "Remember this conversation. Reload the page and it starts fresh"
   heading: "How the assistant works"
   body: >-
     A digital receptionist that answers questions about the clinic, and - once you have signed in -
@@ -247,8 +287,8 @@ footer:
         - {label: "Opening hours", href: "/contact"}
     - heading: "AI assistant"
       links:
-        - {label: "What it does", href: "/#assistant"}
-        - {label: "Open the assistant", href: "http://127.0.0.1:5001/login"}
+        - {label: "What it does", href: "/assistant"}
+        - {label: "Open the assistant", href: "/assistant"}
   legal:
     - {label: "Privacy policy", href: "/contact"}
     - {label: "Terms", href: "/contact"}

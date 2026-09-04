@@ -1,0 +1,105 @@
+{% extends "site_base.html" %}
+{% block title %}{{ clinic.assistant.page_title }} — {{ clinic.clinic.name }}{% endblock %}
+{% block content %}
+<section class="agent" data-agent
+         data-signin-href="{{ clinic.actions.assistant_signin_href }}"
+         data-signin-label="{{ clinic.actions.assistant_signin_label }}"
+         data-thinking-label="{{ clinic.assistant.thinking_label }}"
+         data-listening-label="{{ clinic.assistant.listening_label }}"
+         data-speaking-label="{{ clinic.assistant.speaking_label }}"
+         data-voice-start-label="{{ clinic.assistant.voice_start_label }}"
+         data-voice-stop-label="{{ clinic.assistant.voice_stop_label }}"
+         data-mic-denied-note="{{ clinic.assistant.mic_denied_note }}">
+  <div class="agent-inner">
+
+    <header class="agent-head">
+      {# an identity mark, not stock robot imagery: the clinic's own glyph in
+         a presence ring that reflects state #}
+      <span class="agent-avatar" data-agent-level data-agent-avatar aria-hidden="true">
+        <svg class="agent-avatar-mark"><use href="#i-chat"/></svg>
+      </span>
+      <div>
+        <h1 class="agent-title">{{ clinic.assistant.page_title }}</h1>
+        {# the one place the state is named in words, not only drawn #}
+        <p class="agent-status" data-agent-status role="status" aria-live="polite">Ready</p>
+      </div>
+    </header>
+
+    {# the transcript. the assistant's greeting is rendered server-side, so it
+       is present before any javascript runs and the page is never an empty
+       form. subsequent turns are appended by agent.js. #}
+    <div class="agent-thread" data-agent-thread role="log" aria-live="polite"
+         aria-label="Conversation with the clinic assistant">
+      <p class="agent-turn agent-turn--agent">{{ clinic.assistant.greeting }}</p>
+      <p class="agent-hint">{{ clinic.assistant.greeting_hint }}</p>
+
+      {# no-javascript path: a plain form post renders its answer here, so the
+         assistant still works with scripting off #}
+      {% if state %}
+      {% if asked %}<p class="agent-turn agent-turn--user">{{ asked }}</p>{% endif %}
+      <p class="agent-turn agent-turn--agent agent-turn--{{ state }}">{{ reply }}</p>
+      {% if state == 'handoff' %}
+      <a class="ds-btn ds-btn-primary agent-signin" href="{{ clinic.actions.assistant_signin_href }}">
+        {{ clinic.actions.assistant_signin_label }}
+      </a>
+      {% endif %}
+      {% endif %}
+    </div>
+
+    {# hidden until the server confirms voice is armed - never a control that
+       cannot work. typing always remains available beside it. #}
+    <div class="agent-voice" data-agent-voice hidden>
+      <button type="button" class="agent-mic" data-agent-mic>{{ clinic.assistant.voice_start_label }}</button>
+      <p class="agent-voice-note" data-agent-voice-note role="status" aria-live="polite" hidden></p>
+    </div>
+
+    <div class="agent-starters" data-agent-starters>
+      {% for s in clinic.assistant.starters %}
+      <button type="button" class="agent-starter" data-agent-starter>{{ s }}</button>
+      {% endfor %}
+    </div>
+
+    <form class="agent-composer" method="post" action="/assistant" data-agent-form>
+      <label for="ask" class="ds-sr-only">{{ clinic.assistant.input_placeholder }}</label>
+      <div class="agent-bar">
+        <input type="text" id="ask" name="question" class="agent-input"
+               placeholder="{{ clinic.assistant.input_placeholder }}" maxlength="500"
+               autocomplete="off" required>
+        <button type="submit" class="agent-send" data-agent-send>
+          <span data-agent-send-label>{{ clinic.assistant.send_label }}</span>
+        </button>
+      </div>
+      <p class="agent-note">
+        Answers come from this clinic's own information. It holds no patient records &mdash;
+        anything about your own visits or invoices is answered after you sign in.
+      </p>
+    </form>
+
+  </div>
+</section>
+
+<section class="site-section-tight">
+  <div class="site-wrap">
+    <div class="site-grid site-grid-2">
+      <div class="site-card">
+        <span class="site-card-icon"><svg class="site-icon" aria-hidden="true"><use href="#i-chat"/></svg></span>
+        <h2 class="site-card-title">{{ clinic.assistant.capability_heading }}</h2>
+        <ul class="site-capability">{% for i in clinic.assistant.can %}<li>{{ i }}</li>{% endfor %}</ul>
+      </div>
+      <div class="site-card site-card-muted">
+        <span class="site-card-icon"><svg class="site-icon" aria-hidden="true"><use href="#i-mic-off"/></svg></span>
+        <h2 class="site-card-title">{{ clinic.assistant.cannot_heading }}</h2>
+        <ul class="site-capability site-capability-not">{% for i in clinic.assistant.cannot %}<li>{{ i }}</li>{% endfor %}</ul>
+      </div>
+    </div>
+    <div class="site-cta-row site-assistant-cta">
+      <a class="ds-btn ds-btn-primary" href="{{ clinic.actions.assistant_signin_href }}">{{ clinic.actions.assistant_signin_label }}</a>
+      <a class="ds-btn ds-btn-secondary" href="{{ clinic.contact.phone_href }}">
+        <svg class="site-icon" aria-hidden="true"><use href="#i-phone"/></svg>Call {{ clinic.contact.phone }}
+      </a>
+    </div>
+  </div>
+</section>
+
+<script src="{{ url_for('static', filename='js/agent.js') }}" defer></script>
+{% endblock %}

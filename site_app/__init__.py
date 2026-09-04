@@ -12,11 +12,11 @@ fills it with the real clinic site.
 
 from pathlib import Path
 
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
 from shared import STATIC_ROOT as SHARED_STATIC_ROOT
 
-from . import content
+from . import clinic_answers, content, voice_routes
 
 
 def create_site_app():
@@ -85,6 +85,28 @@ def create_site_app():
     @app.route("/clinic")
     def clinic_page():
         return render_template("clinic.html")
+
+    @app.route("/assistant", methods=["GET", "POST"])
+    def assistant():
+        # public, and holds no data: it answers clinic questions out of
+        # clinic.yaml and hands anything personal to sign-in, where the
+        # scoped chat lives. no database is reachable from this app at all.
+        if request.method == "GET":
+            return render_template("assistant.html")
+        asked = request.form.get("question", "").strip()[:500]
+        state, text = clinic_answers.answer(asked, clinic)
+        return render_template("assistant.html", state=state, reply=text, asked=asked)
+
+    @app.route("/assistant/ask", methods=["POST"])
+    def assistant_ask():
+        # json turn endpoint, so the conversation continues without a reload.
+        # the page still works with javascript off - /assistant handles a
+        # plain form post and renders the same answer - this only upgrades it.
+        asked = (request.form.get("question") or "").strip()[:500]
+        state, text = clinic_answers.answer(asked, clinic)
+        return jsonify({"state": state, "text": text, "asked": asked})
+
+    voice_routes.register(app, clinic)
 
     @app.route("/contact")
     def contact():

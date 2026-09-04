@@ -271,7 +271,7 @@ def selftest():
     # 20. UX-09 - the secondary pages render, and every one of them is held
     # to the same rules as the landing page. checking only "/" would have let
     # four pages ship ungated.
-    PUBLIC_PAGES = ["/", "/services", "/doctors", "/clinic", "/contact"]
+    PUBLIC_PAGES = ["/", "/services", "/doctors", "/clinic", "/contact", "/assistant"]
     for path in PUBLIC_PAGES:
         r = client.get(path)
         assert r.status_code == 200, f"20: {path} must render"
@@ -280,7 +280,17 @@ def selftest():
         ), f"20: {path} must not reference an external http(s) asset"
         assert not re.search(r"<[^>]+\sstyle=", r.text), f"20: {path} has an inline style="
         assert 'class="bi' not in r.text, f"20: {path} carries icon-font markup"
-        assert "<form" not in r.text, f"20: {path} has a form - there is nothing to post to"
+        # PROPERTY NARROWED, not dropped: a form is a fake success path only
+        # where nothing handles it. /assistant now has a real handler that
+        # answers from clinic.yaml and touches no data, so it may carry one -
+        # and it may post ONLY to itself. Every other page still has nothing
+        # to post to and must still have no form.
+        if path == "/assistant":
+            forms = re.findall(r'<form[^>]*action="([^"]*)"', r.text)
+            assert forms == ["/assistant"], \
+                f"20: /assistant must post only to itself, found {forms}"
+        else:
+            assert "<form" not in r.text, f"20: {path} has a form - there is nothing to post to"
         # exactly one h1 per page. two is an outline error a screen reader
         # reads aloud, and it is how a page head and a section heading
         # duplicate each other unnoticed - which /contact did.
@@ -310,12 +320,105 @@ def selftest():
             elif hpath and not hpath.startswith(("/static/", "/shared/")):
                 assert hpath in routes, f"20: {path} links to {hpath}, which is not a route"
 
+    # 20e. the "AI assistant" nav must lead to the assistant page, NOT to a
+    # login form. it pointed straight at the patient app's /login, so the
+    # nav dumped visitors on a bare form with no explanation - the defect
+    # this page replaces.
+    assert cfg["actions"]["assistant_href"] == "/assistant", \
+        "20e: the assistant action must point at the assistant page, not a login url"
+    # every nav/footer link labelled for the assistant resolves to the page,
+    # never to a login url
+    for item in cfg["nav"] + [l for c in cfg["footer"]["columns"] for l in c["links"]]:
+        if "assistant" in item["label"].lower():
+            assert item["href"] == "/assistant", \
+                f"20e: {item['label']!r} points at {item['href']!r}, not the assistant page"
+    a_page = client.get("/assistant")
+    assert a_page.status_code == 200, "20e: the assistant page must render"
+    # it is public and holds nothing: the real chat is behind the patient
+    # session, and this page links there rather than standing in for it
+    assert "Set-Cookie" not in a_page.headers, "20e: the assistant page keeps no session"
+    assert cfg["actions"]["assistant_signin_href"] in a_page.text, \
+        "20e: and must offer the way in to the authenticated chat"
+
+    # 20f. it says plainly what the assistant cannot do. speech exists now,
+    # but only behind the VOICE_DEMO fence and off by default - see 20i - and
+    # the assistant still cannot read records, book, or remember a turn. a
+    # page implying otherwise would promise capabilities that do not exist.
+    for item in cfg["assistant"]["cannot"]:
+        assert on_page(item, a_page.text), f"20f: missing limitation: {item[:40]!r}"
+    assert on_page(cfg["assistant"]["cannot_heading"], a_page.text), \
+        "20f: the limitations need their heading"
+
+    # 20g. the public assistant answers clinic questions and NEVER personal
+    # ones. it has no database - section 1 asserts that structurally - so a
+    # personal question must hand off to sign-in rather than be answered.
+    from site_app import clinic_answers
+    clinic_answers.selftest()
+
+    for q in ("when is my next appointment?", "how much do i owe?", "quanto devo pagare?"):
+        r = client.post("/assistant", data={"question": q})
+        assert r.status_code == 200, f"20g: /assistant should answer {q!r}"
+        assert "agent-turn--handoff" in r.text, \
+            f"20g: {q!r} must hand off to sign-in, not be answered here"
+        assert cfg["actions"]["assistant_signin_href"] in r.text, \
+            "20g: and must offer the way in"
+
+    ans = client.post("/assistant", data={"question": "what are your opening hours?"})
+    assert "agent-turn--answer" in ans.text, "20g: a clinic question should be answered"
+    assert on_page(cfg["hours"][0]["day"], ans.text), \
+        "20g: and the answer must come from clinic.yaml"
+
+    off = client.post("/assistant", data={"question": "what is the capital of france?"})
+    assert "agent-turn--refusal" in off.text, "20g: off-topic must be refused, not guessed"
+
+    # 20h. the json turn endpoint carries the same three outcomes as the
+    # form path, and the same refusal to answer anything personal. a second
+    # code path would be a second place for that rule to be forgotten - it
+    # calls the same router.
+    import json as _json
+    for q, want in (("what are your opening hours?", "answer"),
+                    ("when is my next appointment?", "handoff"),
+                    ("who won the football", "refusal")):
+        r = client.post("/assistant/ask", data={"question": q})
+        assert r.status_code == 200, f"20h: /assistant/ask should answer {q!r}"
+        got = _json.loads(r.data)
+        assert got["state"] == want, f"20h: {q!r} -> {got['state']}, expected {want}"
+        assert got["text"], "20h: every outcome carries text"
+    # and it holds no patient data to leak, like every other route here
+    r = _json.loads(client.post("/assistant/ask", data={"question": "how much do i owe?"}).data)
+    assert r["state"] == "handoff" and "sign in" in r["text"].lower(), \
+        "20h: a personal question must hand off, never be answered"
+
+    # 20i. voice obeys the same fence as everything else. with VOICE_DEMO
+    # unset - which is the default, and what the suite runs under - the
+    # status endpoint says so and the audio endpoints refuse. the page reads
+    # that and hides the control rather than offering one that cannot work.
+    st = _json.loads(client.get("/assistant/voice/status").data)
+    assert st["available"] is False, \
+        "20i: voice must be off by default in a suite run"
+    assert "VOICE_DEMO" in st["reason"], "20i: and must say why"
+    assert client.get("/assistant/voice/greeting").status_code == 503, \
+        "20i: the greeting endpoint must refuse when the fence is closed"
+    assert client.post("/assistant/voice").status_code == 503, \
+        "20i: the turn endpoint must refuse when the fence is closed"
+
+    # 20j. no vendor credential may reach the browser. the page posts audio
+    # here and gets text and sound back; the keys are only ever used server
+    # side.
+    for probe in ("DEEPGRAM", "ELEVENLABS", "api_key", "xi-api-key", "Authorization: Token"):
+        assert probe not in a_page.text, f"20j: {probe!r} appears in the page source"
+    js = client.get("/static/js/agent.js")
+    assert js.status_code == 200, "20j: agent.js should serve"
+    for probe in ("DEEPGRAM", "ELEVENLABS", "sk-", "api.deepgram.com", "api.elevenlabs.io"):
+        assert probe not in js.text, f"20j: {probe!r} appears in client javascript"
+
     # 21. route inventory. this app has no authentication gate, so it must
     # not be able to grow a route unnoticed. asserting the exact set is cheap
     # now and impossible to retrofit convincingly later.
     EXPECTED_ENDPOINTS = {
         "static", "shared", "home", "services", "doctors", "clinic_page",
-        "contact", "reference",
+        "contact", "reference", "assistant", "assistant_ask",
+        "voice_status", "voice_greeting", "voice_turn",
     }
     actual = {r.endpoint for r in app.url_map.iter_rules()}
     assert actual == EXPECTED_ENDPOINTS, (

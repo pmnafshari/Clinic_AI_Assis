@@ -29,7 +29,8 @@ STAFF, PATIENT, SITE = "http://127.0.0.1:5000", "http://127.0.0.1:5001", "http:/
 # roles here would duplicate shot_pages.py's fixture handling for no gain.
 PAGES = [
     ("site", f"{SITE}/"), ("site", f"{SITE}/services"), ("site", f"{SITE}/doctors"),
-    ("site", f"{SITE}/clinic"), ("site", f"{SITE}/contact"), ("site", f"{SITE}/reference"),
+    ("site", f"{SITE}/clinic"), ("site", f"{SITE}/contact"), ("site", f"{SITE}/assistant"),
+    ("site", f"{SITE}/reference"),
     ("staff", f"{STAFF}/login"),
     ("patient", f"{PATIENT}/login"),
 ]
