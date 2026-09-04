@@ -13,6 +13,7 @@ app_selftest.py can see the markup that usually causes it, not the measurement.
 
     ollama serve                                       # not needed, no model here
     .venv/bin/python run.py                            # staff app, port 5000
+    .venv/bin/python site_run.py                       # public site, port 5002
     .venv/bin/python -m playwright install chromium    # once
 
     .venv/bin/python shot_pages.py [--width 390] [--out DIR] [--headed]
@@ -37,6 +38,11 @@ from playwright.sync_api import sync_playwright
 from werkzeug.security import generate_password_hash
 
 STAFF_URL = "http://127.0.0.1:5000"
+# the public site is a second target, not a second instrument. it must be
+# running: UX-17 claims every page on all three apps, and a run that quietly
+# skipped a third of the product would be the kind of green that is worse
+# than no run at all.
+SITE_URL = "http://127.0.0.1:5002"
 DB_PATH = "db/clinic.sqlite"
 
 PASS = "zzs_shotpass_1234"
@@ -48,12 +54,22 @@ CF = "ZZSA850010150801"
 # a page with no role is fetched logged-out. admin never reaches the dashboard:
 # dashboard_routes.index redirects manage_users-without-read_notes to /admin/users.
 PUBLIC_PAGES = [("login", "/login")]
+# no session, no seeding - the site app holds no data to seed
+SITE_PAGES = [
+    ("home", "/"),
+    ("services", "/services"),
+    ("doctors", "/doctors"),
+    ("clinic", "/clinic"),
+    ("contact", "/contact"),
+    ("reference", "/reference"),
+]
 ROLE_PAGES = {
     "dentist": [
         ("dashboard", "/"),
         ("patients", "/patients"),
         ("patient-detail", f"/patients/{CF}"),
         ("qa", "/qa"),
+        ("reports", "/reports"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -136,8 +152,8 @@ def sign_in(page, username):
         raise RuntimeError(f"login failed for {username} - landed on {page.url}")
 
 
-def shoot(page, width, role, name, path, out_dir):
-    page.goto(f"{STAFF_URL}{path}")
+def shoot(page, width, role, name, path, out_dir, base=STAFF_URL):
+    page.goto(f"{base}{path}")
     page.wait_for_load_state("networkidle")
     size = page.evaluate(MEASURE)
 
@@ -158,6 +174,12 @@ def walk(browser, width, out_dir):
     page = ctx.new_page()
     for name, path in PUBLIC_PAGES:
         shoot(page, width, "public", name, path, out_dir)
+    ctx.close()
+
+    ctx = browser.new_context(viewport={"width": width, "height": 900})
+    page = ctx.new_page()
+    for name, path in SITE_PAGES:
+        shoot(page, width, "site", name, path, out_dir, base=SITE_URL)
     ctx.close()
 
     for username, role in USERS:
