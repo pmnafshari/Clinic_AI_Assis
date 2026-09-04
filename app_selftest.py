@@ -218,6 +218,18 @@ def selftest():
         assert app.test_client().get("/patients").status_code == 302, \
             "10b: every other route must still redirect to login without a session"
 
+        # 10b2. the appointments surface is behind the session gate like every
+        # other route, and the dashboard's agenda card obeys the same
+        # withhold rule as its clinical figures: a role without
+        # manage_appointments gets a dashboard with no agenda markup in the
+        # body, not one where the card is hidden.
+        assert app.test_client().get("/appointments").status_code == 302, \
+            "10b2: /appointments must redirect without a session"
+        endpoints = {r.endpoint for r in app.url_map.iter_rules()}
+        for name in ("appointments.index", "appointments.book",
+                     "appointments.cancel", "appointments.reschedule"):
+            assert name in endpoints, f"10b2: {name} should be registered"
+
         # 10c. UX-03/UX-04 - the component layer reads tokens and nothing
         # else. a component that hardcodes a colour is the exact failure
         # UX-01 exists to prevent, it is invisible by eye across 500 lines,
@@ -708,11 +720,14 @@ def selftest():
         # would pass even if authorize() had been stripped out entirely.
         # PROPERTY UNCHANGED: the role filter still bites, counted per role.
         # 6 -> 7 because phase 39 added Reports behind read_clinical, which a
-        # dentist holds. The assertion below that an assistant does NOT gain
-        # it is what keeps this honest - a bare count going up could otherwise
-        # hide authorize() being stripped out.
-        assert shell.data.count(b'class="nav-link') == 7, \
-            f'20: a dentist should see 7 sidebar links, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        # dentist holds. 7 -> 8 because phase 41 added Appointments behind
+        # manage_appointments, which a dentist also holds. The assertion below
+        # that an assistant does NOT gain Reports is what keeps this honest -
+        # a bare count going up could otherwise hide authorize() being
+        # stripped out. Appointments is the opposite case and is asserted
+        # separately: an assistant DOES gain it, and an admin must not.
+        assert shell.data.count(b'class="nav-link') == 8, \
+            f'20: a dentist should see 8 sidebar links, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
         assert b"Reports" in shell.data, "20: a dentist holds read_clinical and is offered Reports"
         assert b"Staff accounts" not in shell.data, \
             "20: a dentist must not be offered the admin link"
@@ -729,6 +744,15 @@ def selftest():
         asst_shell = client_asst.get("/")
         assert b"Reports" not in asst_shell.data, \
             "20a: an assistant must not be offered Reports"
+        # APPT-05, the other direction: reception books, so an assistant DOES
+        # hold manage_appointments and must be offered the link. asserting only
+        # the absences would let the capability be dropped from assistant
+        # without a single test noticing.
+        assert b"Appointments" in asst_shell.data, \
+            "20a: an assistant holds manage_appointments and is offered Appointments"
+        assert client_asst.get("/appointments").status_code == 200, \
+            "20a: and can reach the page"
+
         asst_reports = client_asst.get("/reports")
         assert asst_reports.status_code == 302, \
             "20a: an assistant must be refused the reports route, not shown a hidden page"
@@ -744,6 +768,8 @@ def selftest():
         adm_shell = client_adm.get("/admin/users")
         assert b"Staff accounts" in adm_shell.data, \
             "20: an admin must be offered the admin link"
+        assert b"Appointments" not in adm_shell.data, \
+            "20: an admin holds manage_users alone and must not be offered Appointments"
 
         # 20b. UX-20 - what the reports page must NEVER claim. none of these
         # exist in the schema: invoices carry no status and there is no

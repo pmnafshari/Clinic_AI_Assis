@@ -43,6 +43,44 @@
 </div>
 {% endif %}
 
+{% if show_agenda %}
+<div class="row g-3 mb-4">
+  <div class="col-12">
+    <div class="card h-100">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Today</span>
+        <a class="btn btn-sm btn-outline-secondary"
+           href="{{ url_for('appointments.index', day=today) }}">All appointments</a>
+      </div>
+      <div class="card-body">
+        {% if agenda_has_data %}
+        <table class="table ds-table-cards align-middle mb-0">
+          <thead><tr><th>Time</th><th>Patient</th><th>Dentist</th><th>Length</th></tr></thead>
+          <tbody>
+            {% for a in agenda %}
+            <tr>
+              <td data-label="Time">{{ a.starts_at[11:16] }}</td>
+              <td data-label="Patient">{{ a.patient_name }}</td>
+              <td data-label="Dentist">{{ a.dentist }}</td>
+              <td data-label="Length">{{ a.minutes }} min</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        {# permitted, nothing booked. a role without the capability never
+           reaches this block at all and gets no empty state either. #}
+        <div class="chart-empty">
+          <i class="bi bi-calendar-check"></i>
+          <p class="mb-0">Nothing booked today. Appointments for today appear here.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if show_intake or show_clinical %}
 <div class="row g-3 mb-4">
   {% if show_intake %}

@@ -179,6 +179,14 @@ def selftest():
         assert _rows(db_path, "SELECT * FROM audit_log WHERE action = 'cancel_appointment'"), \
             "10: cancelling must be audited"
 
+        # 10b. the nav link is gated by the SAME capability as the route. a
+        # link a role cannot follow is a withhold failure read from the other
+        # side, and it is how the link and the gate drift apart.
+        assert "/appointments" in dentist.get("/").text, \
+            "10b: a permitted role should see the nav link"
+        assert "/appointments" not in admin.get("/admin/users").text, \
+            "10b: a role without the capability must not be offered the link"
+
         # 11. the agenda no longer shows it, but the day still renders
         page = dentist.get(f"/appointments?day={DAY}")
         assert page.status_code == 200, "11: the day view should render"

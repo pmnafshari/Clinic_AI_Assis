@@ -13,19 +13,19 @@
 <div class="card p-4 mb-4">
   <h2 class="section-title">{{ day }}</h2>
   {% if has_data %}
-  <table class="table align-middle mb-0">
+  <table class="table ds-table-cards align-middle mb-0">
     <thead>
       <tr><th>Time</th><th>Patient</th><th>Dentist</th><th>Length</th><th>Note</th><th></th></tr>
     </thead>
     <tbody>
       {% for r in rows %}
       <tr>
-        <td>{{ r.starts_at[11:16] }}</td>
-        <td>{{ r.patient_name }}</td>
-        <td>{{ r.dentist }}</td>
-        <td>{{ r.minutes }} min</td>
-        <td>{{ r.note or "" }}</td>
-        <td class="text-end">
+        <td data-label="Time">{{ r.starts_at[11:16] }}</td>
+        <td data-label="Patient">{{ r.patient_name }}</td>
+        <td data-label="Dentist">{{ r.dentist }}</td>
+        <td data-label="Length">{{ r.minutes }} min</td>
+        <td data-label="Note">{{ r.note or "" }}</td>
+        <td data-label="" class="text-end">
           <form method="post" action="{{ url_for('appointments.cancel', appointment_id=r.id) }}"
                 class="d-inline">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -35,7 +35,7 @@
         </td>
       </tr>
       <tr>
-        <td colspan="6">
+        <td colspan="6" data-label="">
           {# reschedule is a POST like cancel: a GET that moves an appointment
              is a link something can follow #}
           <form method="post" action="{{ url_for('appointments.reschedule', appointment_id=r.id) }}"

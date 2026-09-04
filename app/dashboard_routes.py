@@ -1,9 +1,11 @@
 import json
+from datetime import date
 from pathlib import Path
 
 from flask import Blueprint, g, redirect, render_template, url_for
 
 import agent
+import appointments
 from auth import authorize
 
 from .db import get_db
@@ -131,6 +133,14 @@ def index():
     intake_has_data = show_intake and any(intake_counts.values())
     visits_have_data = show_clinical and bool(visit_months)
 
+    # today's agenda, on the same rule as everything above it: the capability
+    # decides whether the query RUNS, and a separate verdict decides whether
+    # there is anything to draw. permitted-with-nothing-booked and
+    # not-permitted are different renders.
+    show_agenda = authorize(g.user["role"], "manage_appointments")
+    agenda = appointments.agenda(conn, date.today().isoformat()) if show_agenda else None
+    agenda_has_data = bool(agenda)
+
     # chart series are shaped here, not in jinja: the template renders what
     # it is given and computes nothing (D-01, as phase 23 did for the badge)
     return render_template(
@@ -149,4 +159,8 @@ def index():
         visit_counts=visit_counts,
         visits_have_data=visits_have_data,
         patient_total=patient_total,
+        show_agenda=show_agenda,
+        agenda=agenda,
+        agenda_has_data=agenda_has_data,
+        today=date.today().isoformat(),
     )

@@ -70,6 +70,7 @@ ROLE_PAGES = {
         ("patient-detail", f"/patients/{CF}"),
         ("qa", "/qa"),
         ("reports", "/reports"),
+        ("appointments", "/appointments"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -77,6 +78,10 @@ ROLE_PAGES = {
         ("dashboard", "/"),
         ("patients", "/patients"),
         ("patient-detail", f"/patients/{CF}"),
+        # reception books, so the assistant holds manage_appointments too -
+        # shot here as well because it is a different render from the
+        # dentist's, not the same page behind the same gate
+        ("appointments", "/appointments"),
     ],
     "admin": [
         ("admin-users", "/admin/users"),

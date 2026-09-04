@@ -33,6 +33,15 @@
       <i class="bi bi-journal-plus"></i> Add note
     </a>
     {% endif %}
+    {# manage_appointments, matching appointments_routes' own gate exactly.
+       a link a role cannot follow is the same defect as a hidden withhold,
+       read from the other side. #}
+    {% if authorize(g.user.role, 'manage_appointments') %}
+    <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('appointments.') else '' }}"
+       href="{{ url_for('appointments.index') }}">
+      <i class="bi bi-calendar-check"></i> Appointments
+    </a>
+    {% endif %}
     {# read_clinical, matching reports_routes.index's own gate exactly - the
        link and the route must never disagree about who may see this #}
     {% if authorize(g.user.role, 'read_clinical') %}
