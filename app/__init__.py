@@ -48,6 +48,7 @@ def create_app():
 
     from .admin_routes import admin_bp
     from .agent_routes import agent_bp
+    from .appointments_routes import appointments_bp
     from .auth_routes import auth_bp
     from .dashboard_routes import dashboard_bp
     from .notes_routes import notes_bp
@@ -57,6 +58,7 @@ def create_app():
     from .upload_routes import upload_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(agent_bp)
+    app.register_blueprint(appointments_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(notes_bp)

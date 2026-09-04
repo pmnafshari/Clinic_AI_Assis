@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Appointments</h1>
+
+<form method="get" action="{{ url_for('appointments.index') }}" class="mb-4 d-flex gap-2 align-items-end">
+  <div>
+    <label for="day" class="form-label">Day</label>
+    <input type="date" id="day" name="day" value="{{ day }}" class="form-control">
+  </div>
+  <button type="submit" class="btn btn-secondary">Show</button>
+</form>
+
+<div class="card p-4 mb-4">
+  <h2 class="section-title">{{ day }}</h2>
+  {% if has_data %}
+  <table class="table align-middle mb-0">
+    <thead>
+      <tr><th>Time</th><th>Patient</th><th>Dentist</th><th>Length</th><th>Note</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.starts_at[11:16] }}</td>
+        <td>{{ r.patient_name }}</td>
+        <td>{{ r.dentist }}</td>
+        <td>{{ r.minutes }} min</td>
+        <td>{{ r.note or "" }}</td>
+        <td class="text-end">
+          <form method="post" action="{{ url_for('appointments.cancel', appointment_id=r.id) }}"
+                class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="day" value="{{ day }}">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
+          </form>
+        </td>
+      </tr>
+      <tr>
+        <td colspan="6">
+          {# reschedule is a POST like cancel: a GET that moves an appointment
+             is a link something can follow #}
+          <form method="post" action="{{ url_for('appointments.reschedule', appointment_id=r.id) }}"
+                class="d-flex gap-2 align-items-end flex-wrap">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="day" value="{{ day }}">
+            <div>
+              <label class="form-label small" for="rdate-{{ r.id }}">Move to</label>
+              <input type="date" id="rdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}"
+                     class="form-control form-control-sm" required>
+            </div>
+            <div>
+              <label class="form-label small" for="rtime-{{ r.id }}">Time</label>
+              <input type="time" id="rtime-{{ r.id }}" name="time" value="{{ r.starts_at[11:16] }}"
+                     class="form-control form-control-sm" required>
+            </div>
+            <div>
+              <label class="form-label small" for="rmin-{{ r.id }}">Minutes</label>
+              <input type="number" id="rmin-{{ r.id }}" name="minutes" value="{{ r.minutes }}"
+                     min="5" step="5" class="form-control form-control-sm" required>
+            </div>
+            <button type="submit" class="btn btn-sm btn-outline-primary">Reschedule</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {# permitted, nothing booked. not the same render as not-permitted, which
+     never reaches this template at all. #}
+  <p class="text-secondary mb-0">Nothing booked for this day.</p>
+  {% endif %}
+</div>
+
+<div class="card p-4">
+  <h2 class="section-title">Book an appointment</h2>
+  <form method="post" action="{{ url_for('appointments.book') }}"
+        class="d-flex gap-2 align-items-end flex-wrap">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="day" value="{{ day }}">
+    <div>
+      <label for="cf" class="form-label">Patient</label>
+      <select id="cf" name="codice_fiscale" class="form-select" required>
+        {% for p in patients %}
+        <option value="{{ p.codice_fiscale }}">{{ p.patient_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="dentist" class="form-label">Dentist</label>
+      <select id="dentist" name="dentist" class="form-select" required>
+        {% for d in dentists %}
+        <option value="{{ d.username }}">{{ d.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="bdate" class="form-label">Date</label>
+      <input type="date" id="bdate" name="date" value="{{ day }}" class="form-control" required>
+    </div>
+    <div>
+      <label for="btime" class="form-label">Time</label>
+      <input type="time" id="btime" name="time" class="form-control" required>
+    </div>
+    <div>
+      <label for="bmin" class="form-label">Minutes</label>
+      <input type="number" id="bmin" name="minutes" value="30" min="5" step="5"
+             class="form-control" required>
+    </div>
+    <div>
+      <label for="bnote" class="form-label">Note</label>
+      <input type="text" id="bnote" name="note" maxlength="200" class="form-control">
+    </div>
+    <button type="submit" class="btn btn-primary">Book</button>
+  </form>
+</div>
+{% endblock %}
