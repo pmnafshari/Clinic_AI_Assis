@@ -1,0 +1,10 @@
+{
+  "patient_name": 1.0,
+  "codice_fiscale": 1.0,
+  "phone": 0.9412,
+  "visit_date": 1.0,
+  "procedures": 0.8824,
+  "invoices": 0.7941,
+  "next_appointment": 0.9706,
+  "aggregate": 0.9412
+}

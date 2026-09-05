@@ -122,6 +122,11 @@ ollama run dental-notes "pt mario rossi, rct on 26 done, mild caries on 27, fu i
 they drift apart silently otherwise, and the model then gets trained on one prompt and run
 on another.
 
+After a retrain, `verify_retrain.py` compares **every gated field** against
+`retrain_baseline.json` and fails on any drop. A rising aggregate is not a pass: it hides
+one field going backwards behind two going forwards, and the defects a retrain targets sit
+in the weakest fields. Accept a new baseline only deliberately, with `--baseline`.
+
 > **The prompt and the weights are a matched pair.** Editing the prompt and re-registering
 > against weights trained on the previous one measurably degrades the model — measured
 > 2026-09-05, an invoice-rule edit alone moved the aggregate 0.94 → 0.923, procedures
@@ -189,6 +194,7 @@ exactly the defects these catch:
 | `e2e_voice_walk.py` | the assistant voice paths, including every failure mode |
 | `eval_chat.py` / `eval_notes.py` | answer fidelity, and model accuracy |
 | `shot_pages.py` | every page fits at 390px and 1440px with no horizontal scroll |
+| `verify_retrain.py` | run after a retrain: every field against `retrain_baseline.json`, plus the three later-position terms |
 
 Install the browser tooling with `.venv/bin/pip install -r requirements-dev.txt` then
 `.venv/bin/python -m playwright install chromium`. It is development-only and never goes on
