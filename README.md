@@ -42,7 +42,23 @@ ollama create dental-notes -f Modelfile
 # 3. database and dev accounts
 .venv/bin/python seed_users.py
 
-# 4. run it — one terminal each
+# 4. run it
+./demo.sh
+```
+
+`demo.sh` starts Ollama and all three apps, waits for each to answer, and prints the URLs.
+Ctrl+C stops everything it started — and leaves an Ollama that was already running alone.
+It refuses up front on a busy port, a missing database or a missing `.venv` rather than
+failing three logs deep.
+
+```
+./demo.sh --voice       also arm the fenced demo voice (needs .env.voice)
+./demo.sh --no-ollama   public site only — it reads no model
+```
+
+To run one app on its own:
+
+```bash
 ollama serve
 .venv/bin/python run.py                                   # staff    :5000
 PATIENT_COOKIE_SECURE=0 .venv/bin/python patient_run.py   # patient  :5001
@@ -179,6 +195,7 @@ Stated plainly, because a demo that overstates itself is worse than a small one:
 ## Layout
 
 ```
+demo.sh       start everything
 app/          staff CRM (blueprints, templates)
 patient_app/  patient portal
 site_app/     public clinic site
