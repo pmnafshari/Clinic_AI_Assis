@@ -1,0 +1,82 @@
+{% extends "patient_base.html" %}
+{% block card_class %}patient-card--wide{% endblock %}
+{% block lang_class %}patient-lang--wide{% endblock %}
+{% block nav_class %}patient-nav--wide{% endblock %}
+{% block content %}
+<h1 class="mb-3">{{ t('appt_heading', lang) }}</h1>
+<p class="text-secondary mb-4">{{ t('appt_intro', lang) }}</p>
+
+{% if request.args.get('done') == 'requested' %}
+<div class="alert alert-success" role="status">{{ t('appt_request_ok', lang) }}</div>
+{% elif request.args.get('done') == 'cancelled' %}
+<div class="alert alert-success" role="status">{{ t('appt_cancelled_ok', lang) }}</div>
+{% endif %}
+
+<h2 class="ds-card-title mt-2">{{ t('appt_upcoming', lang) }}</h2>
+{% if booked %}
+<ul class="list-group mb-4">
+  {% for a in booked %}
+  <li class="list-group-item d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      {# a booked row has a real time, so it is shown as one #}
+      <strong>{{ a.starts_at | appt_when(lang) }}</strong>
+      {% if a.dentist %}<span class="text-secondary d-block">{{ t('appt_with', lang).format(dentist=a.dentist) }}</span>{% endif %}
+    </div>
+    <form method="post" action="{{ url_for('patient.appointments_cancel', appointment_id=a.id) }}"
+          onsubmit="return confirm('{{ t('appt_cancel_confirm', lang) }}');">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('appt_cancel', lang) }}</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-secondary mb-4">{{ t('appt_none', lang) }}</p>
+{% endif %}
+
+{% if requested %}
+<h2 class="ds-card-title">{{ t('appt_pending', lang) }}</h2>
+<ul class="list-group mb-4">
+  {% for a in requested %}
+  <li class="list-group-item">
+    <span class="ds-badge ds-badge-neutral">{{ t('appt_pending_badge', lang) }}</span>
+    {# NEVER a time. a request holds a date and a period, and rendering it as
+       an hour would be inventing a confirmation the clinic has not given. #}
+    <p class="mb-0 mt-2">{{ t('appt_pending_line', lang).format(
+         day=a.starts_at | appt_day(lang),
+         period=t('appt_' ~ a.period, lang)) }}</p>
+    {% if a.note %}<p class="text-secondary mb-0"><em>{{ a.note }}</em></p>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+
+<h2 class="ds-card-title">{{ t('appt_request_title', lang) }}</h2>
+<p class="text-secondary">{{ t('appt_request_note', lang) }}</p>
+<form method="post" action="{{ url_for('patient.appointments_request') }}" class="mt-3">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3">
+    <label for="day" class="form-label">{{ t('appt_request_day', lang) }}</label>
+    <input type="date" id="day" name="day" class="form-control" required
+           min="{{ today }}" value="{{ today }}">
+  </div>
+  <fieldset class="mb-3">
+    <legend class="form-label">{{ t('appt_request_period', lang) }}</legend>
+    <div class="form-check">
+      <input class="form-check-input" type="radio" name="period" id="period-morning"
+             value="morning" checked>
+      <label class="form-check-label" for="period-morning">{{ t('appt_morning', lang) }}</label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="radio" name="period" id="period-afternoon"
+             value="afternoon">
+      <label class="form-check-label" for="period-afternoon">{{ t('appt_afternoon', lang) }}</label>
+    </div>
+  </fieldset>
+  <div class="mb-3">
+    <label for="reason" class="form-label">{{ t('appt_request_reason', lang) }}</label>
+    <input type="text" id="reason" name="reason" class="form-control" maxlength="200">
+  </div>
+  <button type="submit" class="btn btn-primary">{{ t('appt_request_send', lang) }}</button>
+</form>
+{% endblock %}

@@ -49,10 +49,63 @@ STRINGS = {
     # about what the clinic holds is the one thing this surface must not do.
     "via_assistant": {"it": "Tramite l'assistente", "en": "Via the assistant"},
     "overview_appt_title": {"it": "Prenotazioni", "en": "Appointments"},
+    # Phase 42 connected this. the old copy said appointments were "not
+    # connected to this portal yet" and the card carried the not_connected
+    # badge - both are now false, and leaving either would be the inaccuracy
+    # UX-14 exists to prevent.
     "overview_appt_body": {
-        "it": "Le prenotazioni si gestiscono per telefono con la clinica: non sono ancora collegate a questo portale.",
-        "en": "Appointments are arranged by phone with the clinic - they are not connected to this portal yet.",
+        "it": "Chiedi un appuntamento e la clinica ti conferma giorno e ora.",
+        "en": "Ask for an appointment and the clinic confirms the day and time.",
     },
+
+    # --- appointments (Phase 42, PAPT-01..05) --------------------------
+    "nav_appointments": {"it": "Appuntamenti", "en": "Appointments"},
+    "appt_heading": {"it": "I tuoi appuntamenti", "en": "Your appointments"},
+    "appt_intro": {
+        "it": "Qui trovi gli appuntamenti confermati e le richieste in attesa.",
+        "en": "Here are your confirmed appointments and any pending requests.",
+    },
+    "appt_upcoming": {"it": "In programma", "en": "Upcoming"},
+    "appt_none": {
+        "it": "Non hai appuntamenti in programma.",
+        "en": "You have no upcoming appointments.",
+    },
+    "appt_pending": {"it": "Richieste in attesa", "en": "Pending requests"},
+    "appt_pending_badge": {"it": "In attesa", "en": "Awaiting confirmation"},
+    # the whole point of the period model: a request has no time, so the
+    # copy must never imply one
+    "appt_pending_line": {
+        "it": "Hai chiesto: {day}, {period}. La clinica ti conferma l'orario.",
+        "en": "You asked for: {day}, {period}. The clinic will confirm the time.",
+    },
+    "appt_morning": {"it": "mattina", "en": "morning"},
+    "appt_afternoon": {"it": "pomeriggio", "en": "afternoon"},
+    "appt_with": {"it": "con {dentist}", "en": "with {dentist}"},
+    "appt_cancel": {"it": "Disdici", "en": "Cancel"},
+    "appt_cancel_confirm": {
+        "it": "Vuoi disdire questo appuntamento?",
+        "en": "Cancel this appointment?",
+    },
+    "appt_cancelled_ok": {"it": "Appuntamento disdetto.", "en": "Appointment cancelled."},
+    "appt_request_title": {"it": "Chiedi un appuntamento", "en": "Request an appointment"},
+    "appt_request_day": {"it": "Giorno preferito", "en": "Preferred day"},
+    "appt_request_period": {"it": "Quando", "en": "When"},
+    "appt_request_reason": {"it": "Motivo (facoltativo)", "en": "Reason (optional)"},
+    "appt_request_send": {"it": "Invia richiesta", "en": "Send request"},
+    "appt_request_ok": {
+        "it": "Richiesta inviata. La clinica ti ricontatta per confermare.",
+        "en": "Request sent. The clinic will get back to you to confirm.",
+    },
+    "appt_request_note": {
+        "it": "Non scegli tu l'orario: la clinica lo fissa in base alle disponibilita reali.",
+        "en": "You do not pick the time - the clinic sets it from real availability.",
+    },
+    "appt_error_date": {"it": "Scegli una data valida, da oggi in poi.",
+                        "en": "Choose a valid date, today or later."},
+    "appt_error_period": {"it": "Scegli mattina o pomeriggio.",
+                          "en": "Choose morning or afternoon."},
+    "appt_error_generic": {"it": "Non e stato possibile completare la richiesta.",
+                           "en": "That could not be completed."},
     "overview_records_title": {"it": "Visite e fatture", "en": "Visits and invoices"},
     "overview_records_body": {
         "it": "I tuoi dati clinici si consultano tramite l'assistente, non come elenco su questa pagina.",

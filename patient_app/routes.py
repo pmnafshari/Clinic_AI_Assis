@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, g, redirect, render_template, request, url_for
 
+import appointments
 import patient_accessor
 import patient_auth
 import storage
@@ -255,3 +256,71 @@ def chat_page():
     return render_template(
         "patient_chat.html", state=result["state"], body=result["body"], question=question
     )
+
+
+# --- appointments (Phase 42) ----------------------------------------------
+#
+# A patient requests a day and a half of it; the clinic confirms the slot.
+# They never write into a dentist's calendar - see appointments.py for why the
+# schema cannot support a slot picker honestly.
+#
+# Every action here goes through appointments.owned_by(). Reaching for another
+# patient's appointment id is not a 404 to be shrugged off: it is logged as a
+# patient_scope_violation, exactly as patient_accessor does for a mismatched
+# codice fiscale, because the two are the same attack seen from different
+# tables.
+
+def _deny(conn, cf, action):
+    log_audit(conn, cf, "patient", "patient_scope_violation", action,
+              allowed=0, ip=net.from_request(request))
+
+
+@patient_bp.route("/appointments")
+def appointments_page():
+    cf = g.patient["codice_fiscale"]
+    booked, requested = appointments.open_for_patient(get_db(), cf)
+    return render_template("patient_appointments.html",
+                           booked=booked, requested=requested)
+
+
+@patient_bp.route("/appointments/request", methods=["POST"])
+def appointments_request():
+    cf = g.patient["codice_fiscale"]
+    conn = get_db()
+    lang = current_language()
+    day = (request.form.get("day") or "").strip()
+    period = (request.form.get("period") or "").strip()
+    reason = (request.form.get("reason") or "").strip()[:200] or None
+    try:
+        new_id = appointments.request(conn, cf, day, period, reason)
+    except ValueError as e:
+        # the module's message names the rule; the page says it in the
+        # patient's language rather than echoing english from a domain module
+        key = "appt_error_date" if "date" in str(e) else (
+            "appt_error_period" if "morning" in str(e) else "appt_error_generic")
+        booked, requested = appointments.open_for_patient(conn, cf)
+        return render_template("patient_appointments.html", booked=booked,
+                               requested=requested, error=t(key, lang)), 400
+    log_audit(conn, cf, "patient", "patient_appointment_request", str(new_id),
+              allowed=1, ip=net.from_request(request))
+    return redirect(url_for("patient.appointments_page", done="requested"))
+
+
+@patient_bp.route("/appointments/<int:appointment_id>/cancel", methods=["POST"])
+def appointments_cancel(appointment_id):
+    cf = g.patient["codice_fiscale"]
+    conn = get_db()
+    row = appointments.owned_by(conn, appointment_id, cf)
+    if row is None:
+        # someone else's id, or none at all. same response either way - a
+        # different one would confirm the appointment exists.
+        _deny(conn, cf, "patient_appointment_cancel")
+        return redirect(url_for("patient.appointments_page"))
+    if row["status"] != appointments.BOOKED:
+        # a request is withdrawn, not cancelled, and a cancelled one is
+        # already done. neither is a scope violation.
+        return redirect(url_for("patient.appointments_page"))
+    appointments.cancel(conn, appointment_id)
+    log_audit(conn, cf, "patient", "patient_appointment_cancel", str(appointment_id),
+              allowed=1, ip=net.from_request(request))
+    return redirect(url_for("patient.appointments_page", done="cancelled"))

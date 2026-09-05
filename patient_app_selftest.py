@@ -546,18 +546,24 @@ def selftest():
         assert t("login_heading", "it") not in home_resp.text, \
             "18: the home screen must not read like the login screen"
 
-        # 18b. UX-14 - the overview names what is missing instead of drawing
-        # an empty table, and reads nothing clinical to do it.
-        assert on_page(t("not_connected", "it"), home_resp.text), \
-            "18b: a surface with no backend must be labelled as such"
-        # and one that IS reachable must not wear that label - visits and
-        # invoices exist, they are simply read through the assistant
+        # 18b. UX-14 - every surface on the overview says what it really is.
+        #
+        # This assertion is INVERTED from what it was before Phase 42, and
+        # deliberately so. It used to require exactly one `not_connected`
+        # badge, because appointments genuinely had no backend. They have one
+        # now, so the badge would be a lie - and a test still demanding it
+        # would be asserting a failure against correct behaviour.
+        assert not on_page(t("not_connected", "it"), home_resp.text), \
+            "18b: nothing on the overview is unconnected now - appointments are real"
+        # visits and invoices are still read through the assistant, and still
+        # must not be mislabelled as unavailable
         assert on_page(t("via_assistant", "it"), home_resp.text), \
             "18b: reachable-via-assistant must not be labelled unavailable"
-        assert home_resp.text.count(str(__import__("markupsafe").escape(t("not_connected", "it")))) == 1, \
-            "18b: exactly one surface here is genuinely absent"
         assert on_page(t("overview_appt_body", "it"), home_resp.text), \
-            "18b: and must say why they are not there"
+            "18b: the appointments card must say what it now does"
+        # and it has to actually go somewhere
+        assert "/appointments" in home_resp.text, \
+            "18b: the appointments card must link to the real surface"
         assert "<table" not in home_resp.text, \
             "18b: an empty table reads as a page that failed to load"
 
@@ -1819,6 +1825,122 @@ def selftest():
         vol_en = client30b.get("/change-pin").text
         assert "before continuing" not in vol_en, \
             "30: the voluntary english screen must not say 'before continuing'"
+
+        # --- 31. appointments (Phase 42, PAPT-02/03/05) -------------------
+        import appointments as _appt
+
+        cf_a = "PPTA850010150910"
+        pin_a = seed_and_issue(cf_a, "Appt Patient")
+        client_a, _ = sign_in(cf_a, pin_a)
+        cf_b = "PPTB850010150911"
+        pin_b = seed_and_issue(cf_b, "Other Patient")
+        client_b, _ = sign_in(cf_b, pin_b)
+
+        # a freshly issued pin forces a change, and that gate covers the new
+        # route like every other one - asserted rather than just worked around
+        assert client_a.get("/appointments").status_code == 302, \
+            "31: the forced pin change must gate the appointments page too"
+
+        def clear_forced(c, new_pin):
+            page = c.get("/change-pin")
+            c.post("/change-pin", data={"pin": new_pin, "confirm": new_pin,
+                                        "csrf_token": _csrf_from(page.text)})
+
+        clear_forced(client_a, "24681357")
+        clear_forced(client_b, "13572468")
+
+        page_a = client_a.get("/appointments")
+        assert page_a.status_code == 200, "31: the appointments page should render"
+        assert on_page(t("appt_none", "it"), page_a.text), \
+            "31: with nothing booked it must say so, not draw an empty list"
+
+        # 31a. a request is stored as a request - no dentist, no time
+        from datetime import date as _date, timedelta as _td
+        soon = (_date.today() + _td(days=5)).isoformat()
+        r = client_a.post("/appointments/request", data={
+            "day": soon, "period": "morning", "reason": "controllo",
+            "csrf_token": _csrf_from(page_a.text)})
+        assert r.status_code == 302, f"31a: a valid request should redirect, got {r.status_code}"
+        conn_a = storage.connect(db_path)
+        rows = _appt.for_patient(conn_a, cf_a)
+        assert len(rows) == 1 and rows[0]["status"] == _appt.REQUESTED, \
+            "31a: the request should be stored as requested"
+        appt_id = rows[0]["id"]
+
+        # 31b. and the page NEVER renders it as a time. this is PAPT-05: the
+        # 00:00 sitting in starts_at is a placeholder, and printing it would
+        # invent a confirmation the clinic has not given.
+        listed = client_a.get("/appointments").text
+        assert on_page(t("appt_pending_badge", "it"), listed), \
+            "31b: a pending request must be badged as pending"
+        assert "00:00" not in listed, \
+            "31b: a requested row must never be rendered with a time"
+
+        # 31c. a past date is refused by the SERVER, not just the date input
+        bad = client_a.post("/appointments/request", data={
+            "day": (_date.today() - _td(days=3)).isoformat(), "period": "morning",
+            "csrf_token": _csrf_from(listed)})
+        assert bad.status_code == 400, \
+            f"31c: a past date must be refused server-side, got {bad.status_code}"
+        assert len(_appt.for_patient(storage.connect(db_path), cf_a)) == 1, \
+            "31c: and must not have been stored"
+
+        # 31d. THE FENCE, asserted as a refusal. patient B reaches for patient
+        # A's appointment id. a test that only exercised the owner would prove
+        # nothing about this.
+        before = conn_a.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_scope_violation'"
+        ).fetchone()["c"]
+        # the target is a BOOKED row of patient A, not a requested one. against
+        # a requested row the `status != BOOKED` guard refuses first, which
+        # would mask the ownership check and let a mutation that deletes it
+        # still pass - measured, and the reason this is booked.
+        victim = _appt.book(storage.connect(db_path), cf_a, "dr bianchi",
+                            f"{soon}T15:00", 30)
+        page_b = client_b.get("/appointments")
+        steal = client_b.post(f"/appointments/{victim}/cancel",
+                              data={"csrf_token": _csrf_from(page_b.text)})
+        assert steal.status_code == 302, "31d: the refusal redirects like any other post"
+        conn_chk = storage.connect(db_path)
+        still = conn_chk.execute("SELECT status FROM appointments WHERE id = ?",
+                                 (victim,)).fetchone()
+        assert still["status"] == _appt.BOOKED, \
+            "31d: another patient must NOT be able to cancel this row"
+        # and B's own page never showed it in the first place
+        assert "15:00" not in page_b.text, \
+            "31d: another patient's appointment must not even be listed"
+        after = conn_chk.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_scope_violation'"
+        ).fetchone()["c"]
+        assert after == before + 1, \
+            f"31d: reaching for another patient's id must be logged ({before} -> {after})"
+
+        # 31e. the owner CAN cancel a booked one, and it is a status not a delete
+        booked_id = _appt.book(storage.connect(db_path), cf_a, "dr rossi",
+                               f"{soon}T09:00", 30)
+        page_a2 = client_a.get("/appointments")
+        assert "09:00" in page_a2.text, "31e: a booked row DOES show its real time"
+        ok = client_a.post(f"/appointments/{booked_id}/cancel",
+                           data={"csrf_token": _csrf_from(page_a2.text)})
+        assert ok.status_code == 302, "31e: the owner may cancel"
+        conn_f = storage.connect(db_path)
+        row_f = conn_f.execute("SELECT status FROM appointments WHERE id = ?",
+                               (booked_id,)).fetchone()
+        assert row_f is not None, "31e: cancelling must not delete the row"
+        assert row_f["status"] == _appt.CANCELLED, "31e: cancelling sets the status"
+        assert conn_f.execute(
+            "SELECT COUNT(*) c FROM audit_log WHERE action = 'patient_appointment_cancel'"
+        ).fetchone()["c"] == 1, "31e: and writes exactly one audit row"
+
+        # 31f. both languages, no hardcoded english in the template
+        client_a.get("/lang/en", follow_redirects=True)
+        en = client_a.get("/appointments").text
+        assert on_page(t("appt_request_title", "en"), en), "31f: english must render"
+        client_a.get("/lang/it", follow_redirects=True)
+        it_page = client_a.get("/appointments").text
+        assert on_page(t("appt_request_title", "it"), it_page), "31f: italian must render"
+        assert t("appt_request_title", "en") not in it_page, \
+            "31f: the italian page must not carry english copy"
 
     print("selftest ok")
 

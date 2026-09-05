@@ -7,6 +7,8 @@ binding security property, not a preference.
 
 from pathlib import Path
 
+from datetime import date, datetime
+
 from flask import Flask, g, redirect, render_template, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
@@ -86,7 +88,41 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
         # and the same context processor runs for every route. the template
         # uses this only as a presence check to decide whether to render the
         # logout control; it never reads a field off it.
-        return {"t": t, "lang": current_language(), "patient": g.get("patient")}
+        return {"t": t, "lang": current_language(), "patient": g.get("patient"),
+                # the request form's `min` and default. computed here, not in
+                # javascript, so a client clock cannot offer yesterday.
+                "today": date.today().isoformat()}
+
+    # Phase 42. dates are rendered through these two rather than in the
+    # template, so the one rule that matters cannot be worked around by
+    # markup: appt_day NEVER shows a time. A requested row has no confirmed
+    # hour, and printing the 00:00 that sits in starts_at would invent one.
+    MONTHS = {
+        "it": ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio",
+               "agosto", "settembre", "ottobre", "novembre", "dicembre"],
+        "en": ["January", "February", "March", "April", "May", "June", "July",
+               "August", "September", "October", "November", "December"],
+    }
+
+    def _dt(value):
+        try:
+            return datetime.fromisoformat(value)
+        except (TypeError, ValueError):
+            return None
+
+    @app.template_filter("appt_day")
+    def appt_day(value, lang="it"):
+        d = _dt(value)
+        if d is None:
+            return ""
+        return f"{d.day} {MONTHS.get(lang, MONTHS['it'])[d.month - 1]} {d.year}"
+
+    @app.template_filter("appt_when")
+    def appt_when(value, lang="it"):
+        d = _dt(value)
+        if d is None:
+            return ""
+        return f"{appt_day(value, lang)}, {d.strftime('%H:%M')}"
 
     @app.route("/lang/<code>")
     def set_language(code):
