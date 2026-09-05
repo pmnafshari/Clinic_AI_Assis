@@ -190,6 +190,49 @@ def synonym_coverage():
     return missing, thin
 
 
+# Italian surfaces measured failing when they are NOT the first procedure in a
+# note (2026-09-05, against dental-notes at that date): the model translated
+# them correctly in first position and emitted them raw in second. Measured
+# three runs each, with and without an invoice clause - position was the
+# trigger, not multi-procedure-ness and not the invoice.
+#
+# All three map to a code the Italian word does not resemble (prophy, opg).
+# The ones that survive second position - devitalizzazione -> rct, corona ->
+# crown, carie -> caries - all had more later-position examples to learn from.
+# So the remedy is coverage in that position specifically, and this is the
+# gate that keeps it. A plain regenerate with generate_dataset.py drops the
+# curated rows and trips this, which is the intent: it says what to restore.
+POSITIONAL_RISK = {"igiene": "prophy", "pulizia": "prophy", "panoramica": "opg"}
+MIN_LATER_POSITION = 3
+
+
+def later_position_coverage():
+    """synonym -> how many training rows put its code somewhere other than first.
+
+    Read off the GOLD procedures, not the prose: the note says "comp 22,
+    igiene 11" and the gold says ["comp 22", "prophy 11"], so index 1 is the
+    fact being counted. Parsing the free text would have to guess where the
+    procedure list starts, which is exactly the ambiguity this dataset exists
+    to remove.
+    """
+    counts = {syn: 0 for syn in POSITIONAL_RISK}
+    with open(TRAIN_FILE) as f:
+        for line in f:
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            raw = row["input"].lower()
+            procs = [p.lower() for p in row["output"].get("procedures", [])]
+            for syn, code in POSITIONAL_RISK.items():
+                if syn not in raw:
+                    continue
+                for i, proc in enumerate(procs):
+                    if i > 0 and proc.split(" ")[0] == code:
+                        counts[syn] += 1
+                        break
+    return counts
+
+
 def selftest():
     # 1. no glossary synonym may be absent from the training set
     missing, thin = synonym_coverage()
@@ -214,9 +257,23 @@ def selftest():
     for term in ("otturazione", "estrazione", "radiografia", "devitalizzazione"):
         assert term in blob, f"3: the adversarial set lost {term}"
 
+    # 4. the terms that fail in non-first position need examples in that
+    # position, not just anywhere. counting occurrences alone said igiene was
+    # covered while the model was still getting it wrong - "present in the
+    # training set" and "present where it fails" are different claims.
+    later = later_position_coverage()
+    short = {syn: n for syn, n in later.items() if n < MIN_LATER_POSITION}
+    assert not short, (
+        f"4: {sorted(short)} need >= {MIN_LATER_POSITION} training rows placing them "
+        f"AFTER another procedure, have {short}. These are the surfaces measured "
+        f"failing in second position on 2026-09-05. If a regenerate dropped the "
+        f"curated rows, re-add them - do not lower the threshold."
+    )
+
     if thin:
         print(f"  thin (legal, but <{THIN_TRAIN_OCCURRENCES} in training): "
               f"{dict(sorted(thin.items()))}")
+    print(f"  later-position coverage: {dict(sorted(later.items()))}")
     print("selftest ok")
 
 

@@ -63,8 +63,11 @@ NOTES = [
     # SAFE - what must never happen is it silently becoming a different
     # treatment. asserted as a membership test, not an equality one.
     ("zzi_igiene.txt", f"{CF_IGIENE} Davide Costa, igiene 43, fu 1mo", None),
-    # the FAILING shape. igiene is context-dependent: it maps correctly alone
-    # and fails alongside another procedure. mirrors notes_test.jsonl row 12.
+    # the FAILING shape. the trigger is POSITION, not multi-procedure-ness:
+    # measured 2026-09-05, three runs each, igiene translates correctly as the
+    # FIRST procedure and comes back raw as the second, with or without an
+    # invoice clause. "igiene 11, comp 22" is multi-procedure and passes.
+    # mirrors notes_test.jsonl row 12.
     ("zzi_igiene_multi.txt",
      f"{CF_IGIENE_MULTI} Giulia Fontana, comp 20, igiene 43, paid 100 for comp 20, fu 3wk",
      None),
@@ -245,9 +248,16 @@ def walk(browser, note_paths):
           safe,
           f"got {ig} (prophy = fixed, igiene = known defect, anything else = unsafe)")
 
-    # case 5b: the FAILING igiene shape. case 5 above uses a single-procedure
-    # note, which the model gets right - so on its own it is not igiene
-    # coverage. this is the multi-procedure form that actually reproduces.
+    # case 5b: the FAILING igiene shape. case 5 above puts igiene first, which
+    # the model gets right - so on its own it is not igiene coverage. this is
+    # the second-position form that actually reproduces.
+    #
+    # igiene is not alone: pulizia (also -> prophy) and panoramica (-> opg)
+    # fail identically in second position, and all three map to a code the
+    # italian word does not resemble. the terms that survive - devitalizzazione
+    # -> rct, corona -> crown - had more later-position training examples.
+    # validate_dataset check 4 is the gate on that coverage; this is the
+    # end-to-end observation of the defect it exists to close.
     igm = procedures_for(CF_IGIENE_MULTI, deadline)
     igm_l = [p.lower() for p in (igm or [])]
 
@@ -258,14 +268,18 @@ def walk(browser, note_paths):
           f"got {igm}")
 
     # characterisation: this PINS the known defect. it is expected to fail the
-    # mapping. if this check fails, igiene may have been FIXED - verify against
-    # notes_test.jsonl row 12 and update the records rather than assuming a
-    # regression.
+    # mapping until the model is retrained on the later-position rows added to
+    # notes_train.jsonl on 2026-09-05 (validate_dataset check 4 guards them).
+    #
+    # if this check FAILS, igiene is probably FIXED - that is the good outcome.
+    # confirm with eval_notes / notes_test.jsonl row 12, then flip this check
+    # to assert "prophy" and delete the pin. do NOT treat it as a regression,
+    # and do not re-add training data to make it pass again.
     reproduced = any(p.startswith("igiene") for p in igm_l)
-    check("5c known igiene defect still reproduces (pinned)",
+    check("5c known igiene defect still reproduces (pinned, pre-retrain)",
           reproduced,
-          f"got {igm} - if this FAILS, igiene may be fixed; re-check eval row 12 "
-          f"and update the docs rather than treating it as a regression")
+          f"got {igm} - if this FAILS the retrain likely worked: verify with "
+          f"eval_notes row 12, then flip this check to assert prophy")
 
     # case 6: unreadable note -> needs_review -> phase 23's badge
     row = needs_review_row(deadline)
