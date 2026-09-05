@@ -233,6 +233,32 @@ def later_position_coverage():
     return counts
 
 
+# An invoice means money that CHANGED HANDS. A price, a cost, a quote or a total
+# is not a payment. The prompt says "only paid items", all 24 positive rows in
+# the test set say "paid", and the model still invented invoices for five
+# priced-but-unpaid notes - because two training rows taught the opposite:
+#
+#   row 39  "Seal 23 ($120), OPG 27 ($170)"  -> invoices PRESENT
+#   row 18  "Filling (code 342) @ $150.00"   -> invoices []
+#
+# structurally identical, labelled both ways, so the model guessed. this is the
+# gate on that: a gold invoice requires the note to say it was paid.
+PAID = re.compile(r'\bpaid\b', re.IGNORECASE)
+
+
+def unpaid_invoice_rows(path):
+    """rows claiming an invoice from a note that never says anything was paid."""
+    bad = []
+    with open(path) as f:
+        for n, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            if (row["output"].get("invoices") or []) and not PAID.search(row["input"]):
+                bad.append((n, row["input"].replace("\n", " | ")[:60]))
+    return bad
+
+
 def selftest():
     # 1. no glossary synonym may be absent from the training set
     missing, thin = synonym_coverage()
@@ -269,6 +295,17 @@ def selftest():
         f"failing in second position on 2026-09-05. If a regenerate dropped the "
         f"curated rows, re-add them - do not lower the threshold."
     )
+
+    # 5. an invoice requires a payment, in every file. the training set taught
+    # both answers for the same shape until 2026-09-05, which is the whole
+    # reason the invoices field sat at 0.79.
+    for path in (TRAIN_FILE, TEST_FILE, ADVERSARIAL_FILE):
+        bad = unpaid_invoice_rows(path)
+        assert not bad, (
+            f"5: {path} has {len(bad)} row(s) with a gold invoice but no 'paid' in the "
+            f"note: {bad}. a price, a cost or a quote is not a payment - set invoices "
+            f"to [] rather than relaxing this."
+        )
 
     if thin:
         print(f"  thin (legal, but <{THIN_TRAIN_OCCURRENCES} in training): "

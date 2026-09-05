@@ -47,7 +47,9 @@ python3 -m venv .venv
 # 2. the model
 ollama pull llama3.2
 # dental-notes is the clinic's fine-tuned model. Its weights are ~2GB and are NOT
-# in this repo — train it in Colab first, then put the .gguf next to Modelfile:
+# in this repo — train it in Colab first, then put the .gguf next to Modelfile.
+# The prompt in Modelfile is the one the weights were trained on: register them
+# together, never a new Modelfile against older weights (see The notes model).
 ollama create dental-notes -f Modelfile
 
 # 3. database and dev accounts
@@ -119,6 +121,12 @@ ollama run dental-notes "pt mario rossi, rct on 26 done, mild caries on 27, fu i
 `Modelfile` and the notebook's `SYSTEM_PROMPT` are asserted identical by the test suite —
 they drift apart silently otherwise, and the model then gets trained on one prompt and run
 on another.
+
+> **The prompt and the weights are a matched pair.** Editing the prompt and re-registering
+> against weights trained on the previous one measurably degrades the model — measured
+> 2026-09-05, an invoice-rule edit alone moved the aggregate 0.94 → 0.923, procedures
+> 0.88 → 0.85 and next_appointment 0.97 → 0.91, before any retrain. Change the prompt and
+> retrain in the same cycle, and re-run `eval_notes.py` after.
 
 **Current accuracy**, `eval_notes.py` over 34 held-out notes:
 
