@@ -13,9 +13,10 @@
     </div>
 
     <div class="site-cta-row site-booking-actions">
-      {# D-06: there is no appointments table in this product. both of these
-         go to real destinations - a phone number and the assistant's login -
-         and neither one confirms anything. #}
+      {# D-06: this app has no database connection, so it cannot book -
+         appointments themselves are real since phase 41, behind the patient
+         login. both of these go to real destinations - a phone number and the
+         assistant's login - and neither one confirms anything here. #}
       <a class="ds-btn ds-btn-primary" href="{{ clinic.contact.phone_href }}">
         <svg class="site-icon" aria-hidden="true"><use href="#i-phone"/></svg>
         Call {{ clinic.contact.phone }}

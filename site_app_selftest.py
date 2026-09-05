@@ -235,8 +235,9 @@ def selftest():
     walk_keys(cfg)
 
     # 16. D-06 - nothing on the public site claims to book, pay or confirm.
-    # there is no appointments table and no payment path in this product, so
-    # a form here could only be a fake success.
+    # appointments are real since phase 41, but THIS app has no database
+    # connection and no payment path, so a form here could only be a fake
+    # success. the constraint is the app's, not the schema's.
     assert "<form" not in home.text, \
         "16: the public site has nothing to post to - a form here would be a fake success path"
     assert on_page(cfg["booking"]["note"], home.text), \

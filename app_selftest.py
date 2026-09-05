@@ -771,10 +771,16 @@ def selftest():
         assert b"Appointments" not in adm_shell.data, \
             "20: an admin holds manage_users alone and must not be offered Appointments"
 
-        # 20b. UX-20 - what the reports page must NEVER claim. none of these
-        # exist in the schema: invoices carry no status and there is no
-        # payments table, there is no appointments table, and patients carry
-        # no created date. they are excluded outright - not shown empty.
+        # 20b. UX-20 - what the reports page must NEVER claim. invoices
+        # carry no status and there is no payments table, and patients carry no
+        # created date, so revenue and growth are unprovable and are excluded
+        # outright rather than shown empty.
+        #
+        # "appointments over time" is a DIFFERENT case since phase 41: the
+        # table exists, so the schema could support that chart. it stays
+        # forbidden here only because nobody has built it, and the page says
+        # exactly that. if a later phase charts it, this line should be
+        # removed deliberately - not read as a schema limit that never lifted.
         rep = client_g.get("/reports")
         assert rep.status_code == 200, "20b: a dentist should reach the reports page"
         body = rep.data.lower()

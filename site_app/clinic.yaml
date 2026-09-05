@@ -81,9 +81,12 @@ booking:
   heading: "Need an appointment?"
   body: >-
     Tell us whether you have been here before and we will point you the right way.
-  # There is no booking system in this product. Every path below is a real
-  # destination - a phone number or the assistant - and none of them confirms
-  # an appointment on this page.
+  # There IS a booking system now (phase 41 staff, phase 42 patient portal) -
+  # but not on the PUBLIC site, which has no database connection at all. Every
+  # path below is a real destination - a phone number or the assistant login -
+  # and none of them confirms an appointment on this page. The note below stays
+  # true either way: arranging one through the assistant is exactly what a
+  # signed-in patient now does.
   note: >-
     Appointments are arranged by phone or through the assistant. Nothing is confirmed on this page.
   options:

@@ -5,13 +5,20 @@
 <div class="ds-alert ds-alert-info mb-4" role="note">
   {# what this page deliberately does not show, said on the page rather than
      only in a plan. invoices carry no status and there is no payments table,
-     so nothing here proves money was collected; there is no appointments
-     table; and patients carry no created date. #}
+     so nothing here proves money was collected; patients carry no created
+     date, so growth cannot be computed at all.
+
+     appointments USED to be in this list. phase 41 built the table and phase
+     42 fills it, so "neither exists in the record" became false - and a page
+     whose whole purpose is saying what it cannot prove must not carry a
+     stale claim about what the clinic holds. they are absent here because
+     nobody has charted them yet, which is a different sentence. #}
   <div>
     <strong class="ds-alert-title">What this page can and cannot show</strong>
     Figures come from filed notes and their invoice lines. <strong>Amounts are billed, not
-    collected</strong> — this system records no payments. Appointment volume and new-patient
-    growth are not shown at all, because neither exists in the record.
+    collected</strong> — this system records no payments. New-patient growth cannot be shown at
+    all, because patient records carry no created date. Appointments are recorded now, but are
+    not charted on this page yet.
   </div>
 </div>
 
