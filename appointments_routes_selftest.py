@@ -66,6 +66,12 @@ def _login(app, username):
     return client
 
 
+def _conn(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
 def _rows(db_path, sql, params=()):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -191,6 +197,80 @@ def selftest():
         page = dentist.get(f"/appointments?day={DAY}")
         assert page.status_code == 200, "11: the day view should render"
         assert "14:00" not in page.text, "11: a cancelled appointment leaves the agenda"
+
+        # --- 12. patient requests (Phase 42, PAPT-04/05) ------------------
+        import appointments as _appt
+        from datetime import date as _date, timedelta as _td
+        conn12 = _conn(db_path)
+        soon12 = (_date.today() + _td(days=6)).isoformat()
+        req_id = _appt.request(conn12, PATIENT_CF, soon12, _appt.MORNING, "controllo")
+
+        # 12a. it appears in the staff queue, as a DAY and a period - never a
+        # time. printing the 00:00 in starts_at would invent a slot.
+        q = dentist.get("/appointments")
+        assert "Patient requests" in q.text, "12a: the requests queue should render"
+        assert soon12 in q.text, "12a: and show the day asked for"
+        assert "morning" in q.text, "12a: and the period"
+        assert "00:00" not in q.text, \
+            "12a: a request must never be rendered with a time"
+
+        # 12b. THE WITHHOLD, for the new surface too. admin holds manage_users
+        # alone: the queue must be absent from the body, not hidden in it.
+        #
+        # one gate in index() protects both the agenda and this queue, so a
+        # mutation removing it is caught by check 5 first and never reaches
+        # here. 12b is the companion that pins the NEW markup to that same
+        # gate - it is not independent proof of the gate itself, and deleting
+        # 5 believing 12b covers it would leave the withhold untested.
+        admin_body = admin.get("/appointments", follow_redirects=True).text
+        assert "Patient requests" not in admin_body, \
+            "12b: a withheld role must not receive the requests queue"
+        assert soon12 not in admin_body, "12b: nor the requested day"
+
+        # 12c. admin cannot confirm either - a gate on the GET and none on the
+        # POST is the defect this asserts against
+        admin.post(f"/appointments/{req_id}/confirm", data={
+            "dentist": "drossi", "date": soon12, "time": "10:00",
+            "minutes": "30", "day": soon12})
+        assert _rows(db_path, "SELECT * FROM appointments WHERE id = ?",
+                     (req_id,))[0]["status"] == "requested", \
+            "12c: a withheld role must not be able to confirm a request"
+
+        # 12d. a confirm that double-books is refused by the SAME rule as a
+        # booking - the request must not be a way around the overlap check
+        _appt.book(_conn(db_path), PATIENT_CF, "drossi",
+                   f"{soon12}T10:00", 30)
+        clash = dentist.post(f"/appointments/{req_id}/confirm", data={
+            "dentist": "drossi", "date": soon12, "time": "10:15",
+            "minutes": "30", "day": soon12}, follow_redirects=True)
+        assert "overlaps" in clash.text, "12d: an overlapping confirm must say so"
+        assert _rows(db_path, "SELECT * FROM appointments WHERE id = ?",
+                     (req_id,))[0]["status"] == "requested", \
+            "12d: and must leave it pending"
+
+        # 12e. a clean confirm makes it real, and audits
+        dentist.post(f"/appointments/{req_id}/confirm", data={
+            "dentist": "drossi", "date": soon12, "time": "16:00",
+            "minutes": "30", "day": soon12})
+        done12 = _rows(db_path, "SELECT * FROM appointments WHERE id = ?", (req_id,))[0]
+        assert done12["status"] == "booked", "12e: confirming makes it a booking"
+        assert done12["dentist"] == "drossi", "12e: with a real dentist"
+        assert done12["period"] is None, "12e: and no period once it is real"
+        assert _rows(db_path,
+                     "SELECT * FROM audit_log WHERE action = 'confirm_appointment_request'"), \
+            "12e: confirming must be audited"
+
+        # 12f. declining is a status, never a delete
+        req2 = _appt.request(_conn(db_path), PATIENT_CF, soon12,
+                             _appt.AFTERNOON)
+        dentist.post(f"/appointments/{req2}/decline",
+                     data={"reason": "fully booked", "day": soon12})
+        gone12 = _rows(db_path, "SELECT * FROM appointments WHERE id = ?", (req2,))
+        assert len(gone12) == 1, "12f: declining must not delete the row"
+        assert gone12[0]["status"] == "declined", "12f: it sets the status"
+        assert _rows(db_path,
+                     "SELECT * FROM audit_log WHERE action = 'decline_appointment_request'"), \
+            "12f: declining must be audited"
 
     print("selftest ok")
 

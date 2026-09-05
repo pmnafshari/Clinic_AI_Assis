@@ -34,6 +34,9 @@ def index():
     day = request.args.get("day") or date.today().isoformat()
     conn = get_db()
     rows = appointments.agenda(conn, day)
+    # patient requests waiting for a slot. read behind the same gate as the
+    # agenda, so a role without the capability never runs this query either.
+    requests_pending = appointments.pending_requests(conn)
     patients = conn.execute(
         "SELECT codice_fiscale, patient_name FROM patients ORDER BY patient_name"
     ).fetchall()
@@ -47,6 +50,7 @@ def index():
         has_data=bool(rows),
         patients=patients,
         dentists=dentists,
+        requests_pending=requests_pending,
     )
 
 
@@ -111,4 +115,50 @@ def reschedule(appointment_id):
         _allowed("reschedule_appointment", str(appointment_id))
         flash("Appointment moved.", "success")
         day = request.form.get("date") or day
+    return redirect(url_for("appointments.index", day=day))
+
+
+# --- patient requests (Phase 42) -------------------------------------------
+#
+# A request is not on the calendar: no dentist, no duration, and only the date
+# part of starts_at means anything. Confirming is what assigns a real slot, and
+# it goes through appointments.confirm(), which shares book()'s overlap rule -
+# so a confirm that double-books is refused exactly as a booking is.
+
+@appointments_bp.route("/appointments/<int:appointment_id>/confirm", methods=["POST"])
+def confirm(appointment_id):
+    if not _may():
+        _denied("manage_appointments", str(appointment_id))
+        return redirect(url_for("dashboard.index"))
+
+    day = request.form.get("day") or date.today().isoformat()
+    starts_at = f"{request.form.get('date', '')}T{request.form.get('time', '')}"
+    try:
+        appointments.confirm(
+            get_db(), appointment_id, request.form.get("dentist", ""),
+            starts_at, request.form.get("minutes", ""),
+        )
+    except ValueError as e:
+        flash(str(e), "error")
+    else:
+        _allowed("confirm_appointment_request", str(appointment_id))
+        flash("Request confirmed.", "success")
+    return redirect(url_for("appointments.index", day=day))
+
+
+@appointments_bp.route("/appointments/<int:appointment_id>/decline", methods=["POST"])
+def decline(appointment_id):
+    if not _may():
+        _denied("manage_appointments", str(appointment_id))
+        return redirect(url_for("dashboard.index"))
+
+    day = request.form.get("day") or date.today().isoformat()
+    try:
+        appointments.decline(get_db(), appointment_id,
+                             (request.form.get("reason") or "").strip() or None)
+    except ValueError as e:
+        flash(str(e), "error")
+    else:
+        _allowed("decline_appointment_request", str(appointment_id))
+        flash("Request declined.", "success")
     return redirect(url_for("appointments.index", day=day))

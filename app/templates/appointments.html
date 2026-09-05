@@ -71,6 +71,55 @@
   {% endif %}
 </div>
 
+<div class="card p-4 mb-4">
+  <h2 class="section-title">Patient requests{% if requests_pending %} ({{ requests_pending|length }}){% endif %}</h2>
+  {% if requests_pending %}
+  <table class="table ds-table-cards align-middle mb-0">
+    <thead>
+      <tr><th>Patient</th><th>Asked for</th><th>Reason</th><th>Confirm</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for r in requests_pending %}
+      <tr>
+        <td>{{ r.patient_name }}</td>
+        {# a request has NO time - only a day and a half of it. rendering the
+           00:00 that sits in starts_at would invent a slot nobody agreed. #}
+        <td>{{ r.starts_at[:10] }}, {{ r.period }}</td>
+        <td>{{ r.note or "-" }}</td>
+        <td>
+          <form method="post" action="{{ url_for('appointments.confirm', appointment_id=r.id) }}"
+                class="d-flex gap-2 align-items-end flex-wrap">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="day" value="{{ day }}">
+            <input type="date" name="date" value="{{ r.starts_at[:10] }}" class="form-control form-control-sm" required>
+            <input type="time" name="time" class="form-control form-control-sm" required>
+            <select name="dentist" class="form-select form-select-sm" required>
+              {% for d in dentists %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
+            </select>
+            <input type="number" name="minutes" value="30" min="5" step="5" class="form-control form-control-sm" required>
+            <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}"
+                class="d-flex gap-2 align-items-end">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="day" value="{{ day }}">
+            <input type="text" name="reason" placeholder="Reason" class="form-control form-control-sm">
+            <button type="submit" class="btn btn-sm btn-outline-secondary">Decline</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {# permitted with an empty queue - a different render from not-permitted,
+     which never reaches this template at all #}
+  <p class="text-secondary mb-0">No patient requests waiting.</p>
+  {% endif %}
+</div>
+
 <div class="card p-4">
   <h2 class="section-title">Book an appointment</h2>
   <form method="post" action="{{ url_for('appointments.book') }}"
