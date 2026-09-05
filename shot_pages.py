@@ -17,6 +17,7 @@ app_selftest.py can see the markup that usually causes it, not the measurement.
     .venv/bin/python -m playwright install chromium    # once
 
     .venv/bin/python shot_pages.py [--width 390] [--out DIR] [--headed]
+    .venv/bin/python shot_pages.py --public-only --out docs/screenshots
 
 seeds ZZS* users and one ZZS patient, deletes them in a finally. ZZS keeps these
 rows clear of e2e_chat_walk.py's ZZE* and e2e_intake_walk.py's ZZI* namespaces so
@@ -24,9 +25,14 @@ none of the three can collide. deliberately NOT in run_selftests.sh - it needs a
 server and a browser.
 
 *** the screenshots contain patient names and codici fiscali. ***
-they default to a temp directory, never the repo, so they cannot be committed by
-accident. run this against fake fixtures only - it predates the real-data cutover
-on purpose, and pointing it at real records writes patient data into png files.
+they default to a temp directory AND an --out inside the repo is refused, so they
+cannot be committed - by accident or on purpose. run this against fake fixtures
+only: it predates the real-data cutover, and pointing it at real records writes
+patient data into png files.
+
+--public-only is the one exemption and the reason the rule can be strict. it
+shoots the site app alone, which holds no database connection, seeds nothing and
+cleans up nothing - so those shots may live in the repo.
 """
 
 import sqlite3
@@ -61,6 +67,7 @@ SITE_PAGES = [
     ("doctors", "/doctors"),
     ("clinic", "/clinic"),
     ("contact", "/contact"),
+    ("assistant", "/assistant"),
     ("reference", "/reference"),
 ]
 ROLE_PAGES = {
@@ -157,14 +164,17 @@ def sign_in(page, username):
         raise RuntimeError(f"login failed for {username} - landed on {page.url}")
 
 
-def shoot(page, width, role, name, path, out_dir, base=STAFF_URL):
+def shoot(page, width, role, name, path, out_dir, base=STAFF_URL, full_page=True):
     page.goto(f"{base}{path}")
     page.wait_for_load_state("networkidle")
     size = page.evaluate(MEASURE)
 
     shot_dir = out_dir / str(width)
     shot_dir.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(shot_dir / f"{role}-{name}.png"), full_page=True)
+    # full_page for the overflow measurement, which is the job this tool exists
+    # for. the README shots pass full_page=False: a 6500px-tall png is a
+    # megabyte and a half and renders as an unreadable strip inline.
+    page.screenshot(path=str(shot_dir / f"{role}-{name}.png"), full_page=full_page)
 
     over = size["scroll"] - size["inner"]
     ok = over <= 1
@@ -172,6 +182,17 @@ def shoot(page, width, role, name, path, out_dir, base=STAFF_URL):
     verdict = "OK" if ok else f"OVERFLOW +{over}px"
     print(f"  {width:>5}  {role:<10} {path:<26} "
           f"scroll={size['scroll']:<5} inner={size['inner']:<5} {verdict}")
+
+
+def walk_site_only(browser, width, out_dir):
+    # the site app holds no database connection at all, so nothing it renders
+    # can carry a patient name or a codice fiscale. that is what makes these
+    # shots safe to keep in the repo when the rest are not.
+    ctx = browser.new_context(viewport={"width": width, "height": 900})
+    page = ctx.new_page()
+    for name, path in SITE_PAGES:
+        shoot(page, width, "site", name, path, out_dir, base=SITE_URL, full_page=False)
+    ctx.close()
 
 
 def walk(browser, width, out_dir):
@@ -199,6 +220,27 @@ def walk(browser, width, out_dir):
 # --- entry point ----------------------------------------------------------
 
 
+REPO_ROOT = Path(__file__).resolve().parent
+
+
+def refuses_repo_output(out_dir, public_only):
+    """A shot that can contain patient data may not be written into the repo.
+
+    The docstring's promise used to rest on a default - temp dir unless someone
+    passed --out. A default is not a rule: `--out docs/` was always one flag
+    away, and once real records are loaded that writes patient data into png
+    files someone then commits, permanently. So it is enforced, and the one
+    exemption is the site app, which has no database connection to leak from.
+    """
+    if public_only:
+        return False
+    try:
+        out_dir.resolve().relative_to(REPO_ROOT)
+    except ValueError:
+        return False
+    return True
+
+
 def parse_args(argv):
     widths = []
     out = None
@@ -220,7 +262,35 @@ def parse_args(argv):
 
 
 def main():
-    widths, out_dir = parse_args(sys.argv[1:])
+    argv = sys.argv[1:]
+    public_only = "--public-only" in argv
+    widths, out_dir = parse_args(argv)
+
+    if refuses_repo_output(out_dir, public_only):
+        print(f"refusing to write into the repo: {out_dir}")
+        print("these shots carry patient names and codici fiscali. write them")
+        print("outside the repo, or use --public-only for the site app, which")
+        print("has no database connection and nothing to leak.")
+        return 2
+
+    # --public-only needs neither the database nor the staff app, so it does
+    # not seed and has nothing to clean up
+    if public_only:
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(headless="--headed" not in argv)
+            try:
+                for width in widths:
+                    print(f"\n--- {width}px")
+                    walk_site_only(browser, width, out_dir)
+            finally:
+                browser.close()
+        over = [r for r in RESULTS if not r[5]]
+        print(f"\nshots: {out_dir}")
+        if over:
+            print(f"{len(over)} of {len(RESULTS)} page-widths scroll horizontally")
+            return 1
+        print(f"all {len(RESULTS)} page-widths fit - no horizontal scroll")
+        return 0
 
     seed()
     try:

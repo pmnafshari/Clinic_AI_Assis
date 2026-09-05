@@ -24,6 +24,17 @@ Three separate Flask apps, each with its own database posture and its own access
 The staff app is never exposed to the internet. The patient app is the only one designed to
 go behind a tunnel, and refuses to start if its ingress configuration is wrong.
 
+![The clinic landing page](docs/screenshots/1440/site-home.png)
+
+![The public assistant](docs/screenshots/1440/site-assistant.png)
+
+More in [`docs/screenshots/`](docs/screenshots/1440/) — services, doctors, and the design
+system reference page.
+
+**Only the public site is pictured, on purpose.** Every other screen renders patient names
+and codici fiscali, and `shot_pages.py` refuses to write those anywhere inside this repo —
+see [Screenshots](#screenshots) below.
+
 ## Quickstart
 
 Requires Python 3.12 and [Ollama](https://ollama.com/download).
@@ -174,6 +185,26 @@ exactly the defects these catch:
 Install the browser tooling with `.venv/bin/pip install -r requirements-dev.txt` then
 `.venv/bin/python -m playwright install chromium`. It is development-only and never goes on
 the clinic machine.
+
+## Screenshots
+
+```bash
+.venv/bin/python site_run.py                                          # :5002
+.venv/bin/python shot_pages.py --public-only --out docs/screenshots
+```
+
+`shot_pages.py` doubles as the responsive gate — it measures horizontal overflow at each
+width and fails if any page scrolls sideways.
+
+**It refuses an `--out` inside this repo for anything but `--public-only`.** The staff and
+patient screens carry patient names and codici fiscali, and once real records are loaded a
+committed screenshot puts patient data in git history permanently. The public site is the
+one exemption because that app holds no database connection at all — there is nothing in it
+to leak. Run the full set outside the repo:
+
+```bash
+.venv/bin/python shot_pages.py --out /tmp/shots
+```
 
 ## What this does not do
 
