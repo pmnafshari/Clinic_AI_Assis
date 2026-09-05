@@ -95,6 +95,7 @@ def init_db(db_path):
             minutes INTEGER NOT NULL,
             status TEXT NOT NULL DEFAULT 'booked',
             note TEXT,
+            period TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
@@ -152,6 +153,11 @@ def _ensure_appointments_table(conn):
         return
     if "note" not in existing:
         conn.execute("ALTER TABLE appointments ADD COLUMN note TEXT")
+    # a patient's request carries a date and a period, never a time - see the
+    # appointments module docstring. null on every staff-booked row, which is
+    # what tells the two apart without a second table.
+    if "period" not in existing:
+        conn.execute("ALTER TABLE appointments ADD COLUMN period TEXT")
 
 
 def upsert_note_sql(note, source_path, conn):
