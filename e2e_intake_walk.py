@@ -59,15 +59,15 @@ NOTES = [
     ("zzi_fill.txt", f"{CF_FILL} Anna Verdi, otturazione dente 47, fu 2wk", ["filling 47"]),
     ("zzi_ext.txt", f"{CF_EXT} Bruno Neri, estrazione dente 38, fu 1wk", ["ext 38"]),
     ("zzi_seal.txt", f"{CF_SEAL} Carla Bianchi, sigillatura dente 16, fu 3wk", ["seal 16"]),
-    # known carried defect: igiene does not map to prophy. either outcome is
-    # SAFE - what must never happen is it silently becoming a different
-    # treatment. asserted as a membership test, not an equality one.
+    # igiene in first position - always worked, kept as the control that shows
+    # position is what mattered
     ("zzi_igiene.txt", f"{CF_IGIENE} Davide Costa, igiene 43, fu 1mo", None),
-    # the FAILING shape. the trigger is POSITION, not multi-procedure-ness:
-    # measured 2026-09-05, three runs each, igiene translates correctly as the
-    # FIRST procedure and comes back raw as the second, with or without an
-    # invoice clause. "igiene 11, comp 22" is multi-procedure and passes.
-    # mirrors notes_test.jsonl row 12.
+    # the shape that USED to fail. the trigger was POSITION, not
+    # multi-procedure-ness: measured 2026-09-05, three runs each, igiene
+    # translated correctly as the FIRST procedure and came back raw as the
+    # second, with or without an invoice clause. "igiene 11, comp 22" is
+    # multi-procedure and always passed. closed by the 2026-09-06 retrain and
+    # kept as the regression guard. mirrors notes_test.jsonl row 12.
     ("zzi_igiene_multi.txt",
      f"{CF_IGIENE_MULTI} Giulia Fontana, comp 20, igiene 43, paid 100 for comp 20, fu 3wk",
      None),
@@ -238,26 +238,27 @@ def walk(browser, note_paths):
               actual == expected,
               f"expected {expected}, got {actual}")
 
-    # case 5: igiene. safe outcomes are the correct mapping OR the raw
-    # flagged term. anything else means a treatment was silently changed.
+    # case 5: igiene in FIRST position. this always worked, so it was written
+    # permissively while the defect was open - prophy or the raw term both
+    # counted. the retrain of 2026-09-06 closed it, so the loose half is gone
+    # and this now asserts the mapping outright.
     ig = procedures_for(CF_IGIENE, deadline)
-    safe = ig is not None and any(
-        p.lower().startswith("prophy") or p.lower().startswith("igiene") for p in ig
-    )
-    check("4 igiene did not become a different treatment",
-          safe,
-          f"got {ig} (prophy = fixed, igiene = known defect, anything else = unsafe)")
+    ig_l = [p.lower() for p in (ig or [])]
+    check("4 igiene maps to prophy",
+          ig is not None and any(p.startswith("prophy") for p in ig_l),
+          f"got {ig}")
 
-    # case 5b: the FAILING igiene shape. case 5 above puts igiene first, which
-    # the model gets right - so on its own it is not igiene coverage. this is
-    # the second-position form that actually reproduces.
+    # case 5b/5c: igiene in SECOND position - the shape that used to fail.
+    # case 5 above puts it first, which always worked, so on its own it was
+    # never igiene coverage.
     #
-    # igiene is not alone: pulizia (also -> prophy) and panoramica (-> opg)
-    # fail identically in second position, and all three map to a code the
-    # italian word does not resemble. the terms that survive - devitalizzazione
-    # -> rct, corona -> crown - had more later-position training examples.
-    # validate_dataset check 4 is the gate on that coverage; this is the
-    # end-to-end observation of the defect it exists to close.
+    # igiene was not alone: pulizia (also -> prophy) and panoramica (-> opg)
+    # failed identically in second position, and all three map to a code the
+    # italian word does not resemble. the terms that survived -
+    # devitalizzazione -> rct, corona -> crown - had more later-position
+    # training examples. that gap was closed by the rows added on 2026-09-05
+    # and the retrain on 2026-09-06; validate_dataset check 4 keeps the
+    # coverage from being lost again, and this is the end-to-end proof.
     igm = procedures_for(CF_IGIENE_MULTI, deadline)
     igm_l = [p.lower() for p in (igm or [])]
 
@@ -267,19 +268,17 @@ def walk(browser, note_paths):
           igm is not None and "comp 20" in igm_l and len(igm_l) == 2,
           f"got {igm}")
 
-    # characterisation: this PINS the known defect. it is expected to fail the
-    # mapping until the model is retrained on the later-position rows added to
-    # notes_train.jsonl on 2026-09-05 (validate_dataset check 4 guards them).
-    #
-    # if this check FAILS, igiene is probably FIXED - that is the good outcome.
-    # confirm with eval_notes / notes_test.jsonl row 12, then flip this check
-    # to assert "prophy" and delete the pin. do NOT treat it as a regression,
-    # and do not re-add training data to make it pass again.
-    reproduced = any(p.startswith("igiene") for p in igm_l)
-    check("5c known igiene defect still reproduces (pinned, pre-retrain)",
-          reproduced,
-          f"got {igm} - if this FAILS the retrain likely worked: verify with "
-          f"eval_notes row 12, then flip this check to assert prophy")
+    # 5c was a PIN on the defect until 2026-09-06 - it asserted that igiene came
+    # back raw, and failing was the success signal. the retrain fixed it
+    # (procedures 0.88 -> 0.91, invoices 0.79 -> 0.97), so it is now an
+    # ordinary assertion: the mapping must hold in second position, and the
+    # untranslated term must not come back.
+    check("5c igiene maps to prophy in second position",
+          "prophy 43" in igm_l,
+          f"got {igm}")
+    check("5c the untranslated term is gone",
+          not any(p.startswith("igiene") for p in igm_l),
+          f"got {igm} - a raw italian term here is the pre-2026-09-06 defect returning")
 
     # case 6: unreadable note -> needs_review -> phase 23's badge
     row = needs_review_row(deadline)
