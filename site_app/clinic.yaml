@@ -187,6 +187,12 @@ assistant:
   voice_stop_label: "Stop"
   voice_off_note: "Voice is switched off on this server."
   mic_denied_note: "Microphone access was refused, so voice is unavailable. You can still type."
+  mic_unavailable_note: >-
+    No microphone was available, so voice is off. It may be missing, or another application may
+    be holding it. You can still type.
+  autoplay_blocked_note: >-
+    Your browser keeps sound off until you interact with the page. Click anywhere to turn it on -
+    the assistant is still listening, and its answer is above.
   input_placeholder: "Ask about the clinic"
   send_label: "Send"
   capability_heading: "What it can do today"

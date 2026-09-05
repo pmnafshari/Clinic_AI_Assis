@@ -121,7 +121,9 @@
     thinking: root.dataset.thinkingLabel || "Thinking",
     start: root.dataset.voiceStartLabel || "Start voice conversation",
     stop: root.dataset.voiceStopLabel || "Stop",
-    micDenied: root.dataset.micDeniedNote || "Microphone unavailable. You can still type."
+    micDenied: root.dataset.micDeniedNote || "Microphone access was refused. You can still type.",
+    micUnavailable: root.dataset.micUnavailableNote || "No microphone was available. You can still type.",
+    autoplay: root.dataset.autoplayNote || "Your browser keeps sound off until you interact with the page. Click anywhere to turn it on."
   };
 
   var btn = mount.querySelector("[data-agent-mic]");
@@ -146,6 +148,13 @@
   var recorder = null, chunks = [], stream = null;
   var player = new Audio();
   var running = false;
+  // getUserMedia is in flight. autostart() fires off the status fetch while the
+  // button is already live, so without this a click in that window opens a
+  // SECOND stream, overwrites `stream`, and leaves the first one running with
+  // nothing holding its tracks - stop() can no longer release it and the
+  // browser keeps showing the recording indicator. measured: 2 calls.
+  var starting = false;
+  var waitingForGesture = false;
 
   function say(text, label) { root.dataset.state = text; if (status) status.textContent = label; }
 
@@ -216,6 +225,40 @@
     if (btn) btn.textContent = L.start;
   }
 
+  // a refused AUTO start is not an error - the visitor never asked for it on
+  // this page load. say what happened, leave the button armed for a real
+  // click, and keep the typed composer exactly as it was.
+  function offer(msg) {
+    stopMeter();
+    say("ready", "Ready");
+    if (note) { note.textContent = msg; note.hidden = false; }
+    running = false;
+    if (btn) btn.textContent = L.start;
+  }
+
+  // browsers keep audio off until the page has been interacted with. when
+  // play() is refused we wait for the first real gesture and resume the
+  // context on it, so the NEXT reply is spoken. this is what makes the note
+  // honest: it says "click anywhere", and clicking anywhere is what fixes it.
+  //
+  // the pending clip is deliberately NOT replayed. by the time a gesture
+  // arrives the microphone is usually recording again, and playing the old
+  // greeting into a live turn would put the assistant's own voice through
+  // deepgram as if the visitor had said it.
+  function armGesture() {
+    if (waitingForGesture) return;
+    waitingForGesture = true;
+    function go() {
+      document.removeEventListener("click", go, true);
+      document.removeEventListener("keydown", go, true);
+      waitingForGesture = false;
+      if (note) note.hidden = true;
+      wake();
+    }
+    document.addEventListener("click", go, true);
+    document.addEventListener("keydown", go, true);
+  }
+
   function send(blob) {
     say("thinking", L.thinking);
     stopMeter();
@@ -241,9 +284,14 @@
     player.onended = function () { stopMeter(); say("ready", "Ready"); if (running) listen(); };
     wake().then(startMeter);
     player.play().catch(function () {
-      // autoplay refused: the text is already on screen, so the conversation
-      // is not lost - just not spoken
-      stopMeter(); say("ready", "Ready");
+      // autoplay refused. the reply is already on screen so nothing is lost
+      // but the sound - say so, offer a remedy that works, and keep the
+      // microphone turn going instead of ending the session without a word.
+      stopMeter();
+      say("ready", "Ready");
+      if (note) { note.textContent = L.autoplay; note.hidden = false; }
+      armGesture();
+      if (running) listen();
     });
   }
 
@@ -266,35 +314,78 @@
     setTimeout(function () { if (recorder && recorder.state === "recording") recorder.stop(); }, 6000);
   }
 
-  function start() {
-    if (!navigator.mediaDevices || !window.MediaRecorder) { return fail(L.micDenied); }
+  // auto: this start was not asked for by a click, so a refusal is reported
+  // softly by offer() rather than as an error
+  function start(auto) {
+    // one attempt at a time. a second stream here is not a cosmetic problem:
+    // it is a microphone left open that nothing can close.
+    if (running || starting) return;
+    var refuse = auto ? offer : fail;
+    if (!navigator.mediaDevices || !window.MediaRecorder) { return refuse(L.micUnavailable); }
+    starting = true;
     navigator.mediaDevices.getUserMedia({ audio: true })
       .then(function (s) {
+        starting = false;
         stream = s;
         running = true;
         if (btn) btn.textContent = L.stop;
         if (note) note.hidden = true;
         graph();
         micSource = audioCtx.createMediaStreamSource(stream);
-        // the greeting is spoken on this click, which is the gesture browsers
-        // require before audio may play
+        // a click is the gesture browsers want before audio may play. on an
+        // auto start there is no gesture, so play() may be refused - it
+        // reports that and carries on listening.
         fetch("/assistant/voice/greeting")
           .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error("greeting")); })
           .then(function (j) { if (j.audio) { play(j.audio); } else { listen(); } })
           .catch(function () { listen(); });
       })
-      .catch(function () { fail(L.micDenied); });
+      // a refusal and a missing device are different facts and need different
+      // remedies. telling someone who has no microphone attached that they
+      // "refused access" sends them to a permission dialog that will not help.
+      .catch(function (e) {
+        starting = false;
+        var denied = e && (e.name === "NotAllowedError" || e.name === "SecurityError");
+        refuse(denied ? L.micDenied : L.micUnavailable);
+      });
+  }
+
+  // opening the page is taken as the intent to talk, so the conversation
+  // starts without waiting for the click. it is only ever an ATTEMPT: if the
+  // microphone is refused the page stays exactly as usable as before.
+  function autostart() {
+    if (!navigator.permissions || !navigator.permissions.query) return start(true);
+    navigator.permissions.query({ name: "microphone" })
+      .then(function (p) {
+        // already denied: the prompt will not appear, so asking would only
+        // produce a silent rejection
+        if (p.state === "denied") return offer(L.micDenied);
+        start(true);
+      })
+      .catch(function () { start(true); });
   }
 
   function stop() {
     running = false;
     if (recorder && recorder.state === "recording") recorder.stop();
+    // drop the old node before the stream goes: a restart builds a new
+    // source, and without this the dead one stays wired to the analyser and
+    // the next one stacks on top of it
+    micToAnalyser(false);
+    micSource = null;
     if (stream) { stream.getTracks().forEach(function (t) { t.stop(); }); stream = null; }
     player.pause();
     stopMeter();
     say("ready", "Ready");
     if (btn) btn.textContent = L.start;
   }
+
+  // bound once, unconditionally. binding it inside the status callback meant
+  // that whenever the button was on screen without voice armed it carried no
+  // listener at all, so clicking it did nothing - visibly a control, actually
+  // inert. what keeps a dead button off the page is hiding the mount, not
+  // withholding its handler.
+  if (btn) btn.addEventListener("click", function () { running ? stop() : start(false); });
 
   // the control only appears if the server says voice is armed - never a
   // button that cannot work
@@ -303,7 +394,7 @@
     .then(function (j) {
       if (!j.available) { mount.hidden = true; return; }
       mount.hidden = false;
-      if (btn) btn.addEventListener("click", function () { running ? stop() : start(); });
+      autostart();
     })
     .catch(function () { mount.hidden = true; });
 })();

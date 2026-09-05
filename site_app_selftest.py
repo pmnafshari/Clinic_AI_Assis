@@ -26,6 +26,39 @@ def on_page(value, page_text):
     return str(escape(value)) in page_text
 
 
+def _code_only(js):
+    """agent.js with its comments stripped.
+
+    An assertion about what the script does must not be satisfied by a
+    commented-out line. Measured: replacing a live call with
+    `/* armGesture(); */` left a plain substring check green.
+    """
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)
+    # the [^:] guard keeps a `//` inside a url from eating the rest of a line
+    return re.sub(r"(^|[^:])//[^\n]*", r"\1", js, flags=re.M)
+
+
+def _fn_body(js, name):
+    """The body of `function name(...)`, braces balanced.
+
+    Scoping matters: `micSource = null` appears both in the declaration at the
+    top of the file and in stop(), and only the second one is the fix. A
+    file-wide substring check passed with the fix reverted.
+    """
+    m = re.search(r"\bfunction\s+" + re.escape(name) + r"\s*\(", js)
+    assert m, f"agent.js has no function {name}()"
+    open_at = js.index("{", m.end() - 1)
+    depth = 0
+    for i in range(open_at, len(js)):
+        if js[i] == "{":
+            depth += 1
+        elif js[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return js[open_at:i + 1]
+    raise AssertionError(f"function {name}() body is never closed")
+
+
 def selftest():
     app = create_site_app()
     client = app.test_client()
@@ -401,6 +434,75 @@ def selftest():
         "20i: the greeting endpoint must refuse when the fence is closed"
     assert client.post("/assistant/voice").status_code == 503, \
         "20i: the turn endpoint must refuse when the fence is closed"
+
+    # 20i2. the fence is only real if the hidden control is actually hidden.
+    # `hidden` is an attribute the stylesheet can silently overrule, and this
+    # sheet sets display on .agent-voice and .agent-starters - so the voice
+    # button rendered with the fence closed, and the starters never cleared.
+    # the page cannot be styled here, so assert the rule that fixes it.
+    css = client.get("/static/css/site.css")
+    assert css.status_code == 200, "20i2: site.css should serve"
+    assert re.search(r"\[hidden\]\s*\{[^}]*display:\s*none\s*!important", css.text), \
+        "20i2: site.css must force [hidden] to display:none, or hidden controls still render"
+    assert 'data-agent-voice hidden' in a_page.text, \
+        "20i2: the voice mount must ship hidden and be revealed only by the status check"
+
+    # 20i3. the mic button is bound unconditionally. binding it inside the
+    # status callback left an inert button on screen whenever it was visible
+    # without voice armed - it looked like a control and did nothing.
+    src = client.get("/static/js/agent.js").text
+    bind = src.find('addEventListener("click", function () { running ? stop() : start(false); })')
+    fence = src.find('fetch("/assistant/voice/status")')
+    assert bind != -1 and fence != -1, "20i3: expected the mic binding and the status fetch"
+    assert bind < fence, \
+        "20i3: the mic handler must be bound before/outside the status check, never inside it"
+    # the auto attempt exists, and a refusal lands in offer(), not fail()
+    assert "function autostart()" in src, "20i3: opening the page must attempt voice"
+    assert "function offer(" in src, "20i3: a refused auto start needs a non-error fallback"
+
+    # 20i4. every fallback is real copy from clinic.yaml, not hardcoded
+    # english in the script.
+    for key in ("mic_denied_note", "mic_unavailable_note", "autoplay_blocked_note"):
+        assert cfg["assistant"][key], f"20i4: {key} must be set"
+    for key in ("mic_unavailable_note", "autoplay_blocked_note"):
+        assert on_page(cfg["assistant"][key], a_page.text), \
+            f"20i4: {key} must reach the page"
+
+    # these next three assert what the script DOES, so they read a
+    # comment-stripped copy and scope each claim to the function it is about.
+    # both traps were hit for real while writing them: `/* armGesture(); */`
+    # satisfied a plain substring check, and `"micSource = null;"` matched the
+    # variable declaration at the top of the file rather than the line in
+    # stop() it was meant to pin.
+    live = _code_only(src)
+
+    # 20i5. a refusal and a missing device are different facts. collapsing
+    # them told a visitor with no microphone attached that they had "refused
+    # access", which points them at a permission dialog that cannot help.
+    start_body = _fn_body(live, "start")
+    assert 'e.name === "NotAllowedError"' in start_body, \
+        "20i5: start() must branch on the error, not assume a refusal"
+    assert "L.micUnavailable" in start_body, "20i5: a non-refusal needs its own copy"
+
+    # 20i6. the autoplay note says "click anywhere", so clicking anywhere has
+    # to be what fixes it. without the gesture listener the note named a
+    # remedy the visitor could not perform - and it pointed at a button that
+    # reads "Stop" mid-session, which ENDS the conversation.
+    assert "function armGesture()" in live, \
+        "20i6: a blocked autoplay must arm a gesture listener, not just apologise"
+    assert "armGesture()" in _fn_body(live, "play"), \
+        "20i6: play()'s refusal path must arm it - a commented-out call is not a remedy"
+    assert "Start voice conversation" not in cfg["assistant"]["autoplay_blocked_note"], \
+        "20i6: the autoplay note must not name a button that reads 'Stop' at that moment"
+
+    # 20i7. one microphone attempt at a time. autostart() runs off the status
+    # fetch while the button is already bound, so a click in that window used
+    # to open a second stream and orphan the first - a microphone left on that
+    # stop() could no longer release.
+    assert "if (running || starting) return;" in start_body, \
+        "20i7: start() must refuse to run twice concurrently"
+    assert "micSource = null" in _fn_body(live, "stop"), \
+        "20i7: stop() must drop the mic node so a restart does not stack another"
 
     # 20j. no vendor credential may reach the browser. the page posts audio
     # here and gets text and sound back; the keys are only ever used server

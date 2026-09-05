@@ -4,6 +4,14 @@
 
 body { background: var(--ds-ground); }
 
+/* the html hidden attribute loses to any author display rule, and this file
+   sets display on the two elements the assistant hides from javascript -
+   .agent-voice and .agent-starters. both stayed on screen: the voice control
+   was offered with the fence closed and no click handler behind it, and the
+   starters never cleared after the first turn. one rule, so the next
+   component to use `hidden` cannot inherit the same bug. */
+[hidden] { display: none !important; }
+
 .site-sprite { display: none; }
 
 .site-icon {
