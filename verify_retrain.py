@@ -6,8 +6,8 @@ on remembering which numbers mattered:
 
   1. did any gated field REGRESS against the recorded baseline
   2. do the three terms that failed in later position now translate
-  3. should e2e_intake_walk check 5c be flipped from pinning the defect to
-     asserting the fix
+  3. does e2e_intake_walk check 5c still hold - it asserts the igiene mapping
+     in second position, so a failure there is this defect coming back
 
 **A rising aggregate is not a pass.** The aggregate hides a field going
 backwards behind two others going forwards, and the two defects this retrain
@@ -137,11 +137,13 @@ def main():
     fixed_igiene = lp.get("igiene", ("", ""))[0] == "fixed"
     print()
     if fixed_igiene:
-        print("  igiene now normalises. e2e_intake_walk check 5c pins the DEFECT and")
-        print("  will fail - that is the success signal, not a regression. flip it to")
-        print("  assert prophy and delete the pin.")
+        print("  igiene normalises. e2e_intake_walk check 5c asserts exactly this in")
+        print("  second position, so it should pass - run it for the end-to-end proof,")
+        print("  this scores the model alone.")
     else:
-        print("  igiene still raw in second position: check 5c should stay as a pin.")
+        print("  igiene came back raw in second position: that is the pre-2026-09-06")
+        print("  defect returning. e2e_intake_walk check 5c asserts the mapping and will")
+        print("  fail - a real regression, not a pin. do not weaken the check.")
 
     failed = [s for s, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")
