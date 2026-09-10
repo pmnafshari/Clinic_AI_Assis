@@ -16,6 +16,7 @@ import patient_auth
 import storage
 from env_config import load_secret_key
 from shared import STATIC_ROOT as SHARED_STATIC_ROOT
+from shared.names import initials, tint
 
 from . import routes
 from .routes import REPO_ROOT, patient_bp, require_patient_session
@@ -82,12 +83,17 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
     app.register_blueprint(patient_bp)
     app.before_request(require_patient_session)
 
+    # avatars, shared with the staff app (phase 45)
+    app.jinja_env.filters["initials"] = initials
+    app.jinja_env.filters["tint"] = tint
+
     @app.context_processor
     def inject_language():
         # g.patient is None on the login screen - no session exists there,
-        # and the same context processor runs for every route. the template
-        # uses this only as a presence check to decide whether to render the
-        # logout control; it never reads a field off it.
+        # and the same context processor runs for every route. the base
+        # template uses it as a presence check for the logout control, and
+        # reads must_change_pin to leave the tabs off the forced change-pin
+        # screen, where every other route redirects back anyway.
         return {"t": t, "lang": current_language(), "patient": g.get("patient"),
                 # the request form's `min` and default. computed here, not in
                 # javascript, so a client clock cannot offer yesterday.
@@ -162,6 +168,21 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
             g.patient["codice_fiscale"], get_db(), ip=net.from_request(_request)
         )
         name = demo["patient_name"].split()[0] if demo and demo.get("patient_name") else None
-        return render_template("patient_home.html", name=name)
+
+        # phase 45 - the overview's two figures. the same function, keyed on
+        # the same session codice fiscale, that /appointments already calls,
+        # so the overview can show nothing the patient could not already see
+        # one tab over. a request is counted, never timed (PAPT-05).
+        import appointments
+
+        booked, requested = appointments.open_for_patient(get_db(), g.patient["codice_fiscale"])
+        next_appt = booked[0]["starts_at"] if booked else None
+        return render_template(
+            "patient_home.html",
+            name=name,
+            next_appt=next_appt,
+            next_time=next_appt[11:16] if next_appt else None,
+            request_count=len(requested),
+        )
 
     return app

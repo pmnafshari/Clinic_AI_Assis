@@ -30,6 +30,16 @@ STRINGS = {
     "nav_chat": {"it": "Assistente", "en": "Assistant"},
     "nav_profile": {"it": "Profilo", "en": "Profile"},
 
+    # phase 45 - the reference's header and overview. the brand names the
+    # surface, never the clinic: this app has no clinic name to show.
+    "brand_name": {"it": "Portale paziente", "en": "Patient portal"},
+    "overview_eyebrow": {"it": "Il tuo riepilogo", "en": "Your overview"},
+    "kpi_next_appt": {"it": "Prossimo appuntamento", "en": "Next appointment"},
+    "kpi_next_none": {"it": "Nessuno in programma", "en": "Nothing booked"},
+    "kpi_next_none_pill": {"it": "chiedine uno", "en": "ask for one"},
+    "kpi_requests": {"it": "Richieste in attesa", "en": "Requests waiting"},
+    "kpi_requests_wait": {"it": "da confermare", "en": "to confirm"},
+    "kpi_requests_clear": {"it": "nessuna", "en": "none"},
     "overview_heading": {"it": "Ciao, {name}", "en": "Hello, {name}"},
     "overview_body": {
         "it": "Da qui puoi chiedere all'assistente delle tue visite, del prossimo appuntamento e delle tue fatture.",

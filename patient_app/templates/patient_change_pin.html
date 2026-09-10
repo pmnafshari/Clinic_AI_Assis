@@ -1,5 +1,6 @@
 {% extends "patient_base.html" %}
 {% block content %}
+<span class="patient-mark mb-3" aria-hidden="true"><i class="bi bi-shield-lock"></i></span>
 <h1 class="mb-3">{{ t('change_heading', lang) }}</h1>
 {% if patient.must_change_pin %}
 <p class="text-secondary mb-4">{{ t('change_body', lang) }}</p>

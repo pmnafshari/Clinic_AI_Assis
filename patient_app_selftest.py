@@ -1942,6 +1942,23 @@ def selftest():
         assert t("appt_request_title", "en") not in it_page, \
             "31f: the italian page must not carry english copy"
 
+        # 31g. DASH-07 (phase 45) - the overview's two figures are the
+        # patient's OWN, read through the same open_for_patient the tab uses.
+        # A holds one pending request and the booked 15:00 row from 31d; B
+        # holds nothing. asserted from both sides, because an overview that
+        # summed the clinic would pass an owner-only check.
+        home_a = client_a.get("/").text
+        home_b = client_b.get("/").text
+        assert "15:00" in home_a, "31g: A's overview should show A's next booked time"
+        assert "00:00" not in home_a, "31g: and never time a request"
+        assert "15:00" not in home_b, "31g: B's overview must not show A's appointment"
+        assert on_page(t("kpi_next_none", "it"), home_b), \
+            "31g: B has nothing booked and the overview must say so"
+        assert on_page(t("kpi_requests_clear", "it"), home_b), \
+            "31g: B has no requests - A's must not be counted on B's overview"
+        assert on_page(t("kpi_requests_wait", "it"), home_a), \
+            "31g: A's pending request is counted on A's overview"
+
     print("selftest ok")
 
 

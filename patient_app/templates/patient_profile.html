@@ -1,9 +1,20 @@
 {% extends "patient_base.html" %}
-{% block card_class %}patient-card--wide{% endblock %}
+{% block card_class %}patient-card--wide patient-card--dash{% endblock %}
 {% block lang_class %}patient-lang--wide{% endblock %}
-{% block nav_class %}patient-nav--wide{% endblock %}
 {% block content %}
-<h1 class="mb-3">{{ t('profile_heading', lang) }}</h1>
+<div class="ds-page-head">
+  <div class="d-flex align-items-center gap-3">
+    {% if demo and demo.patient_name %}
+    <span class="ds-avatar ds-avatar-lg {{ demo.patient_name | tint }}" aria-hidden="true">{{ demo.patient_name | initials }}</span>
+    {% endif %}
+    <div>
+      <p class="ds-page-eyebrow">{{ t('nav_profile', lang) }}</p>
+      <h1 class="ds-page-title">{{ t('profile_heading', lang) }}</h1>
+    </div>
+  </div>
+</div>
+<section class="ds-card patient-profile-card">
+<div class="ds-card-body">
 
 {# read through patient_accessor, the same scope-checked path the chat uses.
    nothing clinical is shown here - no visit, no invoice. #}
@@ -18,5 +29,7 @@
 
 <p class="text-secondary small">{{ t('profile_note', lang) }}</p>
 
-<a href="{{ url_for('patient.change_pin') }}" class="btn btn-outline-secondary">{{ t('profile_change_pin', lang) }}</a>
+<a href="{{ url_for('patient.change_pin') }}" class="btn btn-outline-secondary"><i class="bi bi-key" aria-hidden="true"></i> {{ t('profile_change_pin', lang) }}</a>
+</div>
+</section>
 {% endblock %}

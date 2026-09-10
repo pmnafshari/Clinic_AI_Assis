@@ -1,8 +1,8 @@
 {% extends "patient_base.html" %}
-{% block card_class %}patient-card--wide{% endblock %}
+{% block card_class %}patient-card--wide patient-card--chat{% endblock %}
 {% block lang_class %}patient-lang--wide{% endblock %}
-{% block nav_class %}patient-nav--wide{% endblock %}
 {% block content %}
+<p class="ds-page-eyebrow">{{ t('nav_chat', lang) }}</p>
 <h1 class="chat-title">{{ t('chat_heading', lang) }}</h1>
 <p class="chat-intro">{{ t('chat_intro', lang) }}</p>
 
