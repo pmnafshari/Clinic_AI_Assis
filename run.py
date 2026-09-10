@@ -1,3 +1,4 @@
+import codice_fiscale
 import disk_guard
 import upload_worker
 from app import create_app
@@ -9,6 +10,7 @@ app = create_app()
 # reason patient_run.py gives - construction is the cheaper failure and the two
 # errors should not mask each other.
 disk_guard.guard_or_exit()
+codice_fiscale.guard_or_exit("db/clinic.sqlite")
 # anything left in drop/ by a previous run was uploaded but never processed
 upload_worker.resume_pending()
 # no port argument, so this binds flask's default 5000 - tunnel_guard.STAFF_PORT mirrors it, change both together

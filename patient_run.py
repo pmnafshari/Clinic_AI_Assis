@@ -1,3 +1,4 @@
+import codice_fiscale
 import disk_guard
 import tunnel_guard
 from patient_app import create_patient_app
@@ -18,5 +19,6 @@ if __name__ == "__main__":
     # disk first: encryption at rest is the more fundamental precondition, so
     # on a misconfigured host it should be the first refusal the operator sees.
     disk_guard.guard_or_exit()
+    codice_fiscale.guard_or_exit("db/clinic.sqlite")
     tunnel_guard.guard_or_exit(PATIENT_PORT)
     app.run(host="127.0.0.1", port=PATIENT_PORT, threaded=True)

@@ -30,8 +30,52 @@ _ODD = dict(zip("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 _EVEN = {**{str(i): i for i in range(10)}, **{c: i for i, c in enumerate("ABCDEFGHIJKLMNOPQRSTUVWXYZ")}}
 
 
-def synthetic_allowed():
-    return os.environ.get("CLINIC_ALLOW_SYNTHETIC_CF", "1").strip().lower() not in ("0", "false", "no", "off")
+def is_production(env=None):
+    env = os.environ if env is None else env
+    return env.get("CLINIC_ENV", "").strip().lower() == "production"
+
+
+def synthetic_allowed(env=None):
+    # production never allows synthetic codes, whatever the flag says
+    env = os.environ if env is None else env
+    if is_production(env):
+        return False
+    return env.get("CLINIC_ALLOW_SYNTHETIC_CF", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def guard_refusal(env, real_cf_count):
+    """why the apps must not start, or None. pure, so every branch is testable.
+
+    two signals, because an env var alone is forgotten: production says so
+    explicitly, OR the database already holds real-format codes - real data
+    is present whether or not anyone set CLINIC_ENV."""
+    flag_on = env.get("CLINIC_ALLOW_SYNTHETIC_CF", "1").strip().lower() not in ("0", "false", "no", "off")
+    if is_production(env) and flag_on and "CLINIC_ALLOW_SYNTHETIC_CF" in env:
+        return "CLINIC_ALLOW_SYNTHETIC_CF is on while CLINIC_ENV=production"
+    if real_cf_count and synthetic_allowed(env):
+        return (f"the database holds {real_cf_count} real codice fiscale(s) while synthetic codes "
+                "are still accepted - set CLINIC_ALLOW_SYNTHETIC_CF=0 (or CLINIC_ENV=production)")
+    return None
+
+
+def guard_or_exit(db_path):
+    # startup guard for run.py and patient_run.py, sibling of disk_guard
+    import sqlite3
+    import sys
+    from pathlib import Path
+    real = 0
+    if Path(db_path).exists():
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        try:
+            real = sum(1 for (cf,) in conn.execute("SELECT codice_fiscale FROM patients") if is_real(cf))
+        except sqlite3.OperationalError:
+            real = 0  # no patients table yet: a fresh install holds no real data
+        finally:
+            conn.close()
+    reason = guard_refusal(os.environ, real)
+    if reason:
+        print(f"refusing to start: {reason}", file=sys.stderr)
+        sys.exit(1)
 
 
 def normalize(value):
@@ -96,6 +140,15 @@ def selftest():
             os.environ.pop("CLINIC_ALLOW_SYNTHETIC_CF", None)
         else:
             os.environ["CLINIC_ALLOW_SYNTHETIC_CF"] = old
+    # 6. the production guard (enforced at startup by run.py / patient_run.py)
+    assert not synthetic_allowed({"CLINIC_ENV": "production", "CLINIC_ALLOW_SYNTHETIC_CF": "1"}), \
+        "6: production never allows synthetic codes"
+    assert guard_refusal({}, 0) is None, "6: dev with synthetic data starts"
+    assert guard_refusal({}, 3), "6: real codes present while synthetic is on must refuse"
+    assert guard_refusal({"CLINIC_ALLOW_SYNTHETIC_CF": "0"}, 3) is None, "6: real data with the flag off starts"
+    assert guard_refusal({"CLINIC_ENV": "production", "CLINIC_ALLOW_SYNTHETIC_CF": "1"}, 0), \
+        "6: production with the flag explicitly on must refuse, even before real data"
+    assert guard_refusal({"CLINIC_ENV": "production"}, 5) is None, "6: production, flag unset, real data: starts"
     print("selftest ok")
 
 
