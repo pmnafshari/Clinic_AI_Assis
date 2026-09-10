@@ -7,8 +7,9 @@ the fix can be proven with one command instead of a third rewrite.
 the check is document.documentElement.scrollWidth <= window.innerWidth + 1,
 evaluated in a real browser. the +1 absorbs sub-pixel rounding.
 
-exits 1 if any page-width overflows, or if the fixture cleanup leaves rows
-behind. this is the only automated check on the no-horizontal-scroll rule -
+exits 1 if any page-width overflows, if any text fails AA contrast (the
+a11y_audit.py measurement, run on the signed-in pages that audit cannot
+reach), or if the fixture cleanup leaves rows behind. this is the only automated check on the no-horizontal-scroll rule -
 app_selftest.py can see the markup that usually causes it, not the measurement.
 
     ollama serve                                       # not needed, no model here
@@ -41,6 +42,12 @@ import tempfile
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
+
+# the same measurement a11y_audit.py makes, run here because this is the one
+# tool that signs in as every role. a11y_audit only reaches logged-out pages,
+# so until phase 44 no signed-in page had a contrast check at all - and
+# bootstrap's .text-secondary sat at 4.25:1 on every one of them.
+from a11y_audit import CONTRAST
 from werkzeug.security import generate_password_hash
 
 STAFF_URL = "http://127.0.0.1:5000"
@@ -101,6 +108,7 @@ MEASURE = """() => ({
 })"""
 
 RESULTS = []
+CONTRAST_FAILS = []
 
 
 # --- fixtures -------------------------------------------------------------
@@ -175,6 +183,9 @@ def shoot(page, width, role, name, path, out_dir, base=STAFF_URL, full_page=True
     # for. the README shots pass full_page=False: a 6500px-tall png is a
     # megabyte and a half and renders as an unreadable strip inline.
     page.screenshot(path=str(shot_dir / f"{role}-{name}.png"), full_page=full_page)
+
+    for bad in page.evaluate(CONTRAST):
+        CONTRAST_FAILS.append((width, role, path, bad))
 
     over = size["scroll"] - size["inner"]
     ok = over <= 1
@@ -319,10 +330,18 @@ def main():
     # a failed cleanup and a horizontal scroll are both failures. the baseline
     # was red when this tool landed, so it exited 0 on overflow to stay
     # committable; that is no longer true and the gate 30-01 promised is here.
+    if CONTRAST_FAILS:
+        print(f"\n{len(CONTRAST_FAILS)} text contrast failure(s):")
+        for width, role, path, bad in CONTRAST_FAILS:
+            print(f"  {width}px  {role:<10} {path:<26} {bad['ratio']}:1 (needs {bad['need']}) "
+                  f"{bad['tag']}.{bad['cls']} - {bad['text']!r}")
+    else:
+        print("no text contrast failures on any page-width")
+
     if users_left or pats_left or audit_left:
         print("CLEANUP FAILED - ZZS rows survived")
         return 1
-    if over:
+    if over or CONTRAST_FAILS:
         return 1
     return 0
 
