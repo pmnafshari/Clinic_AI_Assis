@@ -530,6 +530,22 @@ def selftest():
         f"auth gate is a deliberate decision - update this set when you make it."
     )
 
+    # 21. audit INT-1 - the public site links to the patient portal and never
+    # to the staff app. the header "Login" used to point at the staff sign-in
+    # on :5000; CLAUDE.md says the staff app is never exposed.
+    fresh = content.load(env={})
+    assert fresh["actions"]["login_href"] == fresh["actions"]["portal_url"] + "/login", \
+        "21: the public Login must go to the patient portal's sign-in"
+    assert fresh["actions"]["assistant_signin_href"] == fresh["actions"]["login_href"], \
+        "21: both sign-in links must name the same portal"
+    moved = content.load(env={"PATIENT_PORTAL_URL": "https://portal.example.test/"})
+    assert moved["actions"]["login_href"] == "https://portal.example.test/login", \
+        "21: PATIENT_PORTAL_URL must override the yaml default, trailing slash and all"
+    for path in ("/", "/services", "/doctors", "/clinic", "/contact", "/assistant"):
+        body = client.get(path).text
+        assert ":5000" not in body, f"21: {path} links to the staff app"
+        assert fresh["actions"]["login_href"] in body, f"21: {path} must carry the patient login"
+
     print("selftest ok")
 
 

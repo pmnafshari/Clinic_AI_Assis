@@ -60,11 +60,18 @@ actions:
   # replaces. the page itself links on to sign-in when a visitor needs
   # their own records.
   assistant_href: "/assistant"
-  # where the real, authenticated chat lives
-  assistant_signin_href: "http://127.0.0.1:5001/login"
+  # the patient portal - the one signed-in surface a visitor may be sent to.
+  # a default for a local demo only: content.load() takes PATIENT_PORTAL_URL
+  # from the environment first, so a deployment behind the tunnel points
+  # here without editing this file. login_href and assistant_signin_href are
+  # built from it at load, never written by hand.
+  #
+  # the staff app is NEVER linked from this site. this key used to point the
+  # header "Login" at the staff sign-in on :5000, so the most prominent
+  # button on the public site sent patients to an internal login (audit INT-1).
+  portal_url: "http://127.0.0.1:5001"
   assistant_signin_label: "Sign in to the assistant"
-  login_label: "Login"
-  login_href: "http://127.0.0.1:5000/login"
+  login_label: "Patient login"
 
 hero:
   eyebrow: "Modern dental care"
