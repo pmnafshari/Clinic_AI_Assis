@@ -730,7 +730,7 @@
 }
 
 .ds-kpi-value {
-  margin: var(--ds-space-2) 0 0;
+  margin: var(--ds-space-1) 0 0;
   font-size: var(--ds-numeral);
   line-height: 1;
   color: var(--ds-text);
@@ -812,7 +812,7 @@ a.ds-row:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
 }
 
 .ds-row-lead { flex: none; }
-.ds-row-main { flex: 1 1 12rem; min-width: 0; }
+.ds-row-main { flex: 1 1 8rem; min-width: 0; }
 
 .ds-row-title {
   display: block;

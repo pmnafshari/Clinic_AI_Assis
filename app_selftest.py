@@ -675,6 +675,32 @@ def selftest():
         assert b"intake-chart" in asst_assets.data, \
             "19: an assistant may see intake status"
 
+        # 19b. DASH-02/DASH-03 (phase 43) - the dashboard's two new reads, the
+        # patient-request queue and today's dentists, come from rows the same
+        # role already sees on /appointments, under the same gate. a request
+        # carries a date and a period and must never be drawn as a time
+        # (PAPT-05) - its starts_at time part is meaningless.
+        import appointments as appt_mod
+        req_conn = sqlite3.connect(db_path)
+        req_conn.row_factory = sqlite3.Row
+        appt_mod.request(req_conn, "KPIA800010150100", "2031-11-05", "afternoon")
+        req_conn.close()
+        for who, cl in (("dentist", client_dent), ("assistant", client_asst)):
+            q_resp, q_ctx = _dashboard_context(cl)
+            assert q_ctx["request_total"] == 1, \
+                f"19b: a {who} holds manage_appointments and should see 1 request, got {q_ctx['request_total']}"
+            queue = q_resp.data.split(b'id="requests-title"', 1)[1].split(b"</section>", 1)[0]
+            assert b"Kpi Uno" in queue and b"2031-11-05" in queue and b"afternoon" in queue, \
+                f"19b: the {who}'s queue must name the patient, the day and the period"
+            assert not re.search(rb"\b\d{2}:\d{2}\b", queue), \
+                f"19b: the {who}'s queue drew a requested row as a time"
+            # the reference is a pet clinic with revenue, inventory and
+            # vaccination widgets. none of those exist in this schema, and
+            # "billed" is not revenue (phase 39). they must not leak in.
+            flat = q_resp.data.lower()
+            for banned in (b"revenue", b"inventory", b"vaccination", b"in queue"):
+                assert banned not in flat, f"19b: the {who}'s dashboard must not say {banned.decode()!r}"
+
         # 20. GUI-14 - the shell collapses below the xl breakpoint (phase 43
         # moved it from lg: six tabs + search + action + avatar measure ~1230px,
         # so at 992-1199 an inline header wrapped). the fast

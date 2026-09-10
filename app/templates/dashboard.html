@@ -1,228 +1,380 @@
 {% extends "base.html" %}
+{# phase 43 - the reference's layout on this clinic's real figures. every block
+   keeps the gate it had: the route decides whether a query runs, and a figure
+   a role may not see arrives as None, so there is nothing here to hide. the
+   honesty map from reference widget to real figure is 43-CONTEXT D-04. #}
+
+{% macro agenda_card() %}
+<section class="card dash-card" aria-labelledby="agenda-title">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="agenda-title">Today's appointments</h2>
+      <p class="ds-card-sub">{{ agenda_total }} booked{% if next_start %} · next at {{ next_start }}{% endif %}</p>
+    </div>
+    {% if agenda_has_data %}
+    <div class="ds-segmented" role="group" aria-label="Filter today's appointments" data-filter-target="agenda-rows">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="upcoming" aria-pressed="false">Upcoming</button>
+      <button type="button" data-filter="past" aria-pressed="false">Past</button>
+    </div>
+    {% endif %}
+  </div>
+  <div class="dash-card-body">
+    {% if agenda_has_data %}
+    <ul class="ds-rows" id="agenda-rows">
+      {% for a in agenda %}
+      <li class="ds-row{{ ' is-current' if a.is_current else '' }}" data-when="{{ 'past' if a.is_past else 'upcoming' }}">
+        <span class="ds-row-time">{{ a.time }}</span>
+        <span class="ds-avatar ds-avatar-sm ds-row-lead {{ a.tint }}" aria-hidden="true">{{ a.initials }}</span>
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ a.patient_name }}</span>
+          <span class="ds-row-sub">{{ a.minutes }} min{% if a.note %} · {{ a.note }}{% endif %}</span>
+        </span>
+        <span class="ds-row-aside">
+          {% if a.is_current %}
+          <span class="ds-badge ds-badge-success">In progress</span>
+          {% elif a.is_past %}
+          <span class="ds-badge ds-badge-neutral">Past</span>
+          {% else %}
+          <span class="ds-badge ds-badge-primary">Upcoming</span>
+          {% endif %}
+          <span class="ds-person dash-person">
+            <span class="ds-avatar ds-avatar-xs {{ a.dentist_tint }}" aria-hidden="true">{{ a.dentist_initials }}</span>
+            {{ a.dentist }}
+          </span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    {# permitted, nothing booked. a role without the capability never
+       reaches this block at all and gets no empty state either. #}
+    <div class="chart-empty">
+      <i class="bi bi-calendar-check"></i>
+      <p class="mb-0">Nothing booked today. Appointments for today appear here.</p>
+    </div>
+    {% endif %}
+  </div>
+  <div class="dash-card-foot">
+    <a class="ds-card-link" href="{{ url_for('appointments.index', day=today) }}">All appointments <i class="bi bi-arrow-right"></i></a>
+  </div>
+</section>
+{% endmacro %}
+
+{% macro requests_card() %}
+<section class="card dash-card" aria-labelledby="requests-title">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="requests-title">Patient requests</h2>
+      <p class="ds-card-sub">Waiting for a dentist and a time</p>
+    </div>
+    <a class="ds-card-link" href="{{ url_for('appointments.index') }}">Manage</a>
+  </div>
+  <div class="dash-card-body">
+    {% if requests %}
+    <ol class="ds-rows dash-queue">
+      {% for r in requests %}
+      <li class="ds-row">
+        <span class="ds-row-time ds-numeral">{{ loop.index }}.</span>
+        <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.tint }}" aria-hidden="true">{{ r.initials }}</span>
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ r.patient_name }}</span>
+          {# a date and a period, never a time (PAPT-05) #}
+          <span class="ds-row-sub">{{ r.day }} · {{ r.period }}</span>
+        </span>
+        <span class="ds-badge ds-badge-warning">Requested</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="dash-empty-line">No patient requests waiting.</p>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+{% macro intake_card() %}
+<section class="card dash-card" aria-labelledby="intake-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="intake-title">Your intake</h2>
+  </div>
+  <div class="dash-card-body">
+    {% if intake_has_data %}
+    <p class="dash-dist-total"><span class="ds-numeral">{{ intake_total }}</span> files</p>
+    <svg id="intake-chart" class="ds-distbar" viewBox="0 0 100 10" preserveAspectRatio="none"
+         role="img" aria-label="Your files by state">
+      <rect x="0" y="0" width="100" height="10"></rect>
+      {% for seg in intake_segments %}
+      <rect class="{{ seg.cls }}" x="{{ seg.x }}" y="0" width="{{ seg.width }}" height="10"><title>{{ seg.label }}: {{ seg.count }}</title></rect>
+      {% endfor %}
+    </svg>
+    {# every state is named with its count - the colour is never the only
+       signal (UX-17) #}
+    <ul class="ds-legend">
+      {% for item in intake_legend %}
+      <li><span class="ds-dot {{ item.cls }}" aria-hidden="true"></span>{{ item.label }} <span class="ds-numeral">{{ item.count }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="chart-empty chart-empty-sm">
+      <i class="bi bi-bar-chart-steps"></i>
+      <p class="mb-0">Nothing filed yet. Your uploads will appear here, broken down by state.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+{% macro visits_card() %}
+<section class="card dash-card" aria-labelledby="visits-title">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="visits-title">Visits per month</h2>
+      <p class="ds-card-sub">Dated visits across the clinic, last 12 months on record</p>
+    </div>
+  </div>
+  <div class="dash-card-body">
+    {% if visits_have_data %}
+    <div class="chart-box"><canvas id="visits-chart" aria-label="Visits per month" role="img"></canvas></div>
+    {% else %}
+    <div class="chart-empty">
+      <i class="bi bi-graph-up"></i>
+      <p class="mb-0">No dated visits yet. Visits appear here once a note carries a visit date.</p>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
+{% macro uploads_card() %}
+<section class="card dash-card dash-list-card" aria-labelledby="uploads-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="uploads-title">Recent uploads</h2>
+  </div>
+  <div class="dash-card-body">
+    <div hx-get="{{ url_for('upload.recent_intake') }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
+  </div>
+</section>
+{% endmacro %}
+
+{% macro upload_card() %}
+<section class="card dash-card" aria-labelledby="upload-title">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="upload-title">Upload files</h2>
+      <p class="ds-card-sub">Notes are read, matched to a patient and filed</p>
+    </div>
+  </div>
+  <div class="dash-card-body">
+    {% with cf=None %}{% include "_upload_zone.html" %}{% endwith %}
+    <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+  </div>
+</section>
+{% endmacro %}
+
+{% macro actions_card() %}
+<section class="card dash-card" aria-labelledby="actions-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="actions-title">Quick actions</h2>
+  </div>
+  <div class="dash-card-body">
+    <div class="ds-rows">
+      <a class="ds-row" href="{{ url_for('notes.new_note') }}">
+        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-journal-plus"></i></span>
+        <span class="ds-row-main"><span class="ds-row-title">Add note</span><span class="ds-row-sub">Paste or type a visit note</span></span>
+        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
+      </a>
+      <a class="ds-row" href="{{ url_for('qa.qa_page') }}">
+        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-chat-dots"></i></span>
+        <span class="ds-row-main"><span class="ds-row-title">Ask a question</span><span class="ds-row-sub">Search the records in plain words</span></span>
+        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
+      </a>
+      <a class="ds-row" href="{{ url_for('agent.edit_page') }}">
+        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-pencil-square"></i></span>
+        <span class="ds-row-main"><span class="ds-row-title">Edit a record</span><span class="ds-row-sub">Every change is shown before it is saved</span></span>
+        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
+      </a>
+      <a class="ds-row" href="{{ url_for('agent.command_page') }}">
+        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-terminal"></i></span>
+        <span class="ds-row-main"><span class="ds-row-title">Run a command</span><span class="ds-row-sub">Tell the assistant what to change</span></span>
+        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
+      </a>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+{% macro changes_card() %}
+<section class="card dash-card dash-list-card" aria-labelledby="changes-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="changes-title">Recent changes</h2>
+  </div>
+  <div class="dash-card-body">
+    {% if history %}
+    <ul class="ds-rows">
+      {% for entry in history %}
+      <li class="ds-row">
+        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-arrow-counterclockwise"></i></span>
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ entry.tool }}</span>
+          <span class="ds-row-sub">{{ entry.codice_fiscale }} · {{ entry.ts }}</span>
+        </span>
+        {% if loop.first %}
+        <form method="post" action="{{ url_for('agent.undo_change') }}" class="mb-0">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="btn btn-outline-secondary btn-sm">Undo change</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No changes yet. Your edits will appear here after you save something.</p>
+    {% endif %}
+  </div>
+</section>
+{% endmacro %}
+
 {% block content %}
-<h1 class="page-title">Dashboard</h1>
-
-{% if show_clinical or show_intake %}
-<div class="row g-3 mb-4">
-  {% if show_clinical %}
-  <div class="col-6 col-xl-3">
-    <div class="card kpi-card h-100">
-      <div class="card-body">
-        <span class="kpi-label">Patients</span>
-        <span class="kpi-value">{{ patient_total }}</span>
-      </div>
-    </div>
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ greeting }}, {{ user.username }}</p>
+    <h1 class="ds-page-title">Clinic overview</h1>
+    <p class="ds-page-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ today_label }}</p>
   </div>
-  {% endif %}
-  {% if show_intake %}
-  <div class="col-6 col-xl-3">
-    <div class="card kpi-card h-100">
-      <div class="card-body">
-        <span class="kpi-label">Sorted</span>
-        <span class="kpi-value">{{ intake_counts.sorted }}</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-xl-3">
-    <div class="card kpi-card h-100">
-      <div class="card-body">
-        <span class="kpi-label">Needs Review</span>
-        <span class="kpi-value">{{ intake_counts.needs_review }}</span>
-      </div>
-    </div>
-  </div>
-  <div class="col-6 col-xl-3">
-    <div class="card kpi-card h-100">
-      <div class="card-body">
-        <span class="kpi-label">Not searchable</span>
-        <span class="kpi-value">{{ intake_counts.not_searchable }}</span>
-      </div>
-    </div>
-  </div>
+  {% if agenda_dentists %}
+  <ul class="dash-chips" aria-label="Dentists booked today">
+    {% for d in agenda_dentists %}
+    <li class="ds-chip">
+      <span class="ds-avatar ds-avatar-sm {{ d.tint }}" aria-hidden="true">{{ d.initials }}</span>
+      <span class="ds-chip-text">
+        <span class="ds-chip-title">{{ d.name }}</span>
+        <span class="ds-chip-sub">{{ d.count }} booked today</span>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
   {% endif %}
 </div>
-{% endif %}
 
-{% if show_agenda %}
-<div class="row g-3 mb-4">
-  <div class="col-12">
-    <div class="card h-100">
-      <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Today</span>
-        <a class="btn btn-sm btn-outline-secondary"
-           href="{{ url_for('appointments.index', day=today) }}">All appointments</a>
-      </div>
-      <div class="card-body">
-        {% if agenda_has_data %}
-        <table class="table ds-table-cards align-middle mb-0">
-          <thead><tr><th>Time</th><th>Patient</th><th>Dentist</th><th>Length</th></tr></thead>
-          <tbody>
-            {% for a in agenda %}
-            <tr>
-              <td data-label="Time">{{ a.starts_at[11:16] }}</td>
-              <td data-label="Patient">{{ a.patient_name }}</td>
-              <td data-label="Dentist">{{ a.dentist }}</td>
-              <td data-label="Length">{{ a.minutes }} min</td>
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        {# permitted, nothing booked. a role without the capability never
-           reaches this block at all and gets no empty state either. #}
-        <div class="chart-empty">
-          <i class="bi bi-calendar-check"></i>
-          <p class="mb-0">Nothing booked today. Appointments for today appear here.</p>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-</div>
-{% endif %}
-
-{% if show_intake or show_clinical %}
-<div class="row g-3 mb-4">
-  {% if show_intake %}
-  <div class="col-12 col-xl-5">
-    <div class="card h-100">
-      <div class="card-header">Your intake</div>
-      <div class="card-body">
-        {% if intake_has_data %}
-        <div class="chart-box"><canvas id="intake-chart"></canvas></div>
-        {% else %}
-        <div class="chart-empty">
-          <i class="bi bi-pie-chart"></i>
-          <p class="mb-0">Nothing filed yet. Your uploads will appear here, broken down by state.</p>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
-  {% if show_clinical %}
-  <div class="col-12 col-xl-7">
-    <div class="card h-100">
-      <div class="card-header">Visits per month</div>
-      <div class="card-body">
-        {% if visits_have_data %}
-        <div class="chart-box"><canvas id="visits-chart"></canvas></div>
-        {% else %}
-        <div class="chart-empty">
-          <i class="bi bi-bar-chart"></i>
-          <p class="mb-0">No dated visits yet. Visits appear here once a note carries a visit date.</p>
-        </div>
-        {% endif %}
-      </div>
-    </div>
-  </div>
-  {% endif %}
-</div>
-{% endif %}
-
-<div class="card p-4 mb-4">
-  <p>Logged in as <strong>{{ user.username }}</strong> ({{ user.role }})</p>
-  <div class="d-flex gap-2 flex-wrap">
-    <a href="{{ url_for('qa.qa_page') }}" class="btn btn-outline-secondary btn-sm">Ask a question</a>
-    <a href="{{ url_for('notes.new_note') }}" class="btn btn-primary btn-sm">Add note</a>
-    <a href="{{ url_for('agent.edit_page') }}" class="btn btn-outline-secondary btn-sm">Edit a record</a>
-    <a href="{{ url_for('agent.command_page') }}" class="btn btn-outline-secondary btn-sm">Run a command</a>
-  </div>
-</div>
-
-<div class="card p-4 mb-4">
-  <h2 class="section-title">Upload files</h2>
-  {% with cf=None %}{% include "_upload_zone.html" %}{% endwith %}
-  <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
-</div>
-
-<div class="card p-4 mb-4">
-  <h2 class="section-title">Recent uploads</h2>
-  <div hx-get="{{ url_for('upload.recent_intake') }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
-</div>
-
-<div class="card p-4">
-  <h2 class="section-title">Recent changes</h2>
-  {% if history %}
-  <div class="list-group">
-    {% for entry in history %}
-    <div class="list-group-item d-flex justify-content-between align-items-center">
-      <div>
-        <small class="text-secondary d-block">{{ entry.ts }}</small>
-        <span>{{ entry.tool }} - {{ entry.codice_fiscale }}</span>
-      </div>
-      {% if loop.first %}
-      <form method="post" action="{{ url_for('agent.undo_change') }}" class="mb-0">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-secondary btn-sm">Undo change</button>
-      </form>
+{% if show_agenda or show_clinical or show_intake %}
+<div class="dash-kpis">
+  {% if show_agenda %}
+  <div class="ds-kpi">
+    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-calendar-check"></i></span>
+    <p class="ds-kpi-value ds-numeral">{{ agenda_total }}</p>
+    <div class="ds-kpi-foot">
+      <span class="ds-kpi-label">Booked today</span>
+      {% if next_start %}
+      <span class="ds-badge ds-badge-primary">next {{ next_start }}</span>
+      {% elif agenda_has_data %}
+      <span class="ds-badge ds-badge-neutral">day done</span>
+      {% else %}
+      <span class="ds-badge ds-badge-neutral">none booked</span>
       {% endif %}
     </div>
-    {% endfor %}
   </div>
-  {% else %}
-  <p class="text-secondary mb-0">No changes yet. Your edits will appear here after you save something.</p>
+  <div class="ds-kpi">
+    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
+    <p class="ds-kpi-value ds-numeral">{{ request_total }}</p>
+    <div class="ds-kpi-foot">
+      <span class="ds-kpi-label">Requests</span>
+      {% if request_total %}
+      <span class="ds-badge ds-badge-warning">waiting</span>
+      {% else %}
+      <span class="ds-badge ds-badge-success">all clear</span>
+      {% endif %}
+    </div>
+  </div>
+  {% endif %}
+  {% if show_clinical %}
+  <div class="ds-kpi">
+    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-people"></i></span>
+    <p class="ds-kpi-value ds-numeral">{{ patient_total }}</p>
+    <div class="ds-kpi-foot">
+      <span class="ds-kpi-label">Patients</span>
+      <span class="ds-badge ds-badge-neutral">on record</span>
+    </div>
+  </div>
+  {% endif %}
+  {% if show_intake %}
+  <div class="ds-kpi">
+    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+    <p class="ds-kpi-value ds-numeral">{{ intake_counts.sorted }}</p>
+    <div class="ds-kpi-foot">
+      <span class="ds-kpi-label">Sorted</span>
+      <span class="ds-badge ds-badge-success">your files</span>
+    </div>
+  </div>
+  <div class="ds-kpi">
+    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-exclamation-circle"></i></span>
+    <p class="ds-kpi-value ds-numeral">{{ intake_counts.needs_review }}</p>
+    <div class="ds-kpi-foot">
+      <span class="ds-kpi-label">Needs Review</span>
+      {% if intake_counts.needs_review %}
+      <span class="ds-badge ds-badge-warning">check</span>
+      {% else %}
+      <span class="ds-badge ds-badge-neutral">clear</span>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
 </div>
+{% endif %}
 
-{% if intake_has_data or visits_have_data %}
+<div class="row g-3">
+  <div class="col-12 col-xl-8 d-flex flex-column gap-3">
+    {% if show_agenda %}{{ agenda_card() }}{% endif %}
+    {% if show_clinical %}{{ visits_card() }}{% elif show_intake %}{{ uploads_card() }}{% endif %}
+    {{ upload_card() }}
+  </div>
+  <div class="col-12 col-xl-4 d-flex flex-column gap-3">
+    {% if show_agenda %}{{ requests_card() }}{% endif %}
+    {% if show_intake %}{{ intake_card() }}{% endif %}
+    {% if show_clinical %}{{ uploads_card() }}{% endif %}
+    {{ actions_card() }}
+    {{ changes_card() }}
+  </div>
+</div>
+
+{% if visits_have_data %}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
   // every value here is rendered by the server. the template computes nothing:
   // dashboard_routes shapes the label/value lists and decides, per role,
   // whether a dataset exists at all. a role that did not receive a dataset
   // gets no canvas and no init code for it - not hidden code, none.
-  //
-  // the guards below are the has-data verdicts, not the permission flags. an
-  // empty series renders copy instead of a canvas, so initialising it here
-  // would hand new Chart() a null element - a console error, not a chart.
   (function () {
+    var css = getComputedStyle(document.documentElement);
+    var teal = css.getPropertyValue('--ds-chart-1').trim() || '#0f9d8a';
+    var canvas = document.getElementById('visits-chart');
+    var ctx = canvas.getContext('2d');
+    var fill = ctx.createLinearGradient(0, 0, 0, 260);
+    fill.addColorStop(0, 'rgba(15, 157, 138, 0.22)');
+    fill.addColorStop(1, 'rgba(15, 157, 138, 0)');
+
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-    Chart.defaults.color = '#5a6675';
+    Chart.defaults.color = '#64748b';
 
-    {% if intake_has_data %}
-    // one colour per state, taken from the badge class phase 23 assigned it.
-    // the binding rule is that no two FAILURE domains share a hue - Needs
-    // Review, Not searchable and Rejected are all distinct below. Queued and
-    // External share grey because phase 23 gives them the same badge class,
-    // and neither is a failure.
-    new Chart(document.getElementById('intake-chart'), {
-      type: 'doughnut',
-      data: {
-        labels: {{ intake_chart_labels | tojson }},
-        datasets: [{
-          data: {{ intake_chart_values | tojson }},
-          backgroundColor: [
-            '#2b6cb0',  // Sorted          - text-bg-primary
-            '#212529',  // Needs Review    - text-bg-dark
-            '#ffc107',  // Not searchable  - text-bg-warning
-            '#6c757d',  // Queued          - text-bg-secondary
-            '#adb5bd',  // External        - text-bg-secondary, lightened
-            '#c53030'   // Rejected        - text-bg-danger
-          ],
-          borderWidth: 0
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: '62%',
-        plugins: { legend: { position: 'right', labels: { boxWidth: 12, padding: 14 } } }
-      }
-    });
-    {% endif %}
-
-    {% if visits_have_data %}
-    new Chart(document.getElementById('visits-chart'), {
-      type: 'bar',
+    new Chart(canvas, {
+      type: 'line',
       data: {
         labels: {{ visit_months | tojson }},
         datasets: [{
           label: 'Visits',
           data: {{ visit_counts | tojson }},
-          backgroundColor: '#2b6cb0',
-          borderRadius: 6,
-          maxBarThickness: 42
+          borderColor: teal,
+          backgroundColor: fill,
+          borderWidth: 2,
+          fill: true,
+          tension: 0.4,
+          // monotone: a smoothed curve must not dip below a real count
+          // between two points - these are visits, not a signal
+          cubicInterpolationMode: 'monotone',
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          pointBackgroundColor: '#fff',
+          pointBorderColor: teal
         }]
       },
       options: {
@@ -230,12 +382,11 @@
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { display: false } },
-          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#e3e8ef' } }
+          x: { grid: { display: false }, border: { display: false } },
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eef1f5' }, border: { display: false } }
         }
       }
     });
-    {% endif %}
   })();
 </script>
 {% endif %}

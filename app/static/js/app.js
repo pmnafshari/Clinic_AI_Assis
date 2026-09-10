@@ -118,3 +118,23 @@ document.body.addEventListener("htmx:afterRequest", resetUploadForm);
     if (icon) icon.className = shown ? "bi bi-eye" : "bi bi-eye-slash";
   });
 })();
+
+// segmented filter (phase 43). a .ds-segmented with data-filter-target names
+// a list; each button's data-filter hides the rows whose data-when does not
+// match. it filters rows the server already sent - nothing is fetched, so a
+// role sees exactly what it saw before, just fewer of them at a time.
+document.querySelectorAll(".ds-segmented[data-filter-target]").forEach(function (group) {
+  var list = document.getElementById(group.dataset.filterTarget);
+  if (!list) return;
+  group.querySelectorAll("button[data-filter]").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var want = button.dataset.filter;
+      group.querySelectorAll("button[data-filter]").forEach(function (b) {
+        b.setAttribute("aria-pressed", b === button ? "true" : "false");
+      });
+      list.querySelectorAll("[data-when]").forEach(function (row) {
+        row.hidden = want !== "all" && row.dataset.when !== want;
+      });
+    });
+  });
+});

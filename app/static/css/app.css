@@ -365,25 +365,76 @@ h1, h2, h3, h4, h5, h6 {
   min-width: 0;
 }
 
-/* KPI stat cards - one number, one label, nothing else */
-.kpi-card .card-body {
+/* ---- dashboard (phase 43) ----------------------------------------------- */
+
+/* five across on a wide screen, as in the reference; fewer for a role that
+   holds fewer figures, and the row never leaves a hole where one is withheld */
+.dash-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.dash-card { display: flex; flex-direction: column; }
+
+.dash-card-head {
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 1.125rem 1.25rem 0.5rem;
 }
 
-.kpi-label {
-  font-size: 0.8125rem;
-  color: #6c757d;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.dash-card-head .ds-card-title { font-size: 1rem; }
+.dash-card-body { padding: 0.5rem 1rem 1rem; flex: 1 1 auto; }
+.dash-card-foot { padding: 0.75rem 1.25rem; border-top: 1px solid var(--app-border); }
+
+.dash-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
-.kpi-value {
-  font-size: 2rem;
-  font-weight: 600;
-  line-height: 1.1;
-  color: #1f2a37;
+.dash-empty-line { margin: 0.25rem 0.25rem 0.5rem; font-size: 0.875rem; color: var(--ds-text-muted); }
+
+.dash-person { min-width: 8.5rem; }
+
+.dash-queue .ds-row-time { min-width: 1.5rem; font-size: 0.9375rem; color: var(--ds-text-muted); }
+
+.dash-dist-total { margin: 0.25rem 0.25rem 0.75rem; font-size: 0.875rem; color: var(--ds-text-muted); }
+.dash-dist-total .ds-numeral { font-size: 2rem; line-height: 1; color: var(--ds-text); margin-right: 0.25rem; }
+#intake-chart { margin: 0 0.25rem; width: calc(100% - 0.5rem); }
+.dash-card .ds-legend { margin: 1rem 0.25rem 0.25rem; gap: 0.5rem 1.25rem; }
+
+/* intake states, painted with the colour of the badge each one carries in
+   _recent_intake.html (bootstrap text-bg-*, phase 23's contract). fill for the
+   svg bar, color for the legend dot. */
+.intake-sorted { fill: var(--bs-primary); color: var(--bs-primary); }
+.intake-needs_review { fill: #212529; color: #212529; }
+.intake-not_searchable { fill: #ffc107; color: #ffc107; }
+.intake-queued { fill: #6c757d; color: #6c757d; }
+.intake-external { fill: #adb5bd; color: #adb5bd; }
+.intake-rejected { fill: #c53030; color: #c53030; }
+
+/* the recent-intake fragment keeps its markup - phase 23's badge contract and
+   e2e_intake_walk both read it - so it is restyled from here, not rewritten */
+.dash-list-card .list-group { gap: 0.25rem; }
+.dash-list-card .list-group-item {
+  border: 0;
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  font-size: 0.875rem;
+}
+.dash-list-card .list-group-item:hover { background: var(--ds-surface-sunken); }
+.dash-list-card .list-group-item .badge { border-radius: 999px; font-weight: 500; padding: 0.35em 0.7em; }
+
+@media (max-width: 575.98px) {
+  .dash-person { min-width: 0; }
 }
 
 /* a canvas needs a sized parent to resize into, or chart.js grows it
@@ -411,6 +462,8 @@ h1, h2, h3, h4, h5, h6 {
   font-size: 2rem;
   opacity: 0.35;
 }
+
+.chart-empty-sm { height: 180px; }
 
 /* 44px minimum patient-table row height - touch-target-friendly action column */
 .table > tbody > tr {

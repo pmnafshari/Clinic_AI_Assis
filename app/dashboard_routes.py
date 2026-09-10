@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from flask import Blueprint, g, redirect, render_template, url_for
@@ -49,6 +49,98 @@ def _user_undo_history(username, log_path=None, limit=10):
         if entry.get("username") == username:
             mine.append(entry)
     return mine[:limit]
+
+
+def initials(name):
+    # two letters from the first two words, for an avatar. there are no
+    # photos and none will be invented (43-CONTEXT D-07).
+    parts = [w for w in (name or "").replace("_", " ").split() if w]
+    if not parts:
+        return "?"
+    return "".join(w[0] for w in parts[:2]).upper()
+
+
+def tint(name):
+    # the same person always gets the same avatar tint, on every page
+    return f"ds-avatar-t{sum(map(ord, name or '')) % 4 + 1}"
+
+
+def greeting(now):
+    if now.hour < 12:
+        return "Good morning"
+    if now.hour < 18:
+        return "Good afternoon"
+    return "Good evening"
+
+
+def _agenda_view(rows, now):
+    # everything the agenda card needs, shaped here so the template computes
+    # nothing (D-01). past/current are decided against the server clock -
+    # the same clock that decided which day "today" is.
+    view = []
+    for r in rows:
+        start = datetime.fromisoformat(r["starts_at"])
+        end_minutes = start.hour * 60 + start.minute + r["minutes"]
+        now_minutes = now.hour * 60 + now.minute
+        view.append({
+            "time": r["starts_at"][11:16],
+            "patient_name": r["patient_name"],
+            "initials": initials(r["patient_name"]),
+            "tint": tint(r["patient_name"]),
+            "minutes": r["minutes"],
+            "note": r["note"],
+            "dentist": r["dentist"],
+            "dentist_initials": initials(r["dentist"]),
+            "dentist_tint": tint(r["dentist"]),
+            "is_past": end_minutes <= now_minutes,
+            "is_current": start.hour * 60 + start.minute <= now_minutes < end_minutes,
+        })
+    return view
+
+
+def _dentists_on(view):
+    # who is working today and how many bookings each holds, from rows the
+    # role already received. there is no presence data, so no online dot.
+    counts = {}
+    for row in view:
+        counts[row["dentist"]] = counts.get(row["dentist"], 0) + 1
+    return [{"name": name, "count": n, "initials": initials(name), "tint": tint(name)}
+            for name, n in counts.items()]
+
+
+def _request_view(rows, limit=5):
+    # a request carries a date and a period, never a time (PAPT-05) - the
+    # time part of starts_at is meaningless and is not copied out
+    return [{
+        "patient_name": r["patient_name"],
+        "initials": initials(r["patient_name"]),
+        "tint": tint(r["patient_name"]),
+        "day": r["starts_at"][:10],
+        "period": r["period"],
+        "reason": r["note"],
+    } for r in rows[:limit]]
+
+
+def _distribution(counts):
+    # the stacked bar: one svg rect per non-empty state, x and width in a
+    # 0-100 viewbox, computed here so the template draws what it is given.
+    # the class is the STATE, and app.css paints each state the colour of the
+    # badge phase 23 gave it - the bar and the upload list on the same screen
+    # must agree, and no two failure domains may share a hue.
+    total = sum(counts[state] for state, _ in INTAKE_LABELS)
+    segments = []
+    legend = []
+    x = 0.0
+    for state, label in INTAKE_LABELS:
+        n = counts[state]
+        pct = round(100 * n / total) if total else 0
+        legend.append({"label": label, "count": n, "pct": pct, "cls": f"intake-{state}"})
+        if n:
+            width = 100 * n / total
+            segments.append({"x": round(x, 3), "width": round(width, 3), "cls": f"intake-{state}",
+                             "label": label, "count": n})
+            x += width
+    return total, segments, legend
 
 
 def _intake_counts(conn, username):
@@ -138,8 +230,28 @@ def index():
     # there is anything to draw. permitted-with-nothing-booked and
     # not-permitted are different renders.
     show_agenda = authorize(g.user["role"], "manage_appointments")
-    agenda = appointments.agenda(conn, date.today().isoformat()) if show_agenda else None
+    now = datetime.now()
+    agenda = None
+    agenda_dentists = None
+    next_start = None
+    requests = None
+    request_total = None
+    if show_agenda:
+        agenda = _agenda_view(appointments.agenda(conn, date.today().isoformat()), now)
+        agenda_dentists = _dentists_on(agenda)
+        upcoming = [row for row in agenda if not row["is_past"]]
+        next_start = upcoming[0]["time"] if upcoming else None
+        # the same rows, under the same gate, that /appointments shows this
+        # role as its requests queue - a new read here, not new reach
+        pending = appointments.pending_requests(conn)
+        requests = _request_view(pending)
+        request_total = len(pending)
     agenda_has_data = bool(agenda)
+
+    if show_intake:
+        intake_total, intake_segments, intake_legend = _distribution(intake_counts)
+    else:
+        intake_total = intake_segments = intake_legend = None
 
     # chart series are shaped here, not in jinja: the template renders what
     # it is given and computes nothing (D-01, as phase 23 did for the badge)
@@ -162,5 +274,16 @@ def index():
         show_agenda=show_agenda,
         agenda=agenda,
         agenda_has_data=agenda_has_data,
+        agenda_total=len(agenda) if agenda is not None else None,
+        agenda_dentists=agenda_dentists,
+        next_start=next_start,
+        requests=requests,
+        request_total=request_total,
+        intake_total=intake_total,
+        intake_segments=intake_segments,
+        intake_legend=intake_legend,
+        greeting=greeting(now),
+        today_label=f"{now:%A}, {now.day} {now:%B %Y}",
+        user_initials=initials(g.user["username"]),
         today=date.today().isoformat(),
     )
