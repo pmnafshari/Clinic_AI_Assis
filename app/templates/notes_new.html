@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
-<div class="card p-4">
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Intake</p>
+    <h1 class="ds-page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
+    <p class="ds-page-meta">The notes model reads the note; you check it before it is saved</p>
+  </div>
+</div>
+<div class="row g-3">
+<div class="col-12 col-xl-8">
+<div class="card dash-card p-4">
   {% if error %}
   <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
   {% endif %}
@@ -17,11 +25,12 @@
 
   {% if preview %}
   <hr class="my-4">
+  <h2 class="ds-card-title mb-3">Check what was read</h2>
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
     {% if mismatch %}
-    <div class="alert alert-warning" role="alert">{{ mismatch }}</div>
+    <div class="ds-alert ds-alert-warning mb-3" role="alert">{{ mismatch }}</div>
     {% endif %}
     <div class="mb-3">
       <label for="patient_name" class="form-label">Patient name</label>
@@ -76,5 +85,19 @@
     <button type="submit" class="btn btn-primary">Save note</button>
   </form>
   {% endif %}
+</div>
+</div>
+<div class="col-12 col-xl-4">
+  <aside class="card dash-card" aria-labelledby="note-help-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="note-help-title">From note to record</h2></div>
+    <div class="dash-card-body">
+      <ol class="ds-rows steps">
+        <li class="ds-row{{ ' is-current' if not preview else '' }}"><span class="step-num ds-numeral" aria-hidden="true">1</span><span class="ds-row-main"><span class="ds-row-title">Paste the note</span><span class="ds-row-sub">shorthand and Italian are fine</span></span></li>
+        <li class="ds-row{{ ' is-current' if preview else '' }}"><span class="step-num ds-numeral" aria-hidden="true">2</span><span class="ds-row-main"><span class="ds-row-title">Check what was read</span><span class="ds-row-sub">every field can be corrected</span></span></li>
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">3</span><span class="ds-row-main"><span class="ds-row-title">Save note</span><span class="ds-row-sub">nothing is stored before this step</span></span></li>
+      </ol>
+    </div>
+  </aside>
+</div>
 </div>
 {% endblock %}

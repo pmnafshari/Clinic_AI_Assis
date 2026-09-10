@@ -100,7 +100,7 @@
       <div class="dropdown">
         <button class="app-user" type="button" data-bs-toggle="dropdown" aria-expanded="false"
                 aria-label="Account menu for {{ g.user.username }}">
-          <span class="ds-avatar ds-avatar-sm">{{ g.user.username[:1] | upper }}</span>
+          <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}">{{ g.user.username | initials }}</span>
           <span class="app-user-text d-none d-xxl-flex">
             <span class="app-user-name">{{ g.user.username }}</span>
             <span class="app-user-role">{{ g.user.role }}</span>

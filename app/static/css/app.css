@@ -8,14 +8,14 @@
   --ds-primary: #2563eb;
   --ds-primary-hover: #1d4ed8;
   --ds-primary-active: #1e40af;
-  --ds-accent: #0f9d8a;
+  --ds-accent: #0f766e;           /* text-weight teal; #0f9d8a stays a chart fill only */
   --ds-accent-soft: #dcf3ef;
   --ds-ground: #f4f6fa;
   --ds-surface-sunken: #f1f4f8;
   --ds-border: #e6eaf0;
   --ds-border-strong: #d3dae4;
   --ds-text: #0f172a;
-  --ds-text-muted: #64748b;       /* 4.76:1 on white */
+  --ds-text-muted: #5b6b80;       /* 5.0:1 on the ground, 4.9 on sunken - #64748b was 4.4 on the ground */
   --ds-success: #0f7a55;
   --ds-success-surface: #e3f6ee;
   --ds-warning: #9a5b00;
@@ -32,7 +32,13 @@
   --bs-body-color: #0f172a;
   --bs-body-bg: #f4f6fa;
   --bs-border-color: #e6eaf0;
-  --bs-secondary-color: #64748b;
+  --bs-secondary-color: #5b6b80;
+  /* bootstrap's .text-secondary reads the rgb triple, not the colour above.
+     its stock #6c757d measured 4.25:1 on the sunken ground - below AA, on
+     every signed-in page, found by running a11y_audit's contrast check
+     against authenticated pages in phase 44 (the audit only ever covered
+     the login screens). */
+  --bs-secondary-rgb: 91, 107, 128;
 
   /* shell tokens - declared once here, never inlined per template.
      every card surface in the app reads these, so a change lands everywhere. */
@@ -478,11 +484,24 @@ strong {
 /* upload drop zone (Phase 11) */
 .upload-zone {
   min-height: 160px;
-  border: 2px dashed #dee2e6;
-  border-radius: 0.375rem;
+  border: 1.5px dashed var(--ds-border-strong);
+  border-radius: 14px;
+  background: var(--ds-surface-sunken);
   cursor: pointer;
-  color: #6c757d;
+  color: var(--ds-text-muted);
+  transition: border-color var(--ds-duration-fast) var(--ds-ease), background-color var(--ds-duration-fast) var(--ds-ease);
 }
+
+.upload-zone:hover { border-color: var(--ds-primary); background: color-mix(in srgb, var(--ds-primary) 5%, var(--ds-surface)); }
+.upload-zone:focus-within { box-shadow: var(--ds-focus-ring); }
+.upload-zone .bi-cloud-upload {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 3rem; height: 3rem; border-radius: 0.875rem;
+  background: var(--app-surface); color: var(--ds-primary); box-shadow: var(--ds-shadow-sm);
+  font-size: 1.5rem !important;
+}
+.upload-zone .upload-zone-idle-heading,
+.upload-zone .upload-zone-dragover-heading { font-size: 1rem !important; font-weight: 600; color: var(--ds-text); }
 
 .upload-zone .upload-zone-dragover-heading {
   display: none;
@@ -490,7 +509,7 @@ strong {
 
 .upload-zone.is-dragover {
   border-color: var(--bs-primary);
-  background: rgba(43, 108, 176, 0.05);
+  background: rgba(37, 99, 235, 0.06);
   color: var(--bs-primary);
 }
 
@@ -524,15 +543,39 @@ strong {
   flex-direction: column;
   justify-content: center;
   padding: var(--ds-space-8);
-  background: var(--ds-navy-900);
+  /* phase 43: the reference blue, deepened so white copy holds AA. the
+     solid colour is the fallback AND what a11y_audit measures against - it
+     reads background-color, and a gradient alone left it measuring the grey
+     ground behind the panel (1.01:1, a false fail). #f1f5ff is 4.74:1 on the
+     gradient's lightest stop, #2563eb. */
+  background-color: #1e40af;
+  background-image: radial-gradient(120% 90% at 0% 0%, #2563eb 0%, #1d4ed8 40%, #1e3a8a 100%);
   color: var(--ds-text-on-dark);
 }
 
 @media (min-width: 992px) { .auth-brand { display: flex; } }
 
-.auth-brand-mark { font-size: var(--ds-h1); color: var(--ds-teal-400); margin-bottom: var(--ds-space-5); }
+.auth-brand-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 0.875rem;
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 1.5rem;
+  color: #fff;
+  margin-bottom: var(--ds-space-5);
+}
 .auth-brand-title { font-size: var(--ds-h2); font-weight: var(--ds-weight-semibold); margin: 0 0 var(--ds-space-3); }
-.auth-brand-body { max-width: 26rem; font-size: var(--ds-body-lg); color: var(--ds-border-strong); margin: 0; }
+.auth-brand-title { font-family: var(--ds-font-display); font-style: italic; font-size: 2.25rem; }
+.auth-brand-body { max-width: 26rem; font-size: var(--ds-body-lg); color: #f1f5ff; margin: 0; }
+.auth-brand-points { list-style: none; margin: var(--ds-space-6) 0 0; padding: 0; display: grid; gap: 0.875rem; }
+.auth-brand-points li { display: flex; align-items: center; gap: 0.75rem; color: #f1f5ff; font-size: 0.9375rem; }
+.auth-brand-points i {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 2rem; height: 2rem; border-radius: 0.5rem; background: rgba(255, 255, 255, 0.14);
+}
 
 .auth-panel {
   display: flex;
@@ -629,7 +672,7 @@ strong {
 
 /* bootstrap form controls on staff pages, brought to the reference's softer
    radius. the .ds-input family already reads --ds-radius. */
-.form-control, .form-select { border-radius: 0.625rem; border-color: var(--ds-border-strong); }
+.form-control, .form-select { border-radius: 0.625rem; border-color: var(--ds-border-strong); background-color: #fff; }
 .btn { border-radius: 0.625rem; }
 .btn-sm { border-radius: 0.5rem; }
 .form-label { font-weight: 500; font-size: 0.875rem; }
@@ -658,3 +701,48 @@ strong {
 .ds-page-actions .btn,
 .ds-page-actions .form-control { height: 2.5rem; font-size: 0.875rem; }
 .ds-page-actions .btn { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0 1rem; }
+
+.steps .step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--ds-surface-sunken);
+  color: var(--ds-primary);
+  font-size: 1rem;
+}
+.steps .is-current .step-num { background: var(--ds-primary); color: #fff; }
+
+.confirm-card { max-width: 44rem; }
+.confirm-diff {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.25rem;
+  border-left: 3px solid var(--ds-primary);
+  border-radius: 0.5rem;
+  background: var(--ds-surface-sunken);
+  font-size: 1.0625rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.auth-card .app-brand-mark { width: 2.75rem; height: 2.75rem; font-size: 1.25rem; }
+.auth-card { max-width: 400px; border-radius: 20px; }
+.toast { border: 1px solid var(--app-border); border-radius: 0.875rem; box-shadow: var(--ds-shadow-lg); }
+.toast-header { border-bottom-color: var(--app-border); border-radius: 0.875rem 0.875rem 0 0; }
+
+/* secondary buttons, after the reference: a hairline and dark text, lit
+   on hover - and above AA, which bootstrap's compiled #6c757d is not */
+.btn-outline-secondary {
+  --bs-btn-color: #334155;
+  --bs-btn-border-color: var(--ds-border-strong);
+  --bs-btn-bg: var(--app-surface);
+  --bs-btn-hover-color: var(--ds-text);
+  --bs-btn-hover-bg: var(--ds-surface-sunken);
+  --bs-btn-hover-border-color: var(--ds-border-strong);
+  --bs-btn-active-color: var(--ds-text);
+  --bs-btn-active-bg: var(--ds-border);
+  --bs-btn-active-border-color: var(--ds-border-strong);
+}

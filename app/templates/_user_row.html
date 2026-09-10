@@ -1,22 +1,27 @@
 {% set locked = row.locked_until is not none %}
 <tr id="user-row-{{ row.username }}">
   <td data-label="Username">
-    {{ row.username }}
-    {% if row.username == me %}
-    <span class="text-secondary">This is you</span>
-    {% endif %}
-    {% if locked %}
-    <small class="text-secondary d-block">Locked after {{ row.failed_attempts }} failed attempts.</small>
-    {% endif %}
+    <span class="ds-person">
+      <span class="ds-avatar ds-avatar-sm {{ row.username | tint }}" aria-hidden="true">{{ row.username | initials }}</span>
+      <span>
+        {{ row.username }}
+        {% if row.username == me %}
+        <span class="ds-badge ds-badge-primary ms-1">This is you</span>
+        {% endif %}
+        {% if locked %}
+        <small class="text-secondary d-block">Locked after {{ row.failed_attempts }} failed attempts.</small>
+        {% endif %}
+      </span>
+    </span>
   </td>
-  <td data-label="Role">{{ row.role }}</td>
+  <td data-label="Role"><span class="text-capitalize">{{ row.role }}</span></td>
   <td data-label="Status">
     {% if locked %}
-    <span class="badge text-bg-warning">Locked</span>
+    <span class="ds-badge ds-badge-warning">Locked</span>
     {% elif row.active %}
-    <span class="badge text-bg-secondary">Active</span>
+    <span class="ds-badge ds-badge-success">Active</span>
     {% else %}
-    <span class="badge text-bg-light border">Disabled</span>
+    <span class="ds-badge ds-badge-neutral">Disabled</span>
     {% endif %}
   </td>
   <td data-label="">

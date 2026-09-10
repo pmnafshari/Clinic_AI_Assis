@@ -2,8 +2,16 @@
 {% block content %}
 {# "Ask a question" is asserted verbatim by admin_routes_selftest's
    CLINICAL_STRINGS (SC5) - an admin's page body must not contain it #}
-<h1 class="page-title">Ask a question</h1>
-<div class="ds-card">
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Assistant</p>
+    <h1 class="ds-page-title">Ask a question</h1>
+    <p class="ds-page-meta">Answers are read from filed records, on this machine</p>
+  </div>
+</div>
+<div class="row g-3">
+<div class="col-12 col-xl-8">
+<div class="card dash-card">
   <div class="ds-card-body">
     {% if not question %}
     <p class="text-secondary">Ask about a patient's appointments, treatments, or contact details.</p>
@@ -43,5 +51,19 @@
     </div>
     {% endif %}
   </div>
+</div>
+</div>
+<div class="col-12 col-xl-4">
+  <aside class="card dash-card" aria-labelledby="qa-help-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="qa-help-title">What it can answer</h2></div>
+    <div class="dash-card-body">
+      <ul class="ds-rows">
+        <li class="ds-row"><span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span><span class="ds-row-main"><span class="ds-row-title">Appointments</span><span class="ds-row-sub">When a patient is next due</span></span></li>
+        <li class="ds-row"><span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span><span class="ds-row-main"><span class="ds-row-title">Treatments</span><span class="ds-row-sub">What was done at a visit</span></span></li>
+        <li class="ds-row"><span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-telephone"></i></span><span class="ds-row-main"><span class="ds-row-title">Contact details</span><span class="ds-row-sub">A patient's phone on record</span></span></li>
+      </ul>
+    </div>
+  </aside>
+</div>
 </div>
 {% endblock %}

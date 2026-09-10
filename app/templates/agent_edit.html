@@ -1,7 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title">Edit a record</h1>
-<div class="card p-4">
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Records</p>
+    <h1 class="ds-page-title">Edit a record</h1>
+    <p class="ds-page-meta">Every change is shown before it is saved</p>
+  </div>
+</div>
+<div class="row g-3">
+<div class="col-12 col-xl-8">
+<div class="card dash-card p-4">
   {% if error %}
   <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
   {% endif %}
@@ -25,5 +33,19 @@
     </div>
     <button type="submit" class="btn btn-primary">Preview change</button>
   </form>
+</div>
+</div>
+<div class="col-12 col-xl-4">
+  <aside class="card dash-card" aria-labelledby="edit-help-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="edit-help-title">How an edit works</h2></div>
+    <div class="dash-card-body">
+      <ol class="ds-rows steps">
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">1</span><span class="ds-row-main"><span class="ds-row-title">Name the patient</span><span class="ds-row-sub">by name or codice fiscale</span></span></li>
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">2</span><span class="ds-row-main"><span class="ds-row-title">Preview the change</span><span class="ds-row-sub">the old and new value are frozen together</span></span></li>
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">3</span><span class="ds-row-main"><span class="ds-row-title">Confirm or discard</span><span class="ds-row-sub">only a confirmed change touches the record</span></span></li>
+      </ol>
+    </div>
+  </aside>
+</div>
 </div>
 {% endblock %}

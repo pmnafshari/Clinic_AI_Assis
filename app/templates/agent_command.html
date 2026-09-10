@@ -1,8 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
 {# "Run a command" is asserted verbatim by admin_routes_selftest (SC5) #}
-<h1 class="page-title">Run a command</h1>
-<div class="ds-card">
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Assistant</p>
+    <h1 class="ds-page-title">Run a command</h1>
+    <p class="ds-page-meta">Say what should change, in plain words</p>
+  </div>
+</div>
+<div class="row g-3">
+<div class="col-12 col-xl-8">
+<div class="card dash-card">
   <div class="ds-card-body">
     {% if error %}
     <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
@@ -17,5 +25,19 @@
       <button type="submit" class="ds-btn ds-btn-primary">Run command</button>
     </form>
   </div>
+</div>
+</div>
+<div class="col-12 col-xl-4">
+  <aside class="card dash-card" aria-labelledby="cmd-help-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="cmd-help-title">What happens next</h2></div>
+    <div class="dash-card-body">
+      <ol class="ds-rows steps">
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">1</span><span class="ds-row-main"><span class="ds-row-title">The assistant reads your command</span><span class="ds-row-sub">and works out the patient and the field</span></span></li>
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">2</span><span class="ds-row-main"><span class="ds-row-title">You see the exact change</span><span class="ds-row-sub">old value and new value, side by side</span></span></li>
+        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">3</span><span class="ds-row-main"><span class="ds-row-title">Nothing is saved until you confirm</span><span class="ds-row-sub">and the latest change can be undone from the dashboard</span></span></li>
+      </ol>
+    </div>
+  </aside>
+</div>
 </div>
 {% endblock %}

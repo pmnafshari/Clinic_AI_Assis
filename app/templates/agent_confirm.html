@@ -1,7 +1,13 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title">Confirm change</h1>
-<div class="ds-card">
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Records</p>
+    <h1 class="ds-page-title">Confirm change</h1>
+    <p class="ds-page-meta">Check it once more - this writes to a patient record</p>
+  </div>
+</div>
+<div class="card dash-card confirm-card">
   <div class="ds-card-body">
     {% if error %}
     <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
@@ -10,7 +16,7 @@
     {# the frozen diff. it is the whole point of this screen, so it gets the
        weight - and the two actions are visually distinct, because "write
        this to a patient record" and "throw it away" must never look alike. #}
-    <p class="section-title">{{ diff_line }}</p>
+    <p class="confirm-diff">{{ diff_line }}</p>
     <div class="d-flex flex-wrap gap-2 align-items-center">
       <form method="post" action="{{ url_for('agent.confirm_change') }}" class="d-inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
