@@ -1,0 +1,130 @@
+{# phase 43 - the header from the reference: brand, tabs, search, one action,
+   avatar. every link keeps the authorize() gate it had in the rail, and the
+   gate matches the route's own - a tab a role cannot follow is the same
+   defect as a hidden withhold, read from the other side. #}
+<header class="app-topbar">
+  <div class="app-topbar-inner">
+    <button class="btn btn-link app-topbar-toggle d-xl-none" type="button"
+            data-bs-toggle="offcanvas" data-bs-target="#app-nav"
+            aria-controls="app-nav" aria-label="Open navigation">
+      <i class="bi bi-list"></i>
+    </button>
+
+    <a class="app-brand" href="{{ url_for('dashboard.index') }}">
+      <span class="app-brand-mark" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+      <span class="app-brand-text">
+        <span class="app-brand-name">Dental AI</span>
+        <span class="app-brand-sub">Clinic</span>
+      </span>
+    </a>
+
+    <nav class="app-nav offcanvas-xl offcanvas-start" id="app-nav" tabindex="-1" aria-label="Navigation">
+      <div class="offcanvas-header d-xl-none">
+        <span class="offcanvas-title">Dental AI</span>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
+                data-bs-target="#app-nav" aria-label="Close navigation"></button>
+      </div>
+      <div class="offcanvas-body">
+        <div class="ds-pill-nav">
+          <a class="nav-link{{ ' active' if request.endpoint == 'dashboard.index' else '' }}"
+             href="{{ url_for('dashboard.index') }}">
+            <i class="bi bi-grid"></i> Dashboard
+          </a>
+          {% if authorize(g.user.role, 'read_notes') %}
+          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('patients.') else '' }}"
+             href="/patients">
+            <i class="bi bi-people"></i> Patients
+          </a>
+          {% endif %}
+          {# manage_appointments, matching appointments_routes' own gate exactly #}
+          {% if authorize(g.user.role, 'manage_appointments') %}
+          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('appointments.') else '' }}"
+             href="{{ url_for('appointments.index') }}">
+            <i class="bi bi-calendar-check"></i> Appointments
+          </a>
+          {% endif %}
+          {% if authorize(g.user.role, 'read_notes') %}
+          <a class="nav-link{{ ' active' if request.endpoint == 'qa.qa_page' else '' }}"
+             href="{{ url_for('qa.qa_page') }}">
+            <i class="bi bi-chat-dots"></i> Q&amp;A
+          </a>
+          <a class="nav-link{{ ' active' if request.endpoint == 'notes.new_note' else '' }}"
+             href="{{ url_for('notes.new_note') }}">
+            <i class="bi bi-journal-plus"></i> Add note
+          </a>
+          {% endif %}
+          {# read_clinical, matching reports_routes.index's own gate exactly #}
+          {% if authorize(g.user.role, 'read_clinical') %}
+          <a class="nav-link{{ ' active' if request.endpoint == 'reports.index' else '' }}"
+             href="{{ url_for('reports.index') }}">
+            <i class="bi bi-graph-up"></i> Reports
+          </a>
+          {% endif %}
+          {% if authorize(g.user.role, 'manage_users') %}
+          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('admin.') else '' }}"
+             href="{{ url_for('admin.users_view') }}">
+            <i class="bi bi-people-fill"></i> Staff accounts
+          </a>
+          {% endif %}
+        </div>
+      </div>
+    </nav>
+
+    <div class="app-tools">
+      {# search reads patient names, so it is read_notes or nothing - absent,
+         not disabled, for a role that may not look anyone up #}
+      {% if authorize(g.user.role, 'read_notes') %}
+      <div class="app-search d-none d-md-block" role="search">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input type="search" name="q" class="form-control" placeholder="Search patients"
+               aria-label="Search patients" autocomplete="off"
+               hx-get="{{ url_for('patients.search_fragment') }}"
+               hx-trigger="keyup changed delay:300ms, search"
+               hx-target="#app-search-results">
+        <div id="app-search-results" class="app-search-results"></div>
+      </div>
+      {% endif %}
+
+      {% if authorize(g.user.role, 'manage_appointments') %}
+      <a class="btn btn-primary app-cta d-inline-flex align-items-center gap-2"
+         href="{{ url_for('appointments.index') }}#book" aria-label="New appointment">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="d-none d-sm-inline">New appointment</span>
+      </a>
+      {% elif authorize(g.user.role, 'manage_users') %}
+      <a class="btn btn-primary app-cta d-inline-flex align-items-center gap-2"
+         href="{{ url_for('admin.users_view') }}#create" aria-label="New account">
+        <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="d-none d-sm-inline">New account</span>
+      </a>
+      {% endif %}
+
+      <div class="dropdown">
+        <button class="app-user" type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                aria-label="Account menu for {{ g.user.username }}">
+          <span class="ds-avatar ds-avatar-sm">{{ g.user.username[:1] | upper }}</span>
+          <span class="app-user-text d-none d-xxl-flex">
+            <span class="app-user-name">{{ g.user.username }}</span>
+            <span class="app-user-role">{{ g.user.role }}</span>
+          </span>
+          <i class="bi bi-chevron-down small text-secondary d-none d-xxl-inline" aria-hidden="true"></i>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end app-user-menu">
+          <div class="px-3 py-2 d-xxl-none">
+            <div class="app-user-name">{{ g.user.username }}</div>
+            <div class="app-user-role">{{ g.user.role }}</div>
+          </div>
+          <a class="dropdown-item{{ ' active' if request.endpoint == 'auth.change_password' else '' }}"
+             href="{{ url_for('auth.change_password') }}">
+            <i class="bi bi-key"></i> Change password
+          </a>
+          <hr class="dropdown-divider">
+          <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="dropdown-item">
+              <i class="bi bi-box-arrow-right"></i> Logout
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>

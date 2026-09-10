@@ -287,18 +287,20 @@ def selftest():
             assert tds == labelled, \
                 f"10f: {table_file} has {tds} cells but {labelled} data-labels"
 
-        # 11. D-05 - login opts out of the sidebar; an authenticated screen
-        # keeps it
+        # 11. D-05 - login opts out of the shell; an authenticated screen
+        # keeps it. phase 43 replaced the left rail with a top header whose
+        # tabs live in <nav class="app-nav">. PROPERTY UNCHANGED: chromeless
+        # pages carry no navigation, authenticated ones do.
         login_page = app.test_client().get("/login")
         def has_class(html, cls):
             return any(cls in attr.split()
                        for attr in re.findall(r'class="([^"]*)"', html))
 
-        assert not has_class(login_page.text, "app-sidebar"), \
-            "11: login must render without the sidebar"
+        assert not has_class(login_page.text, "app-nav"), \
+            "11: login must render without the navigation"
         dash_with_shell = client_a.get("/")
-        assert has_class(dash_with_shell.text, "app-sidebar"), \
-            "11: an authenticated screen must render the sidebar"
+        assert has_class(dash_with_shell.text, "app-nav"), \
+            "11: an authenticated screen must render the navigation"
 
         # ---- AUTH-05 staff password self-service ----
 
@@ -673,26 +675,28 @@ def selftest():
         assert b"intake-chart" in asst_assets.data, \
             "19: an assistant may see intake status"
 
-        # 20. GUI-14 - the shell collapses below the lg breakpoint. the fast
+        # 20. GUI-14 - the shell collapses below the xl breakpoint (phase 43
+        # moved it from lg: six tabs + search + action + avatar measure ~1230px,
+        # so at 992-1199 an inline header wrapped). the fast
         # suite has no browser, so it cannot measure scrollWidth; what it CAN
         # pin is the markup contract the collapse depends on. the measurement
         # itself lives in shot_pages.py.
         shell = client_dent.get("/")
 
-        assert b"offcanvas-lg" in shell.data, \
-            "20: the sidebar must be an offcanvas panel below the lg breakpoint"
+        assert b"offcanvas-xl" in shell.data, \
+            "20: the nav must be an offcanvas panel below the xl breakpoint"
         assert b'id="app-nav"' in shell.data, \
             "20: the offcanvas panel needs the id the toggle targets"
         assert b"app-topbar" in shell.data, \
-            "20: an authenticated screen must carry the below-breakpoint top bar"
+            "20: an authenticated screen must carry the top header"
 
         # the toggle and the panel must actually refer to the same element. a
         # typo here leaves a hamburger that opens nothing while every other
         # assertion in this section still passes.
         #
         # scope this to the TOGGLE's own tag. a document-wide search for
-        # data-bs-target matches the panel's close button first (_sidebar.html
-        # is included above the top bar), which always names a real id - so the
+        # data-bs-target matches the panel's close button (it sits inside the
+        # same header), which always names a real id - so the
         # naive version passed a deliberately broken hamburger. found by
         # mutation, not by review.
         toggle = re.search(rb'<button[^>]*data-bs-toggle="offcanvas"[^>]*>', shell.data)
@@ -726,8 +730,15 @@ def selftest():
         # a bare count going up could otherwise hide authorize() being
         # stripped out. Appointments is the opposite case and is asserted
         # separately: an assistant DOES gain it, and an admin must not.
-        assert shell.data.count(b'class="nav-link') == 8, \
-            f'20: a dentist should see 8 sidebar links, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        # 8 -> 6 in phase 43: Change password and Logout moved out of the tabs
+        # into the avatar menu. PROPERTY UNCHANGED - the count is still per
+        # role, and the two moved links are asserted present below so they
+        # cannot have simply vanished.
+        assert shell.data.count(b'class="nav-link') == 6, \
+            f'20: a dentist should see 6 nav tabs, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        menu = re.findall(rb'class="dropdown-item[^"]*"[^>]*>\s*<i[^>]*></i>\s*([^<]+?)\s*<', shell.data)
+        assert b"Change password" in menu and b"Logout" in menu, \
+            f"20: the avatar menu must carry Change password and Logout, got {menu}"
         assert b"Reports" in shell.data, "20: a dentist holds read_clinical and is offered Reports"
         assert b"Staff accounts" not in shell.data, \
             "20: a dentist must not be offered the admin link"
@@ -821,7 +832,7 @@ def selftest():
         if b'id="billed-chart"' not in rep.data:
             assert b"Nothing billed yet" in rep.data, \
                 "20d: an empty billed series must render the empty state"
-        assert b"Patients" not in adm_shell.data.split(b"</aside>")[0], \
+        assert b"Patients" not in adm_shell.data.split(b"</nav>")[0], \
             "20: an admin holds no read_notes and must not be offered Patients"
 
         # login renders no sidebar, so it must render no hamburger either - a
@@ -829,7 +840,7 @@ def selftest():
         login_shell = app.test_client().get("/login")
         assert b"app-topbar" not in login_shell.data, \
             "20: a chromeless page must not carry the top bar"
-        assert b"offcanvas-lg" not in login_shell.data, \
+        assert b"offcanvas-xl" not in login_shell.data, \
             "20: a chromeless page must not carry the offcanvas panel"
 
         # 21. GUI-13/GUI-14 - the two rules phase 30 established, pinned so

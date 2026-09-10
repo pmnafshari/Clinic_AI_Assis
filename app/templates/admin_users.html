@@ -22,7 +22,7 @@
   </div>
 </div>
 
-<div class="card p-4 mt-6">
+<div class="card p-4 mt-6" id="create">
   <h2 class="section-title">Add a staff account</h2>
   <form method="post" action="{{ url_for('admin.create') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

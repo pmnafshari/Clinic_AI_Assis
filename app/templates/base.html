@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dental AI Assistant</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/5.3.3/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/1.11.3/bootstrap-icons.css') }}">
@@ -12,23 +13,13 @@
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
   {% set chromeless = request.endpoint in ('auth.login', 'auth.change_password') %}
   {% if not chromeless %}
-    {% include "_sidebar.html" %}
-  {% endif %}
-  {% if not chromeless %}
-    <div class="app-topbar d-lg-none d-flex align-items-center gap-2">
-      <button class="btn btn-link app-topbar-toggle" type="button"
-              data-bs-toggle="offcanvas" data-bs-target="#app-nav"
-              aria-controls="app-nav" aria-label="Open navigation">
-        <i class="bi bi-list"></i>
-      </button>
-      <span class="app-sidebar-brand h6 mb-0">Dental AI</span>
-    </div>
+    {% include "_topbar.html" %}
   {% endif %}
   {# the login is the one full-bleed screen: its split panel reaches the
      viewport edge, so it opts out of .content's padding rather than
      cancelling it with a negative margin that cannot track the responsive
      override at 992px. #}
-  <main class="content{{ '' if chromeless else ' content-shifted' }}{{ ' content-flush' if request.endpoint == 'auth.login' else '' }}">
+  <main class="content{{ ' content-flush' if request.endpoint == 'auth.login' else '' }}">
     <div class="content-inner">
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}

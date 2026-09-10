@@ -616,3 +616,331 @@
   --bs-btn-active-bg: var(--bs-primary);
   --bs-btn-active-border-color: var(--bs-primary);
 }
+
+/* ===================================================== dashboard (43) ==== */
+
+/* Phase 43 - the language of the Fireart "Pet Clinic Dashboard" reference:
+   a page head with a greeting, KPI cards with serif numerals, avatar rows,
+   tinted pills, a segmented control and a stacked distribution bar. Shared by
+   the staff app and the patient app; each app binds its own --ds-primary. */
+
+.ds-badge-primary {
+  background: color-mix(in srgb, var(--ds-primary) 12%, var(--ds-surface));
+  color: var(--ds-primary-active);
+}
+
+.ds-numeral {
+  font-family: var(--ds-font-display);
+  font-style: italic;
+  font-weight: var(--ds-weight-semibold);
+  font-variant-numeric: lining-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ---- page head ---- */
+.ds-page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--ds-space-4);
+  padding-bottom: var(--ds-space-5);
+  margin-bottom: var(--ds-space-5);
+  border-bottom: 1px solid var(--ds-border);
+}
+
+.ds-page-eyebrow {
+  margin: 0 0 var(--ds-space-1);
+  font-size: var(--ds-small);
+  color: var(--ds-text-muted);
+}
+
+.ds-page-title {
+  margin: 0;
+  font-size: var(--ds-h2);
+  line-height: var(--ds-h2-lh);
+  font-weight: var(--ds-weight-semibold);
+  letter-spacing: var(--ds-tracking-tight);
+  color: var(--ds-text);
+}
+
+.ds-page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-2);
+  margin: var(--ds-space-2) 0 0;
+  font-size: var(--ds-caption);
+  color: var(--ds-text-muted);
+}
+
+.ds-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-3); }
+
+.ds-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--ds-radius-pill);
+  background: currentColor;
+  flex: none;
+}
+
+.ds-dot-success { color: var(--ds-success); }
+
+/* ---- chip: a person or a thing, small and bordered ---- */
+.ds-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-3);
+  padding: var(--ds-space-2) var(--ds-space-4) var(--ds-space-2) var(--ds-space-2);
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-sm);
+  min-width: 0;
+}
+
+.ds-chip-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.3; }
+.ds-chip-title { font-size: var(--ds-small); font-weight: var(--ds-weight-semibold); color: var(--ds-text); }
+.ds-chip-sub { font-size: var(--ds-caption); color: var(--ds-text-muted); }
+
+/* ---- kpi card ---- */
+.ds-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ds-space-3);
+  height: 100%;
+  padding: var(--ds-space-5);
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: var(--ds-radius-lg);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+.ds-kpi-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--ds-radius);
+  background: color-mix(in srgb, var(--ds-primary) 10%, var(--ds-surface));
+  color: var(--ds-primary);
+  font-size: var(--ds-body-lg);
+}
+
+.ds-kpi-value {
+  margin: var(--ds-space-2) 0 0;
+  font-size: var(--ds-numeral);
+  line-height: 1;
+  color: var(--ds-text);
+}
+
+.ds-kpi-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ds-space-2);
+}
+
+.ds-kpi-label { font-size: var(--ds-small); color: var(--ds-text-muted); }
+
+/* ---- segmented control ---- */
+/* aria-pressed carries the state, so what is announced and what is drawn
+   cannot disagree - the same rule .ds-tab follows with aria-selected */
+.ds-segmented {
+  display: inline-flex;
+  gap: var(--ds-space-1);
+  padding: var(--ds-space-1);
+  background: var(--ds-surface-sunken);
+  border-radius: var(--ds-radius);
+}
+
+.ds-segmented button,
+.ds-segmented a {
+  padding: var(--ds-space-1) var(--ds-space-3);
+  border: 0;
+  border-radius: var(--ds-radius-sm);
+  background: transparent;
+  font-family: var(--ds-font);
+  font-size: var(--ds-small);
+  color: var(--ds-text-muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.ds-segmented button:hover,
+.ds-segmented a:hover { color: var(--ds-text); }
+
+.ds-segmented button:focus-visible,
+.ds-segmented a:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+.ds-segmented [aria-pressed="true"],
+.ds-segmented [aria-current="page"] {
+  background: var(--ds-surface);
+  color: var(--ds-text);
+  font-weight: var(--ds-weight-medium);
+  box-shadow: var(--ds-shadow-sm);
+}
+
+/* ---- row: one line of a list - time, avatar, two lines, pill, person ---- */
+.ds-rows { display: flex; flex-direction: column; gap: var(--ds-space-1); margin: 0; padding: 0; list-style: none; }
+
+.ds-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-3) var(--ds-space-4);
+  padding: var(--ds-space-3);
+  border-radius: var(--ds-radius);
+  color: var(--ds-text);
+  text-decoration: none;
+}
+
+.ds-row:hover,
+.ds-row.is-current { background: var(--ds-surface-sunken); }
+
+a.ds-row:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+.ds-row-time {
+  flex: none;
+  min-width: 3rem;
+  font-size: var(--ds-caption);
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-muted);
+}
+
+.ds-row-lead { flex: none; }
+.ds-row-main { flex: 1 1 12rem; min-width: 0; }
+
+.ds-row-title {
+  display: block;
+  font-size: var(--ds-small);
+  font-weight: var(--ds-weight-semibold);
+  color: var(--ds-text);
+  overflow-wrap: anywhere;
+}
+
+.ds-row-sub {
+  display: block;
+  font-size: var(--ds-caption);
+  color: var(--ds-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.ds-row-aside {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--ds-space-3);
+}
+
+.ds-row-status {
+  font-family: var(--ds-font-display);
+  font-style: italic;
+  font-size: var(--ds-small);
+  font-weight: var(--ds-weight-semibold);
+}
+
+.ds-row-status-danger { color: var(--ds-danger); }
+.ds-row-status-warning { color: var(--ds-warning); }
+.ds-row-status-success { color: var(--ds-success); }
+.ds-row-status-muted { color: var(--ds-text-muted); }
+
+.ds-person {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  font-size: var(--ds-small);
+  font-weight: var(--ds-weight-medium);
+  color: var(--ds-text);
+}
+
+.ds-avatar-xs { width: 1.75rem; height: 1.75rem; font-size: var(--ds-caption); }
+
+/* avatar tints, so a column of initials is not one flat colour. picked by
+   the server from the name, never at random - the same person always gets
+   the same tint on every page. */
+.ds-avatar-t1 { background: color-mix(in srgb, var(--ds-chart-1) 16%, var(--ds-surface)); color: var(--ds-teal-600); }
+.ds-avatar-t2 { background: color-mix(in srgb, var(--ds-chart-2) 20%, var(--ds-surface)); color: var(--ds-warning); }
+.ds-avatar-t3 { background: color-mix(in srgb, var(--ds-chart-3) 16%, var(--ds-surface)); color: var(--ds-info); }
+.ds-avatar-t4 { background: color-mix(in srgb, var(--ds-chart-4) 18%, var(--ds-surface)); color: var(--ds-neutral); }
+
+/* ---- list card: card title + an "All" link at the right ---- */
+.ds-card-link {
+  font-size: var(--ds-small);
+  font-weight: var(--ds-weight-semibold);
+  color: var(--ds-primary);
+  text-decoration: none;
+}
+
+.ds-card-link:hover { text-decoration: underline; }
+.ds-card-link:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: var(--ds-radius-sm); }
+
+.ds-card-sub { margin: var(--ds-space-1) 0 0; font-size: var(--ds-caption); color: var(--ds-text-muted); }
+
+/* ---- distribution: one stacked bar and a dot legend ---- */
+/* drawn as svg rects whose x/width the server computes - attributes, not an
+   inline style, so the no-style= rule on staff pages still holds */
+.ds-distbar { display: block; width: 100%; height: 0.625rem; border-radius: var(--ds-radius-pill); overflow: hidden; }
+.ds-distbar rect { fill: var(--ds-surface-sunken); }
+.ds-distbar .ds-seg-1 { fill: var(--ds-chart-1); }
+.ds-distbar .ds-seg-2 { fill: var(--ds-chart-2); }
+.ds-distbar .ds-seg-3 { fill: var(--ds-chart-3); }
+.ds-distbar .ds-seg-4 { fill: var(--ds-chart-4); }
+.ds-distbar .ds-seg-5 { fill: var(--ds-chart-5); }
+.ds-distbar .ds-seg-6 { fill: var(--ds-border-strong); }
+
+.ds-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--ds-space-2) var(--ds-space-5);
+  margin: var(--ds-space-4) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--ds-small);
+  color: var(--ds-text);
+}
+
+.ds-legend li { display: inline-flex; align-items: center; gap: var(--ds-space-2); }
+.ds-legend .ds-numeral { color: var(--ds-text); }
+.ds-legend .ds-seg-1 { color: var(--ds-chart-1); }
+.ds-legend .ds-seg-2 { color: var(--ds-chart-2); }
+.ds-legend .ds-seg-3 { color: var(--ds-chart-3); }
+.ds-legend .ds-seg-4 { color: var(--ds-chart-4); }
+.ds-legend .ds-seg-5 { color: var(--ds-chart-5); }
+.ds-legend .ds-seg-6 { color: var(--ds-border-strong); }
+
+/* ---- pill nav: tabs whose active member is a filled pill ---- */
+.ds-pill-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--ds-space-1); }
+
+.ds-pill-nav a,
+.ds-pill-nav .nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ds-space-2);
+  padding: var(--ds-space-2) var(--ds-space-4);
+  border-radius: var(--ds-radius);
+  font-size: var(--ds-small);
+  font-weight: var(--ds-weight-medium);
+  color: var(--ds-text-muted);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color var(--ds-duration-fast) var(--ds-ease),
+              color var(--ds-duration-fast) var(--ds-ease);
+}
+
+.ds-pill-nav a:hover,
+.ds-pill-nav .nav-link:hover { background: var(--ds-surface-sunken); color: var(--ds-text); }
+
+.ds-pill-nav a:focus-visible,
+.ds-pill-nav .nav-link:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+.ds-pill-nav a.active,
+.ds-pill-nav .nav-link.active {
+  background: var(--ds-primary);
+  color: var(--ds-text-on-dark);
+  box-shadow: var(--ds-shadow-sm);
+}
