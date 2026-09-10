@@ -1,117 +1,191 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="page-header">
-  <h1 class="page-title">{{ patient.patient_name }}</h1>
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="/patients">Patients</a></li>
+    <li aria-current="page">{{ patient.patient_name }}</li>
+  </ol>
+</nav>
+
+<div class="ds-page-head">
+  <div class="d-flex align-items-center gap-3 min-w-0">
+    <span class="ds-avatar ds-avatar-lg {{ patient.patient_name | tint }}" aria-hidden="true">{{ patient.patient_name | initials }}</span>
+    <div class="min-w-0">
+      <p class="ds-page-eyebrow">Patient record</p>
+      <h1 class="ds-page-title text-break">{{ patient.patient_name }}</h1>
+      <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %} · {{ patient.phone }}{% endif %}</p>
+    </div>
+  </div>
   {% if authorize(g.user.role, 'append_note') %}
-  <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-primary btn-sm">Add note</a>
+  <div class="ds-page-actions">
+    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-primary"><i class="bi bi-journal-plus"></i> Add note</a>
+  </div>
   {% endif %}
 </div>
 
-<div class="card p-4 mb-4">
-  <div class="d-flex justify-content-between align-items-start mb-3">
-    <h2 class="section-title mb-0">Demographics</h2>
-    <button type="button" class="btn btn-outline-secondary btn-sm"
-      data-bs-toggle="modal" data-bs-target="#editModal"
-      hx-get="{{ url_for('patients.edit_form_fragment', cf=cf, field='phone') }}"
-      hx-target="#modal-body-target" hx-swap="innerHTML">Edit</button>
-  </div>
-  <dl class="row mb-0">
-    <dt class="col-sm-3">Codice Fiscale</dt>
-    <dd class="col-sm-9">{{ cf }}</dd>
-    <dt class="col-sm-3">Phone</dt>
-    <dd class="col-sm-9">{{ patient.phone or "-" }}</dd>
-  </dl>
-
-  {% if authorize(g.user.role, 'issue_patient_pin') %}
-  <div class="mt-4">
-    <button type="button" class="btn btn-outline-secondary btn-sm"
-      hx-post="{{ url_for('patients.issue_pin_submit', cf=cf) }}"
-      hx-target="#patient-pin-target" hx-swap="innerHTML"
-      hx-confirm="Issue a new PIN? Any PIN this patient already has will stop working.">
-      <i class="bi bi-key"></i> Issue patient PIN
-    </button>
-    <div id="patient-pin-target"></div>
-  </div>
-  {% endif %}
-
-  {% if authorize(g.user.role, 'revoke_patient_pin') %}
-  <div class="mt-4">
-    <button type="button" class="btn btn-outline-danger btn-sm"
-      hx-post="{{ url_for('patients.revoke_pin_submit', cf=cf) }}"
-      hx-target="#patient-pin-revoke-target" hx-swap="innerHTML"
-      hx-confirm="Revoke this patient's PIN? They will be signed out immediately and their PIN will stop working until a new one is issued.">
-      <i class="bi bi-key"></i> Revoke patient PIN
-    </button>
-    <div id="patient-pin-revoke-target"></div>
-  </div>
-  {% endif %}
-
-  <h3 class="subsection-title">Visit dates</h3>
-  {% if patient.visit_dates %}
-  <ul class="mb-0">
-    {% for d in patient.visit_dates %}
-    <li>{{ d }}</li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="text-secondary mb-0">No visits on record.</p>
-  {% endif %}
-
-  <h3 class="subsection-title">Invoices</h3>
-  {% if patient.invoices %}
-  <ul class="mb-0">
-    {% for inv in patient.invoices %}
-    <li>{{ inv.amount }} - {{ inv.description }}</li>
-    {% endfor %}
-  </ul>
-  {% else %}
-  <p class="text-secondary mb-0">No invoices on record.</p>
-  {% endif %}
-
-  {% if show_clinical %}
-  <h3 class="subsection-title">Files</h3>
-  <div hx-get="{{ url_for('patients.files_fragment', cf=cf) }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
-  {% endif %}
-</div>
-
-{% if authorize(g.user.role, 'upload_file') %}
-<div class="card p-4 mb-4">
-  <h2 class="section-title">Upload files</h2>
-  {% with cf=cf %}{% include "_upload_zone.html" %}{% endwith %}
-  <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
-</div>
-{% endif %}
-
-{% if show_clinical %}
-<div class="card p-4">
-  <h2 class="section-title">Clinical history</h2>
-  {% if clinical %}
-  <div class="list-group">
-    {% for visit in clinical %}
-    <div class="list-group-item">
-      <small class="text-secondary d-block">{{ visit.visit_date or "no date" }}</small>
-      <p class="mb-1">{{ visit.clinical_notes }}</p>
-      {% if visit.procedures %}
-      <p class="mb-1">Procedures: {{ visit.procedures | join(", ") }}</p>
-      {% endif %}
-      <div class="d-flex justify-content-between align-items-center">
-        <p class="mb-0">Next appointment: {{ visit.next_appointment or "not set" }}</p>
+<div class="row g-3">
+  <div class="col-12 col-xl-4 d-flex flex-column gap-3">
+    <section class="card dash-card" aria-labelledby="profile-title">
+      <div class="dash-card-head">
+        <h2 class="ds-card-title" id="profile-title">Demographics</h2>
         <button type="button" class="btn btn-outline-secondary btn-sm"
           data-bs-toggle="modal" data-bs-target="#editModal"
-          hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
-          hx-target="#modal-body-target" hx-swap="innerHTML">Edit</button>
+          hx-get="{{ url_for('patients.edit_form_fragment', cf=cf, field='phone') }}"
+          hx-target="#modal-body-target" hx-swap="innerHTML"><i class="bi bi-pencil"></i> Edit</button>
       </div>
-    </div>
-    {% endfor %}
+      <div class="dash-card-body">
+        <dl class="detail-list">
+          <div><dt>Codice Fiscale</dt><dd class="font-monospace">{{ cf }}</dd></div>
+          <div><dt>Phone</dt><dd>{{ patient.phone or "-" }}</dd></div>
+        </dl>
+      </div>
+    </section>
+
+    {% if authorize(g.user.role, 'issue_patient_pin') or authorize(g.user.role, 'revoke_patient_pin') %}
+    <section class="card dash-card" aria-labelledby="access-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="access-title">Patient portal access</h2>
+          <p class="ds-card-sub">A PIN lets the patient sign in to the portal</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if authorize(g.user.role, 'issue_patient_pin') %}
+        <div>
+          <button type="button" class="btn btn-outline-secondary btn-sm"
+            hx-post="{{ url_for('patients.issue_pin_submit', cf=cf) }}"
+            hx-target="#patient-pin-target" hx-swap="innerHTML"
+            hx-confirm="Issue a new PIN? Any PIN this patient already has will stop working.">
+            <i class="bi bi-key"></i> Issue patient PIN
+          </button>
+          <div id="patient-pin-target"></div>
+        </div>
+        {% endif %}
+
+        {% if authorize(g.user.role, 'revoke_patient_pin') %}
+        <div class="mt-3">
+          <button type="button" class="btn btn-outline-danger btn-sm"
+            hx-post="{{ url_for('patients.revoke_pin_submit', cf=cf) }}"
+            hx-target="#patient-pin-revoke-target" hx-swap="innerHTML"
+            hx-confirm="Revoke this patient's PIN? They will be signed out immediately and their PIN will stop working until a new one is issued.">
+            <i class="bi bi-key"></i> Revoke patient PIN
+          </button>
+          <div id="patient-pin-revoke-target"></div>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card dash-card" aria-labelledby="visits-title">
+      <div class="dash-card-head">
+        <h2 class="ds-card-title" id="visits-title">Visit dates</h2>
+      </div>
+      <div class="dash-card-body">
+        {% if patient.visit_dates %}
+        <ul class="ds-rows">
+          {% for d in patient.visit_dates %}
+          <li class="ds-row">
+            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+            <span class="ds-row-main"><span class="ds-row-title">{{ d }}</span></span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty-line">No visits on record.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card dash-card" aria-labelledby="invoices-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="invoices-title">Invoices</h2>
+          <p class="ds-card-sub">Billed lines - no paid or unpaid status is recorded</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if patient.invoices %}
+        <ul class="ds-rows">
+          {% for inv in patient.invoices %}
+          <li class="ds-row">
+            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-receipt"></i></span>
+            <span class="ds-row-main"><span class="ds-row-title">{{ inv.description }}</span></span>
+            <span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty-line">No invoices on record.</p>
+        {% endif %}
+      </div>
+    </section>
   </div>
-  {% else %}
-  <p class="text-secondary mb-0">No clinical visits on record.</p>
-  {% endif %}
+
+  <div class="col-12 col-xl-8 d-flex flex-column gap-3">
+    {% if show_clinical %}
+    <section class="card dash-card" aria-labelledby="clinical-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="clinical-title">Clinical history</h2>
+          <p class="ds-card-sub">Dentist only</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if clinical %}
+        <ol class="timeline">
+          {% for visit in clinical %}
+          <li class="timeline-item">
+            <div class="timeline-head">
+              <span class="timeline-date">{{ visit.visit_date or "no date" }}</span>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                data-bs-toggle="modal" data-bs-target="#editModal"
+                hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
+                hx-target="#modal-body-target" hx-swap="innerHTML">Edit</button>
+            </div>
+            <p class="timeline-note">{{ visit.clinical_notes }}</p>
+            {% if visit.procedures %}
+            <p class="timeline-procs"><span class="visually-hidden">Procedures: </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>
+            {% endif %}
+            <p class="timeline-next">Next appointment: {{ visit.next_appointment or "not set" }}</p>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="dash-empty-line">No clinical visits on record.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card dash-card" aria-labelledby="files-title">
+      <div class="dash-card-head">
+        <h2 class="ds-card-title" id="files-title">Files</h2>
+      </div>
+      <div class="dash-card-body patient-files">
+        <div hx-get="{{ url_for('patients.files_fragment', cf=cf) }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if authorize(g.user.role, 'upload_file') %}
+    <section class="card dash-card" aria-labelledby="upload-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="upload-title">Upload files</h2>
+          <p class="ds-card-sub">Filed straight to this patient</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% with cf=cf %}{% include "_upload_zone.html" %}{% endwith %}
+        <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+      </div>
+    </section>
+    {% endif %}
+  </div>
 </div>
-{% endif %}
 
 <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>

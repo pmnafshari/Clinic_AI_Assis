@@ -1,7 +1,10 @@
 {% if files %}
-<ul class="mb-0">
+<ul class="ds-rows">
   {% for f in files %}
-  <li>{{ f }}</li>
+  <li class="ds-row">
+    <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-file-earmark"></i></span>
+    <span class="ds-row-main"><span class="ds-row-title">{{ f }}</span></span>
+  </li>
   {% endfor %}
 </ul>
 {% else %}

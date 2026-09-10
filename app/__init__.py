@@ -7,6 +7,7 @@ import web_session
 from auth import authorize
 from env_config import load_secret_key
 from shared import STATIC_ROOT as SHARED_STATIC_ROOT
+from shared.names import initials, tint
 from storage import init_db
 
 from . import db
@@ -36,8 +37,11 @@ def create_app():
 
     CSRFProtect(app)
 
-    # exposed so _sidebar.html can role-filter nav items server-side
+    # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
+    # avatars: initials on a stable tint (phase 43). presentation, not a figure
+    app.jinja_env.filters["initials"] = initials
+    app.jinja_env.filters["tint"] = tint
 
     # read db.DB_PATH at call time (not imported by value) so a selftest
     # can point create_app() at a temp db by patching app.db.DB_PATH

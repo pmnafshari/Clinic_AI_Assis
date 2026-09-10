@@ -568,3 +568,93 @@ strong {
 
 .auth-pw-toggle:hover { color: var(--ds-text); }
 .auth-pw-toggle:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+/* ---- staff pages (phase 44) ---------------------------------------------- */
+
+.app-search-inline { width: 100%; max-width: 30rem; }
+
+/* tables read like the reference's lists: hairline rows, a quiet uppercase
+   header, the whole row lit on hover */
+.card .table { --bs-table-bg: transparent; margin-bottom: 0; }
+.card .table > thead > tr > th {
+  padding: 0.625rem 0.75rem;
+  border-bottom: 1px solid var(--app-border);
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ds-text-muted);
+  white-space: nowrap;
+}
+.card .table > tbody > tr > td {
+  padding: 0.75rem;
+  border-bottom-color: var(--app-border);
+  font-size: 0.9375rem;
+}
+.card .table > tbody > tr:last-child > td { border-bottom: 0; }
+.card .table > tbody > tr:hover > td { background: var(--ds-surface-sunken); }
+
+.detail-list { margin: 0.25rem; display: grid; gap: 0.75rem; }
+.detail-list > div { display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.detail-list dt { font-weight: 500; font-size: 0.875rem; color: var(--ds-text-muted); }
+.detail-list dd { margin: 0; font-size: 0.9375rem; overflow-wrap: anywhere; }
+
+.invoice-amount { font-size: 1.125rem; color: var(--ds-text); }
+
+.timeline { list-style: none; margin: 0.25rem; padding: 0 0 0 1.25rem; border-left: 2px solid var(--app-border); }
+.timeline-item { position: relative; padding: 0 0 1.25rem 0.5rem; }
+.timeline-item:last-child { padding-bottom: 0.25rem; }
+.timeline-item::before {
+  content: "";
+  position: absolute;
+  left: -1.72rem;
+  top: 0.35rem;
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--app-surface);
+  border: 2px solid var(--ds-primary);
+}
+.timeline-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.375rem; }
+.timeline-date { font-weight: 600; font-size: 0.9375rem; }
+.timeline-note { margin: 0 0 0.5rem; color: var(--ds-text); overflow-wrap: anywhere; }
+.timeline-procs { margin: 0 0 0.5rem; }
+.timeline-next { margin: 0; font-size: 0.875rem; color: var(--ds-text-muted); }
+
+.pin-display { font-size: 2.25rem; line-height: 1.1; letter-spacing: 0.08em; margin: 0.25rem 0; }
+
+.modal-content { border: 0; border-radius: 16px; box-shadow: var(--ds-shadow-lg); }
+.modal-header { border-bottom: 0; padding-bottom: 0; }
+
+/* bootstrap form controls on staff pages, brought to the reference's softer
+   radius. the .ds-input family already reads --ds-radius. */
+.form-control, .form-select { border-radius: 0.625rem; border-color: var(--ds-border-strong); }
+.btn { border-radius: 0.625rem; }
+.btn-sm { border-radius: 0.5rem; }
+.form-label { font-weight: 500; font-size: 0.875rem; }
+
+.appt-item { border-radius: 0.75rem; }
+.appt-item + .appt-item { border-top: 1px solid var(--app-border); }
+.appt-more { padding: 0 0.75rem 0.75rem; }
+.appt-more > summary {
+  display: inline-block;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ds-primary);
+  cursor: pointer;
+  list-style: none;
+  border-radius: 0.375rem;
+}
+.appt-more > summary::-webkit-details-marker { display: none; }
+.appt-more > summary::after { content: " \25BE"; }
+.appt-more[open] > summary { margin-bottom: 0.75rem; }
+.appt-more > summary:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
+.book-form { display: grid; gap: 0.875rem; }
+.book-form-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+
+/* page-head actions match the header's own action size */
+.ds-page-actions .btn,
+.ds-page-actions .form-control { height: 2.5rem; font-size: 0.875rem; }
+.ds-page-actions .btn { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0 1rem; }

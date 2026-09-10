@@ -1,165 +1,214 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title">Appointments</h1>
-
-<form method="get" action="{{ url_for('appointments.index') }}" class="mb-4 d-flex gap-2 align-items-end">
+<div class="ds-page-head">
   <div>
-    <label for="day" class="form-label">Day</label>
-    <input type="date" id="day" name="day" value="{{ day }}" class="form-control">
+    <p class="ds-page-eyebrow">Scheduling</p>
+    <h1 class="ds-page-title">Appointments</h1>
+    <p class="ds-page-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ day }}</p>
   </div>
-  <button type="submit" class="btn btn-secondary">Show</button>
-</form>
-
-<div class="card p-4 mb-4">
-  <h2 class="section-title">{{ day }}</h2>
-  {% if has_data %}
-  <table class="table ds-table-cards align-middle mb-0">
-    <thead>
-      <tr><th>Time</th><th>Patient</th><th>Dentist</th><th>Length</th><th>Note</th><th></th></tr>
-    </thead>
-    <tbody>
-      {% for r in rows %}
-      <tr>
-        <td data-label="Time">{{ r.starts_at[11:16] }}</td>
-        <td data-label="Patient">{{ r.patient_name }}</td>
-        <td data-label="Dentist">{{ r.dentist }}</td>
-        <td data-label="Length">{{ r.minutes }} min</td>
-        <td data-label="Note">{{ r.note or "" }}</td>
-        <td data-label="" class="text-end">
-          <form method="post" action="{{ url_for('appointments.cancel', appointment_id=r.id) }}"
-                class="d-inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="day" value="{{ day }}">
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
-          </form>
-        </td>
-      </tr>
-      <tr>
-        <td colspan="6" data-label="">
-          {# reschedule is a POST like cancel: a GET that moves an appointment
-             is a link something can follow #}
-          <form method="post" action="{{ url_for('appointments.reschedule', appointment_id=r.id) }}"
-                class="d-flex gap-2 align-items-end flex-wrap">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="day" value="{{ day }}">
-            <div>
-              <label class="form-label small" for="rdate-{{ r.id }}">Move to</label>
-              <input type="date" id="rdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}"
-                     class="form-control form-control-sm" required>
-            </div>
-            <div>
-              <label class="form-label small" for="rtime-{{ r.id }}">Time</label>
-              <input type="time" id="rtime-{{ r.id }}" name="time" value="{{ r.starts_at[11:16] }}"
-                     class="form-control form-control-sm" required>
-            </div>
-            <div>
-              <label class="form-label small" for="rmin-{{ r.id }}">Minutes</label>
-              <input type="number" id="rmin-{{ r.id }}" name="minutes" value="{{ r.minutes }}"
-                     min="5" step="5" class="form-control form-control-sm" required>
-            </div>
-            <button type="submit" class="btn btn-sm btn-outline-primary">Reschedule</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  {# permitted, nothing booked. not the same render as not-permitted, which
-     never reaches this template at all. #}
-  <p class="text-secondary mb-0">Nothing booked for this day.</p>
-  {% endif %}
-</div>
-
-<div class="card p-4 mb-4">
-  <h2 class="section-title">Patient requests{% if requests_pending %} ({{ requests_pending|length }}){% endif %}</h2>
-  {% if requests_pending %}
-  <table class="table ds-table-cards align-middle mb-0">
-    <thead>
-      <tr><th>Patient</th><th>Asked for</th><th>Reason</th><th>Confirm</th><th></th></tr>
-    </thead>
-    <tbody>
-      {% for r in requests_pending %}
-      <tr>
-        <td>{{ r.patient_name }}</td>
-        {# a request has NO time - only a day and a half of it. rendering the
-           00:00 that sits in starts_at would invent a slot nobody agreed. #}
-        <td>{{ r.starts_at[:10] }}, {{ r.period }}</td>
-        <td>{{ r.note or "-" }}</td>
-        <td>
-          <form method="post" action="{{ url_for('appointments.confirm', appointment_id=r.id) }}"
-                class="d-flex gap-2 align-items-end flex-wrap">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="day" value="{{ day }}">
-            <input type="date" name="date" value="{{ r.starts_at[:10] }}" class="form-control form-control-sm" required>
-            <input type="time" name="time" class="form-control form-control-sm" required>
-            <select name="dentist" class="form-select form-select-sm" required>
-              {% for d in dentists %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
-            </select>
-            <input type="number" name="minutes" value="30" min="5" step="5" class="form-control form-control-sm" required>
-            <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
-          </form>
-        </td>
-        <td>
-          <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}"
-                class="d-flex gap-2 align-items-end">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="day" value="{{ day }}">
-            <input type="text" name="reason" placeholder="Reason" class="form-control form-control-sm">
-            <button type="submit" class="btn btn-sm btn-outline-secondary">Decline</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  {# permitted with an empty queue - a different render from not-permitted,
-     which never reaches this template at all #}
-  <p class="text-secondary mb-0">No patient requests waiting.</p>
-  {% endif %}
-</div>
-
-<div class="card p-4" id="book">
-  <h2 class="section-title">Book an appointment</h2>
-  <form method="post" action="{{ url_for('appointments.book') }}"
-        class="d-flex gap-2 align-items-end flex-wrap">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="day" value="{{ day }}">
-    <div>
-      <label for="cf" class="form-label">Patient</label>
-      <select id="cf" name="codice_fiscale" class="form-select" required>
-        {% for p in patients %}
-        <option value="{{ p.codice_fiscale }}">{{ p.patient_name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="dentist" class="form-label">Dentist</label>
-      <select id="dentist" name="dentist" class="form-select" required>
-        {% for d in dentists %}
-        <option value="{{ d.username }}">{{ d.username }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div>
-      <label for="bdate" class="form-label">Date</label>
-      <input type="date" id="bdate" name="date" value="{{ day }}" class="form-control" required>
-    </div>
-    <div>
-      <label for="btime" class="form-label">Time</label>
-      <input type="time" id="btime" name="time" class="form-control" required>
-    </div>
-    <div>
-      <label for="bmin" class="form-label">Minutes</label>
-      <input type="number" id="bmin" name="minutes" value="30" min="5" step="5"
-             class="form-control" required>
-    </div>
-    <div>
-      <label for="bnote" class="form-label">Note</label>
-      <input type="text" id="bnote" name="note" maxlength="200" class="form-control">
-    </div>
-    <button type="submit" class="btn btn-primary">Book</button>
+  <form method="get" action="{{ url_for('appointments.index') }}" class="ds-page-actions">
+    <label for="day" class="visually-hidden">Day</label>
+    <input type="date" id="day" name="day" value="{{ day }}" class="form-control w-auto">
+    <button type="submit" class="btn btn-outline-secondary">Show</button>
+    <a href="#book" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Book</a>
   </form>
+</div>
+
+<div class="row g-3">
+  <div class="col-12 col-xl-8">
+    <section class="card dash-card" aria-labelledby="day-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="day-title">{{ day }}</h2>
+          <p class="ds-card-sub">Booked appointments for this day</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if has_data %}
+        <ul class="ds-rows">
+          {% for r in rows %}
+          <li class="appt-item">
+            <div class="ds-row">
+              <span class="ds-row-time">{{ r.starts_at[11:16] }}</span>
+              <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.patient_name | tint }}" aria-hidden="true">{{ r.patient_name | initials }}</span>
+              <span class="ds-row-main">
+                <span class="ds-row-title">{{ r.patient_name }}</span>
+                <span class="ds-row-sub">{{ r.minutes }} min{% if r.note %} · {{ r.note }}{% endif %}</span>
+              </span>
+              <span class="ds-row-aside">
+                <span class="ds-person">
+                  <span class="ds-avatar ds-avatar-xs {{ r.dentist | tint }}" aria-hidden="true">{{ r.dentist | initials }}</span>
+                  {{ r.dentist }}
+                </span>
+                <form method="post" action="{{ url_for('appointments.cancel', appointment_id=r.id) }}"
+                      class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="day" value="{{ day }}">
+                  <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
+                </form>
+              </span>
+            </div>
+            <details class="appt-more">
+              <summary>Reschedule</summary>
+              {# reschedule is a POST like cancel: a GET that moves an appointment
+                 is a link something can follow #}
+              <form method="post" action="{{ url_for('appointments.reschedule', appointment_id=r.id) }}"
+                    class="d-flex gap-2 align-items-end flex-wrap">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="day" value="{{ day }}">
+                <div>
+                  <label class="form-label small" for="rdate-{{ r.id }}">Move to</label>
+                  <input type="date" id="rdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}"
+                         class="form-control form-control-sm" required>
+                </div>
+                <div>
+                  <label class="form-label small" for="rtime-{{ r.id }}">Time</label>
+                  <input type="time" id="rtime-{{ r.id }}" name="time" value="{{ r.starts_at[11:16] }}"
+                         class="form-control form-control-sm" required>
+                </div>
+                <div>
+                  <label class="form-label small" for="rmin-{{ r.id }}">Minutes</label>
+                  <input type="number" id="rmin-{{ r.id }}" name="minutes" value="{{ r.minutes }}"
+                         min="5" step="5" class="form-control form-control-sm" required>
+                </div>
+                <button type="submit" class="btn btn-sm btn-outline-primary">Reschedule</button>
+              </form>
+            </details>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        {# permitted, nothing booked. not the same render as not-permitted, which
+           never reaches this template at all. #}
+        <div class="ds-state">
+          <i class="bi bi-calendar-x ds-state-icon" aria-hidden="true"></i>
+          <p class="ds-state-body">Nothing booked for this day.</p>
+        </div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <div class="col-12 col-xl-4 d-flex flex-column gap-3">
+    <section class="card dash-card" id="book" aria-labelledby="book-title">
+      <div class="dash-card-head">
+        <h2 class="ds-card-title" id="book-title">Book an appointment</h2>
+      </div>
+      <div class="dash-card-body">
+        <form method="post" action="{{ url_for('appointments.book') }}" class="book-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="day" value="{{ day }}">
+          <div>
+            <label for="cf" class="form-label">Patient</label>
+            <select id="cf" name="codice_fiscale" class="form-select" required>
+              {% for p in patients %}
+              <option value="{{ p.codice_fiscale }}">{{ p.patient_name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label for="dentist" class="form-label">Dentist</label>
+            <select id="dentist" name="dentist" class="form-select" required>
+              {% for d in dentists %}
+              <option value="{{ d.username }}">{{ d.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="book-form-pair">
+            <div>
+              <label for="bdate" class="form-label">Date</label>
+              <input type="date" id="bdate" name="date" value="{{ day }}" class="form-control" required>
+            </div>
+            <div>
+              <label for="btime" class="form-label">Time</label>
+              <input type="time" id="btime" name="time" class="form-control" required>
+            </div>
+          </div>
+          <div>
+            <label for="bmin" class="form-label">Minutes</label>
+            <input type="number" id="bmin" name="minutes" value="30" min="5" step="5"
+                   class="form-control" required>
+          </div>
+          <div>
+            <label for="bnote" class="form-label">Note</label>
+            <input type="text" id="bnote" name="note" maxlength="200" class="form-control">
+          </div>
+          <button type="submit" class="btn btn-primary w-100">Book</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="card dash-card" aria-labelledby="requests-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="requests-title">Patient requests{% if requests_pending %} ({{ requests_pending|length }}){% endif %}</h2>
+          <p class="ds-card-sub">Confirm with a dentist and a time, or decline</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if requests_pending %}
+        <ul class="ds-rows">
+          {% for r in requests_pending %}
+          <li class="appt-item">
+            <div class="ds-row">
+              <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.patient_name | tint }}" aria-hidden="true">{{ r.patient_name | initials }}</span>
+              <span class="ds-row-main">
+                <span class="ds-row-title">{{ r.patient_name }}</span>
+                {# a request has NO time - only a day and a half of it. rendering the
+                   00:00 that sits in starts_at would invent a slot nobody agreed. #}
+                <span class="ds-row-sub">{{ r.starts_at[:10] }}, {{ r.period }} · {{ r.note or "-" }}</span>
+              </span>
+              <span class="ds-badge ds-badge-warning">Requested</span>
+            </div>
+            <details class="appt-more">
+              <summary>Confirm or decline</summary>
+              <form method="post" action="{{ url_for('appointments.confirm', appointment_id=r.id) }}"
+                    class="book-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="day" value="{{ day }}">
+                <div class="book-form-pair">
+                  <div>
+                    <label class="form-label small" for="cdate-{{ r.id }}">Date</label>
+                    <input type="date" id="cdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}" class="form-control form-control-sm" required>
+                  </div>
+                  <div>
+                    <label class="form-label small" for="ctime-{{ r.id }}">Time</label>
+                    <input type="time" id="ctime-{{ r.id }}" name="time" class="form-control form-control-sm" required>
+                  </div>
+                </div>
+                <div class="book-form-pair">
+                  <div>
+                    <label class="form-label small" for="cdent-{{ r.id }}">Dentist</label>
+                    <select id="cdent-{{ r.id }}" name="dentist" class="form-select form-select-sm" required>
+                      {% for d in dentists %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="form-label small" for="cmin-{{ r.id }}">Minutes</label>
+                    <input type="number" id="cmin-{{ r.id }}" name="minutes" value="30" min="5" step="5" class="form-control form-control-sm" required>
+                  </div>
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
+              </form>
+              <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}"
+                    class="d-flex gap-2 align-items-end mt-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="day" value="{{ day }}">
+                <label class="visually-hidden" for="dreason-{{ r.id }}">Reason</label>
+                <input type="text" id="dreason-{{ r.id }}" name="reason" placeholder="Reason" class="form-control form-control-sm">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">Decline</button>
+              </form>
+            </details>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        {# permitted with an empty queue - a different render from not-permitted,
+           which never reaches this template at all #}
+        <p class="dash-empty-line">No patient requests waiting.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
 </div>
 {% endblock %}

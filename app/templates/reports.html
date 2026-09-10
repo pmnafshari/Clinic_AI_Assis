@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="page-title">Reports</h1>
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Insights</p>
+    <h1 class="ds-page-title">Reports</h1>
+    <p class="ds-page-meta">From filed notes and their invoice lines · dentist only</p>
+  </div>
+</div>
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
   {# what this page deliberately does not show, said on the page rather than
@@ -22,11 +28,16 @@
   </div>
 </div>
 
-<div class="row g-4">
+<div class="row g-3">
   <div class="col-12 col-xl-6">
-    <div class="card p-4 h-100">
-      <h2 class="section-title">Procedures</h2>
-      <p class="text-secondary small">How often each procedure code appears across all filed visits.</p>
+    <section class="card dash-card h-100" aria-labelledby="proc-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="proc-title">Procedures</h2>
+          <p class="ds-card-sub">How often each procedure code appears across all filed visits.</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
       {% if proc_has_data %}
       <div class="chart-box"><canvas id="proc-chart"></canvas></div>
       <p class="text-secondary small mb-0 mt-3">
@@ -39,13 +50,19 @@
         <p class="mb-0">No procedures yet. They appear here once a note is filed with a procedure on it.</p>
       </div>
       {% endif %}
-    </div>
+      </div>
+    </section>
   </div>
 
   <div class="col-12 col-xl-6">
-    <div class="card p-4 h-100">
-      <h2 class="section-title">Billed by month</h2>
-      <p class="text-secondary small">Invoice lines totalled against the month of their visit.</p>
+    <section class="card dash-card h-100" aria-labelledby="billed-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="billed-title">Billed by month</h2>
+          <p class="ds-card-sub">Invoice lines totalled against the month of their visit.</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
       {% if billed_has_data %}
       <div class="chart-box"><canvas id="billed-chart"></canvas></div>
       <p class="text-secondary small mb-0 mt-3">
@@ -57,7 +74,8 @@
         <p class="mb-0">Nothing billed yet. Amounts appear here once an invoice line is filed against a dated visit.</p>
       </div>
       {% endif %}
-    </div>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -70,12 +88,13 @@
   const dsGrid = getComputedStyle(document.documentElement).getPropertyValue('--ds-border').trim();
   const dsBar = getComputedStyle(document.documentElement).getPropertyValue('--ds-primary').trim();
   const dsWarn = getComputedStyle(document.documentElement).getPropertyValue('--ds-warning').trim();
+  const dsTeal = getComputedStyle(document.documentElement).getPropertyValue('--ds-chart-1').trim();
   const baseOpts = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
     scales: {
-      x: { ticks: { color: dsAxis }, grid: { display: false } },
-      y: { beginAtZero: true, ticks: { color: dsAxis, precision: 0 }, grid: { color: dsGrid } }
+      x: { ticks: { color: dsAxis }, grid: { display: false }, border: { display: false } },
+      y: { beginAtZero: true, ticks: { color: dsAxis, precision: 0 }, grid: { color: dsGrid }, border: { display: false } }
     }
   };
 {% if proc_has_data %}
@@ -87,7 +106,9 @@
         data: {{ proc_values | tojson }},
         // an uncoded term is drawn in the warning colour AND named in the
         // tooltip - colour is never the only signal (UX-17)
-        backgroundColor: {{ proc_uncoded | tojson }}.map(u => u ? dsWarn : dsBar)
+        backgroundColor: {{ proc_uncoded | tojson }}.map(u => u ? dsWarn : dsBar),
+        borderRadius: 6,
+        maxBarThickness: 36
       }]
     },
     options: Object.assign({}, baseOpts, {
@@ -102,7 +123,7 @@
     type: 'bar',
     data: {
       labels: {{ billed_months | tojson }},
-      datasets: [{ data: {{ billed_values | tojson }}, backgroundColor: dsBar }]
+      datasets: [{ data: {{ billed_values | tojson }}, backgroundColor: dsTeal, borderRadius: 6, maxBarThickness: 36 }]
     },
     options: baseOpts
   });

@@ -7,6 +7,7 @@ from flask import Blueprint, g, redirect, render_template, url_for
 import agent
 import appointments
 from auth import authorize
+from shared.names import initials, tint
 
 from .db import get_db
 from .upload_routes import _intake_state
@@ -49,20 +50,6 @@ def _user_undo_history(username, log_path=None, limit=10):
         if entry.get("username") == username:
             mine.append(entry)
     return mine[:limit]
-
-
-def initials(name):
-    # two letters from the first two words, for an avatar. there are no
-    # photos and none will be invented (43-CONTEXT D-07).
-    parts = [w for w in (name or "").replace("_", " ").split() if w]
-    if not parts:
-        return "?"
-    return "".join(w[0] for w in parts[:2]).upper()
-
-
-def tint(name):
-    # the same person always gets the same avatar tint, on every page
-    return f"ds-avatar-t{sum(map(ord, name or '')) % 4 + 1}"
 
 
 def greeting(now):
