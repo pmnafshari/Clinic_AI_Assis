@@ -31,6 +31,9 @@ notes_raw.jsonl
 # runtime output
 log.txt
 sorted/
+# encrypted backups (backup.py) - never committed, even encrypted
+backups/
+*.cbk
 
 # models and data (large / private)
 models/
