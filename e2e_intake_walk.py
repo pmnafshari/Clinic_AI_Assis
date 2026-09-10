@@ -128,6 +128,17 @@ def cleanup():
     ).fetchone()[0]
     conn.close()
 
+    # the search index too. a filed note is embedded into chroma with its cf in
+    # the metadata, and this cleanup used to stop at sqlite and the files - so
+    # every run left its patients' note text searchable after the patients
+    # were gone (found by the P01 restore drill: 6 ZZI* chunks, 2026-09-10).
+    # deleted by this walk's own cfs only, and counted, so check 9 bites.
+    import storage
+    collection = storage.get_collection("db/chroma")
+    in_walk = {"codice_fiscale": {"$in": list(ALL_CFS)}}
+    collection.delete(where=in_walk)
+    index_left = len(collection.get(where=in_walk)["ids"])
+
     files_left = 0
     for cf in ALL_CFS:
         d = SORTED_ROOT / cf
@@ -142,7 +153,7 @@ def cleanup():
     for cf in ALL_CFS:
         if (SORTED_ROOT / cf).exists():
             files_left += 1
-    return left, files_left, audit_left
+    return left, files_left, audit_left, index_left
 
 
 def procedures_for(cf, deadline):
@@ -337,11 +348,12 @@ def main():
                 finally:
                     browser.close()
         finally:
-            left, files_left, audit_left = cleanup()
+            left, files_left, audit_left, index_left = cleanup()
 
     check("9 fixtures cleaned up",
-          left == 0 and files_left == 0 and audit_left == 0,
-          f"{left} row(s), {files_left} file(s), {audit_left} audit row(s) left behind")
+          left == 0 and files_left == 0 and audit_left == 0 and index_left == 0,
+          f"{left} row(s), {files_left} file(s), {audit_left} audit row(s), "
+          f"{index_left} index chunk(s) left behind")
 
     failed = [s for s, ok, _ in RESULTS if not ok]
     print(f"\n{len(RESULTS) - len(failed)}/{len(RESULTS)} checks passed")

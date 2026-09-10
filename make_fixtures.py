@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from cf_generator import make_cf, seed_cf
-from dental_notes_schema import CF_PATTERN
+from codice_fiscale import is_valid as is_valid_cf
 
 PATIENTS = [
     ("Mario", "Rossi"),
@@ -57,9 +57,9 @@ def build(drop_dir):
 
 
 def _has_cf_in_name(name):
-    # tokenize so CF_PATTERN.match works on each isolated token
+    # tokenize so is_valid_cf sees each isolated token
     for token in re.split(r'[\W_]+', name.upper()):
-        if CF_PATTERN.match(token):
+        if is_valid_cf(token):
             return True
     return False
 

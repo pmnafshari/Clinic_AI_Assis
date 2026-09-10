@@ -1240,10 +1240,17 @@ def selftest():
         # 25a. the prompt capture - the assertion that matters most. the
         # accessor is what guarantees the scoping; this proves the guarantee
         # survives all the way to the string the model is actually handed.
-        assert len(captured_prompts) == 8, \
-            f"25a: expected 8 captured prompts (4 routes x 2 patients), got {len(captured_prompts)}"
-        prompts_p1 = captured_prompts[:4]
-        prompts_p2 = captured_prompts[4:]
+        # 8 -> 6 in P02.03: the invoice route no longer calls the model at all -
+        # money is answered in python (chat.invoice_answer), so it builds no
+        # prompt to capture. PROPERTY UNCHANGED for the three routes that do,
+        # and the invoice bodies are still leak-checked in section 25 above.
+        assert len(captured_prompts) == 6, \
+            f"25a: expected 6 captured prompts (3 model routes x 2 patients), got {len(captured_prompts)}"
+        for who, responses in (("one", resp_p1), ("two", resp_p2)):
+            assert on_page(t("inv_not_recorded", "it"), responses["invoices"]), \
+                f"25a: patient {who}'s invoice answer must say payments are not recorded"
+        prompts_p1 = captured_prompts[:3]
+        prompts_p2 = captured_prompts[3:]
         for prompt in prompts_p1:
             for leak in leak_values_p2:
                 assert leak not in prompt, \

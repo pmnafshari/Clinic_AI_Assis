@@ -4,7 +4,8 @@ from pathlib import Path
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 from auth import authorize, log_audit
-from dental_notes_schema import CF_PATTERN, DentalNote
+from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
+from dental_notes_schema import DentalNote
 from extract_note import OllamaUnreachable, call_model, parse_reply
 from storage import lookup_patient, save_new_note
 
@@ -28,7 +29,7 @@ def _locked_patient(cf):
     # never be tricked into filing under a patient the request didn't lock
     if not cf:
         return None
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
     patient = lookup_patient(cf, get_db())
     if patient is None:
@@ -106,7 +107,7 @@ def new_note():
             codice_fiscale = locked["cf"]
         else:
             patient_name = request.form["patient_name"]
-            codice_fiscale = request.form["codice_fiscale"]
+            codice_fiscale = normalize_cf(request.form["codice_fiscale"])
         note = DentalNote(
             patient_name=patient_name,
             codice_fiscale=codice_fiscale,

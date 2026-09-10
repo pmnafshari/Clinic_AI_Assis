@@ -18,7 +18,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 import storage
 from auth import log_audit
-from dental_notes_schema import CF_PATTERN
+from codice_fiscale import is_valid as is_valid_cf
 
 PATIENT_COOKIE_NAME = "patient_session"
 
@@ -115,8 +115,8 @@ def _generate_pin():
 
 
 def _require_cf(cf):
-    if not CF_PATTERN.match(cf or ""):
-        raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
+    if not is_valid_cf(cf or ""):
+        raise ValueError(f"not a valid codice fiscale: {cf!r}")
 
 
 def _credential(conn, cf):
@@ -219,7 +219,7 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
         log_audit(conn, cf, "patient", "patient_pin_check", cf, allowed=0, ip=source)
         return "throttled", None
 
-    if not CF_PATTERN.match(cf or ""):
+    if not is_valid_cf(cf or ""):
         check_password_hash(_DUMMY_HASH, pin or "")  # equalise the miss-path timing (D-03)
         return _refuse("unknown")
 

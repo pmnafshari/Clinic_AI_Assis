@@ -147,7 +147,7 @@ def amount_variants(amount):
     # sign, generated from the one canonical float in the fixture.
     #
     # the thousands-separated forms matter now that the invoices context
-    # carries a python-computed total (chat.invoice_context_lines): a total
+    # carries a python-computed total (chat.invoice_answer): a total
     # crosses 1000 far more easily than a single line does, and format_amount
     # renders 1234.5 as "€ 1.234,50" in italian and "€1,234.50" in english. a
     # scorer that only knew "1234,50" would score a perfectly faithful answer

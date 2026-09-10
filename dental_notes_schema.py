@@ -1,12 +1,12 @@
 import json
-import re
 from datetime import date
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
-CF_PATTERN = re.compile(r'^[A-Z]{4}[0-9]{12}$')
+from codice_fiscale import is_valid as is_valid_cf
+
 
 # anchored on this file, not the process cwd - the app, the watcher and the
 # selftests all start from different directories
@@ -32,8 +32,8 @@ class DentalNote(BaseModel):
     @field_validator('codice_fiscale')
     @classmethod
     def validate_cf(cls, v):
-        if not CF_PATTERN.match(v):
-            raise ValueError(f'codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {v!r}')
+        if not is_valid_cf(v):
+            raise ValueError(f'not a valid codice fiscale: {v!r}')
         return v
 
     def unknown_procedures(self):

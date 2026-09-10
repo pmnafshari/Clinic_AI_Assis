@@ -14,7 +14,8 @@ from pydantic import BaseModel, field_validator
 from ask import resolve_cf
 from auth import authorize, log_audit
 from cli_session import read_session
-from dental_notes_schema import CF_PATTERN, DentalNote
+from codice_fiscale import is_valid as is_valid_cf
+from dental_notes_schema import DentalNote
 from extract_note import OllamaUnreachable, extract_json
 from storage import get_collection, init_db, lookup_patient, upsert_note_chroma, upsert_note_sql
 
@@ -168,7 +169,7 @@ def resolve_patient(name, conn, choose_cf=None):
             # non-interactive caller (web) - refuse rather than prompt
             return None, f"multiple patients named {name} found - be more specific"
         typed = choose_cf(cf)
-        # candidates are already CF_PATTERN-filtered in resolve_cf, so
+        # candidates are already is_valid_cf-filtered in resolve_cf, so
         # membership also guarantees a pattern-valid cf
         if typed not in cf:
             return None, "that codice fiscale is not one of the candidates"
@@ -194,7 +195,7 @@ def update_field(cf, field, value, conn):
 def add_invoice(cf, amount, description, visit_date, sorted_root=Path("sorted")):
     # cf must be validated before any path is built - a model-supplied value
     # containing "../" must never reach the filesystem (T-06-02).
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
 
     xlsx_dir = sorted_root / cf / "records"
@@ -237,7 +238,7 @@ def pick_target_visit(cf, conn):
 
 def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorted")):
     # cf must be validated before any path is built (T-06-02)
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
 
     json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
@@ -251,7 +252,7 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
 
 def update_visit_field(cf, visit_id, value, conn, sorted_root=Path("sorted")):
     # cf must be validated before any path is built (T-06-02)
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
 
     # ownership re-check - safe no matter who builds the ToolCall

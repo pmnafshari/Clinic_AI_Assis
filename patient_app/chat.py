@@ -233,24 +233,26 @@ def visit_context_lines(rows, lang):
     return lines
 
 
-def invoice_context_lines(rows, lang):
-    # python does the arithmetic, the model only restates it. over three
-    # invoice lines the model answered with the first line alone and called it
-    # the amount owed; over two it summed them itself and got it right. neither
-    # is something to rely on for a patient's bill.
-    #
-    # the total goes in only above one line. repeated under a single invoice it
-    # measurably harms - "€ 120,50 - otturazione" then "Totale: € 120,50" and
-    # the model stops giving the amount at all, reading the repeat as a
-    # relationship between two facts. one line is already its own total.
-    #
-    # rounded before formatting: these are floats, and 0.1 + 0.2 must not reach
-    # format_amount as 0.30000000000000004.
+def invoice_answer(rows, lang):
+    """the invoice route's whole answer, built here and never by the model.
+
+    containment for a money defect (P02.03): invoices carry no payment
+    status, so a total of the lines is what was BILLED, not what is owed. the
+    model used to restate it - asked "quanto devo pagare?" it answered "Devi
+    pagare € 580,00" for lines that may long since have been paid. an llm is
+    not the source of truth for a debt (R09), so the amounts are formatted in
+    python, called billed, and followed by a fixed sentence that says the
+    system cannot know what is still to pay. the real balance is P07's ledger.
+    """
     lines = render_invoices(rows, lang)
+    parts = [t("inv_on_record", lang).format(lines="; ".join(lines))]
+    # rounded before formatting: these are floats, and 0.1 + 0.2 must not
+    # reach format_amount as 0.30000000000000004. one line is its own total.
     if len(rows) > 1:
         total = round(sum(row["amount"] for row in rows), 2)
-        lines.append(f"{t('ctx_total', lang)}: {format_amount(total, lang)}")
-    return lines
+        parts.append(t("inv_billed_total", lang).format(total=format_amount(total, lang)))
+    parts.append(t("inv_not_recorded", lang))
+    return " ".join(parts)
 
 
 def parse_reply(reply):
@@ -345,12 +347,14 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     if not data:
         return {"state": "refusal", "body": None, "target": f"{route}:empty"}
 
+    # money is answered in python, never by the model - see invoice_answer
+    if route == "invoices":
+        return {"state": "answer", "body": invoice_answer(data, lang), "target": route}
+
     # 6. render the already-scoped rows through patient_app/render.py, in
     # the patient's own language (D-06)
     if route == "next_appointment":
         lines = [render_next_appointment(data, lang)]
-    elif route == "invoices":
-        lines = invoice_context_lines(data, lang)
     elif route == "demographics":
         lines = render_demographics(data, lang)
     else:
@@ -981,6 +985,28 @@ def selftest():
             "8: resolve_cf is ask.py's inverse operation, patient code must never call it"
         assert re.search(r"(?i)\b(insert|update|delete|drop|alter|replace)\b", scannable) is None, \
             "8: patient_app/chat.py holds no write path either"
+
+        # 9. P02.03 - money is answered in python and never states a debt.
+        # invoices carry no payment status, so the model used to turn a total
+        # of billed lines into "devi pagare". raising_urlopen fails this
+        # section if the model is called for a money question at all.
+        for lang, question, owe in (
+            ("it", "Quanto devo pagare?", r"devi pagare|devi ancora|sei in debito"),
+            ("en", "How much do I owe?", r"you owe|you must pay|amount due|outstanding"),
+        ):
+            r9 = answer_question(question, cf_a, conn, lang, urlopen=raising_urlopen)
+            assert r9["state"] == "answer" and r9["target"] == "invoices", f"9: {r9}"
+            assert not re.search(owe, r9["body"].lower()), f"9: the answer states a debt: {r9['body']}"
+            assert t("inv_not_recorded", lang) in r9["body"], "9: it must say payments are not recorded"
+            assert format_amount(80.0, lang) in r9["body"], "9: patient A's own line is listed"
+            assert format_amount(40.0, lang) not in r9["body"], "9: patient B's line must never appear"
+        conn.execute(
+            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            " VALUES (?, ?, ?, ?, ?)", (cf_a, visit_id_a, 1, 20.5, "xray"))
+        conn.commit()
+        r9 = answer_question("Quanto devo pagare?", cf_a, conn, "it", urlopen=raising_urlopen)
+        assert t("inv_billed_total", "it").format(total=format_amount(100.5, "it")) in r9["body"], \
+            f"9: two lines carry a billed total, computed in python: {r9['body']}"
 
     print("selftest ok")
 

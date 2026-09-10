@@ -300,7 +300,14 @@ STRINGS = {
     "ctx_phone": {"it": "Telefono", "en": "Phone"},
     "ctx_visit_date": {"it": "Data", "en": "Date"},
     "ctx_procedure": {"it": "Procedura", "en": "Procedure"},
-    "ctx_total": {"it": "Totale", "en": "Total"},
+    # the invoice answer (chat.invoice_answer). billed, never "owed": there is
+    # no payment status to know what is owed from (P02.03)
+    "inv_on_record": {"it": "Fatture registrate: {lines}.", "en": "Invoices on record: {lines}."},
+    "inv_billed_total": {"it": "Totale fatturato: {total}.", "en": "Total billed: {total}."},
+    "inv_not_recorded": {
+        "it": "Il sistema non registra i pagamenti, quindi non può dirti quanto resta da pagare: per questo chiedi alla clinica.",
+        "en": "This system does not record payments, so it cannot tell you what is still to pay: please ask the clinic.",
+    },
 
     # --- glossary phrase templates, one per dental_shorthand_glossary.json code ---
     # [ASSUMED] italian phrasing not yet native-speaker reviewed, same standing

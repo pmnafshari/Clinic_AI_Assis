@@ -2,7 +2,7 @@ import re
 import sys
 import unittest
 
-CF_REGEX = re.compile(r'^[A-Z]{4}[0-9]{12}$')
+from codice_fiscale import SYNTHETIC as CF_REGEX
 
 
 class TestDentalNoteV2(unittest.TestCase):

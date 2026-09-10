@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import Blueprint, current_app, g, redirect, render_template, request, url_for
 
+from codice_fiscale import normalize as normalize_cf
 import appointments
 import patient_accessor
 import patient_auth
@@ -103,7 +104,7 @@ def login():
     if request.method == "GET":
         return render_template("patient_login.html")
 
-    cf = request.form.get("codice_fiscale", "").strip().upper()
+    cf = normalize_cf(request.form.get("codice_fiscale", ""))
     pin = request.form.get("pin", "")
 
     # unbounded form input goes straight into werkzeug's key derivation

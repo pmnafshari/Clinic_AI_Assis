@@ -32,7 +32,7 @@ THIN_TRAIN_OCCURRENCES = 3
 NEEDED = 180
 TRAIN_COUNT = 150
 
-CF_PATTERN = re.compile(r'^[A-Z]{4}[0-9]{12}$')
+from codice_fiscale import is_valid as is_valid_cf
 MONEY_PATTERN = re.compile(r'\d\s*(eur|euro|€|\$)', re.IGNORECASE)
 MONEY_PATTERN2 = re.compile(r'(eur|euro|€|\$)\s*\d', re.IGNORECASE)
 NEXT_APPT_FMT = re.compile(r'^\d+d$')
@@ -83,7 +83,7 @@ def validate_sample(raw, gold):
 
     cf = gold.get('codice_fiscale', '')
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         return False, f"CF regex: {cf!r}"
 
     if cf not in raw:

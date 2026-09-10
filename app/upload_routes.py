@@ -8,7 +8,7 @@ from werkzeug.utils import secure_filename
 import sort_files
 import upload_worker
 from auth import authorize, log_audit
-from dental_notes_schema import CF_PATTERN
+from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
@@ -92,7 +92,7 @@ def _process_uploads(files, cf, username, role, conn):
 
 @upload_bp.route("/patients/<cf>/upload", methods=["POST"])
 def submit_patient(cf):
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     if not authorize(g.user["role"], "upload_file"):

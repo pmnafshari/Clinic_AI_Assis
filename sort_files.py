@@ -4,7 +4,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from dental_notes_schema import CF_PATTERN
+from codice_fiscale import is_valid as is_valid_cf
 from extract_note import extract_note, OllamaUnreachable
 from action_log import log_action
 
@@ -47,7 +47,7 @@ def _move(src, dest_dir, reason, sorted_root, log_path=None):
 
 def find_cf_in_name(filename):
     for token in re.split(r'[\W_]+', filename.upper()):
-        if CF_PATTERN.match(token):
+        if is_valid_cf(token):
             return token
     return None
 

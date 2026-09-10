@@ -100,7 +100,7 @@ def selftest():
     except ValueError:
         pass
 
-    # 3b. a codice_fiscale that fails the v2 regex (^[A-Z]{4}[0-9]{12}$) is flagged,
+    # 3b. a codice_fiscale that fails codice_fiscale.is_valid is flagged,
     # not silently accepted - structural guard for a malformed key field.
     try:
         parse_reply('{"patient_name": "anna bianchi", "codice_fiscale": "not-a-cf"}')

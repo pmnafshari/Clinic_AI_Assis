@@ -1,5 +1,4 @@
 import json
-import re
 import sys
 
 from extract_note import OllamaUnreachable, extract_note
@@ -10,7 +9,7 @@ THRESHOLD = 0.85
 # record) - gated on its own so a handful of easy notes can't dilute it under the
 # aggregate threshold and let a translation-blind model through.
 PROCEDURES_THRESHOLD = 0.85
-CF_RE = re.compile(r'^[A-Z]{4}[0-9]{12}$')
+from codice_fiscale import is_valid as is_valid_cf
 
 GATE_FIELDS = [
     "patient_name",
@@ -99,7 +98,7 @@ def field_match(name, pred, gold):
     if name == "codice_fiscale":
         pn = norm_str(pred)
         gn = norm_str(gold)
-        return pn == gn and bool(CF_RE.match(gold or ""))
+        return pn == gn and is_valid_cf(gold or "")
 
     # next_appointment and all other scalar fields
     return norm_str(pred) == norm_str(gold)

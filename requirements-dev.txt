@@ -5,3 +5,10 @@
 # shot_pages.py. needs a one-off browser download after install:
 #     .venv/bin/python -m playwright install chromium
 playwright==1.62.0
+
+# baseline security scans (P02.05). both only read the repo; pip-audit sends
+# dependency names to pypi/osv, never data.
+#     .venv/bin/pip-audit -r requirements.txt
+#     git ls-files -z | xargs -0 .venv/bin/detect-secrets scan
+pip-audit==2.9.0
+detect-secrets==1.5.0

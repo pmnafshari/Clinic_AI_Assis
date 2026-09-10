@@ -9,7 +9,7 @@ import ask
 import patient_auth
 import pending_actions
 from auth import authorize, log_audit
-from dental_notes_schema import CF_PATTERN
+from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_clinical, lookup_patient
 
 from .db import get_db
@@ -62,7 +62,7 @@ def detail_view(cf):
         return redirect(url_for("dashboard.index"))
 
     # validate before any db/filesystem access - cf is a raw path segment
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     conn = get_db()
@@ -74,6 +74,14 @@ def detail_view(cf):
     # assistant also holds (RBAC-03)
     show_clinical = authorize(g.user["role"], "read_clinical")
     clinical = lookup_clinical(cf, conn) if show_clinical else None
+
+    # an authorized view is audited too, not only a refusal (P02.04): who
+    # opened whose record, and when - never what it said. written BEFORE the
+    # page renders, so if the audit write fails the request fails with it and
+    # no record is served unlogged (fail-closed). the 5s files poll is not
+    # logged per poll; this view, which starts it, is.
+    log_audit(conn, g.user["username"], g.user["role"],
+              "view_record_clinical" if show_clinical else "view_record", cf, allowed=1)
 
     return render_template(
         "patients_detail.html",
@@ -93,7 +101,7 @@ def files_fragment(cf):
     if not authorize(g.user["role"], "read_clinical"):
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     patient_dir = SORTED_ROOT / cf
@@ -115,7 +123,7 @@ def issue_pin_submit(cf):
                   cf, allowed=0)
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     conn = get_db()
@@ -145,7 +153,7 @@ def revoke_pin_submit(cf):
                   cf, allowed=0)
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     conn = get_db()
@@ -177,7 +185,7 @@ def edit_form_fragment(cf):
     if not authorize(g.user["role"], "read_notes"):
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     field = request.args.get("field", "")
@@ -197,7 +205,7 @@ def edit_submit(cf):
     if not authorize(g.user["role"], "read_notes"):
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     field = request.form.get("field", "")
@@ -241,7 +249,7 @@ def visit_edit_form_fragment(cf, visit_id):
     if not authorize(g.user["role"], "read_clinical"):
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     row = get_db().execute(
@@ -262,7 +270,7 @@ def visit_edit_submit(cf, visit_id):
     if not authorize(g.user["role"], "read_clinical"):
         return "", 403
 
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         abort(404)
 
     value = request.form.get("value", "")

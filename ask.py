@@ -4,7 +4,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from dental_notes_schema import CF_PATTERN
+from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from extract_note import OllamaUnreachable
 from storage import get_collection, init_db, lookup_patient
 
@@ -54,9 +54,9 @@ def resolve_cf(name, conn):
     if len(rows) == 0:
         return None
     if len(rows) > 1:
-        return [r["codice_fiscale"] for r in rows if CF_PATTERN.match(r["codice_fiscale"])]
+        return [r["codice_fiscale"] for r in rows if is_valid_cf(r["codice_fiscale"])]
     cf = rows[0]["codice_fiscale"]
-    if not CF_PATTERN.match(cf):
+    if not is_valid_cf(cf):
         return None
     return cf
 
@@ -446,8 +446,8 @@ def main():
         return
     if isinstance(cf, list):
         print(f"multiple patients named {name} found, candidates: {', '.join(cf)}")
-        typed = input("type the codice fiscale to use: ").strip().upper()
-        if not CF_PATTERN.match(typed):
+        typed = normalize_cf(input("type the codice fiscale to use: "))
+        if not is_valid_cf(typed):
             print("invalid codice fiscale")
             return
         cf = typed
