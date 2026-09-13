@@ -376,6 +376,33 @@ def selftest():
             "11i: a file merely NAMED needs_review.txt must not trip the segment test"
         assert "Needs Review" not in resp11i.text, "11i: filename must not false-positive as needs_review"
 
+        # 11j - the upload list shows a readable time and keeps the machine one
+        # (P03.06). the raw ISO stays in <time datetime>, so the row is still
+        # parseable; what changes is what a person reads.
+        _seed_user(db_path, "unote9", "goodpass", "assistant")
+        client11j = _login(app, "unote9", "goodpass")
+        conn11.execute(
+            "INSERT INTO audit_log (ts, username, role, action, target, allowed)"
+            " VALUES ('2026-09-10T14:09:33.812445', 'unote9', 'assistant',"
+            " 'upload_file', 'sorted/media/scan11j.pdf', 1)")
+        conn11.commit()
+        resp11j = client11j.get("/upload/recent").text
+        assert "10 Sep 2026, 14:09" in resp11j, \
+            "11j: the upload list must show a readable time"
+        assert '<time datetime="2026-09-10T14:09:33.812445">' in resp11j, \
+            "11j: and keep the exact stored value in the datetime attribute"
+        assert ">2026-09-10T14:09:33.812445<" not in resp11j, \
+            "11j: the raw ISO string must not be what the user reads"
+        # a row whose ts is not parseable still renders - the list is a status
+        # view, and one odd row must not take the whole fragment down
+        conn11.execute(
+            "INSERT INTO audit_log (ts, username, role, action, target, allowed)"
+            " VALUES ('not a timestamp', 'unote9', 'assistant',"
+            " 'upload_file', 'sorted/media/odd11j.pdf', 1)")
+        conn11.commit()
+        assert client11j.get("/upload/recent").status_code == 200, \
+            "11j: an unparseable timestamp must not break the list"
+
         # 11e - D-11/D-19 leak guard. a plain `username = ?` filter alone
         # would leak watcher rows to any account literally named "system",
         # so seed exactly that account and prove the role check is what

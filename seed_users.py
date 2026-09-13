@@ -65,6 +65,25 @@ def selftest():
         except ValueError:
             pass
 
+        # 5. SEEDING CREATES, IT DOES NOT REPAIR. INSERT OR IGNORE means an
+        # existing row wins, whatever this list says - which is correct, since
+        # a real deployment's roles and passwords must not be reset by a dev
+        # seed list. the cost is that drift is silent: the dev db's `admin`
+        # account sat on role `dentist` while this file declared `admin`, and
+        # every re-seed left it that way. it was repaired by hand through
+        # user_admin.set_role on 2026-09-13, after a backup snapshot.
+        #
+        # this check exists so the next person reads the behaviour here rather
+        # than assuming a re-seed fixes a wrong role. if seeding is ever made
+        # to repair, this is the assertion to change deliberately.
+        conn.execute("UPDATE users SET role = 'assistant' WHERE username = 'admin'")
+        conn.commit()
+        seed(conn)
+        drifted = conn.execute(
+            "SELECT role FROM users WHERE username = 'admin'").fetchone()["role"]
+        assert drifted == "assistant", \
+            "5: seeding must not silently rewrite an existing account's role"
+
     print("selftest ok")
 
 

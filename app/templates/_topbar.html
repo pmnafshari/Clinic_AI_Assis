@@ -83,6 +83,11 @@
                hx-target="#app-search-results">
         <div id="app-search-results" class="app-search-results"></div>
       </div>
+      {# below md the box above is display:none, and searching then meant
+         opening the drawer and finding /patients by hand. same capability,
+         same destination, one tap. #}
+      <a class="app-search-sm d-inline-flex d-md-none" href="{{ url_for('patients.list_view') }}"
+         aria-label="Search patients"><i class="bi bi-search" aria-hidden="true"></i></a>
       {% endif %}
 
       {% if authorize(g.user.role, 'manage_appointments') %}

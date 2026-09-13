@@ -255,6 +255,19 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .app-search-results:empty { display: none; }
+/* the small-screen stand-in for the box above. 2.5rem square keeps it a real
+   tap target next to the account menu rather than a bare glyph. */
+.app-search-sm {
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.625rem;
+  color: var(--ds-text-muted);
+  text-decoration: none;
+}
+.app-search-sm:hover { background: var(--ds-surface-sunken); color: var(--ds-text); }
+.app-search-sm:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
 
 .app-search-results > * {
   margin: 0 !important;

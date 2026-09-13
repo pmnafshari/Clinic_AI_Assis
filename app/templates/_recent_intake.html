@@ -3,7 +3,11 @@
   {% for row in rows %}
   <div class="list-group-item d-flex justify-content-between align-items-center gap-2">
     <div class="min-w-0">
-      <small class="text-secondary d-block">{{ row.ts }}</small>
+      {# the readable form for the person, the raw ISO for anything parsing it.
+         the badge markup below is phase 23's contract and is asserted by
+         upload_routes_selftest 11-11i - this line is deliberately the only
+         thing that changed here. #}
+      <small class="text-secondary d-block"><time datetime="{{ row.ts }}">{{ row.ts_display }}</time></small>
       {# upload filenames are user-supplied and unbounded. without min-w-0 on
          this flex child the span cannot shrink, and a long name pushes the
          whole page sideways - measured at 1576px on a 390px viewport. #}

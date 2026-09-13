@@ -1,5 +1,6 @@
 import os
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
@@ -148,6 +149,17 @@ def _intake_state(row):
     return "rejected"
 
 
+def _ts_display(ts):
+    # audit_log stores ISO text. "2026-09-10T14:09:33.812445" is a timestamp a
+    # machine reads; the person watching their upload land wants "10 Sep 2026,
+    # 14:09". the raw value stays on the row for the <time datetime> attribute,
+    # so nothing machine-readable is lost.
+    try:
+        return datetime.fromisoformat(ts).strftime("%-d %b %Y, %H:%M")
+    except (TypeError, ValueError):
+        return ts
+
+
 def _user_recent_intake(conn, username, limit=10):
     # per-user scoping (D-19) - reads audit_log only, never the shared
     # operational log, which has no user field and would leak clinic-wide
@@ -179,6 +191,7 @@ def _user_recent_intake(conn, username, limit=10):
         seen.add(name)
         collapsed.append({
             "ts": row["ts"],
+            "ts_display": _ts_display(row["ts"]),
             "target": row["target"],
             "action": row["action"],
             "allowed": row["allowed"],

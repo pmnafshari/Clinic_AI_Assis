@@ -857,6 +857,27 @@ def selftest():
         assert b"Appointments" not in adm_shell.data, \
             "20: an admin holds manage_users alone and must not be offered Appointments"
 
+        # 20c. P03.06 - the header search box is d-none below md, so on a phone
+        # the only way to look a patient up was the drawer. the small-screen
+        # link stands in for it, and carries the SAME capability: a role that
+        # may not search must not get a second door to it.
+        assert b"app-search-sm" in shell.data, \
+            "20c: a dentist must get the small-screen search link"
+        assert b"app-search-sm" in asst_shell.data, \
+            "20c: an assistant holds read_notes and gets it too"
+        assert b"app-search-sm" not in adm_shell.data, \
+            "20c: an admin does not hold read_notes and must not get it"
+        # it is the small-screen counterpart, so the box it replaces must still
+        # be the one hidden there - if the box stopped being d-none below md,
+        # both would show and this link would be a duplicate
+        assert b'class="app-search d-none d-md-block"' in shell.data, \
+            "20c: the full search box is still the md-and-up one"
+        sm = re.search(rb'<a class="app-search-sm[^>]*>', shell.data)
+        assert b"d-md-none" in sm.group(0), \
+            "20c: and the link is the below-md one, or the two would both show"
+        assert b'href="/patients"' in sm.group(0), \
+            "20c: it goes to the patients list, where the inline search lives"
+
         # 20b. UX-20 - what the reports page must NEVER claim. invoices
         # carry no status and there is no payments table, and patients carry no
         # created date, so revenue and growth are unprovable and are excluded
