@@ -1,3 +1,4 @@
+from site_app import content
 from site_app import create_site_app
 
 # its own port, alongside 5000 (staff) and 5001 (patient). loopback in
@@ -13,4 +14,8 @@ if __name__ == "__main__":
     # unencrypted host because they read patient data. this app reads none,
     # so there is nothing for encryption at rest to protect. if that ever
     # stops being true, the guard comes back with it.
+    #
+    # the portal guard does apply: this is the app that sends patients to their
+    # sign-in, and a loopback link on a public site sends them nowhere.
+    content.portal_guard_or_exit()
     app.run(host="127.0.0.1", port=SITE_PORT, threaded=True)

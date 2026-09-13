@@ -546,6 +546,39 @@ def selftest():
         assert ":5000" not in body, f"21: {path} links to the staff app"
         assert fresh["actions"]["login_href"] in body, f"21: {path} must carry the patient login"
 
+    # 22. THE PORTAL GUARD (P03.05). the yaml default is a loopback address and
+    # it is committed, so the way this goes wrong is by nobody doing anything -
+    # the site goes public with a Login button pointing at the visitor's own
+    # machine. the refusal is what turns that into a failure someone sees.
+    #
+    # asserted on the refusal reason, not just on truthiness: a guard that
+    # refuses everything would pass a `is not None` check and take the whole
+    # deployment down for the wrong reason.
+    PROD = {"CLINIC_ENV": "production"}
+    assert content.portal_guard_refusal({}, "http://127.0.0.1:5001") is None, \
+        "22: a loopback portal in development is the normal case and must start"
+    assert content.portal_guard_refusal({}, "") is None, \
+        "22: development with nothing configured still starts"
+    for local in ("http://127.0.0.1:5001", "http://localhost:5001",
+                  "https://LocalHost/", "http://[::1]:5001", "http://0.0.0.0:5001",
+                  "http://portal.localhost"):
+        reason = content.portal_guard_refusal(PROD, local)
+        assert reason and "production" in reason, \
+            f"22: production must refuse a portal at {local}, got {reason!r}"
+    assert content.portal_guard_refusal(PROD, ""), \
+        "22: production with no portal configured at all must refuse"
+    assert content.portal_guard_refusal(PROD, "https://portal.example.test") is None, \
+        "22: production with a real portal address starts"
+    # an operator who edited clinic.yaml instead of exporting the variable has
+    # configured it just as well, and must not be refused
+    assert content.portal_guard_refusal(
+        PROD, content.load(env={"PATIENT_PORTAL_URL": "https://portal.example.test"})
+        ["actions"]["portal_url"]) is None, \
+        "22: the guard reads the resolved portal, not the environment variable"
+    # and the shipped default is exactly the thing it has to catch
+    assert content.portal_guard_refusal(PROD, content.load(env={})["actions"]["portal_url"]), \
+        "22: the committed clinic.yaml default must not be allowed into production"
+
     print("selftest ok")
 
 

@@ -7,8 +7,11 @@ the project, so this adds nothing to install.
 
 import os
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import yaml
+
+import codice_fiscale
 
 CONFIG_PATH = Path(__file__).resolve().parent / "clinic.yaml"
 
@@ -45,3 +48,41 @@ def load(path=None, env=None):
     actions["login_href"] = portal + "/login"
     actions["assistant_signin_href"] = portal + "/login"
     return data
+
+
+# a loopback portal is the right default for a demo and the wrong one for a
+# deployment: this is the public site, so every visitor who clicks Login would
+# be sent to their OWN machine. it fails quietly - the link is there, it just
+# goes nowhere - and the yaml default is committed, so shipping it is the
+# path of least resistance rather than an unlikely mistake.
+LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1", "0.0.0.0")
+
+
+def portal_guard_refusal(env, portal_url):
+    """Why the public site must not start, or None. Pure, so every branch is testable.
+
+    Takes the RESOLVED portal url, not the environment variable: an operator who
+    edits portal_url in clinic.yaml has configured the deployment just as well
+    as one who exports PATIENT_PORTAL_URL, and refusing that would be refusing a
+    correct setup.
+    """
+    if not codice_fiscale.is_production(env):
+        return None
+    if not portal_url:
+        return f"{PORTAL_ENV} is not set and clinic.yaml carries no portal_url"
+    host = (urlsplit(portal_url).hostname or "").lower()
+    if host in LOCAL_HOSTS or host.endswith(".localhost"):
+        return (f"the patient portal points at {host} while CLINIC_ENV=production - "
+                f"set {PORTAL_ENV} to the address patients actually reach")
+    return None
+
+
+def portal_guard_or_exit(env=None):
+    # startup guard for site_run.py, same shape as disk_guard and
+    # codice_fiscale.guard_or_exit
+    import sys
+    env = os.environ if env is None else env
+    reason = portal_guard_refusal(env, load(env=env)["actions"]["portal_url"])
+    if reason:
+        print(f"refusing to start: {reason}", file=sys.stderr)
+        sys.exit(1)
