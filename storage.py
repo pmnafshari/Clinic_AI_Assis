@@ -114,6 +114,14 @@ def init_db(db_path):
     # matters is by table and module, not by database file.
     from patient_auth import init_patient_tables
     init_patient_tables(conn)
+
+    # duplicate review and merge mapping (P04). deferred for the same circular
+    # import reason - patient_identity imports auth, which imports nothing of
+    # this, but the module reads as a pair with patient_auth above and is kept
+    # beside it. both tables are additive: an old database gains them empty.
+    from patient_identity import SCHEMA as IDENTITY_SCHEMA
+    conn.executescript(IDENTITY_SCHEMA)
+    conn.commit()
     return conn
 
 

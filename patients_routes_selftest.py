@@ -54,6 +54,18 @@ def _phone(db_path, cf):
     return row["phone"]
 
 
+def _rows(db_path, sql, params=()):
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    out = conn.execute(sql, params).fetchall()
+    conn.close()
+    return out
+
+
+def _rows_count(db_path, table):
+    return _rows(db_path, f"SELECT COUNT(*) c FROM {table}")[0]["c"]
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
@@ -880,6 +892,88 @@ def selftest():
         admin_page_resp = admin_client.get(f"/patients/{cap_cf}")
         assert admin_page_resp.status_code == 302, \
             "29: admin GET /patients/<cf> should redirect (RBAC-04)"
+
+        # --- duplicate review (P04, plan 1) -------------------------------
+        #
+        # the property under test is that this screen ASKS and never ACTS.
+        # every assertion about a count below is really an assertion that
+        # looking at the list changed nothing.
+        dup_a, dup_b = "RSPS850010150900", "RSSP850010150900"
+        dconn = sqlite3.connect(db_path)
+        dconn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                      " VALUES (?, ?, ?)", (dup_a, "Paola Rossi", None))
+        dconn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                      " VALUES (?, ?, ?)", (dup_b, "paola rossi", "555 0000"))
+        dconn.commit()
+        dconn.close()
+
+        # 30. /patients/duplicates must reach its own view and NOT be read as
+        # a codice fiscale by /patients/<cf>. the two rules overlap; werkzeug
+        # sorts static ahead of dynamic, but that is exactly the kind of thing
+        # that quietly stops being true, and the failure mode is a 404 on a
+        # real page.
+        before30 = _rows_count(db_path, "patients")
+        dup_resp = admin_client.get("/patients/duplicates")
+        assert dup_resp.status_code == 200, \
+            f"30: /patients/duplicates must reach the review screen, got {dup_resp.status_code}"
+        dup_body = dup_resp.text
+        assert "Possible duplicates" in dup_body, "30: and render the review screen"
+
+        # 31. the pair is surfaced with its reasons in words, and the screen
+        # says plainly that nothing has been merged. staff who read this as a
+        # list of findings will click through it.
+        assert dup_a in dup_body and dup_b in dup_body, "31: both records are shown"
+        assert "the same name" in dup_body, "31: the reasons must be in words"
+        assert "Nothing here has been merged" in dup_body, \
+            "31: the screen must say it has not acted"
+
+        # 32. LOOKING CHANGED NOTHING. a detector with a side effect is a
+        # merge engine, and this is the assertion that would catch one.
+        assert _rows_count(db_path, "patients") == before30, \
+            "32: reviewing must not add or remove a patient"
+        assert _rows_count(db_path, "patient_merges") == 0, "32: nor merge anything"
+        assert _rows_count(db_path, "patient_duplicate_dismissals") == 0, "32: nor dismiss anything"
+
+        # 33. THE WITHHOLD. a dentist holds read_notes but not manage_users,
+        # and the merge screen is the most destructive surface in the product.
+        # asserted on the body, so a CSS hide fails this.
+        for withheld, who in ((dentist_client, "dentist"), (assistant_client, "assistant")):
+            body33 = withheld.get("/patients/duplicates", follow_redirects=True).text
+            assert "Possible duplicates" not in body33, \
+                f"33: a {who} must not reach the duplicate review screen"
+            assert dup_b not in body33, f"33: nor see the candidate records through it"
+        denied33 = _rows(db_path,
+                         "SELECT * FROM audit_log WHERE action = 'review_duplicates' AND allowed = 0")
+        assert denied33, "33: a refused review must leave an audit row"
+
+        # 34. a dismissal is a decision, and it is kept - the pair does not
+        # come back next week to be clicked through again
+        csrf34 = _csrf_from(dup_body)
+        drop = admin_client.post("/patients/duplicates/dismiss", data={
+            "cf_a": dup_a, "cf_b": dup_b, "csrf_token": csrf34,
+            "reason": "checked both records, different birth dates",
+        }, follow_redirects=True)
+        assert drop.status_code == 200, "34: dismissing should land back on the review screen"
+        assert _rows_count(db_path, "patient_duplicate_dismissals") == 1, \
+            "34: the decision is recorded"
+        assert dup_a not in admin_client.get("/patients/duplicates").text, \
+            "34: and the pair leaves the list"
+        kept = _rows(db_path, "SELECT * FROM patient_duplicate_dismissals")[0]
+        assert kept["reason"] and "birth dates" in kept["reason"], \
+            "34: including how the person knew"
+        assert _rows(db_path,
+                     "SELECT * FROM audit_log WHERE action = 'dismiss_duplicate' AND allowed = 1"), \
+            "34: and it is audited"
+
+        # 35. a withheld role cannot dismiss either. a gate on the GET and none
+        # on the POST is the shape this check exists to catch - the same one
+        # appointments check 7 catches for booking.
+        csrf35 = _csrf_from(dentist_client.get("/patients").text)
+        dentist_client.post("/patients/duplicates/dismiss", data={
+            "cf_a": "AAAA000000000001", "cf_b": "ZZZZ999999999999", "csrf_token": csrf35,
+        })
+        assert _rows_count(db_path, "patient_duplicate_dismissals") == 1, \
+            "35: a role without manage_users must not be able to dismiss a pair"
 
     print("selftest ok")
 

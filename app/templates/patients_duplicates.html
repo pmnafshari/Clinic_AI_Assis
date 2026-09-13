@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Records</p>
+    <h1 class="ds-page-title">Possible duplicates</h1>
+    <p class="ds-page-meta">{{ pairs | length }} pair{{ '' if pairs | length == 1 else 's' }} to review</p>
+  </div>
+</div>
+
+{# the screen states what it is and what it is not. staff who believe the list
+   is a list of duplicates will click through it; staff who understand it is a
+   list of QUESTIONS will read it. #}
+<div class="alert alert-secondary" role="note">
+  <strong>These are questions, not findings.</strong> Two people can share a name, and two records
+  with different codici fiscali are usually two different people. Nothing here has been merged, and
+  nothing merges on its own. Check the clinic's own records before deciding.
+</div>
+
+{% if pairs %}
+{% for pair in pairs %}
+<section class="card dash-card mb-3" aria-labelledby="pair-{{ loop.index }}">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="pair-{{ loop.index }}">
+        {{ pair.a.patient_name }} &middot; {{ pair.b.patient_name }}
+      </h2>
+      <p class="ds-card-sub">
+        Looks alike because:
+        {% for reason in pair.reasons %}{{ reason }}{% if not loop.last %}, {% endif %}{% endfor %}.
+      </p>
+    </div>
+    <span class="badge {{ 'text-bg-dark' if pair.strength == 'strong' else 'text-bg-secondary' }}">
+      {{ 'Worth checking' if pair.strength == 'strong' else 'Possible' }}
+    </span>
+  </div>
+  <div class="dash-card-body">
+    <div class="row g-3">
+      {% for side in (pair.a, pair.b) %}
+      <div class="col-12 col-md-6">
+        <div class="dup-side">
+          <p class="ds-row-title mb-1">{{ side.patient_name }}</p>
+          <p class="ds-row-sub mb-1"><code>{{ side.codice_fiscale }}</code></p>
+          <p class="ds-row-sub mb-2">{{ side.phone or 'no phone on record' }}</p>
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{{ url_for('patients.detail_view', cf=side.codice_fiscale) }}">Open record</a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <form method="post" action="{{ url_for('patients.duplicates_dismiss') }}"
+          class="dup-actions">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="cf_a" value="{{ pair.a.codice_fiscale }}">
+      <input type="hidden" name="cf_b" value="{{ pair.b.codice_fiscale }}">
+      <label class="form-label small" for="reason-{{ loop.index }}">
+        If these are different people, say how you know
+      </label>
+      <div class="d-flex gap-2 flex-wrap">
+        <input type="text" class="form-control w-auto flex-grow-1" id="reason-{{ loop.index }}"
+               name="reason" placeholder="e.g. checked both records, different birth dates">
+        <button type="submit" class="btn btn-outline-secondary">Different people</button>
+      </div>
+    </form>
+  </div>
+</section>
+{% endfor %}
+{% else %}
+<section class="card dash-card">
+  <div class="dash-card-body">
+    <p class="text-secondary mb-0">
+      No pairs to review. Records that have already been marked as different people stay off this
+      list.
+    </p>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

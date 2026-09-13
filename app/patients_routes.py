@@ -7,6 +7,7 @@ import sqlite3
 import agent
 import ask
 import patient_auth
+import patient_identity
 import pending_actions
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
@@ -52,6 +53,54 @@ def search_fragment():
     query = request.args.get("q", "")
     candidates = ask.fuzzy_lookup(query, get_db())
     return render_template("_patient_candidates.html", candidates=candidates, query=query)
+
+
+# --- duplicate review (P04) ------------------------------------------------
+#
+# REGISTERED BEFORE /patients/<cf> ON PURPOSE. Werkzeug sorts static rules
+# ahead of dynamic ones so the order in this file does not actually decide it,
+# but the two rules do overlap, and `patients_routes_selftest` asserts that
+# /patients/duplicates reaches this view rather than being read as a codice
+# fiscale. Do not merge the two into one dynamic rule.
+#
+# manage_users, not read_notes: merging two patients is the most destructive
+# operation in the product, and reception must not hold it. Dismissing a pair
+# is the same judgement in the other direction - a wrong dismissal hides a real
+# duplicate from everyone who looks after it - so it is gated identically.
+
+@patients_bp.route("/patients/duplicates")
+def duplicates_view():
+    if not authorize(g.user["role"], "manage_users"):
+        log_audit(get_db(), g.user["username"], g.user["role"],
+                  "review_duplicates", None, allowed=0)
+        flash("You don't have permission to review duplicate records.")
+        return redirect(url_for("dashboard.index"))
+
+    conn = get_db()
+    pairs = patient_identity.candidates(conn)
+    log_audit(conn, g.user["username"], g.user["role"],
+              "review_duplicates", str(len(pairs)), allowed=1)
+    return render_template("patients_duplicates.html", pairs=pairs)
+
+
+@patients_bp.route("/patients/duplicates/dismiss", methods=["POST"])
+def duplicates_dismiss():
+    # the gate lives in patient_identity.dismiss() as well as here. the module
+    # is callable from a CLI and from a future agent action, and a capability
+    # check that only exists in a route is a capability check that gets skipped.
+    ok, message = patient_identity.dismiss(
+        get_db(),
+        request.form.get("cf_a", ""),
+        request.form.get("cf_b", ""),
+        g.user["username"],
+        g.user["role"],
+        request.form.get("reason"),
+    )
+    if not ok:
+        flash(message, "error")
+        return redirect(url_for("dashboard.index"))
+    flash(message, "success")
+    return redirect(url_for("patients.duplicates_view"))
 
 
 @patients_bp.route("/patients/<cf>")

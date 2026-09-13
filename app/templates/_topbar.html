@@ -65,6 +65,13 @@
              href="{{ url_for('admin.users_view') }}">
             <i class="bi bi-people-fill"></i> Staff accounts
           </a>
+          {# manage_users, matching patients_routes.duplicates_view's own gate.
+             merging two patients is the most destructive action in the
+             product, so it sits with the account admin, not with reception. #}
+          <a class="nav-link{{ ' active' if request.endpoint == 'patients.duplicates_view' else '' }}"
+             href="{{ url_for('patients.duplicates_view') }}">
+            <i class="bi bi-people"></i> Duplicates
+          </a>
           {% endif %}
         </div>
       </div>

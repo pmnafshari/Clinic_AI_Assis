@@ -839,3 +839,15 @@ strong {
   --bs-btn-active-bg: var(--ds-border);
   --bs-btn-active-border-color: var(--ds-border-strong);
 }
+
+/* duplicate review (P04). the two sides are deliberately identical in weight -
+   nothing in the layout should suggest which record is the "real" one. */
+.dup-side {
+  height: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--app-border);
+  border-radius: 0.75rem;
+  background: var(--ds-surface-sunken);
+}
+.dup-side code { font-size: 0.8125rem; color: var(--ds-text); }
+.dup-actions { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--app-border); }
