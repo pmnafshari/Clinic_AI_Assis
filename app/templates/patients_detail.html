@@ -123,6 +123,37 @@
   </div>
 
   <div class="col-12 col-xl-8 d-flex flex-column gap-3">
+    {# one date-ordered history. every other card here is one relation in
+       isolation, and none of them answer "what happened to this person, in
+       order" - which is the question actually being asked when a record is
+       opened. #}
+    <section class="card dash-card" aria-labelledby="timeline-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
+          <p class="ds-card-sub">Visits, appointments and billing, in order</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if timeline %}
+        <ol class="tl">
+          {% for event in timeline %}
+          <li class="tl-item tl-{{ event.kind }}">
+            <span class="tl-date">{{ event.date or 'no date' }}</span>
+            <span class="tl-main">
+              <span class="ds-row-title">{{ event.title }}</span>
+              {% if event.detail %}<span class="ds-row-sub">{{ event.detail }}</span>{% endif %}
+              <span class="tl-source">{{ event.source }}</span>
+            </span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="text-secondary mb-0">Nothing recorded for this patient yet.</p>
+        {% endif %}
+      </div>
+    </section>
+
     {% if show_clinical %}
     <section class="card dash-card" aria-labelledby="clinical-title">
       <div class="dash-card-head">

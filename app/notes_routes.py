@@ -31,10 +31,23 @@ def _locked_patient(cf):
         return None
     if not is_valid_cf(cf):
         abort(404)
-    patient = lookup_patient(cf, get_db())
+    conn = get_db()
+    patient = lookup_patient(cf, conn)
     if patient is None:
         abort(404)
-    return {"cf": cf, "patient_name": patient["patient_name"]}
+    # P04.06: prefilled fields say WHERE they came from and HOW OLD that is.
+    # a name sitting in a box looks like something the person typed and
+    # checked; the same name with "from the patient record" beside it is
+    # something they have been handed and can disagree with.
+    latest = conn.execute(
+        "SELECT visit_date FROM visits WHERE codice_fiscale = ? AND visit_date IS NOT NULL"
+        " ORDER BY visit_date DESC LIMIT 1", (cf,)).fetchone()
+    return {
+        "cf": cf,
+        "patient_name": patient["patient_name"],
+        "source": "the patient record",
+        "as_of": latest["visit_date"] if latest else None,
+    }
 
 
 @notes_bp.route("/notes/new", methods=["GET", "POST"])
@@ -50,7 +63,13 @@ def new_note():
                            target=cf, allowed=0)
                 flash("You don't have permission to add notes.", "danger")
                 return redirect(url_for("dashboard.index"))
-        return render_template("notes_new.html", locked=_locked_patient(cf))
+        locked = _locked_patient(cf)
+        if locked:
+            # who was handed which patient's details, and when. a prefill is a
+            # disclosure of a patient's name to whoever opened the form.
+            log_audit(get_db(), g.user["username"], g.user["role"],
+                      "prefill_note", cf, allowed=1)
+        return render_template("notes_new.html", locked=locked)
 
     if "raw_note" in request.form:
         # step 1: extract once, render editable preview (D-02)

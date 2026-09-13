@@ -379,6 +379,88 @@ def repoint_index(collection, source_cf, target_cf, target_name):
     return len(ids)
 
 
+def timeline(conn, cf, show_clinical=True):
+    """One date-ordered record of everything that happened to a patient.
+
+    The detail page already has a card per relation - visits here, appointments
+    there, invoices below - and none of them answer "what happened to this
+    person, in order", which is the question a clinician actually asks.
+
+    NO TOTAL AND NO BALANCE. Invoice lines appear as what was billed on a
+    visit, and nothing anywhere adds them up. `invoices` carries no payment
+    status and there is no payments table, so any total would be a claim the
+    data cannot support - which is the exact defect P02 closed in the patient
+    chat. The ledger is P07's job.
+
+    show_clinical follows the caller's own gate: an assistant holds read_notes
+    but not read_clinical, so they get the shape of the history - a visit
+    happened on this date - without the clinical text.
+    """
+    events = []
+
+    for v in conn.execute(
+            "SELECT id, visit_date, procedures, clinical_notes FROM visits"
+            " WHERE codice_fiscale = ? ORDER BY visit_date IS NULL, visit_date, id", (cf,)):
+        procedures = json.loads(v["procedures"]) if v["procedures"] else []
+        events.append({
+            "date": v["visit_date"],
+            "kind": "visit",
+            "title": ", ".join(procedures) if procedures else "Visit",
+            "detail": (v["clinical_notes"] or "") if show_clinical else "",
+            "source": "from a filed note",
+        })
+
+    for a in conn.execute(
+            "SELECT starts_at, minutes, status, dentist FROM appointments"
+            " WHERE codice_fiscale = ? ORDER BY starts_at", (cf,)):
+        # a request carries a date and a period, never a time - so the time
+        # part of starts_at is meaningless on it and must not be rendered
+        requested = a["status"] == "requested"
+        events.append({
+            "date": a["starts_at"][:10],
+            "kind": "appointment",
+            "title": {"booked": "Appointment", "requested": "Requested an appointment",
+                      "cancelled": "Appointment cancelled",
+                      "declined": "Request declined"}.get(a["status"], a["status"]),
+            "detail": "" if requested else
+                      f"{a['starts_at'][11:16]} with {a['dentist']} ({a['minutes']} min)",
+            "source": "scheduling",
+        })
+
+    for inv in conn.execute(
+            "SELECT i.amount, i.description, v.visit_date FROM invoices i"
+            " JOIN visits v ON v.id = i.visit_id"
+            " WHERE i.codice_fiscale = ? ORDER BY v.visit_date, i.line_index", (cf,)):
+        events.append({
+            "date": inv["visit_date"],
+            "kind": "billed",
+            "title": f"Billed {inv['amount']:.2f} EUR",
+            "detail": inv["description"] or "",
+            # said on every single line, not once at the bottom, because the
+            # line is what gets read aloud to a patient over the phone
+            "source": "billed, not collected - payments are not recorded here",
+        })
+
+    for mrg in conn.execute(
+            "SELECT source_cf, merged_at, merged_by, source_row FROM patient_merges"
+            " WHERE target_cf = ? ORDER BY merged_at", (cf,)):
+        was = json.loads(mrg["source_row"])
+        events.append({
+            "date": mrg["merged_at"][:10],
+            "kind": "merge",
+            "title": f"Absorbed the record of {was.get('patient_name') or mrg['source_cf']}",
+            "detail": f"{mrg['source_cf']}, merged by {mrg['merged_by']}",
+            # a record that absorbed another says so on its own history. a
+            # merge that is only visible in an audit log is a merge nobody
+            # reading the record will ever know happened.
+            "source": "record merge",
+        })
+
+    # undated rows sort last rather than crashing the sort or claiming a date
+    events.sort(key=lambda e: (e["date"] is None, e["date"] or ""))
+    return events
+
+
 def selftest():
     import sqlite3
     import tempfile
@@ -681,6 +763,86 @@ def selftest():
         # answered and must not be asked again
         assert all(GONE not in (c["a"]["codice_fiscale"], c["b"]["codice_fiscale"])
                    for c in candidates(m)), "18: a merged record is not a duplicate candidate"
+
+        # --- the record timeline (plan 3) ---------------------------------
+        t = storage.init_db(str(Path(tmp) / "timeline.sqlite"))
+        TCF = "TTTT000000000001"
+        t.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                  " VALUES (?, 'Timeline Rossi', NULL)", (TCF,))
+        t.execute("INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                  " clinical_notes, next_appointment, source_path)"
+                  " VALUES (?, '2026-03-02', '[\"comp 20\"]', 'filled the tooth', NULL, 't1.json')",
+                  (TCF,))
+        vid = t.execute("SELECT id FROM visits WHERE codice_fiscale = ?", (TCF,)).fetchone()["id"]
+        t.execute("INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+                  " VALUES (?, ?, 0, 80.0, 'composite filling')", (TCF, vid))
+        t.execute("INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+                  " status, created_at, updated_at)"
+                  " VALUES (?, 'dr rossi', '2026-05-10T14:30:00', 30, 'booked', '', '')", (TCF,))
+        t.execute("INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+                  " status, period, created_at, updated_at)"
+                  " VALUES (?, '', '2026-01-04T00:00:00', 0, 'requested', 'morning', '', '')", (TCF,))
+        t.commit()
+
+        # 19. one list, in date order, across every relation
+        tl = timeline(t, TCF)
+        assert [e["date"] for e in tl] == sorted(e["date"] for e in tl), \
+            "19: the timeline must be in date order"
+        kinds = [e["kind"] for e in tl]
+        assert kinds.count("visit") == 1 and kinds.count("appointment") == 2 \
+            and kinds.count("billed") == 1, f"19: every relation should appear, got {kinds}"
+        assert tl[0]["kind"] == "appointment" and tl[0]["date"] == "2026-01-04", \
+            "19: the january request comes first"
+
+        # 20. A REQUEST IS NEVER GIVEN A TIME. it carries a date and a period,
+        # so the time half of starts_at is meaningless - rendering 00:00 would
+        # be inventing an appointment the clinic never offered.
+        req = [e for e in tl if e["title"] == "Requested an appointment"][0]
+        assert "00:00" not in req["detail"] and req["detail"] == "", \
+            f"20: a request must not be shown with a time, got {req['detail']!r}"
+        booked = [e for e in tl if e["title"] == "Appointment"][0]
+        assert "14:30" in booked["detail"], "20: a real booking does show its time"
+
+        # 21. NO TOTAL. invoices carry no payment status and there is no
+        # payments table, so any sum would be a claim the data cannot support -
+        # the same defect P02 closed in the patient chat, in a new surface.
+        billed = [e for e in tl if e["kind"] == "billed"][0]
+        assert "80.00" in billed["title"], "21: the billed line shows what was billed"
+        assert "not collected" in billed["source"], \
+            "21: and says so on the line, not once at the bottom of the page"
+        joined = " ".join(e["title"] + e["detail"] + e["source"] for e in tl).lower()
+        for forbidden in ("total", "balance", "owes", "outstanding", "due"):
+            assert forbidden not in joined, \
+                f"21: the timeline must never present a {forbidden!r}"
+
+        # 22. an assistant holds read_notes but not read_clinical, so they see
+        # THAT a visit happened without reading what it said
+        plain = timeline(t, TCF, show_clinical=False)
+        assert all("filled the tooth" not in e["detail"] for e in plain), \
+            "22: clinical text must follow the caller's own gate"
+        assert [e["kind"] for e in plain] == kinds, \
+            "22: but the shape of the history is still there"
+
+        # 23. a merge appears on the survivor's own history. one that is only
+        # in an audit log is one nobody reading the record will ever know about.
+        t.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                  " VALUES ('TTTT000000000002', 'timeline rossi', NULL)")
+        t.commit()
+        merge(t, "TTTT000000000002", TCF, "anadmin", "admin")
+        merged_tl = timeline(t, TCF)
+        note = [e for e in merged_tl if e["kind"] == "merge"]
+        assert len(note) == 1, "23: the merge must show on the surviving record"
+        assert "timeline rossi" in note[0]["title"], "23: naming what it absorbed"
+        assert "anadmin" in note[0]["detail"], "23: and who did it"
+
+        # 24. an undated visit sorts last instead of crashing or claiming a date
+        t.execute("INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                  " clinical_notes, next_appointment, source_path)"
+                  " VALUES (?, NULL, '[]', 'no date on this one', NULL, 't2.json')", (TCF,))
+        t.commit()
+        undated = timeline(t, TCF)
+        assert undated[-1]["date"] is None, "24: an undated row sorts last"
+        assert len(undated) == len(merged_tl) + 1, "24: and is not dropped"
 
     print("selftest ok")
 

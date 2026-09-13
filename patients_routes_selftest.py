@@ -1059,6 +1059,61 @@ def selftest():
         assert dentist_client.get("/patients/ZZZZ999999999999").status_code == 404, \
             "41: an unknown codice fiscale is still not found"
 
+        # --- record timeline and prefill (P04, plan 3) --------------------
+
+        # 42. the timeline is on the record, and the merge shows on it. a
+        # merge visible only in an audit log is one nobody reading the record
+        # will ever know about.
+        rec = dentist_client.get(f"/patients/{mg_keep}").text
+        assert "Record timeline" in rec, "42: the record carries a timeline"
+        assert "folded note" in rec or "Visit" in rec, "42: with the folded visit on it"
+        assert "Absorbed the record of" in rec, "42: and the merge itself"
+        assert "marco verdi" in rec, "42: naming what was absorbed"
+
+        # 43. NO TOTAL, NO BALANCE. invoices carry no payment status and there
+        # is no payments table. P02 closed exactly this defect in the patient
+        # chat; the timeline must not reopen it in a staff surface.
+        tl_block = rec.split('id="timeline-title"', 1)[1].split("</section>", 1)[0].lower()
+        for forbidden in ("total", "balance", "owes", "outstanding", "amount due"):
+            assert forbidden not in tl_block, \
+                f"43: the timeline must not present a {forbidden!r}"
+
+        # 44. the timeline follows the SAME gate as the clinical card - an
+        # assistant sees THAT a visit happened, never what it said
+        asst_rec = assistant_client.get(f"/patients/{mg_keep}").text
+        assert "Record timeline" in asst_rec, "44: an assistant still gets the history"
+        assert "folded note" not in asst_rec, \
+            "44: but not the clinical text, which is read_clinical"
+
+        # 45. PREFILL SAYS WHERE IT CAME FROM (P04.06). a name sitting in a box
+        # looks like one somebody typed and checked.
+        form = dentist_client.get(f"/notes/new?cf={mg_keep}").text
+        assert "Patient details come from the patient record" in form, \
+            "45: a prefilled form must name its source"
+        # matched without the trailing word: the sentence wraps in the
+        # template, so asserting across the line break tests the indentation
+        assert "Nothing is saved until you" in form, \
+            "45: and say that nothing auto-saves"
+        assert _rows(db_path, "SELECT * FROM audit_log WHERE action = 'prefill_note'"
+                     " AND target = ?", (mg_keep,)), \
+            "45: handing over a patient's details is itself auditable"
+
+        # 46. and the prefill gate is the write gate - an empty form with a ?cf
+        # is a patient-name disclosure, so it is append_note or nothing.
+        # the admin is the role that does NOT hold it; an assistant does, and
+        # check 45 above already covers the allowed direction for a dentist.
+        assert not authorize("admin", "append_note"), \
+            "46: this check assumes admin lacks append_note - the matrix moved"
+        before46 = len(_rows(db_path, "SELECT * FROM audit_log WHERE action = 'prefill_note'"))
+        denied46 = admin_client.get(f"/notes/new?cf={mg_keep}", follow_redirects=True)
+        assert "Marco Verdi" not in denied46.text, \
+            "46: a role without append_note must not be handed the patient's name"
+        assert len(_rows(db_path, "SELECT * FROM audit_log WHERE action = 'prefill_note'")) \
+            == before46, "46: and no prefill is recorded for a refused one"
+        assert _rows(db_path, "SELECT * FROM audit_log WHERE action = 'append_note'"
+                     " AND allowed = 0 AND username = 'aadmin'"), \
+            "46: the refusal is audited"
+
     print("selftest ok")
 
 

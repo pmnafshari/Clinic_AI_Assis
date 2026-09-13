@@ -13,6 +13,17 @@
   {% if error %}
   <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
   {% endif %}
+  {# P04.06. a prefilled field looks exactly like one somebody typed and
+     checked. saying where it came from, and how old that is, is what turns it
+     back into something the person can disagree with. shown from the GET
+     onward, not only on the confirm step. #}
+  {% if locked %}
+  <p class="prefill-note">
+    Patient details come from {{ locked.source }}{% if locked.as_of %}, last updated
+    {{ locked.as_of }}{% else %} (no visit recorded yet){% endif %}. Nothing is saved until you
+    confirm.
+  </p>
+  {% endif %}
   <form method="post" action="{{ url_for('notes.new_note') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}

@@ -196,6 +196,10 @@ def detail_view(cf):
         patient=patient,
         clinical=clinical,
         show_clinical=show_clinical,
+        # the timeline follows the SAME gate as the clinical card above, rather
+        # than carrying a gate of its own - an assistant sees that a visit
+        # happened without reading what it said (RBAC-03)
+        timeline=patient_identity.timeline(conn, cf, show_clinical=show_clinical),
     )
 
 

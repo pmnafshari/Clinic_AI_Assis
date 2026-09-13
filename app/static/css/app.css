@@ -855,3 +855,40 @@ strong {
 .dup-merge > summary { cursor: pointer; font-size: 0.875rem; font-weight: 600; }
 .dup-merge > summary:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
 .dup-merge[open] > summary { margin-bottom: 0.75rem; }
+
+/* record timeline (P04). a rail with the date on the left, so a long history
+   is scannable by when rather than by which card it happens to live in. */
+.tl { list-style: none; margin: 0; padding: 0; }
+.tl-item {
+  display: flex;
+  gap: 0.875rem;
+  padding: 0.75rem 0;
+  border-left: 2px solid var(--ds-border);
+  padding-left: 1rem;
+  margin-left: 0.25rem;
+}
+.tl-item + .tl-item { border-top: 0; }
+.tl-date {
+  flex: none;
+  width: 6rem;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ds-text-muted);
+}
+.tl-main { display: flex; flex-direction: column; gap: 0.125rem; min-width: 0; }
+.tl-source { font-size: 0.75rem; color: var(--ds-text-muted); }
+.tl-merge { border-left-color: var(--ds-warning); }
+.tl-billed { border-left-color: var(--ds-accent); }
+@media (max-width: 575.98px) {
+  .tl-item { flex-direction: column; gap: 0.25rem; }
+  .tl-date { width: auto; }
+}
+.prefill-note {
+  margin-bottom: 1rem;
+  padding: 0.625rem 0.875rem;
+  border-left: 3px solid var(--ds-accent);
+  border-radius: 0.5rem;
+  background: var(--ds-surface-sunken);
+  font-size: 0.8125rem;
+  color: var(--ds-text-muted);
+}
