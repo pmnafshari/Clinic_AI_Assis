@@ -345,12 +345,19 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
         conn.rollback()
         raise
 
+    # the index step is recorded EITHER WAY. a skip that leaves no trace is a
+    # skip nobody can find later: the chunks still carry the folded patient's
+    # name, and the only way to know which merges need re-pointing is a record
+    # that says so. `index_pending` is what a repair pass looks for.
     if collection is not None:
         moved["index_chunks"] = repoint_index(collection, source_cf, target_cf,
                                               target["patient_name"])
-        conn.execute("UPDATE patient_merges SET moved = ? WHERE source_cf = ?",
-                     (json.dumps(moved), source_cf))
-        conn.commit()
+    else:
+        moved["index_chunks"] = None
+        moved["index_pending"] = True
+    conn.execute("UPDATE patient_merges SET moved = ? WHERE source_cf = ?",
+                 (json.dumps(moved), source_cf))
+    conn.commit()
 
     log_audit(conn, actor, actor_role, "merge_patient",
               f"{source_cf}->{target_cf}", allowed=1)
@@ -459,6 +466,46 @@ def timeline(conn, cf, show_clinical=True):
     # undated rows sort last rather than crashing the sort or claiming a date
     events.sort(key=lambda e: (e["date"] is None, e["date"] or ""))
     return events
+
+
+def pending_index_repoints(conn):
+    """Merges whose index step never ran. The recovery hook for MERGE-2.
+
+    A merge completes in SQLite even when Chroma is unreachable - refusing the
+    whole merge because the search index is down would be worse. What must not
+    happen is the skip going unrecorded, because then the chunks keep citing a
+    patient who no longer exists and nothing says which merges to fix.
+    """
+    out = []
+    for row in conn.execute(
+            "SELECT source_cf, target_cf, moved FROM patient_merges ORDER BY merged_at"):
+        if json.loads(row["moved"]).get("index_pending"):
+            out.append({"source_cf": row["source_cf"], "target_cf": row["target_cf"]})
+    return out
+
+
+def repair_index(conn, collection):
+    """Re-run every index repoint that was skipped. Safe to run repeatedly."""
+    done = []
+    for job in pending_index_repoints(conn):
+        target = conn.execute(
+            "SELECT patient_name FROM patients WHERE codice_fiscale = ?",
+            (job["target_cf"],)).fetchone()
+        if target is None:
+            continue    # the survivor was itself merged away; the flatten
+                        # rewrote target_cf, so the next pass picks it up
+        count = repoint_index(collection, job["source_cf"], job["target_cf"],
+                              target["patient_name"])
+        row = conn.execute("SELECT moved FROM patient_merges WHERE source_cf = ?",
+                           (job["source_cf"],)).fetchone()
+        history = json.loads(row["moved"])
+        history["index_chunks"] = count
+        history.pop("index_pending", None)
+        conn.execute("UPDATE patient_merges SET moved = ? WHERE source_cf = ?",
+                     (json.dumps(history), job["source_cf"]))
+        done.append({**job, "chunks": count})
+    conn.commit()
+    return done
 
 
 def selftest():
@@ -758,6 +805,39 @@ def selftest():
             ("FFFF000000000007",)).fetchone()["moved"])
         assert recorded["index_chunks"] == 2, \
             "17b: the number of chunks repointed is recorded with the merge"
+
+        # 17c. MERGE-2. an unreachable index must not fail the merge - refusing
+        # because search is down would be worse - but the skip has to leave a
+        # record, or the chunks keep citing a folded patient and nothing says
+        # which merges need fixing.
+        seed("GGGG000000000008", "Pending Rossi")
+        seed("HHHH000000000009", "pending rossi")
+        m.commit()
+        ok17c, _ = merge(m, "HHHH000000000009", "GGGG000000000008",
+                         "anadmin", "admin", collection=None)
+        assert ok17c, "17c: an unreachable index must not fail the merge"
+        skipped = json.loads(m.execute(
+            "SELECT moved FROM patient_merges WHERE source_cf = ?",
+            ("HHHH000000000009",)).fetchone()["moved"])
+        assert skipped["index_pending"] is True, \
+            "17c: a skipped index repoint MUST be recorded, or it cannot be found again"
+        # every merge above also ran without a collection, so this one is not
+        # alone in the list - what matters is that it IS in it
+        assert "HHHH000000000009" in [j["source_cf"] for j in pending_index_repoints(m)], \
+            "17c: and it must be listed as pending"
+
+        coll2 = client.get_or_create_collection(name="pending_notes")
+        coll2.upsert(ids=["HHHH:n0"], documents=["stranded note"],
+                     metadatas=[{"codice_fiscale": "HHHH000000000009",
+                                 "patient_name": "pending rossi"}])
+        fixed = repair_index(m, coll2)
+        mine = [f for f in fixed if f["source_cf"] == "HHHH000000000009"]
+        assert len(mine) == 1 and mine[0]["chunks"] == 1, \
+            f"17c: the repair must repoint this merge's chunk, got {fixed}"
+        assert coll2.get(where={"codice_fiscale": "HHHH000000000009"})["ids"] == [], \
+            "17c: after the repair no chunk carries the folded codice fiscale"
+        assert pending_index_repoints(m) == [], "17c: and nothing is left pending"
+        assert repair_index(m, coll2) == [], "17c: re-running the repair is a no-op"
 
         # 18. a merged pair leaves the review screen - the question has been
         # answered and must not be asked again
