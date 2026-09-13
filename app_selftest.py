@@ -857,6 +857,19 @@ def selftest():
         assert b"Appointments" not in adm_shell.data, \
             "20: an admin holds manage_users alone and must not be offered Appointments"
 
+        # 20b-bis. THE ENTRY POINTS MUST AT LEAST PARSE. nothing in the fast
+        # suite imports run.py, patient_run.py or site_run.py - they are the
+        # three files that are only exercised by actually starting a server. a
+        # stray indent in run.py got all the way to a failed service start on
+        # 2026-09-13 with the whole suite green, which is how this check came
+        # to exist. ast.parse, not import: importing would run the guards.
+        import ast as _ast
+        for entry in ("run.py", "patient_run.py", "site_run.py"):
+            try:
+                _ast.parse(Path(entry).read_text())
+            except SyntaxError as e:
+                raise AssertionError(f"20b-bis: {entry} does not parse - {e}")
+
         # 20c. P03.06 - the header search box is d-none below md, so on a phone
         # the only way to look a patient up was the drawer. the small-screen
         # link stands in for it, and carries the SAME capability: a role that

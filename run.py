@@ -12,10 +12,10 @@ app = create_app()
 # errors should not mask each other.
 disk_guard.guard_or_exit()
 codice_fiscale.guard_or_exit("db/clinic.sqlite")
-    # P05: stored datetimes are naive clinic-local. a row carrying an offset
-    # was written under a different contract, and shifting it silently moves
-    # appointments by an hour - so refuse instead of guessing.
-    clinic_time.guard_or_exit("db/clinic.sqlite")
+# P05: stored datetimes are naive clinic-local. a row carrying an offset was
+# written under a different contract, and shifting it silently moves
+# appointments by an hour - so refuse instead of guessing.
+clinic_time.guard_or_exit("db/clinic.sqlite")
 # anything left in drop/ by a previous run was uploaded but never processed
 upload_worker.resume_pending()
 # no port argument, so this binds flask's default 5000 - tunnel_guard.STAFF_PORT mirrors it, change both together
