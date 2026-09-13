@@ -19,12 +19,15 @@ half is whose. Everything here is shaped by that:
     delete, which P04.03 forbids.
 
 The codice fiscale is the primary key of `patients` and the foreign key of
-every relation, so a merge is a repoint, not a rename. It also keys the Chroma
-chunk ids AND the chunk metadata that scopes a patient's retrieval, and the
-`sorted/<CF>/` directory on disk - so a merge that only touches SQLite leaves
-the survivor's own notes unretrievable and leaves index chunks scoped to an
-identity that no longer exists. All three stores move together or the merge is
-not done.
+every relation, so a merge is a repoint, not a rename. It also appears in the
+Chroma chunk metadata, which staff Q&A reads to attribute an answer to a
+patient - so a merge that only touches SQLite leaves the survivor's own notes
+cited under a name that no longer exists. The index is repointed with the rows.
+
+Files are NOT moved. `sorted/<CF>/` is a storage location, not a claim about
+identity, and there is no transaction spanning SQLite and the filesystem; the
+files view resolves through merged_sources_of() instead. See .planning/plans/
+P04.md section 4, plan 2, for why that is the safer half of the trade.
 """
 
 import difflib
@@ -220,6 +223,162 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
     return True, "Recorded as two different people."
 
 
+# every relation keyed by the codice fiscale that a merge has to repoint.
+# patient_credentials is deliberately NOT here - it is UNIQUE on the CF, so a
+# repoint collides whenever both sides hold a PIN, and a merged-away identity
+# must not keep an independent way to sign in. it is revoked instead.
+MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions")
+
+
+def merge_target(conn, cf):
+    """-> the CF this one was merged into, or None. Always one hop.
+
+    An old link, an old audit row and an old file path all still name the
+    source. They must lead somewhere true rather than 404, which is what makes
+    this not a trace-free delete.
+
+    One hop is enough because merge() FLATTENS: when B is merged into C,
+    everything that had been merged into B is repointed at C in the same
+    transaction. That is not only a convenience - `patient_merges.target_cf`
+    REFERENCES patients(codice_fiscale) with foreign keys ON, so leaving a row
+    pointing at B would make deleting B's patients row fail outright.
+    """
+    row = conn.execute(
+        "SELECT target_cf FROM patient_merges WHERE source_cf = ?", (cf,)).fetchone()
+    return row["target_cf"] if row else None
+
+
+def merged_sources_of(conn, target_cf):
+    """Every CF that was merged into this one. Flat, for the reason above."""
+    return [r["source_cf"] for r in conn.execute(
+        "SELECT source_cf FROM patient_merges WHERE target_cf = ? ORDER BY merged_at",
+        (target_cf,))]
+
+
+def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
+    """Fold source into target. THE DESTRUCTIVE ONE. Returns (ok, message).
+
+    Only ever called from a human confirmation naming both sides - never from
+    candidates(), never from a score.
+
+    Order is deliberate. SQLite commits first, in one transaction, so a failure
+    part-way leaves nothing moved. The index is repointed after, and if that
+    fails the merge is already recorded and the repoint is re-runnable against
+    the mapping. The reverse order would leave chunks pointing at a survivor
+    whose relations had not moved.
+
+    Files are NOT touched. `sorted/<CF>/` is a storage location, not a claim
+    about identity, and `visits.source_path` is UNIQUE - moving the tree would
+    mean rewriting every path and handling collisions between the two patients,
+    with no transaction spanning SQLite and the filesystem. The files view
+    resolves through merged_sources_of() instead, so nothing on disk is mutated
+    and there is no half-move to recover from.
+    """
+    if not authorize(actor_role, "manage_users"):
+        log_audit(conn, actor, actor_role, "merge_patient",
+                  f"{source_cf}->{target_cf}", allowed=0)
+        return False, f"not permitted: {actor_role} may not manage_users"
+
+    source_cf = (source_cf or "").strip()
+    target_cf = (target_cf or "").strip()
+    if not source_cf or not target_cf:
+        return False, "both records must be named"
+    if source_cf == target_cf:
+        return False, "a record cannot be merged into itself"
+
+    # asked BEFORE "does this patient exist", because a merged source no
+    # longer has a patients row - ask the other way round and this branch is
+    # unreachable and the operator retrying a merge is told the patient does
+    # not exist, which is both unhelpful and untrue.
+    already = conn.execute(
+        "SELECT target_cf FROM patient_merges WHERE source_cf = ?", (source_cf,)).fetchone()
+    if already:
+        return False, f"{source_cf} has already been merged into {already['target_cf']}"
+
+    source = conn.execute(
+        "SELECT * FROM patients WHERE codice_fiscale = ?", (source_cf,)).fetchone()
+    target = conn.execute(
+        "SELECT * FROM patients WHERE codice_fiscale = ?", (target_cf,)).fetchone()
+    if source is None:
+        return False, f"no patient with codice fiscale {source_cf}"
+    if target is None:
+        return False, f"no patient with codice fiscale {target_cf}"
+    moved = {}
+    try:
+        # one transaction over every relation. sqlite3 opens one implicitly on
+        # the first write and holds it until commit, so a raise anywhere below
+        # rolls the whole thing back and nothing has moved.
+        for table in MERGE_RELATIONS:
+            cur = conn.execute(
+                f"UPDATE {table} SET codice_fiscale = ? WHERE codice_fiscale = ?",
+                (target_cf, source_cf))
+            moved[table] = cur.rowcount
+        cur = conn.execute(
+            "UPDATE patient_credentials SET active = 0 WHERE codice_fiscale = ?", (source_cf,))
+        moved["credentials_revoked"] = cur.rowcount
+        # FLATTEN. anything already merged into the source is repointed at the
+        # new survivor, in this same transaction. staff merge A into B and only
+        # later find B is also a duplicate of C, and A must not be stranded.
+        # the original target is kept on each affected row so the history is
+        # still readable - the mapping is rewritten, not erased.
+        rechained = conn.execute(
+            "SELECT source_cf, moved FROM patient_merges WHERE target_cf = ?",
+            (source_cf,)).fetchall()
+        for old_row in rechained:
+            history = json.loads(old_row["moved"])
+            history.setdefault("original_target", source_cf)
+            conn.execute("UPDATE patient_merges SET target_cf = ?, moved = ? WHERE source_cf = ?",
+                         (target_cf, json.dumps(history), old_row["source_cf"]))
+        moved["rechained"] = [r["source_cf"] for r in rechained]
+
+        conn.execute(
+            "INSERT INTO patient_merges (source_cf, target_cf, merged_at, merged_by,"
+            " source_row, moved) VALUES (?, ?, ?, ?, ?, ?)",
+            (source_cf, target_cf, datetime.now().isoformat(), actor,
+             json.dumps(dict(source)), json.dumps(moved)))
+        # the credential row still references the source patient, so it has to
+        # go before the patients row does - the FK is ON
+        conn.execute("DELETE FROM patient_credentials WHERE codice_fiscale = ?", (source_cf,))
+        conn.execute("DELETE FROM patients WHERE codice_fiscale = ?", (source_cf,))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+    if collection is not None:
+        moved["index_chunks"] = repoint_index(collection, source_cf, target_cf,
+                                              target["patient_name"])
+        conn.execute("UPDATE patient_merges SET moved = ? WHERE source_cf = ?",
+                     (json.dumps(moved), source_cf))
+        conn.commit()
+
+    log_audit(conn, actor, actor_role, "merge_patient",
+              f"{source_cf}->{target_cf}", allowed=1)
+    return True, f"Merged into {target['patient_name']}."
+
+
+def repoint_index(collection, source_cf, target_cf, target_name):
+    """Point the source's chunks at the survivor. Metadata only.
+
+    Chunk ids are opaque - note_chunk_id() builds them from the CF at upsert
+    time, but nothing reads identity back out of an id. The metadata is what
+    staff Q&A cites, so leaving it stale would attribute the survivor's own
+    notes to a patient who no longer exists.
+    """
+    found = collection.get(where={"codice_fiscale": source_cf})
+    ids = found.get("ids") or []
+    if not ids:
+        return 0
+    updated = []
+    for meta in found.get("metadatas") or []:
+        fresh = dict(meta)
+        fresh["codice_fiscale"] = target_cf
+        fresh["patient_name"] = target_name
+        updated.append(fresh)
+    collection.update(ids=ids, metadatas=updated)
+    return len(ids)
+
+
 def selftest():
     import sqlite3
     import tempfile
@@ -329,6 +488,199 @@ def selftest():
         assert conn.execute(
             "SELECT COUNT(*) c FROM patient_duplicate_dismissals").fetchone()["c"] == 1, \
             "10: a refused dismissal writes nothing"
+
+        # --- the merge (plan 2) -------------------------------------------
+        #
+        # a separate database. the checks above leave a dismissal and three
+        # patients behind, and every assertion here is about exact counts.
+        m = storage.init_db(str(Path(tmp) / "merge.sqlite"))
+        KEEP, GONE, OTHER = "AAAA000000000001", "AAAA000000000002", "BBBB000000000003"
+
+        def seed(cf, name):
+            m.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                      " VALUES (?, ?, NULL)", (cf, name))
+
+        def relations(cf):
+            return {t: m.execute(
+                f"SELECT COUNT(*) c FROM {t} WHERE codice_fiscale = ?", (cf,)
+            ).fetchone()["c"] for t in MERGE_RELATIONS}
+
+        def give(cf, n=1):
+            for i in range(n):
+                m.execute(
+                    "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                    " clinical_notes, next_appointment, source_path)"
+                    " VALUES (?, '2026-01-01', '[]', 'note', NULL, ?)",
+                    (cf, f"sorted/{cf}/notes/n{i}.json"))
+                m.execute(
+                    "INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+                    " status, created_at, updated_at)"
+                    " VALUES (?, 'dr rossi', ?, 30, 'booked', '2026-01-01', '2026-01-01')",
+                    (cf, f"2026-0{i + 1}-05T09:00:00"))
+
+        seed(KEEP, "Paola Rossi")
+        seed(GONE, "paola rossi")
+        seed(OTHER, "Giulia Bianchi")
+        give(KEEP, 1)
+        give(GONE, 2)
+        give(OTHER, 1)
+        m.commit()
+        keep_before = relations(KEEP)
+        gone_before = relations(GONE)
+        other_before = relations(OTHER)
+
+        # 11. THE WITHHOLD. a merge is the most destructive operation in the
+        # product, and reception must not hold it. asserted on the data, not
+        # only the return value.
+        ok11, msg11 = merge(m, GONE, KEEP, "areception", "assistant")
+        assert not ok11 and "not permitted" in msg11, "11: an assistant must not merge"
+        assert relations(GONE) == gone_before, "11: a refused merge moves nothing"
+        assert m.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"] == 3, \
+            "11: and deletes nobody"
+        denied11 = m.execute(
+            "SELECT * FROM audit_log WHERE action = 'merge_patient' AND allowed = 0").fetchall()
+        assert denied11 and denied11[0]["username"] == "areception", \
+            "11: a refused merge is audited, naming who was refused"
+
+        # 12. the refusals that stop a nonsense merge before it starts
+        for a, b, why in ((KEEP, KEEP, "into itself"),
+                          ("NOSUCHPATIENT", KEEP, "from a record that does not exist"),
+                          (KEEP, "NOSUCHPATIENT", "into a record that does not exist"),
+                          ("", KEEP, "with no source")):
+            ok12, _ = merge(m, a, b, "anadmin", "admin")
+            assert not ok12, f"12: a merge {why} must be refused"
+        assert m.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"] == 3, \
+            "12: and none of them wrote anything"
+
+        # 13. ATOMICITY. with the appointments repoint made to raise, NOTHING
+        # may have moved - not the visits that were repointed before it, not
+        # the credential, not the patients row. this is the check that makes
+        # the single transaction real rather than decorative.
+        class FailsOnAppointments:
+            # sqlite3.Connection.execute is read-only, so the failure is
+            # injected through a proxy rather than by monkeypatching. the
+            # rollback still lands on the real connection underneath.
+            def __init__(self, conn):
+                self._conn = conn
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+            def execute(self, sql, *args):
+                if sql.startswith("UPDATE appointments"):
+                    raise RuntimeError("appointments repoint failed")
+                return self._conn.execute(sql, *args)
+
+        try:
+            merge(FailsOnAppointments(m), GONE, KEEP, "anadmin", "admin")
+            raise AssertionError("13: the failure must propagate, not be swallowed")
+        except RuntimeError:
+            pass
+        assert relations(GONE) == gone_before, "13: a failed merge rolls the visits back too"
+        assert relations(KEEP) == keep_before, "13: and the survivor gains nothing"
+        assert m.execute("SELECT COUNT(*) c FROM patients WHERE codice_fiscale = ?",
+                         (GONE,)).fetchone()["c"] == 1, "13: the source row survives a failure"
+        assert m.execute("SELECT COUNT(*) c FROM patient_merges").fetchone()["c"] == 0, \
+            "13: and no mapping row is left behind"
+
+        # 14. the clean merge. every relation moves, and the counts are kept so
+        # a human can see exactly what happened.
+        ok14, msg14 = merge(m, GONE, KEEP, "anadmin", "admin")
+        assert ok14, f"14: an admin may merge - {msg14}"
+        after = relations(KEEP)
+        for table in MERGE_RELATIONS:
+            assert after[table] == keep_before[table] + gone_before[table], \
+                f"14: {table} should have moved to the survivor"
+        assert relations(GONE) == {t: 0 for t in MERGE_RELATIONS}, \
+            "14: nothing is left pointing at the merged record"
+        assert relations(OTHER) == other_before, \
+            "14: AN UNRELATED PATIENT MUST NOT BE TOUCHED"
+        row14 = m.execute("SELECT * FROM patient_merges WHERE source_cf = ?", (GONE,)).fetchone()
+        assert row14["target_cf"] == KEEP and row14["merged_by"] == "anadmin"
+        assert json.loads(row14["moved"])["visits"] == gone_before["visits"], \
+            "14: the counts moved are recorded"
+        assert json.loads(row14["source_row"])["patient_name"] == "paola rossi", \
+            "14: and the whole source row is kept - this is what makes it not a trace-free delete"
+        assert m.execute("SELECT * FROM audit_log WHERE action = 'merge_patient'"
+                         " AND allowed = 1").fetchall(), "14: a merge is audited"
+
+        # 15. THE OLD CODICE FISCALE STILL RESOLVES. an old link, an old audit
+        # row and an old file path all name it, and 404 would make the merge a
+        # trace-free delete in every surface that matters.
+        assert merge_target(m, GONE) == KEEP, "15: the merged CF resolves to the survivor"
+        assert merge_target(m, KEEP) is None, "15: a live record resolves to nothing"
+        assert merge_target(m, OTHER) is None, "15: and so does an unrelated one"
+        assert merged_sources_of(m, KEEP) == [GONE], "15: the survivor knows what it absorbed"
+
+        # 16. a second merge of the same source is refused, and so is merging
+        # away a record that others were merged INTO - that would strand their
+        # mapping at a CF with no row.
+        ok16, msg16 = merge(m, GONE, OTHER, "anadmin", "admin")
+        assert not ok16 and "already been merged" in msg16, "16: no double merge"
+
+        # 17. MERGING A SURVIVOR ONWARD FLATTENS THE CHAIN. staff merge A into
+        # B, then find B is also a duplicate of C. A must not be stranded
+        # pointing at a record that no longer exists - and it cannot be, since
+        # patient_merges.target_cf is a foreign key onto patients and the
+        # delete would fail outright.
+        ok17, msg17 = merge(m, KEEP, OTHER, "anadmin", "admin")
+        assert ok17, f"17: a survivor may itself be merged onward - {msg17}"
+        assert merge_target(m, KEEP) == OTHER, "17: the survivor now resolves onward"
+        assert merge_target(m, GONE) == OTHER, \
+            "17: AND SO DOES WHAT IT HAD ABSORBED - one hop, not a dangling pointer"
+        assert set(merged_sources_of(m, OTHER)) == {KEEP, GONE}, \
+            "17: the final survivor knows everything it holds"
+        assert m.execute("SELECT COUNT(*) c FROM patients WHERE codice_fiscale = ?",
+                         (KEEP,)).fetchone()["c"] == 0, "17: and the middle record is gone"
+        # the rewrite kept the history rather than erasing it
+        hist = json.loads(m.execute(
+            "SELECT moved FROM patient_merges WHERE source_cf = ?", (GONE,)).fetchone()["moved"])
+        assert hist["original_target"] == KEEP, \
+            "17: the original target is still recorded on the rewritten row"
+
+        # 17b. THE INDEX MOVES WITH THE ROWS. staff Q&A queries Chroma with no
+        # where-clause and attributes each answer from the chunk metadata, so
+        # a merge that repoints SQLite and leaves the metadata alone makes the
+        # survivor's own notes get cited under a patient who no longer exists.
+        # this runs against a real collection: a stubbed one would pass with
+        # the repoint deleted, which is exactly the mutation it has to catch.
+        import chromadb
+        from chromadb.config import Settings as _Settings
+
+        client = chromadb.PersistentClient(
+            path=str(Path(tmp) / "chroma"), settings=_Settings(anonymized_telemetry=False))
+        coll = client.get_or_create_collection(name="patient_notes")
+        seed("EEEE000000000006", "Survivor Rossi")
+        seed("FFFF000000000007", "survivor rossi")
+        m.commit()
+        coll.upsert(ids=["EEEE:n0"], documents=["kept note"],
+                    metadatas=[{"codice_fiscale": "EEEE000000000006",
+                                "patient_name": "Survivor Rossi"}])
+        coll.upsert(ids=["FFFF:n0", "FFFF:n1"], documents=["moved note", "another"],
+                    metadatas=[{"codice_fiscale": "FFFF000000000007",
+                                "patient_name": "survivor rossi"}] * 2)
+
+        ok17b, _ = merge(m, "FFFF000000000007", "EEEE000000000006",
+                         "anadmin", "admin", collection=coll)
+        assert ok17b, "17b: the merge itself should succeed"
+        left = coll.get(where={"codice_fiscale": "FFFF000000000007"})
+        assert left["ids"] == [], \
+            "17b: NO chunk may still carry the merged-away codice fiscale"
+        kept = coll.get(where={"codice_fiscale": "EEEE000000000006"})
+        assert len(kept["ids"]) == 3, \
+            f"17b: the survivor should hold all 3 chunks, got {len(kept['ids'])}"
+        assert all(md["patient_name"] == "Survivor Rossi" for md in kept["metadatas"]), \
+            "17b: and every chunk must be attributed to the surviving patient"
+        recorded = json.loads(m.execute(
+            "SELECT moved FROM patient_merges WHERE source_cf = ?",
+            ("FFFF000000000007",)).fetchone()["moved"])
+        assert recorded["index_chunks"] == 2, \
+            "17b: the number of chunks repointed is recorded with the merge"
+
+        # 18. a merged pair leaves the review screen - the question has been
+        # answered and must not be asked again
+        assert all(GONE not in (c["a"]["codice_fiscale"], c["b"]["codice_fiscale"])
+                   for c in candidates(m)), "18: a merged record is not a duplicate candidate"
 
     print("selftest ok")
 

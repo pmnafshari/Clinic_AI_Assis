@@ -975,6 +975,90 @@ def selftest():
         assert _rows_count(db_path, "patient_duplicate_dismissals") == 1, \
             "35: a role without manage_users must not be able to dismiss a pair"
 
+        # --- the merge (P04, plan 2) --------------------------------------
+        mg_keep, mg_gone = "MRGA000000000001", "MRGB000000000002"
+        gconn = sqlite3.connect(db_path)
+        for mcf, mname in ((mg_keep, "Marco Verdi"), (mg_gone, "marco verdi")):
+            gconn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
+                          " VALUES (?, ?, '555 1234')", (mcf, mname))
+        gconn.execute("INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                      " clinical_notes, next_appointment, source_path)"
+                      " VALUES (?, '2026-05-05', '[]', 'folded note', NULL, 'mrg1.json')",
+                      (mg_gone,))
+        gconn.commit()
+        gconn.close()
+
+        merge_page = admin_client.get("/patients/duplicates").text
+        csrf_m = _csrf_from(merge_page)
+
+        # 36. THE CONFIRMATION IS NOT DECORATION. without the checkbox nothing
+        # happens at all - a destructive action must not be one stray click.
+        admin_client.post("/patients/duplicates/merge", data={
+            "cf_a": mg_keep, "cf_b": mg_gone, "keep": mg_keep, "csrf_token": csrf_m,
+        })
+        assert _rows_count(db_path, "patient_merges") == 0, \
+            "36: a merge without the confirmation must do nothing"
+
+        # 37. and neither does one that never says which record survives.
+        #
+        # NOTE ON WHAT THIS PROVES. merge()'s own guards already refuse all
+        # three of these, so deleting the route's check keeps the database
+        # correct - verified by mutation. The route check earns its place by
+        # answering with a usable message here rather than one from three
+        # layers down, so that is what is asserted. The thing that actually
+        # stops a hostile post is the manage_users capability (check 38), not
+        # this validation: cf_a and cf_b are form fields either way.
+        for bad in ({"keep": ""}, {"keep": "ZZZZ999999999999"}, {"cf_b": mg_keep}):
+            data37 = {"cf_a": mg_keep, "cf_b": mg_gone, "keep": mg_keep,
+                      "confirm": "yes", "csrf_token": csrf_m}
+            data37.update(bad)
+            said = admin_client.post("/patients/duplicates/merge", data=data37,
+                                     follow_redirects=True)
+            assert "Choose which record to keep." in said.text, \
+                f"37: {bad} should be answered on the review screen, not deeper down"
+        assert _rows_count(db_path, "patient_merges") == 0, \
+            "37: and none of them may merge anything"
+
+        # 38. THE WITHHOLD on the write, not only the screen. a gate on the GET
+        # and none on the POST is the shape this check exists to catch.
+        csrf38 = _csrf_from(dentist_client.get("/patients").text)
+        dentist_client.post("/patients/duplicates/merge", data={
+            "cf_a": mg_keep, "cf_b": mg_gone, "keep": mg_keep,
+            "confirm": "yes", "csrf_token": csrf38,
+        })
+        assert _rows_count(db_path, "patient_merges") == 0, \
+            "38: a dentist must not be able to merge two patients"
+        assert _rows(db_path, "SELECT * FROM audit_log WHERE action = 'merge_patient'"
+                     " AND allowed = 0"), "38: and the refusal is audited"
+
+        # 39. the real thing, through the form
+        merged = admin_client.post("/patients/duplicates/merge", data={
+            "cf_a": mg_keep, "cf_b": mg_gone, "keep": mg_keep,
+            "confirm": "yes", "csrf_token": csrf_m,
+        }, follow_redirects=True)
+        assert merged.status_code == 200, "39: a confirmed merge should complete"
+        assert _rows_count(db_path, "patient_merges") == 1, "39: and be recorded"
+        assert _rows(db_path, "SELECT * FROM visits WHERE codice_fiscale = ?",
+                     (mg_keep,)), "39: the folded record's visit moved to the survivor"
+        assert not _rows(db_path, "SELECT * FROM patients WHERE codice_fiscale = ?",
+                         (mg_gone,)), "39: and the folded patient row is gone"
+
+        # 40. THE OLD LINK STILL WORKS. this is the whole of P04.03's "old
+        # mapping": a 404 here would make the merge a trace-free delete from
+        # every surface a person actually uses.
+        old_link = dentist_client.get(f"/patients/{mg_gone}")
+        assert old_link.status_code == 302, \
+            f"40: a merged codice fiscale must redirect, got {old_link.status_code}"
+        assert mg_keep in old_link.headers["Location"], \
+            "40: and it must land on the survivor"
+        followed = dentist_client.get(f"/patients/{mg_gone}", follow_redirects=True)
+        assert "Marco Verdi" in followed.text, "40: which shows the surviving record"
+
+        # 41. a codice fiscale that was never a patient still 404s. the merge
+        # lookup must not turn every unknown CF into a redirect.
+        assert dentist_client.get("/patients/ZZZZ999999999999").status_code == 404, \
+            "41: an unknown codice fiscale is still not found"
+
     print("selftest ok")
 
 

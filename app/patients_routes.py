@@ -13,7 +13,7 @@ from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_clinical, lookup_patient
 
-from .db import get_db
+from .db import get_chroma, get_db
 
 patients_bp = Blueprint("patients", __name__)
 
@@ -103,6 +103,55 @@ def duplicates_dismiss():
     return redirect(url_for("patients.duplicates_view"))
 
 
+@patients_bp.route("/patients/duplicates/merge", methods=["POST"])
+def duplicates_merge():
+    # the capability check lives in patient_identity.merge() too. this is the
+    # most destructive operation in the product, and a gate that exists only in
+    # a route is a gate that a CLI or a future agent action walks straight past.
+    conn = get_db()
+    cf_a = request.form.get("cf_a", "")
+    cf_b = request.form.get("cf_b", "")
+    keep = request.form.get("keep", "")
+    if request.form.get("confirm") != "yes":
+        flash("Tick the confirmation to merge two records.", "error")
+        return redirect(url_for("patients.duplicates_view"))
+    # the form sends both records and which one survives; the other is derived
+    # here rather than posted, so the page cannot disagree with itself about
+    # which record is being folded away.
+    #
+    # this is NOT what stops a malicious post: cf_a and cf_b are form fields,
+    # so anyone who holds manage_users can name any two records either way
+    # round. The capability IS the protection, and merge() re-checks it. What
+    # this guard buys is an incoherent or half-filled form getting a clear
+    # answer here instead of a confusing one from three layers down.
+    if keep not in (cf_a, cf_b) or cf_a == cf_b or not cf_a or not cf_b:
+        flash("Choose which record to keep.", "error")
+        return redirect(url_for("patients.duplicates_view"))
+    target = keep
+    source = cf_b if keep == cf_a else cf_a
+
+    ok, message = patient_identity.merge(
+        conn, source, target, g.user["username"], g.user["role"],
+        collection=get_collection_or_none(),
+    )
+    flash(message, "success" if ok else "error")
+    if not ok and "not permitted" in message:
+        return redirect(url_for("dashboard.index"))
+    return redirect(url_for("patients.duplicates_view"))
+
+
+def get_collection_or_none():
+    # the merge repoints chunk metadata so staff Q&A stops citing a patient
+    # who no longer exists. if the index is unreachable the SQLite merge still
+    # stands and is re-runnable against the mapping, which is better than
+    # refusing the merge outright - but it must not fail silently, so the
+    # count of repointed chunks is recorded on the merge row either way.
+    try:
+        return get_chroma()
+    except Exception:
+        return None
+
+
 @patients_bp.route("/patients/<cf>")
 def detail_view(cf):
     if not authorize(g.user["role"], "read_notes"):
@@ -117,6 +166,15 @@ def detail_view(cf):
     conn = get_db()
     patient = lookup_patient(cf, conn)
     if patient is None:
+        # a merged codice fiscale still names something real. an old link, an
+        # old audit row and an old file path all carry it, and 404 here would
+        # make the merge a trace-free delete from every surface that matters -
+        # which is what P04.03 forbids. checked only after lookup fails, so a
+        # live record never pays for the query.
+        survivor = patient_identity.merge_target(conn, cf)
+        if survivor:
+            flash(f"{cf} was merged into this record.")
+            return redirect(url_for("patients.detail_view", cf=survivor))
         abort(404)
 
     # dentist-only gate for the clinical card - never read_notes, which
@@ -153,13 +211,21 @@ def files_fragment(cf):
     if not is_valid_cf(cf):
         abort(404)
 
-    patient_dir = SORTED_ROOT / cf
+    # a merge repoints the database rows but deliberately leaves the files
+    # where they are - sorted/<CF>/ is a storage location, not a claim about
+    # identity, and there is no transaction spanning sqlite and the filesystem
+    # (see .planning/plans/P04.md, plan 2). so the survivor's file list is its
+    # own directory plus every directory it absorbed, resolved through the
+    # mapping rather than by having moved anything.
+    roots = [cf] + patient_identity.merged_sources_of(get_db(), cf)
     files = []
-    if patient_dir.is_dir():
-        files = sorted(
-            str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file()
-        )
-    return render_template("_patient_files.html", files=files)
+    for root in roots:
+        patient_dir = SORTED_ROOT / root
+        if patient_dir.is_dir():
+            files.extend(
+                str(f.relative_to(SORTED_ROOT)) for f in patient_dir.rglob("*") if f.is_file()
+            )
+    return render_template("_patient_files.html", files=sorted(files))
 
 
 @patients_bp.route("/patients/<cf>/issue-pin", methods=["POST"])

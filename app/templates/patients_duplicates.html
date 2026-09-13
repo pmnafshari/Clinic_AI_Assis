@@ -63,6 +63,50 @@
         <button type="submit" class="btn btn-outline-secondary">Different people</button>
       </div>
     </form>
+
+    {# the merge. no default is selected: which record survives is the whole
+       decision, and pre-picking one makes it a click instead of a choice. #}
+    <details class="dup-merge">
+      <summary>These are the same person &mdash; merge them</summary>
+      <form method="post" action="{{ url_for('patients.duplicates_merge') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <p class="ds-row-sub">
+          Everything on the record you fold in &mdash; visits, invoices, appointments and files
+          &mdash; moves to the one you keep. The folded codice fiscale keeps working as a link, and
+          its portal PIN is revoked. <strong>This is not undone from here:</strong> take a backup
+          first if you are unsure.
+        </p>
+        <fieldset class="mb-2">
+          <legend class="form-label small">Which record do you keep?</legend>
+          {% for side in (pair.a, pair.b) %}
+          {% set other = pair.b if side is sameas pair.a else pair.a %}
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="keep"
+                   id="keep-{{ loop.index0 }}-{{ pair.a.codice_fiscale }}"
+                   value="{{ side.codice_fiscale }}" required>
+            <label class="form-check-label" for="keep-{{ loop.index0 }}-{{ pair.a.codice_fiscale }}">
+              Keep <strong>{{ side.patient_name }}</strong> ({{ side.codice_fiscale }}),
+              fold in {{ other.codice_fiscale }}
+            </label>
+          </div>
+          {% endfor %}
+        </fieldset>
+        {# both records go up and the radio says which one survives; the
+           server derives the other. no javascript stands between a person and
+           a destructive action, and a form that needs a script to be correct
+           is a form that is wrong when the script does not run. #}
+        <input type="hidden" name="cf_a" value="{{ pair.a.codice_fiscale }}">
+        <input type="hidden" name="cf_b" value="{{ pair.b.codice_fiscale }}">
+        <div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="confirm" value="yes"
+                 id="confirm-{{ loop.index }}" required>
+          <label class="form-check-label" for="confirm-{{ loop.index }}">
+            I have checked both records and they are the same person
+          </label>
+        </div>
+        <button type="submit" class="btn btn-danger">Merge records</button>
+      </form>
+    </details>
   </div>
 </section>
 {% endfor %}

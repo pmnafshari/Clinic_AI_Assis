@@ -851,3 +851,7 @@ strong {
 }
 .dup-side code { font-size: 0.8125rem; color: var(--ds-text); }
 .dup-actions { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--app-border); }
+.dup-merge { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--app-border); }
+.dup-merge > summary { cursor: pointer; font-size: 0.875rem; font-weight: 600; }
+.dup-merge > summary:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.dup-merge[open] > summary { margin-bottom: 0.75rem; }
