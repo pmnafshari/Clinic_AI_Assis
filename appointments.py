@@ -804,6 +804,39 @@ def selftest():
         except ValueError as e:
             assert "at most" in str(e), f"27: got {e}"
 
+        # 28. A DATABASE THAT ALREADY HOLDS A DOUBLE BOOKING MUST STILL BOOT.
+        # the race existed before the index did, so a real clinic database may
+        # carry its output. CREATE UNIQUE INDEX would raise, init_db would fail
+        # and the app would not start at all - a worse answer than a report.
+        legacy_db = str(Path(tmp) / "legacy.sqlite")
+        raw = sqlite3.connect(legacy_db)
+        raw.executescript("""
+            CREATE TABLE patients (codice_fiscale TEXT PRIMARY KEY,
+                patient_name TEXT NOT NULL, phone TEXT);
+            CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                codice_fiscale TEXT NOT NULL, dentist TEXT NOT NULL, starts_at TEXT NOT NULL,
+                minutes INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'booked', note TEXT,
+                period TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+            INSERT INTO patients VALUES ('ZZE00E00E000E','Legacy Patient',NULL);
+            INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes, status,
+                created_at, updated_at)
+                VALUES ('ZZE00E00E000E','dr rossi','2026-05-05T09:00:00',30,'booked','','');
+            INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes, status,
+                created_at, updated_at)
+                VALUES ('ZZE00E00E000E','dr rossi','2026-05-05T09:00:00',30,'booked','','');
+        """)
+        raw.commit()
+        raw.close()
+        legacy = storage.init_db(legacy_db)           # must not raise
+        assert legacy.execute(
+            "SELECT COUNT(*) c FROM appointments").fetchone()["c"] == 2, \
+            "28: a migration must not delete one of two real appointments"
+        built = legacy.execute(
+            "SELECT COUNT(*) c FROM sqlite_master WHERE type='index'"
+            " AND name='idx_appointments_slot'").fetchone()["c"]
+        assert built == 0, "28: and the guard is honestly absent, not silently assumed"
+        legacy.close()
+
     print("selftest ok")
 
 

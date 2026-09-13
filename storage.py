@@ -101,14 +101,8 @@ def init_db(db_path):
         );
         CREATE INDEX IF NOT EXISTS idx_appointments_day
             ON appointments (starts_at);
-        -- P05: THE RACE STOPPER. appointments.book() checked for an overlap and
-        -- then inserted, with nothing in between - two threads booking the same
-        -- slot both succeeded, reproduced on 2026-09-13. A partial unique index
-        -- over live rows only makes the second insert fail instead. Cancelled
-        -- and declined rows are excluded so a freed slot can be booked again.
-        CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot
-            ON appointments (dentist, starts_at) WHERE status = 'booked';
     """)
+    _ensure_slot_index(conn)
     _ensure_lockout_columns(conn)
     _ensure_audit_ip_column(conn)
     _ensure_audit_reason_column(conn)
@@ -137,6 +131,43 @@ def init_db(db_path):
     conn.executescript(AVAILABILITY_SCHEMA)
     conn.commit()
     return conn
+
+
+def _ensure_slot_index(conn):
+    """P05: THE RACE STOPPER, built defensively.
+
+    appointments.book() checked for an overlap and then inserted, with nothing
+    in between - two threads booking the same slot both succeeded, reproduced
+    on 2026-09-13. A partial unique index over live rows makes the second
+    insert fail instead. Cancelled and declined rows are excluded so a freed
+    slot can be booked again.
+
+    IT IS BUILT IN ITS OWN STATEMENT, NOT IN THE executescript ABOVE, because a
+    database written before this index existed may already hold a double-booked
+    pair from exactly the race it prevents - and then CREATE UNIQUE INDEX
+    raises, init_db fails, and the app will not start at all. A refusal to boot
+    with a raw IntegrityError is a worse answer than a clear report, so the
+    conflicts are named and nothing is deleted: which of two real appointments
+    to drop is a clinic's decision, not a migration's.
+    """
+    try:
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot"
+            " ON appointments (dentist, starts_at) WHERE status = 'booked'")
+        return True
+    except sqlite3.IntegrityError:
+        clashes = conn.execute(
+            "SELECT dentist, starts_at, COUNT(*) AS n, GROUP_CONCAT(id) AS ids"
+            " FROM appointments WHERE status = 'booked'"
+            " GROUP BY dentist, starts_at HAVING n > 1").fetchall()
+        print("warning: the double-booking guard could not be built - this database already "
+              "holds appointments that share a dentist and a start time:", file=sys.stderr)
+        for row in clashes:
+            print(f"  {row['dentist']} at {row['starts_at']}: appointment ids {row['ids']}",
+                  file=sys.stderr)
+        print("  cancel the ones that should not stand, then restart. nothing has been deleted.",
+              file=sys.stderr)
+        return False
 
 
 def _ensure_lockout_columns(conn):
