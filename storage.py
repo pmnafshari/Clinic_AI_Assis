@@ -101,6 +101,13 @@ def init_db(db_path):
         );
         CREATE INDEX IF NOT EXISTS idx_appointments_day
             ON appointments (starts_at);
+        -- P05: THE RACE STOPPER. appointments.book() checked for an overlap and
+        -- then inserted, with nothing in between - two threads booking the same
+        -- slot both succeeded, reproduced on 2026-09-13. A partial unique index
+        -- over live rows only makes the second insert fail instead. Cancelled
+        -- and declined rows are excluded so a freed slot can be booked again.
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_slot
+            ON appointments (dentist, starts_at) WHERE status = 'booked';
     """)
     _ensure_lockout_columns(conn)
     _ensure_audit_ip_column(conn)
@@ -121,6 +128,13 @@ def init_db(db_path):
     # beside it. both tables are additive: an old database gains them empty.
     from patient_identity import SCHEMA as IDENTITY_SCHEMA
     conn.executescript(IDENTITY_SCHEMA)
+
+    # opening hours, closures, roster and leave (P05). additive like the two
+    # above: an old database gains them empty, and an empty clinic_hours makes
+    # availability.refusal() refuse rather than allow - an unconfigured clinic
+    # is not an open-all-hours clinic.
+    from availability import SCHEMA as AVAILABILITY_SCHEMA
+    conn.executescript(AVAILABILITY_SCHEMA)
     conn.commit()
     return conn
 

@@ -634,25 +634,30 @@ def selftest():
                 f"SELECT COUNT(*) c FROM {t} WHERE codice_fiscale = ?", (cf,)
             ).fetchone()["c"] for t in MERGE_RELATIONS}
 
-        def give(cf, n=1):
+        def give(cf, n=1, hour=9):
             for i in range(n):
                 m.execute(
                     "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
                     " clinical_notes, next_appointment, source_path)"
                     " VALUES (?, '2026-01-01', '[]', 'note', NULL, ?)",
                     (cf, f"sorted/{cf}/notes/n{i}.json"))
+                # each fixture patient gets its OWN hour, passed in rather
+                # than derived: P05 added a unique index over live rows and it
+                # caught this immediately - two patients were being booked into
+                # the identical slot, the exact thing the index exists to stop.
+                # hash(cf) would also work until PYTHONHASHSEED changed it.
                 m.execute(
                     "INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
                     " status, created_at, updated_at)"
                     " VALUES (?, 'dr rossi', ?, 30, 'booked', '2026-01-01', '2026-01-01')",
-                    (cf, f"2026-0{i + 1}-05T09:00:00"))
+                    (cf, f"2026-0{i + 1}-05T{hour + i:02d}:00:00"))
 
         seed(KEEP, "Paola Rossi")
         seed(GONE, "paola rossi")
         seed(OTHER, "Giulia Bianchi")
-        give(KEEP, 1)
-        give(GONE, 2)
-        give(OTHER, 1)
+        give(KEEP, 1, hour=9)
+        give(GONE, 2, hour=11)
+        give(OTHER, 1, hour=15)
         m.commit()
         keep_before = relations(KEEP)
         gone_before = relations(GONE)

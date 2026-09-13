@@ -1,3 +1,4 @@
+import clinic_time
 import codice_fiscale
 import disk_guard
 import tunnel_guard
@@ -20,5 +21,9 @@ if __name__ == "__main__":
     # on a misconfigured host it should be the first refusal the operator sees.
     disk_guard.guard_or_exit()
     codice_fiscale.guard_or_exit("db/clinic.sqlite")
+    # P05: stored datetimes are naive clinic-local. a row carrying an offset
+    # was written under a different contract, and shifting it silently moves
+    # appointments by an hour - so refuse instead of guessing.
+    clinic_time.guard_or_exit("db/clinic.sqlite")
     tunnel_guard.guard_or_exit(PATIENT_PORT)
     app.run(host="127.0.0.1", port=PATIENT_PORT, threaded=True)

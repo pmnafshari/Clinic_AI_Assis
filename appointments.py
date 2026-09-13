@@ -26,6 +26,7 @@ compares ISO strings correctly, so an overlap is a string comparison and there i
 no epoch column to keep in sync.
 """
 
+import sqlite3
 import sys
 from datetime import datetime, timedelta
 
@@ -55,6 +56,13 @@ def _parse(starts_at):
         raise ValueError("start time is not a valid date and time")
 
 
+# a dental appointment is not longer than a working day. the cap is not
+# cosmetic: _overlaps() bounds its scan to the day either side of the slot, and
+# that is only sound because an appointment cannot run across a whole day into
+# a third one. raise this and widen that window together.
+MAX_MINUTES = 480
+
+
 def _check_minutes(minutes):
     try:
         minutes = int(minutes)
@@ -62,6 +70,8 @@ def _check_minutes(minutes):
         raise ValueError("length must be a whole number of minutes")
     if minutes <= 0:
         raise ValueError("length must be more than zero minutes")
+    if minutes > MAX_MINUTES:
+        raise ValueError(f"length must be at most {MAX_MINUTES} minutes")
     return minutes
 
 
@@ -73,12 +83,22 @@ def _window(starts_at, minutes):
 def _overlaps(conn, dentist, starts_at, minutes, exclude_id=None):
     # half-open intervals: 10:00-10:30 and 10:30-11:00 touch, they do not
     # overlap, and a clinic books back-to-back all day.
+    #
+    # BOUNDED TO THE DAY (P05). this used to read every booked row the dentist
+    # had ever had and compare them all in python, so the cost grew with their
+    # history rather than with the day. an appointment cannot overlap one on
+    # another date - MAX_MINUTES caps it at a working day - so the window is
+    # the day either side of the slot.
     start, end = _window(starts_at, minutes)
+    day = _parse(starts_at).date()
+    lo = (day - timedelta(days=1)).isoformat()
+    hi = (day + timedelta(days=1)).isoformat()
     sql = (
         "SELECT id, starts_at, minutes FROM appointments"
         " WHERE dentist = ? AND status = ?"
+        " AND starts_at >= ? AND starts_at < ?"
     )
-    params = [dentist, BOOKED]
+    params = [dentist, BOOKED, f"{lo}T00:00:00", f"{hi}T23:59:59.999999"]
     if exclude_id is not None:
         sql += " AND id != ?"
         params.append(exclude_id)
@@ -89,20 +109,51 @@ def _overlaps(conn, dentist, starts_at, minutes, exclude_id=None):
     return False
 
 
+def _check_schedule(conn, dentist, start, minutes, exclude_id=None):
+    """The clinic's opening hours, the roster, leave and capacity (P05).
+
+    Called by book(), reschedule() AND confirm(), the same way _overlaps() is,
+    so a patient request confirmed into a slot cannot reach a time a staff
+    booking would have been refused.
+    """
+    import availability
+    why = availability.refusal(conn, dentist, start, minutes, exclude_id=exclude_id)
+    if why:
+        raise ValueError(why)
+
+
+# SQLite raises this when two callers win the same slot at once. Before P05 the
+# overlap check was a check-then-act with nothing behind it, and two threads
+# booking the identical slot BOTH SUCCEEDED - reproduced, not theorised. The
+# partial unique index in storage.init_db makes the second one fail here, and
+# this turns that failure into the same message the single-threaded path gives.
+SLOT_TAKEN = "that slot overlaps another appointment for this dentist"
+
+
 def book(conn, codice_fiscale, dentist, starts_at, minutes, note=None):
     minutes = _check_minutes(minutes)
     start, _ = _window(starts_at, minutes)
     if not dentist:
         raise ValueError("an appointment needs a dentist")
+    _check_schedule(conn, dentist, start, minutes)
     if _overlaps(conn, dentist, start, minutes):
-        raise ValueError("that slot overlaps another appointment for this dentist")
+        raise ValueError(SLOT_TAKEN)
     ts = _now()
-    cur = conn.execute(
-        "INSERT INTO appointments"
-        " (codice_fiscale, dentist, starts_at, minutes, status, note, created_at, updated_at)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (codice_fiscale, dentist, start, minutes, BOOKED, note, ts, ts),
-    )
+    try:
+        cur = conn.execute(
+            "INSERT INTO appointments"
+            " (codice_fiscale, dentist, starts_at, minutes, status, note, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (codice_fiscale, dentist, start, minutes, BOOKED, note, ts, ts),
+        )
+    except sqlite3.IntegrityError as e:
+        # the unique slot index, i.e. someone else took it between the check
+        # above and this insert. anything else is a real error and must not be
+        # dressed up as a booking conflict.
+        if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
+            raise
+        conn.rollback()
+        raise ValueError(SLOT_TAKEN)
     conn.commit()
     return cur.lastrowid
 
@@ -128,12 +179,19 @@ def reschedule(conn, appointment_id, starts_at, minutes):
         raise ValueError("no such appointment")
     if row["status"] != BOOKED:
         raise ValueError("a cancelled appointment cannot be moved")
+    _check_schedule(conn, row["dentist"], start, minutes, exclude_id=appointment_id)
     if _overlaps(conn, row["dentist"], start, minutes, exclude_id=appointment_id):
-        raise ValueError("that slot overlaps another appointment for this dentist")
-    conn.execute(
-        "UPDATE appointments SET starts_at = ?, minutes = ?, updated_at = ? WHERE id = ?",
-        (start, minutes, _now(), appointment_id),
-    )
+        raise ValueError(SLOT_TAKEN)
+    try:
+        conn.execute(
+            "UPDATE appointments SET starts_at = ?, minutes = ?, updated_at = ? WHERE id = ?",
+            (start, minutes, _now(), appointment_id),
+        )
+    except sqlite3.IntegrityError as e:
+        if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
+            raise
+        conn.rollback()
+        raise ValueError(SLOT_TAKEN)
     conn.commit()
 
 
@@ -182,8 +240,9 @@ def confirm(conn, appointment_id, dentist, starts_at, minutes):
     """Staff turn a request into a real appointment.
 
     This is the only place a requested row gains a dentist and a time, and it
-    goes through the same overlap rule as book() - a confirm that double-books
-    is refused exactly as a booking is.
+    goes through the same overlap rule AND the same schedule rule as book() - a
+    confirm that double-books, or that lands outside the clinic's hours or the
+    dentist's roster, is refused exactly as a booking is.
     """
     minutes = _check_minutes(minutes)
     start, _ = _window(starts_at, minutes)
@@ -196,13 +255,23 @@ def confirm(conn, appointment_id, dentist, starts_at, minutes):
         raise ValueError("no such request")
     if row["status"] != REQUESTED:
         raise ValueError("only a pending request can be confirmed")
+    # the SAME schedule rule as book(). a request is not a way around the
+    # clinic's opening hours or a dentist's roster - the patient asked for a
+    # date and a period, and this is where a real time gets chosen.
+    _check_schedule(conn, dentist, start, minutes, exclude_id=appointment_id)
     if _overlaps(conn, dentist, start, minutes, exclude_id=appointment_id):
-        raise ValueError("that slot overlaps another appointment for this dentist")
-    conn.execute(
-        "UPDATE appointments SET dentist = ?, starts_at = ?, minutes = ?,"
-        " status = ?, period = NULL, updated_at = ? WHERE id = ?",
-        (dentist, start, minutes, BOOKED, _now(), appointment_id),
-    )
+        raise ValueError(SLOT_TAKEN)
+    try:
+        conn.execute(
+            "UPDATE appointments SET dentist = ?, starts_at = ?, minutes = ?,"
+            " status = ?, period = NULL, updated_at = ? WHERE id = ?",
+            (dentist, start, minutes, BOOKED, _now(), appointment_id),
+        )
+    except sqlite3.IntegrityError as e:
+        if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
+            raise
+        conn.rollback()
+        raise ValueError(SLOT_TAKEN)
     conn.commit()
 
 
@@ -319,12 +388,28 @@ def selftest():
 
     import storage
 
+    import availability
+
     with tempfile.TemporaryDirectory() as tmp:
         conn = storage.init_db(str(Path(tmp) / "t.sqlite"))
         conn.execute(
             "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
             ("ZZA00A00A000A", "Test Patient"),
         )
+        # P05: the clinic has to be open and the dentists rostered, or every
+        # booking below is refused before it reaches the rule under test. an
+        # UNCONFIGURED clinic refusing everything is the correct default and is
+        # asserted in availability's own check 10.
+        availability.seed_fixture_hours(conn)
+        for who in ("dr rossi", "dr bianchi", "drossi"):
+            for weekday in range(7):
+                conn.execute(
+                    "INSERT OR IGNORE INTO dentist_schedule (dentist, weekday, starts, ends)"
+                    " VALUES (?, ?, '00:00', '23:59')", (who, weekday))
+        # and these fixtures book at all hours on purpose - they are testing the
+        # overlap rule, not the schedule - so the clinic is open around the
+        # clock HERE ONLY
+        conn.execute("UPDATE clinic_hours SET opens='00:00', closes='23:59', closed=0")
         conn.commit()
         CF = "ZZA00A00A000A"
 
@@ -612,6 +697,112 @@ def selftest():
         # and looks each day up, so {} has to be a usable answer.
         assert month_counts(mc, "2026-05-01", "2026-06-01") == {}, \
             "23: a month with nothing in it returns an empty mapping"
+
+        # --- P05: the schedule rule and the race -------------------------
+        #
+        # a SEPARATE database with realistic hours. the fixture above opens the
+        # clinic around the clock so the overlap checks can book at any hour;
+        # these checks are about the schedule itself, so they need a clinic
+        # that actually closes.
+        sched = storage.init_db(str(Path(tmp) / "sched.sqlite"))
+        availability.seed_fixture_hours(sched)
+        sched.execute("INSERT INTO patients (codice_fiscale, patient_name)"
+                      " VALUES ('ZZC00C00C000C', 'Schedule Patient')")
+        sched.execute("INSERT INTO dentist_schedule (dentist, weekday, starts, ends)"
+                      " VALUES ('dr rossi', 0, '09:00', '18:00')")
+        sched.commit()
+        SCF, MON = "ZZC00C00C000C", "2026-09-07"
+
+        # 24. 03:00 BOOKED SILENTLY BEFORE THIS PHASE - measured, not assumed.
+        # this is the defect the whole schedule rule exists for.
+        try:
+            book(sched, SCF, "dr rossi", f"{MON}T03:00", 30)
+            raise AssertionError("24: 03:00 must be refused once the clinic has opening hours")
+        except ValueError as e:
+            assert "opens at 09:00" in str(e), f"24: and must say why, got {e}"
+        assert book(sched, SCF, "dr rossi", f"{MON}T09:00", 30), \
+            "24: an hour the clinic is actually open still books"
+
+        # 25. THE SAME RULE ON ALL THREE WRITE PATHS. a rule applied to book()
+        # and not to confirm() is a rule a patient request walks straight past,
+        # which is the drift _overlaps() was already written to avoid.
+        soon25 = date.today() + _td(days=30)
+        while soon25.weekday() != 0:          # a Monday, so the roster applies
+            soon25 += _td(days=1)
+        soon25 = soon25.isoformat()
+        r25 = request(sched, SCF, soon25, MORNING)
+        try:
+            confirm(sched, r25, "dr rossi", f"{soon25}T03:00", 30)
+            raise AssertionError("25: confirming into 03:00 must be refused too")
+        except ValueError as e:
+            assert "opens at 09:00" in str(e), f"25: confirm must use the same rule, got {e}"
+        confirm(sched, r25, "dr rossi", f"{soon25}T10:00", 30)
+        assert sched.execute("SELECT starts_at FROM appointments WHERE id = ?",
+                             (r25,)).fetchone()["starts_at"].startswith(f"{soon25}T10:00"), \
+            "25: a valid confirm lands"
+        try:
+            reschedule(sched, r25, f"{soon25}T22:00", 30)
+            raise AssertionError("25: rescheduling outside hours must be refused")
+        except ValueError as e:
+            assert "runs past closing" in str(e) or "opens at" in str(e), \
+                f"25: reschedule must use the same rule, got {e}"
+
+        # 26. THE RACE. two threads booking the identical slot both succeeded
+        # before this phase - reproduced on 2026-09-13, two booked rows. the
+        # partial unique index makes the second one impossible; this is the
+        # check that would have caught the live defect.
+        import threading
+        race_db = str(Path(tmp) / "race.sqlite")
+        rconn = storage.init_db(race_db)
+        availability.seed_fixture_hours(rconn)
+        rconn.execute("UPDATE clinic_hours SET opens='00:00', closes='23:59', closed=0")
+        rconn.execute("INSERT INTO patients (codice_fiscale, patient_name)"
+                      " VALUES ('ZZD00D00D000D', 'Race Patient')")
+        for wd in range(7):
+            rconn.execute("INSERT INTO dentist_schedule (dentist, weekday, starts, ends)"
+                          " VALUES ('dr rossi', ?, '00:00', '23:59')", (wd,))
+        rconn.commit()
+        rconn.close()
+
+        barrier = threading.Barrier(4)
+        outcomes = []
+
+        def grab():
+            c = storage.connect(race_db)
+            try:
+                barrier.wait()
+                book(c, "ZZD00D00D000D", "dr rossi", "2026-10-05T09:00", 30)
+                outcomes.append("booked")
+            except ValueError:
+                outcomes.append("refused")
+            except Exception as exc:              # anything else is a real bug
+                outcomes.append(f"error:{exc}")   # and must not read as a refusal
+            finally:
+                c.close()
+
+        threads = [threading.Thread(target=grab) for _ in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        check = storage.connect(race_db)
+        booked_rows = check.execute(
+            "SELECT COUNT(*) c FROM appointments WHERE status = 'booked'").fetchone()["c"]
+        check.close()
+        assert booked_rows == 1, \
+            f"26: four threads, one slot, expected exactly 1 booking, got {booked_rows}"
+        assert outcomes.count("booked") == 1, f"26: exactly one winner, got {outcomes}"
+        assert all(o in ("booked", "refused") for o in outcomes), \
+            f"26: the losers must get a refusal, not a raw database error - {outcomes}"
+
+        # 27. the length cap. _overlaps() bounds its scan to the day either side
+        # of the slot, and that is only sound while an appointment cannot run
+        # across a whole day into a third one.
+        try:
+            book(sched, SCF, "dr rossi", f"{MON}T09:00", MAX_MINUTES + 1)
+            raise AssertionError("27: an appointment longer than a working day must be refused")
+        except ValueError as e:
+            assert "at most" in str(e), f"27: got {e}"
 
     print("selftest ok")
 

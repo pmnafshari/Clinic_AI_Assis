@@ -33,6 +33,34 @@ def seed(conn):
         seed_account(username, role, password, conn)
 
 
+def seed_schedule(conn):
+    """Dev opening hours and a roster for the seeded dentists.
+
+    NOT the clinic's hours. D07 is unanswered, and init_db deliberately creates
+    `clinic_hours` empty - an unconfigured clinic refuses every booking rather
+    than behaving as though it were open around the clock. This is the dev
+    fixture that makes the demo usable, and it lives here with the dev
+    passwords rather than in init_db, so a real deployment never silently
+    inherits somebody's guess at when it opens.
+
+    Create-only, like seed_account: hours the clinic has already set are never
+    overwritten.
+    """
+    import availability
+
+    availability.seed_fixture_hours(conn)
+    dentists = [r["username"] for r in conn.execute(
+        "SELECT username FROM users WHERE role = 'dentist' AND active = 1")]
+    for username in dentists:
+        for weekday in range(5):
+            closes = "17:00" if weekday == 4 else "18:00"
+            conn.execute(
+                "INSERT OR IGNORE INTO dentist_schedule (dentist, weekday, starts, ends)"
+                " VALUES (?, ?, '09:00', ?)", (username, weekday, closes))
+    conn.commit()
+    return len(dentists)
+
+
 def selftest():
     import tempfile
 
@@ -95,10 +123,12 @@ def main():
     Path("db").mkdir(exist_ok=True)
     conn = init_db("db/clinic.sqlite")
     seed(conn)
+    seed_schedule(conn)
 
     count = conn.execute("SELECT COUNT(*) c FROM users").fetchone()["c"]
     print(f"seeded {count} accounts")
     print("warning: dev-only passwords - change before any real patient data is loaded")
+    print("warning: dev-only opening hours and roster (Mon-Fri) - the clinic states its own")
 
 
 if __name__ == "__main__":

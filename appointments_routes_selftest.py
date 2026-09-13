@@ -52,6 +52,26 @@ def _seed_patient(db_path):
     conn.close()
 
 
+def _seed_schedule(db_path):
+    # P05: an unconfigured clinic refuses every booking, which is the correct
+    # default and is asserted in availability's own check 10. These route tests
+    # are about the gate, the audit trail and the overlap rule, so the clinic is
+    # open around the clock here and every dentist is rostered - otherwise every
+    # check below would be refused before reaching what it tests.
+    import availability
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    availability.seed_fixture_hours(conn)
+    conn.execute("UPDATE clinic_hours SET opens='00:00', closes='23:59', closed=0")
+    for who in ("drossi", "aassist", "dr rossi"):
+        for weekday in range(7):
+            conn.execute(
+                "INSERT OR IGNORE INTO dentist_schedule (dentist, weekday, starts, ends)"
+                " VALUES (?, ?, '00:00', '23:59')", (who, weekday))
+    conn.commit()
+    conn.close()
+
+
 def _csrf_from(html):
     return re.search(r'name="csrf_token" value="([^"]+)"', html).group(1)
 
@@ -95,6 +115,7 @@ def selftest():
         _seed_user(db_path, "aassist", "assistant")
         _seed_user(db_path, "aadmin", "admin")
         _seed_patient(db_path)
+        _seed_schedule(db_path)
 
         dentist = _login(app, "drossi")
         assistant = _login(app, "aassist")

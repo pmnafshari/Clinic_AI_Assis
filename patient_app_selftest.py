@@ -49,6 +49,20 @@ def selftest():
         db_path = str(Path(tmp) / "clinic.sqlite")
         conn = storage.init_db(db_path)
         patient_auth.init_patient_tables(conn)
+        # P05: an unconfigured clinic refuses every booking - the correct
+        # default, asserted in availability check 10. This file tests the
+        # PATIENT surface (ownership, requests, the fence), not the schedule,
+        # so the clinic is open around the clock here and every dentist these
+        # checks use is rostered.
+        import availability
+        availability.seed_fixture_hours(conn)
+        conn.execute("UPDATE clinic_hours SET opens='00:00', closes='23:59', closed=0")
+        for who in ("dr rossi", "dr bianchi", "drossi"):
+            for weekday in range(7):
+                conn.execute(
+                    "INSERT OR IGNORE INTO dentist_schedule (dentist, weekday, starts, ends)"
+                    " VALUES (?, ?, '00:00', '23:59')", (who, weekday))
+        conn.commit()
         conn.close()
 
         # this file must not depend on the staff app - point routes.py at
