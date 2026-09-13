@@ -99,6 +99,10 @@ ROLE_PAGES = {
     ],
     "admin": [
         ("admin-users", "/admin/users"),
+        # duplicate review is manage_users, so the admin is the only role that
+        # renders it - a new page that no width gate covers is a new page that
+        # breaks at 390px without anyone noticing
+        ("duplicates", "/patients/duplicates"),
     ],
 }
 
