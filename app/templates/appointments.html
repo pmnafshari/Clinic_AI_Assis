@@ -16,6 +16,62 @@
 
 <div class="row g-3">
   <div class="col-12 col-xl-8">
+    {# the month. a table, not a grid of divs: these cells ARE tabular data -
+       a weekday column and a week row - and a screen reader reading "Wednesday,
+       10 September" out of the header association is the whole point. #}
+    <section class="card dash-card appt-cal-card" aria-labelledby="cal-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="cal-title">{{ month_label }}</h2>
+          <p class="ds-card-sub">Pick a day to see its agenda</p>
+        </div>
+        <div class="appt-cal-nav">
+          <a class="btn btn-sm btn-outline-secondary" rel="prev"
+             href="{{ url_for('appointments.index', day=day, month=prev_month) }}"
+             aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+          <a class="btn btn-sm btn-outline-secondary"
+             href="{{ url_for('appointments.index', day=today) }}">Today</a>
+          <a class="btn btn-sm btn-outline-secondary" rel="next"
+             href="{{ url_for('appointments.index', day=day, month=next_month) }}"
+             aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        <table class="appt-cal">
+          <caption class="visually-hidden">{{ month_label }}</caption>
+          <thead>
+            <tr>
+              {% for wd in weekdays %}<th scope="col">{{ wd }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for week in weeks %}
+            <tr>
+              {% for c in week %}
+              <td class="{% if not c.in_month %}appt-cal-out{% endif %}">
+                <a class="appt-cal-day{% if c.is_today %} appt-cal-today{% endif %}{% if c.is_selected %} appt-cal-on{% endif %}"
+                   href="{{ url_for('appointments.index', day=c.iso, month=month) }}"
+                   aria-label="{{ c.label }}"
+                   {% if c.is_selected %}aria-current="date"{% endif %}>
+                  <span class="appt-cal-num" aria-hidden="true">{{ c.number }}</span>
+                  <span class="appt-cal-marks" aria-hidden="true">
+                    {% if c.booked %}<span class="appt-cal-booked">{{ c.booked }}</span>{% endif %}
+                    {% if c.requested %}<span class="appt-cal-req"></span>{% endif %}
+                  </span>
+                </a>
+              </td>
+              {% endfor %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p class="appt-cal-key">
+          <span class="appt-cal-booked">n</span> booked
+          <span class="appt-cal-req"></span> request waiting
+        </p>
+      </div>
+    </section>
+
     <section class="card dash-card" aria-labelledby="day-title">
       <div class="dash-card-head">
         <div>

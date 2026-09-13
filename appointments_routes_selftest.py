@@ -272,6 +272,80 @@ def selftest():
                      "SELECT * FROM audit_log WHERE action = 'decline_appointment_request'"), \
             "12f: declining must be audited"
 
+        # --- the month calendar (phase 48) --------------------------------
+        #
+        # asserted through the aria-label rather than the day number, because
+        # the number is in the markup whether or not anything is booked on it.
+        # the label is the only place the counts are actually stated, and it is
+        # also what a screen reader gets - so a wrong count and an unreadable
+        # cell fail the same check.
+        CAL_MONTH = "2027-03"
+        CAL_DAY = "2027-03-15"
+        CAL_NEXT = "2027-03-16"
+
+        def cal_label(client, iso, day=CAL_DAY, month=CAL_MONTH):
+            body = client.get(f"/appointments?day={day}&month={month}").text
+            tag = re.search(r'<a class="appt-cal-day[^>]*\bday=' + iso + r'&[^>]*>', body)
+            assert tag, f"no calendar cell for {iso}"
+            return re.search(r'aria-label="([^"]*)"', tag.group(0)).group(1)
+
+        # 13. the month is drawn, and the selected day is the current one. a
+        # calendar that marks nothing as current leaves a keyboard user with no
+        # idea which agenda is below it.
+        body13 = dentist.get(f"/appointments?day={CAL_DAY}&month={CAL_MONTH}").text
+        assert "appt-cal" in body13, "13: the month calendar must be on the page"
+        assert "March 2027" in body13, "13: captioned with the month it is showing"
+        on = re.search(r'<a class="appt-cal-day[^>]*\bday=' + CAL_DAY + r'&[^>]*>', body13).group(0)
+        assert 'aria-current="date"' in on, "13: the selected day must be aria-current"
+        assert cal_label(dentist, CAL_DAY) == "15 March 2027: nothing booked", \
+            "13: an empty day says so rather than leaving the label bare"
+
+        # 13b. a request is counted on the day the patient asked for, and it is
+        # counted AS a request - never totalled in with real appointments,
+        # which is the whole reason month_counts keeps the two apart.
+        req_id13 = _appt.request(_conn(db_path), PATIENT_CF, CAL_DAY, _appt.MORNING)
+        assert cal_label(dentist, CAL_DAY) == "15 March 2027: 1 request", \
+            "13b: a pending request shows as a request, not as a booking"
+
+        # 13c. confirming moves the count to the date the slot was actually
+        # given, which is not necessarily the date that was asked for
+        dentist.post(f"/appointments/{req_id13}/confirm", data={
+            "dentist": "drossi", "date": CAL_NEXT, "time": "10:00",
+            "minutes": "30", "day": CAL_DAY})
+        assert cal_label(dentist, CAL_DAY) == "15 March 2027: nothing booked", \
+            "13c: the request must leave the day it was asked for"
+        assert cal_label(dentist, CAL_NEXT) == "16 March 2027: 1 booked", \
+            "13c: and land on the day it was confirmed for"
+
+        # 13d. cancelling takes it off the month. the row survives (12f), so a
+        # calendar reading the table without a status filter would still show
+        # it here.
+        appt13 = _rows(db_path, "SELECT id FROM appointments WHERE id = ?", (req_id13,))[0]
+        dentist.post(f"/appointments/{appt13['id']}/cancel", data={"day": CAL_NEXT})
+        assert cal_label(dentist, CAL_NEXT) == "16 March 2027: nothing booked", \
+            "13d: a cancelled appointment is off the month"
+
+        # 13e. THE WITHHOLD, again, for the new surface. the calendar is a
+        # second way to read the same data, and the gate has to cover it - a
+        # month of counts tells an admin exactly how busy the clinic is.
+        body13e = admin.get("/appointments", follow_redirects=True).text
+        assert "appt-cal" not in body13e, "13e: a withheld role gets no calendar at all"
+
+        # 13f. the two roles that may manage appointments see the same month
+        _appt.book(_conn(db_path), PATIENT_CF, "drossi", f"{CAL_DAY}T14:00", 30)
+        assert cal_label(assistant, CAL_DAY) == cal_label(dentist, CAL_DAY) \
+            == "15 March 2027: 1 booked", "13f: dentist and assistant read the same counts"
+
+        # 13g. a hand-typed day or month is user input. before the calendar a
+        # bad ?day= just read an empty agenda; now it reaches date arithmetic,
+        # and a 500 on the scheduling page is not an acceptable answer to a
+        # typo.
+        for bad in ("?day=not-a-date", "?month=2027-13", "?month=banana",
+                    "?day=2027-02-30", f"?day={CAL_DAY}&month=", "?day=&month="):
+            resp13 = dentist.get(f"/appointments{bad}")
+            assert resp13.status_code == 200, f"13g: {bad} must not break the page"
+            assert "appt-cal" in resp13.text, f"13g: {bad} must still draw a month"
+
     print("selftest ok")
 
 

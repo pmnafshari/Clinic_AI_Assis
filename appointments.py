@@ -259,6 +259,32 @@ def agenda(conn, day):
     ).fetchall()
 
 
+def month_counts(conn, first_day, next_first):
+    """-> {"2026-09-10": {"booked": 3, "requested": 1}} for one month.
+
+    ONE query for the whole grid. A per-day call would be 28-31 queries to draw
+    a calendar, and the page already runs agenda() and pending_requests().
+
+    Booked and requested are counted apart because they are not the same claim
+    on a day: a request carries a preferred DATE and no time (see the module
+    docstring), so the calendar may mark it but must never total it in with
+    real appointments. Cancelled and declined rows are excluded - a cancelled
+    appointment is history, not something on the month.
+    """
+    counts = {}
+    rows = conn.execute(
+        "SELECT substr(starts_at, 1, 10) AS d, status, COUNT(*) AS n"
+        " FROM appointments"
+        " WHERE starts_at >= ? AND starts_at < ? AND status IN (?, ?)"
+        " GROUP BY d, status",
+        (f"{first_day}T00:00:00", f"{next_first}T00:00:00", BOOKED, REQUESTED),
+    ).fetchall()
+    for row in rows:
+        day = counts.setdefault(row["d"], {BOOKED: 0, REQUESTED: 0})
+        day[row["status"]] = row["n"]
+    return counts
+
+
 def for_patient(conn, codice_fiscale):
     return conn.execute(
         "SELECT * FROM appointments WHERE codice_fiscale = ? ORDER BY starts_at DESC",
@@ -508,6 +534,84 @@ def selftest():
         obk, orq = open_for_patient(conn, OTHER)
         assert all(x["codice_fiscale"] == OTHER for x in obk + orq), \
             "18: open_for_patient must be scoped to the patient asked for"
+
+        # --- month_counts (phase 48) --------------------------------------
+        #
+        # a separate database, because the checks above leave a deliberate mess
+        # and these assertions are about exact totals. rows go in with plain
+        # INSERTs rather than book()/request(): most of the months below are in
+        # the past, which request() refuses by design (check 12), and
+        # month_counts is a read - what it has to get right is what the table
+        # actually holds.
+        mc = storage.init_db(str(Path(tmp) / "months.sqlite"))
+        mc.execute("INSERT INTO patients (codice_fiscale, patient_name)"
+                   " VALUES (?, ?)", (CF, "Test Patient"))
+
+        def put(starts_at, status):
+            mc.execute(
+                "INSERT INTO appointments (codice_fiscale, dentist, starts_at,"
+                " minutes, status, created_at, updated_at)"
+                " VALUES (?, 'dr rossi', ?, 30, ?, '2026-01-01', '2026-01-01')",
+                (CF, starts_at, status),
+            )
+
+        # 19. a month of 30 days. two bookings share a day, one sits alone, and
+        # a request on the same day as a booking is counted apart from it.
+        for at in ("2026-09-10T09:00:00", "2026-09-10T11:00:00", "2026-09-24T09:00:00"):
+            put(at, BOOKED)
+        put("2026-09-10T00:00:00", REQUESTED)
+        # neither of these may be counted anywhere
+        put("2026-09-10T14:00:00", CANCELLED)
+        put("2026-09-11T00:00:00", DECLINED)
+        mc.commit()
+        sept = month_counts(mc, "2026-09-01", "2026-10-01")
+        assert sept["2026-09-10"] == {BOOKED: 2, REQUESTED: 1}, \
+            f"19: bookings and requests are counted apart, got {sept.get('2026-09-10')}"
+        assert sept["2026-09-24"] == {BOOKED: 1, REQUESTED: 0}, "19: and a lone booking counts 1"
+        assert "2026-09-11" not in sept, "19: a declined request is not on the month"
+        assert sum(d[BOOKED] for d in sept.values()) == 3, \
+            "19: a cancelled appointment is not on the month either"
+
+        # 20. month lengths. february is the one a naive +30 gets wrong, and
+        # 2028 is the leap year that catches an off-by-one on the 29th.
+        put("2026-02-28T09:00:00", BOOKED)
+        put("2028-02-29T09:00:00", BOOKED)
+        put("2026-12-31T09:00:00", BOOKED)
+        mc.commit()
+        assert month_counts(mc, "2026-02-01", "2026-03-01") == \
+            {"2026-02-28": {BOOKED: 1, REQUESTED: 0}}, "20: the 28th of a 28-day february"
+        assert month_counts(mc, "2028-02-01", "2028-03-01") == \
+            {"2028-02-29": {BOOKED: 1, REQUESTED: 0}}, "20: and the 29th of a leap one"
+        assert month_counts(mc, "2026-12-01", "2027-01-01") == \
+            {"2026-12-31": {BOOKED: 1, REQUESTED: 0}}, "20: the 31st of december"
+
+        # 21. THE DECEMBER BOUNDARY. the next month is a different year, so a
+        # window built by bumping the month alone reads 2026-12-01..2026-01-01,
+        # which is empty - and an empty december looks like a quiet month
+        # rather than a bug. january must not pick december's row up either.
+        assert month_counts(mc, "2027-01-01", "2027-02-01") == {}, \
+            "21: january must not see december"
+        put("2027-01-01T09:00:00", BOOKED)
+        mc.commit()
+        jan = month_counts(mc, "2027-01-01", "2027-02-01")
+        assert jan == {"2027-01-01": {BOOKED: 1, REQUESTED: 0}}, \
+            "21: the first of january belongs to january"
+        assert "2027-01-01" not in month_counts(mc, "2026-12-01", "2027-01-01"), \
+            "21: and not to december"
+
+        # 22. ONE query for the whole grid, not one per day. a calendar drawn
+        # day by day is 28-31 round trips on a page that already runs two other
+        # queries, and nothing in the rendered output would show the difference.
+        seen = []
+        mc.set_trace_callback(lambda sql: seen.append(sql))
+        month_counts(mc, "2026-09-01", "2026-10-01")
+        mc.set_trace_callback(None)
+        assert len(seen) == 1, f"22: month_counts must run exactly 1 query, ran {len(seen)}"
+
+        # 23. an empty month is empty, not missing. the template walks the grid
+        # and looks each day up, so {} has to be a usable answer.
+        assert month_counts(mc, "2026-05-01", "2026-06-01") == {}, \
+            "23: a month with nothing in it returns an empty mapping"
 
     print("selftest ok")
 

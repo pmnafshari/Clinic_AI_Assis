@@ -1,3 +1,4 @@
+import calendar
 from datetime import date
 
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
@@ -8,6 +9,8 @@ from auth import authorize, log_audit
 from .db import get_db
 
 appointments_bp = Blueprint("appointments", __name__)
+
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def _denied(action, target=None):
@@ -22,6 +25,82 @@ def _may():
     return authorize(g.user["role"], "manage_appointments")
 
 
+def _pick_day(raw):
+    # a hand-typed ?day= is user input, and it now drives which month is drawn
+    # as well as which agenda is read. before the calendar a bad value just
+    # returned an empty day; now it would reach date arithmetic, so it falls
+    # back to today rather than raising.
+    try:
+        return date.fromisoformat(raw)
+    except (TypeError, ValueError):
+        return date.today()
+
+
+def _pick_month(raw, day):
+    # ?month=YYYY-MM, defaulting to the month the selected day is in
+    try:
+        year, month = raw.split("-")
+        return date(int(year), int(month), 1)
+    except (AttributeError, TypeError, ValueError):
+        return day.replace(day=1)
+
+
+def _shift_month(first, step):
+    # first day of the month `step` months away. going through the month number
+    # rather than adding days is what keeps december -> january on the right
+    # year and never lands on the 31st of a 30-day month.
+    month = first.month + step
+    year = first.year + (month - 1) // 12
+    return date(year, (month - 1) % 12 + 1, 1)
+
+
+def _day_label(d, booked, requested):
+    # what a screen reader gets instead of a bare number in a grid
+    parts = [d.strftime("%-d %B %Y")]
+    counts = []
+    if booked:
+        counts.append(f"{booked} booked")
+    if requested:
+        counts.append(f"{requested} request" if requested == 1 else f"{requested} requests")
+    if counts:
+        parts.append(", ".join(counts))
+    else:
+        parts.append("nothing booked")
+    return ": ".join(parts)
+
+
+def _month_grid(conn, first, selected):
+    """The weeks of one month, each day carrying everything the template shows.
+
+    Built here rather than in Jinja: the template would otherwise be doing date
+    arithmetic and dictionary lookups per cell, and the counts have to line up
+    with the aria-label on the same cell.
+    """
+    counts = appointments.month_counts(
+        conn, first.isoformat(), _shift_month(first, 1).isoformat()
+    )
+    today = date.today()
+    weeks = []
+    for week in calendar.Calendar(firstweekday=0).monthdatescalendar(first.year, first.month):
+        cells = []
+        for d in week:
+            day_counts = counts.get(d.isoformat(), {})
+            booked = day_counts.get(appointments.BOOKED, 0)
+            requested = day_counts.get(appointments.REQUESTED, 0)
+            cells.append({
+                "iso": d.isoformat(),
+                "number": d.day,
+                "in_month": d.month == first.month,
+                "is_today": d == today,
+                "is_selected": d == selected,
+                "booked": booked,
+                "requested": requested,
+                "label": _day_label(d, booked, requested),
+            })
+        weeks.append(cells)
+    return weeks
+
+
 @appointments_bp.route("/appointments")
 def index():
     # the gate decides whether the query RUNS, so a role without the capability
@@ -31,7 +110,9 @@ def index():
         _denied("manage_appointments")
         return redirect(url_for("dashboard.index"))
 
-    day = request.args.get("day") or date.today().isoformat()
+    selected = _pick_day(request.args.get("day"))
+    day = selected.isoformat()
+    first = _pick_month(request.args.get("month"), selected)
     conn = get_db()
     rows = appointments.agenda(conn, day)
     # patient requests waiting for a slot. read behind the same gate as the
@@ -51,6 +132,13 @@ def index():
         patients=patients,
         dentists=dentists,
         requests_pending=requests_pending,
+        weeks=_month_grid(conn, first, selected),
+        weekdays=WEEKDAYS,
+        month=first.isoformat()[:7],
+        month_label=first.strftime("%B %Y"),
+        prev_month=_shift_month(first, -1).isoformat()[:7],
+        next_month=_shift_month(first, 1).isoformat()[:7],
+        today=date.today().isoformat(),
     )
 
 
