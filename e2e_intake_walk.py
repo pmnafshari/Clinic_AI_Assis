@@ -23,6 +23,7 @@ a browser and a live model.
 import json
 import os
 import shutil
+import re
 import sqlite3
 import sys
 import time
@@ -323,9 +324,13 @@ def walk(browser, note_paths):
         if BAD_NOTE_NAME in chunk:
             bad_row = chunk
             break
+    # report the badge ACTUALLY rendered, not just "OTHER": when this failed on
+    # 2026-09-15 the note said OTHER and that told nobody anything.
+    found_badge = re.search(r'<span class="badge[^"]*"[^>]*>([^<]+)</span>', bad_row)
     check("8 the failed note's own row is not Sorted",
           bad_row and "Needs Review" in bad_row and ">Sorted<" not in bad_row,
-          f"row found={bool(bad_row)}, badge={'Needs Review' if 'Needs Review' in bad_row else 'OTHER'}")
+          f"row found={bool(bad_row)}, badge={found_badge.group(1).strip() if found_badge else None!r},"
+          f" url={page.url}")
     page.close()
 
 
