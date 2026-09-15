@@ -1,5 +1,7 @@
 import re
 import sqlite3
+
+import patient_id
 import sys
 import tempfile
 from pathlib import Path
@@ -126,34 +128,28 @@ def selftest():
 
         cf = "RSSM800010150100"
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf, "mario rossi", "333123456"),
-        )
+        pid = patient_id.seed_patient(conn, cf, "mario rossi", "333123456")
         conn.execute(
             "INSERT INTO visits"
-            " (codice_fiscale, visit_date, procedures, clinical_notes, next_appointment, source_path)"
+            " (patient_id, visit_date, procedures, clinical_notes, next_appointment, source_path)"
             " VALUES (?, ?, ?, ?, ?, ?)",
-            (cf, "2026-06-01", '["rct 26"]', "rct done on tooth 26", "2026-08-01", "n1.json"),
+            (pid, "2026-06-01", '["rct 26"]', "rct done on tooth 26", "2026-08-01", "n1.json"),
         )
         # an older visit inserted later - a bulk re-import assigns ids by
         # filename, so the highest id is not the latest visit
         conn.execute(
             "INSERT INTO visits"
-            " (codice_fiscale, visit_date, procedures, clinical_notes, next_appointment, source_path)"
+            " (patient_id, visit_date, procedures, clinical_notes, next_appointment, source_path)"
             " VALUES (?, ?, ?, ?, ?, ?)",
-            (cf, "2026-03-15", "[]", "cleaning", None, "n10.json"),
+            (pid, "2026-03-15", "[]", "cleaning", None, "n10.json"),
         )
         # capitalized as the web form stores it - the search box must find it
         cap_cf = "GLLA920010150500"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cap_cf, "Anna Gialli", "333999888"),
-        )
+        patient_id.seed_patient(conn, cap_cf, "Anna Gialli", "333999888")
         conn.commit()
         conn.close()
 
-        (sorted_root / cf / "notes").mkdir(parents=True)
+        (sorted_root / pid / "notes").mkdir(parents=True)
         # a real serialized note, not the "{}" placeholder - build_pending_action's
         # D-09 check opens and validates it as a DentalNote
         seed_note = DentalNote(
@@ -165,9 +161,9 @@ def selftest():
             clinical_notes="rct done on tooth 26",
             next_appointment="2026-08-01",
         )
-        (sorted_root / cf / "notes" / "n1.json").write_text(seed_note.model_dump_json())
-        (sorted_root / cf / "images").mkdir(parents=True)
-        (sorted_root / cf / "images" / "xray-26-rct.jpg").write_text("x")
+        (sorted_root / pid / "notes" / "n1.json").write_text(seed_note.model_dump_json())
+        (sorted_root / pid / "images").mkdir(parents=True)
+        (sorted_root / pid / "images" / "xray-26-rct.jpg").write_text("x")
 
         # 1. RBAC-04 - admin gets no table, just the redirect + denied audit row
         admin_client = _login(app, "aadmin", "goodpass")
@@ -435,9 +431,9 @@ def selftest():
             f"/patients/{cf}/visits/{visit_id}/edit",
             data={"value": "2026-09-10", "csrf_token": visit_edit_csrf},
         )
-        assert visit_build_resp.status_code == 200
-        assert "<html" not in visit_build_resp.text.lower()
-        assert "next_appointment:" in visit_build_resp.text
+        assert visit_build_resp.status_code == 200, visit_build_resp.text[:300]
+        assert "<html" not in visit_build_resp.text.lower(), visit_build_resp.text[:300]
+        assert "next_appointment:" in visit_build_resp.text, visit_build_resp.text[:300]
         assert "2026-08-01" in visit_build_resp.text and "2026-09-10" in visit_build_resp.text
         assert "mario rossi" in visit_build_resp.text
         assert "visit of" in visit_build_resp.text.lower()
@@ -472,7 +468,7 @@ def selftest():
         assert next_appt == "2026-09-10", "confirming should apply the frozen new value to sqlite"
 
         note_json = DentalNote.model_validate_json(
-            (sorted_root / cf / "notes" / "n1.json").read_text()
+            (sorted_root / pid / "notes" / "n1.json").read_text()
         )
         assert note_json.next_appointment == "2026-09-10", \
             "confirming should apply the frozen new value to the json sibling too (D-09)"
@@ -519,7 +515,7 @@ def selftest():
         conn.close()
         assert next_appt is None, "an empty value should clear next_appointment to NULL (D-07)"
         note_json = DentalNote.model_validate_json(
-            (sorted_root / cf / "notes" / "n1.json").read_text()
+            (sorted_root / pid / "notes" / "n1.json").read_text()
         )
         assert note_json.next_appointment is None, "an empty value should clear the json field too"
 
@@ -531,7 +527,7 @@ def selftest():
         conn.commit()
         conn.close()
         note_json.next_appointment = "2026-09-10"
-        (sorted_root / cf / "notes" / "n1.json").write_text(note_json.model_dump_json())
+        (sorted_root / pid / "notes" / "n1.json").write_text(note_json.model_dump_json())
 
         # 13. SC4 RBAC re-check on the new tool - a role downgraded mid-flow
         # is denied at apply time, not just hidden by the UI
@@ -618,7 +614,7 @@ def selftest():
 
         # the poll's whole point: a file that lands after the first fetch
         # must appear on the next one, with no page reload in between
-        (sorted_root / cf / "images" / "xray-36-new.jpg").write_text("x")
+        (sorted_root / pid / "images" / "xray-36-new.jpg").write_text("x")
         refetch_resp = dentist_client.get(f"/patients/{cf}/files")
         assert refetch_resp.status_code == 200
         assert "xray-36-new.jpg" in refetch_resp.text, \
@@ -646,8 +642,10 @@ def selftest():
 
         def _cred_count(codice):
             c = sqlite3.connect(db_path)
+            c.row_factory = sqlite3.Row
             n = c.execute(
-                "SELECT COUNT(*) FROM patient_credentials WHERE codice_fiscale = ?", (codice,)
+                "SELECT COUNT(*) FROM patient_credentials WHERE patient_id = ?",
+                (patient_id.resolve(c, codice),)
             ).fetchone()[0]
             c.close()
             return n
@@ -741,10 +739,7 @@ def selftest():
         # the credential state sections 16-20 already built up
         revoke_cf = "VRDL900010150300"
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (revoke_cf, "luca verdi", "333555777"),
-        )
+        patient_id.seed_patient(conn, revoke_cf, "luca verdi", "333555777")
         conn.commit()
         conn.close()
 
@@ -758,8 +753,10 @@ def selftest():
 
         def _session_count(codice):
             c = sqlite3.connect(db_path)
+            c.row_factory = sqlite3.Row
             n = c.execute(
-                "SELECT COUNT(*) FROM patient_sessions WHERE codice_fiscale = ?", (codice,)
+                "SELECT COUNT(*) FROM patient_sessions WHERE patient_id = ?",
+                (patient_id.resolve(c, codice),)
             ).fetchone()[0]
             c.close()
             return n
@@ -768,7 +765,8 @@ def selftest():
             c = sqlite3.connect(db_path)
             c.row_factory = sqlite3.Row
             row = c.execute(
-                "SELECT active FROM patient_credentials WHERE codice_fiscale = ?", (codice,)
+                "SELECT active FROM patient_credentials WHERE patient_id = ?",
+                (patient_id.resolve(c, codice),)
             ).fetchone()
             c.close()
             return row["active"]
@@ -790,10 +788,7 @@ def selftest():
         # 23. the assistant control works too, same shape
         assistant_revoke_cf = "BNCS910010150400"
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (assistant_revoke_cf, "sara bianchi", "333111222"),
-        )
+        patient_id.seed_patient(conn, assistant_revoke_cf, "sara bianchi", "333111222")
         patient_auth.issue_pin(assistant_revoke_cf, conn, "aassist", "assistant")
         patient_auth.create_patient_session(conn, assistant_revoke_cf)
         conn.close()
@@ -845,7 +840,7 @@ def selftest():
             "27: revoking for an unknown patient should 404"
         conn_f = sqlite3.connect(db_path)
         unknown_cred_count = conn_f.execute(
-            "SELECT COUNT(*) FROM patient_credentials WHERE codice_fiscale = ?",
+            "SELECT COUNT(*) FROM patient_credentials WHERE patient_id = ?",
             (unknown_revoke_cf,),
         ).fetchone()[0]
         conn_f.close()
@@ -858,8 +853,8 @@ def selftest():
         conn_g = sqlite3.connect(db_path)
         conn_g.row_factory = sqlite3.Row
         before_attempts = conn_g.execute(
-            "SELECT failed_attempts FROM patient_credentials WHERE codice_fiscale = ?",
-            (revoke_cf,),
+            "SELECT failed_attempts FROM patient_credentials WHERE patient_id = ?",
+            (patient_id.resolve(conn_g, revoke_cf),),
         ).fetchone()["failed_attempts"]
         before_checks = conn_g.execute(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_pin_check' AND target = ?",
@@ -869,8 +864,8 @@ def selftest():
         assert status == "wrong", \
             "28: a revoked credential with the correct pin must read exactly like a wrong pin"
         after_attempts = conn_g.execute(
-            "SELECT failed_attempts FROM patient_credentials WHERE codice_fiscale = ?",
-            (revoke_cf,),
+            "SELECT failed_attempts FROM patient_credentials WHERE patient_id = ?",
+            (patient_id.resolve(conn_g, revoke_cf),),
         ).fetchone()["failed_attempts"]
         after_checks = conn_g.execute(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_pin_check' AND target = ?",
@@ -900,10 +895,8 @@ def selftest():
         # looking at the list changed nothing.
         dup_a, dup_b = "RSPS850010150900", "RSSP850010150900"
         dconn = sqlite3.connect(db_path)
-        dconn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                      " VALUES (?, ?, ?)", (dup_a, "Paola Rossi", None))
-        dconn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                      " VALUES (?, ?, ?)", (dup_b, "paola rossi", "555 0000"))
+        patient_id.seed_patient(dconn, dup_a, "Paola Rossi", None)
+        patient_id.seed_patient(dconn, dup_b, "paola rossi", "555 0000")
         dconn.commit()
         dconn.close()
 
@@ -979,12 +972,11 @@ def selftest():
         mg_keep, mg_gone = "MRGA000000000001", "MRGB000000000002"
         gconn = sqlite3.connect(db_path)
         for mcf, mname in ((mg_keep, "Marco Verdi"), (mg_gone, "marco verdi")):
-            gconn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                          " VALUES (?, ?, '555 1234')", (mcf, mname))
-        gconn.execute("INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+            patient_id.seed_patient(gconn, mcf, mname, "555 1234")
+        gconn.execute("INSERT INTO visits (patient_id, visit_date, procedures,"
                       " clinical_notes, next_appointment, source_path)"
                       " VALUES (?, '2026-05-05', '[]', 'folded note', NULL, 'mrg1.json')",
-                      (mg_gone,))
+                      (patient_id.resolve(gconn, mg_gone),))
         gconn.commit()
         gconn.close()
 
@@ -1038,8 +1030,10 @@ def selftest():
         }, follow_redirects=True)
         assert merged.status_code == 200, "39: a confirmed merge should complete"
         assert _rows_count(db_path, "patient_merges") == 1, "39: and be recorded"
-        assert _rows(db_path, "SELECT * FROM visits WHERE codice_fiscale = ?",
-                     (mg_keep,)), "39: the folded record's visit moved to the survivor"
+        keep_pid = _rows(db_path, "SELECT patient_id FROM patients WHERE codice_fiscale = ?",
+                         (mg_keep,))[0]["patient_id"]
+        assert _rows(db_path, "SELECT * FROM visits WHERE patient_id = ?",
+                     (keep_pid,)), "39: the folded record's visit moved to the survivor"
         assert not _rows(db_path, "SELECT * FROM patients WHERE codice_fiscale = ?",
                          (mg_gone,)), "39: and the folded patient row is gone"
 

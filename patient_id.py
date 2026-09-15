@@ -36,6 +36,22 @@ def is_valid(value):
     return isinstance(value, str) and bool(PATTERN.match(value))
 
 
+def seed_patient(conn, codice_fiscale, patient_name, phone=None, commit=True):
+    """Insert a patient with a fresh surrogate, and return it.
+
+    For fixtures and seeding. `patients.patient_id` is NOT NULL, so an insert
+    that forgets the surrogate fails loudly rather than creating a patient with
+    no identity - this is the one-liner that keeps that from being annoying.
+    """
+    pid = new_id()
+    conn.execute(
+        "INSERT INTO patients (patient_id, codice_fiscale, patient_name, phone)"
+        " VALUES (?, ?, ?, ?)", (pid, codice_fiscale, patient_name, phone))
+    if commit:
+        conn.commit()
+    return pid
+
+
 def resolve(conn, key):
     """A patient_id, a live codice fiscale, or a folded one -> patient_id.
 
@@ -47,24 +63,29 @@ def resolve(conn, key):
 
     Returns None when the key names nobody.
     """
+    # INDEXED, NOT NAMED, access to every row here: this is called from the
+    # routes, the modules and a lot of test code, and not all of those hand it a
+    # connection with sqlite3.Row set. A resolver that only works on a
+    # correctly-configured connection is a resolver that fails in the one place
+    # somebody forgot.
     if not key:
         return None
     if is_valid(key):
         row = conn.execute(
             "SELECT patient_id FROM patients WHERE patient_id = ?", (key,)).fetchone()
-        return row["patient_id"] if row else None
+        return row[0] if row else None
 
     row = conn.execute(
         "SELECT patient_id FROM patients WHERE codice_fiscale = ?", (key,)).fetchone()
     if row:
-        return row["patient_id"]
+        return row[0]
 
     # a folded codice fiscale. P04 kept the mapping precisely so an old link
     # still leads somewhere true rather than 404ing.
     row = conn.execute(
         "SELECT target_patient_id FROM patient_merges WHERE source_cf = ?", (key,)).fetchone()
-    if row and row["target_patient_id"]:
-        return resolve(conn, row["target_patient_id"])
+    if row and row[0]:
+        return resolve(conn, row[0])
     return None
 
 
@@ -86,19 +107,11 @@ def selftest():
     # error that produced a constant would show here
     assert len({new_id() for _ in range(1000)}) == 1000, "1: ids must not repeat"
 
-    import migrate_pid
-
     with tempfile.TemporaryDirectory() as tmp:
-        # the v2 shape comes from the real migration, never from DDL written in
-        # a test file. audit_log's ip and reason columns broke the fast suite
-        # twice because three test files built that table by hand.
+        # init_db creates the v2 shape directly since Phase 51; the migration
+        # from v1 is proved in migrate_pid_selftest, which pins the old DDL.
         conn = storage.init_db(str(Path(tmp) / "t.sqlite"))
-        conn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                     " VALUES ('RSSM800010150100', 'Mario Rossi', NULL)")
-        conn.commit()
-        migrate_pid.ensure_ops_table(conn)
-        migrate_pid.sqlite_step(conn)
-        pid = conn.execute("SELECT patient_id FROM patients").fetchone()["patient_id"]
+        pid = seed_patient(conn, "RSSM800010150100", "Mario Rossi")
 
         # 2. resolve by the surrogate itself
         assert resolve(conn, pid) == pid, "2: a patient_id resolves to itself"

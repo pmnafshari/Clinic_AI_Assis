@@ -19,6 +19,13 @@ patients_bp = Blueprint("patients", __name__)
 
 SORTED_ROOT = Path("sorted")
 
+
+def patient_identity_pid(key):
+    """Resolve a route's identifier to a patient_id (Phase 51)."""
+    import patient_id as _pid
+
+    return _pid.resolve(get_db(), key)
+
 # newest by visit_date, not by insert order - a bulk load_from_sorted re-import
 # assigns visit ids by filename, so the highest id is not the latest visit.
 # same ordering as agent.pick_target_visit; nulls sort last.
@@ -33,10 +40,10 @@ def list_view():
         return redirect(url_for("dashboard.index"))
 
     patients = get_db().execute(f"""
-        SELECT p.codice_fiscale, p.patient_name, p.phone,
-            (SELECT next_appointment FROM visits v WHERE v.codice_fiscale = p.codice_fiscale
+        SELECT p.patient_id, p.codice_fiscale, p.patient_name, p.phone,
+            (SELECT next_appointment FROM visits v WHERE v.patient_id = p.patient_id
              {LATEST_VISIT}) AS next_appointment,
-            (SELECT visit_date FROM visits v WHERE v.codice_fiscale = p.codice_fiscale
+            (SELECT visit_date FROM visits v WHERE v.patient_id = p.patient_id
              {LATEST_VISIT}) AS last_visit
         FROM patients p
         ORDER BY p.patient_name
@@ -164,17 +171,22 @@ def detail_view(cf):
         abort(404)
 
     conn = get_db()
-    patient = lookup_patient(cf, conn)
+    pid = patient_identity_pid(cf)
+    if pid is None:
+        abort(404)
+    # A FOLDED CODICE FISCALE REDIRECTS RATHER THAN RENDERING. lookup_patient
+    # would happily serve the survivor's record under the old identifier, and
+    # that is worse than it sounds: two URLs would show one record, so a link
+    # copied out of the address bar would keep the dead identifier alive. The
+    # redirect makes the canonical URL the one people actually pass around.
+    current = conn.execute(
+        "SELECT codice_fiscale FROM patients WHERE patient_id = ?", (pid,)).fetchone()
+    if current is not None and cf not in (pid, current["codice_fiscale"]):
+        flash(f"{cf} was merged into this record.")
+        return redirect(url_for("patients.detail_view", cf=current["codice_fiscale"]))
+
+    patient = lookup_patient(pid, conn)
     if patient is None:
-        # a merged codice fiscale still names something real. an old link, an
-        # old audit row and an old file path all carry it, and 404 here would
-        # make the merge a trace-free delete from every surface that matters -
-        # which is what P04.03 forbids. checked only after lookup fails, so a
-        # live record never pays for the query.
-        survivor = patient_identity.merge_target(conn, cf)
-        if survivor:
-            flash(f"{cf} was merged into this record.")
-            return redirect(url_for("patients.detail_view", cf=survivor))
         abort(404)
 
     # dentist-only gate for the clinical card - never read_notes, which
@@ -215,15 +227,23 @@ def files_fragment(cf):
     if not is_valid_cf(cf):
         abort(404)
 
-    # a merge repoints the database rows but deliberately leaves the files
-    # where they are - sorted/<CF>/ is a storage location, not a claim about
-    # identity, and there is no transaction spanning sqlite and the filesystem
-    # (see .planning/plans/P04.md, plan 2). so the survivor's file list is its
-    # own directory plus every directory it absorbed, resolved through the
-    # mapping rather than by having moved anything.
-    roots = [cf] + patient_identity.merged_sources_of(get_db(), cf)
+    # ONE DIRECTORY PER PATIENT, named by the surrogate (Phase 51). A merge now
+    # moves the folded patient's files into the survivor's directory, so this no
+    # longer has to union several roots the way it did while MERGE-1 was open.
+    #
+    # The legacy names are still consulted: a migration or merge file-move op
+    # that has not completed yet leaves a directory under the old codice
+    # fiscale, and a file that exists must not vanish from this list because a
+    # background step is still pending.
+    pid = patient_identity_pid(cf)
+    roots = [pid] if pid else []
+    roots += [cf] + patient_identity.merged_sources_of(get_db(), cf)
     files = []
+    seen = set()
     for root in roots:
+        if not root or root in seen:
+            continue
+        seen.add(root)
         patient_dir = SORTED_ROOT / root
         if patient_dir.is_dir():
             files.extend(
@@ -280,7 +300,8 @@ def revoke_pin_submit(cf):
         abort(404)
 
     cur = conn.execute(
-        "UPDATE patient_credentials SET active = 0 WHERE codice_fiscale = ?", (cf,)
+        "UPDATE patient_credentials SET active = 0 WHERE patient_id = ?",
+        (patient_identity_pid(cf),)
     )
     conn.commit()
     if cur.rowcount == 0:
@@ -372,8 +393,8 @@ def visit_edit_form_fragment(cf, visit_id):
         abort(404)
 
     row = get_db().execute(
-        "SELECT visit_date, next_appointment FROM visits WHERE id = ? AND codice_fiscale = ?",
-        (visit_id, cf),
+        "SELECT visit_date, next_appointment FROM visits WHERE id = ? AND patient_id = ?",
+        (visit_id, patient_identity_pid(cf)),
     ).fetchone()
     if row is None:
         abort(404)

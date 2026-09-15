@@ -119,7 +119,7 @@ def index():
     # agenda, so a role without the capability never runs this query either.
     requests_pending = appointments.pending_requests(conn)
     patients = conn.execute(
-        "SELECT codice_fiscale, patient_name FROM patients ORDER BY patient_name"
+        "SELECT patient_id, codice_fiscale, patient_name FROM patients ORDER BY patient_name"
     ).fetchall()
     dentists = conn.execute(
         "SELECT username FROM users WHERE role = 'dentist' AND active = 1 ORDER BY username"

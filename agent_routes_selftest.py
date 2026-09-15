@@ -1,6 +1,8 @@
 import json
 import re
 import sqlite3
+
+import patient_id
 import sys
 import tempfile
 from pathlib import Path
@@ -88,10 +90,7 @@ def selftest():
 
         cf = "RSSM800010150100"
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf, "mario rossi", "333 9999999"),
-        )
+        patient_id.seed_patient(conn, cf, "mario rossi", "333 9999999")
         conn.commit()
         conn.close()
 
@@ -251,10 +250,7 @@ def selftest():
         # 7. an ambiguous patient name never reaches input() - the page
         # re-renders with a clear message and no confirm token
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            ("RSSA850010150200", "anna rossi", "333 8888888"),
-        )
+        patient_id.seed_patient(conn, "RSSA850010150200", "anna rossi", "333 8888888")
         conn.commit()
         conn.close()
 

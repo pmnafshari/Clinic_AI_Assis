@@ -1,6 +1,8 @@
 import io
 import re
 import sqlite3
+
+import patient_id
 import sys
 import tempfile
 import threading
@@ -90,10 +92,7 @@ def selftest():
         app.config["TESTING"] = True
 
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (VALID_CF, "mario rossi", "333123456"),
-        )
+        patient_id.seed_patient(conn, VALID_CF, "mario rossi", "333123456")
         conn.commit()
         conn.close()
 

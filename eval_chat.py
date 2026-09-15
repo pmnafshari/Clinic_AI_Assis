@@ -85,10 +85,7 @@ def build_db(patients):
         );
     """)
     for i, p in enumerate(patients):
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (p["cf"], p["name"], p["phone"]),
-        )
+        _pidmod.seed_patient(conn, p["cf"], p["name"], p["phone"])
         for j, visit in enumerate(patient_visits(p)):
             source_path = f"eval/{i}-{j}.json"
             conn.execute(
@@ -194,6 +191,9 @@ def score_case(result, case):
     if missing:
         return False, f"missing {missing} in body {result['body']!r}"
     return True, "ok"
+
+
+import patient_id as _pidmod
 
 
 def selftest():

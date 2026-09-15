@@ -7,6 +7,7 @@ copied here and the modules are not imported. auth.log_audit is the one
 sanctioned reuse - it is an audit utility, not an auth mechanism.
 """
 
+import patient_id as _pidmod
 import hashlib
 import os
 import secrets
@@ -56,32 +57,18 @@ PATIENT_IP_ATTEMPT_WINDOW_MINUTES = 15
 _DUMMY_HASH = generate_password_hash("0" * PIN_LENGTH)
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS patient_credentials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    codice_fiscale TEXT NOT NULL UNIQUE REFERENCES patients(codice_fiscale),
-    pin_hash TEXT NOT NULL,
-    must_change_pin INTEGER NOT NULL DEFAULT 1,
-    issued_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL,
-    failed_attempts INTEGER NOT NULL DEFAULT 0,
-    locked_until TEXT,
-    active INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS patient_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    token_hash TEXT UNIQUE NOT NULL,
-    codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
-    created_at TEXT NOT NULL,
-    last_seen_at TEXT NOT NULL
-);
-
 CREATE TABLE IF NOT EXISTS patient_login_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ip TEXT NOT NULL,
     attempted_at TEXT NOT NULL
 );
 """
+
+# patient_credentials and patient_sessions moved to migrate_pid.TABLE_BODIES in
+# Phase 51, because they are keyed on patient_id now and a second definition of
+# the same table is how a fresh database and a migrated one drift apart. The
+# security property the old comment recorded still holds and still matters:
+# NO ROLE COLUMN AND NO JOIN TO `users` in either of them.
 
 
 def init_patient_tables(conn):
@@ -119,9 +106,18 @@ def _require_cf(cf):
         raise ValueError(f"not a valid codice fiscale: {cf!r}")
 
 
+def _pid(conn, cf):
+    # Phase 51: the codice fiscale is still what a patient TYPES - it is a
+    # lookup value, and the only one they know. It is resolved to the surrogate
+    # once, here, and the credential and session rows are keyed on that.
+    import patient_id as _pidmod
+
+    return _pidmod.resolve(conn, cf)
+
+
 def _credential(conn, cf):
     return conn.execute(
-        "SELECT * FROM patient_credentials WHERE codice_fiscale = ?", (cf,)
+        "SELECT * FROM patient_credentials WHERE patient_id = ?", (_pid(conn, cf),)
     ).fetchone()
 
 
@@ -159,10 +155,10 @@ def issue_pin(cf, conn, issued_by, issued_by_role="staff", now=None):
     expires = now + timedelta(days=CREDENTIAL_VALIDITY_DAYS)
     conn.execute("""
         INSERT INTO patient_credentials
-            (codice_fiscale, pin_hash, must_change_pin, issued_at, expires_at,
+            (patient_id, pin_hash, must_change_pin, issued_at, expires_at,
              failed_attempts, locked_until, active)
         VALUES (?, ?, 1, ?, ?, 0, NULL, 1)
-        ON CONFLICT(codice_fiscale) DO UPDATE SET
+        ON CONFLICT(patient_id) DO UPDATE SET
             pin_hash = excluded.pin_hash,
             must_change_pin = 1,
             issued_at = excluded.issued_at,
@@ -170,7 +166,7 @@ def issue_pin(cf, conn, issued_by, issued_by_role="staff", now=None):
             failed_attempts = 0,
             locked_until = NULL,
             active = 1
-    """, (cf, generate_password_hash(pin), now.isoformat(), expires.isoformat()))
+    """, (_pid(conn, cf), generate_password_hash(pin), now.isoformat(), expires.isoformat()))
     conn.commit()
 
     # the pin itself is never in the audit row - only that one was issued
@@ -233,7 +229,7 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     if row["locked_until"] and now >= datetime.fromisoformat(row["locked_until"]):
         conn.execute(
             "UPDATE patient_credentials SET failed_attempts = 0, locked_until = NULL"
-            " WHERE codice_fiscale = ?", (cf,)
+            " WHERE patient_id = ?", (_pid(conn, cf),)
         )
         conn.commit()
         row = _credential(conn, cf)
@@ -251,8 +247,8 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
             "UPDATE patient_credentials SET failed_attempts = failed_attempts + 1,"
             " locked_until = CASE WHEN failed_attempts + 1 >= ?"
             " THEN ? ELSE locked_until END"
-            " WHERE codice_fiscale = ?",
-            (PIN_LOCKOUT_THRESHOLD, lock_ts, cf),
+            " WHERE patient_id = ?",
+            (PIN_LOCKOUT_THRESHOLD, lock_ts, _pid(conn, cf)),
         )
         conn.commit()
         return _refuse("wrong")
@@ -269,7 +265,7 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     # address must not throttle itself
     conn.execute(
         "UPDATE patient_credentials SET failed_attempts = 0, locked_until = NULL"
-        " WHERE codice_fiscale = ?", (cf,)
+        " WHERE patient_id = ?", (_pid(conn, cf),)
     )
     conn.commit()
     return "ok", _credential(conn, cf)
@@ -307,8 +303,8 @@ def change_pin(cf, new_pin, conn, now=None, current_pin=None, ip=None):
 
     conn.execute(
         "UPDATE patient_credentials SET pin_hash = ?, must_change_pin = 0,"
-        " failed_attempts = 0, locked_until = NULL WHERE codice_fiscale = ?",
-        (generate_password_hash(new_pin), cf),
+        " failed_attempts = 0, locked_until = NULL WHERE patient_id = ?",
+        (generate_password_hash(new_pin), _pid(conn, cf)),
     )
     conn.commit()
     # a pin change is a security event and its source belongs in the row.
@@ -334,9 +330,9 @@ def create_patient_session(conn, cf, now=None):
     token = secrets.token_urlsafe(32)
     ts = now.isoformat()
     conn.execute(
-        "INSERT INTO patient_sessions (token_hash, codice_fiscale, created_at, last_seen_at)"
+        "INSERT INTO patient_sessions (token_hash, patient_id, created_at, last_seen_at)"
         " VALUES (?, ?, ?, ?)",
-        (_hash_token(token), cf, ts, ts),
+        (_hash_token(token), _pid(conn, cf), ts, ts),
     )
     conn.commit()
     return token
@@ -354,9 +350,11 @@ def load_patient_session(conn, token, now=None):
     # carrying must_change_pin=None - require_patient_session reads that as
     # falsy and would let it slide past the forced-change gate (D-10, WR-07)
     row = conn.execute("""
-        SELECT s.codice_fiscale, s.created_at, s.last_seen_at, c.must_change_pin
+        SELECT s.patient_id, p.codice_fiscale, s.created_at, s.last_seen_at,
+               c.must_change_pin
         FROM patient_sessions s
-        JOIN patient_credentials c ON c.codice_fiscale = s.codice_fiscale
+        JOIN patient_credentials c ON c.patient_id = s.patient_id
+        JOIN patients p ON p.patient_id = s.patient_id
         WHERE s.token_hash = ? AND c.active = 1
     """, (token_hash,)).fetchone()
     if row is None:
@@ -380,6 +378,9 @@ def load_patient_session(conn, token, now=None):
     )
     conn.commit()
     return {
+        # the surrogate is the identity every scoped read uses; the codice
+        # fiscale rides along because the portal shows it back to the patient
+        "patient_id": row["patient_id"],
         "codice_fiscale": row["codice_fiscale"],
         "must_change_pin": row["must_change_pin"],
     }
@@ -391,7 +392,7 @@ def destroy_patient_session(conn, token):
 
 
 def destroy_patient_sessions(conn, cf):
-    cur = conn.execute("DELETE FROM patient_sessions WHERE codice_fiscale = ?", (cf,))
+    cur = conn.execute("DELETE FROM patient_sessions WHERE patient_id = ?", (_pid(conn, cf),))
     conn.commit()
     return cur.rowcount
 
@@ -407,9 +408,7 @@ def selftest():
         conn = storage.init_db(str(Path(tmp) / "clinic.sqlite"))
         init_patient_tables(conn)
         for c, name in ((cf, "test patient"), (other, "other patient")):
-            conn.execute(
-                "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)", (c, name)
-            )
+            _pidmod.seed_patient(conn, c, name)
         conn.commit()
 
         # 1. the foreign key actually bites - proves the pragma reached this
@@ -446,8 +445,8 @@ def selftest():
         assert verify_pin("not-a-cf", pin, conn)[0] == "unknown", "3: malformed cf"
 
         conn.execute(
-            "UPDATE patient_credentials SET expires_at = ? WHERE codice_fiscale = ?",
-            ((datetime.now() - timedelta(days=1)).isoformat(), cf),
+            "UPDATE patient_credentials SET expires_at = ? WHERE patient_id = ?",
+            ((datetime.now() - timedelta(days=1)).isoformat(), _pid(conn, cf)),
         )
         conn.commit()
         assert verify_pin(cf, pin, conn)[0] == "expired", "3: expired temp credential"
@@ -476,7 +475,7 @@ def selftest():
         assert fresh["failed_attempts"] == 0 and fresh["locked_until"] is None, \
             "6: reissue must clear the lockout - it is the only recovery path"
         assert conn.execute(
-            "SELECT COUNT(*) c FROM patient_credentials WHERE codice_fiscale = ?", (cf,)
+            "SELECT COUNT(*) c FROM patient_credentials WHERE patient_id = ?", (_pid(conn, cf),)
         ).fetchone()["c"] == 1, "6: reissue must update in place, not add a row"
 
         # 7. sessions
@@ -574,10 +573,7 @@ def selftest():
         # locked. fails until verify_pin checks the pin before revealing
         # locked/expired.
         cf10 = "BSSN930010150100"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf10, "oracle patient"),
-        )
+        _pidmod.seed_patient(conn, cf10, "oracle patient")
         conn.commit()
         pin10 = issue_pin(cf10, conn, "test-dentist", "dentist")
         for _ in range(PIN_LOCKOUT_THRESHOLD):
@@ -590,15 +586,12 @@ def selftest():
             "10: a correct pin during lockout must still return locked - the 17-01 property"
 
         cf10b = "GNTL940010150200"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf10b, "expired patient"),
-        )
+        _pidmod.seed_patient(conn, cf10b, "expired patient")
         conn.commit()
         pin10b = issue_pin(cf10b, conn, "test-dentist", "dentist")
         conn.execute(
-            "UPDATE patient_credentials SET expires_at = ? WHERE codice_fiscale = ?",
-            ((datetime.now() - timedelta(days=1)).isoformat(), cf10b),
+            "UPDATE patient_credentials SET expires_at = ? WHERE patient_id = ?",
+            ((datetime.now() - timedelta(days=1)).isoformat(), _pid(conn, cf10b)),
         )
         conn.commit()
         assert verify_pin(cf10b, "wrongpin", conn)[0] == "wrong", \
@@ -615,10 +608,7 @@ def selftest():
         assert "_DUMMY_HASH" in globals(), "11: expected a module-level _DUMMY_HASH"
 
         cf11 = "PPRT950010150300"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf11, "timing patient"),
-        )
+        _pidmod.seed_patient(conn, cf11, "timing patient")
         conn.commit()
         issue_pin(cf11, conn, "test-dentist", "dentist")
 
@@ -652,10 +642,7 @@ def selftest():
         # counter into the next attempt. fails until verify_pin resets
         # failed_attempts/locked_until before evaluating the pin.
         cf12 = "VNZL960010150400"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf12, "cooldown patient"),
-        )
+        _pidmod.seed_patient(conn, cf12, "cooldown patient")
         conn.commit()
         pin12 = issue_pin(cf12, conn, "test-dentist", "dentist")
         for _ in range(PIN_LOCKOUT_THRESHOLD):
@@ -685,10 +672,7 @@ def selftest():
         throttle_cfs = []
         for i in range(PATIENT_IP_ATTEMPT_THRESHOLD):
             tcf = f"THRT{i:012d}"
-            conn.execute(
-                "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-                (tcf, "throttle patient"),
-            )
+            _pidmod.seed_patient(conn, tcf, "throttle patient")
             conn.commit()
             issue_pin(tcf, conn, "test-dentist", "dentist")
             throttle_cfs.append(tcf)
@@ -712,10 +696,7 @@ def selftest():
         conn.execute("DELETE FROM patient_login_attempts")
         conn.commit()
         cf14 = "GRSS970010150500"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf14, "audit patient"),
-        )
+        _pidmod.seed_patient(conn, cf14, "audit patient")
         conn.commit()
         issue_pin(cf14, conn, "test-dentist", "dentist")
 
@@ -747,14 +728,8 @@ def selftest():
         # destroy_patient_sessions.
         cf15 = "MRNZ980010151100"
         other15 = "TRNL990010151200"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf15, "reissue patient"),
-        )
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (other15, "other reissue patient"),
-        )
+        _pidmod.seed_patient(conn, cf15, "reissue patient")
+        _pidmod.seed_patient(conn, other15, "other reissue patient")
         conn.commit()
         issue_pin(cf15, conn, "test-dentist", "dentist")
         issue_pin(other15, conn, "test-dentist", "dentist")
@@ -771,7 +746,7 @@ def selftest():
         assert load_patient_session(conn, other_sess15) is not None, \
             "15: reissue for one patient must not touch another patient's session"
         assert conn.execute(
-            "SELECT COUNT(*) c FROM patient_sessions WHERE codice_fiscale = ?", (cf15,)
+            "SELECT COUNT(*) c FROM patient_sessions WHERE patient_id = ?", (_pid(conn, cf15),)
         ).fetchone()["c"] == 0, "15: no session rows should remain for the reissued patient"
 
         # 16. a revoked credential (active=0) kills its live sessions (D-10 /
@@ -780,21 +755,20 @@ def selftest():
         # reactivated is not over-specified here. fails until
         # load_patient_session inner-joins on active=1.
         cf16 = "LNDR900010151300"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf16, "revoked patient"),
-        )
+        _pidmod.seed_patient(conn, cf16, "revoked patient")
         conn.commit()
         issue_pin(cf16, conn, "test-dentist", "dentist")
         sess16 = create_patient_session(conn, cf16)
         assert load_patient_session(conn, sess16) is not None, "16: setup - session should load"
 
-        conn.execute("UPDATE patient_credentials SET active = 0 WHERE codice_fiscale = ?", (cf16,))
+        conn.execute("UPDATE patient_credentials SET active = 0 WHERE patient_id = ?",
+                     (_pid(conn, cf16),))
         conn.commit()
         assert load_patient_session(conn, sess16) is None, \
             "16: a session must not load while its credential is revoked"
 
-        conn.execute("UPDATE patient_credentials SET active = 1 WHERE codice_fiscale = ?", (cf16,))
+        conn.execute("UPDATE patient_credentials SET active = 1 WHERE patient_id = ?",
+                     (_pid(conn, cf16),))
         conn.commit()
 
         # 17. an orphan session (a patients row exists, but no credential row
@@ -802,17 +776,14 @@ def selftest():
         # must_change_pin=None, which require_patient_session reads as
         # falsy (WR-07). fails until the outer join becomes an inner one.
         cf17 = "PZZL910010151400"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf17, "orphan patient"),
-        )
+        _pidmod.seed_patient(conn, cf17, "orphan patient")
         conn.commit()
         now17 = datetime.now()
         token17 = "orphan-token-17"
         conn.execute(
-            "INSERT INTO patient_sessions (token_hash, codice_fiscale, created_at, last_seen_at)"
+            "INSERT INTO patient_sessions (token_hash, patient_id, created_at, last_seen_at)"
             " VALUES (?, ?, ?, ?)",
-            (_hash_token(token17), cf17, now17.isoformat(), now17.isoformat()),
+            (_hash_token(token17), _pid(conn, cf17), now17.isoformat(), now17.isoformat()),
         )
         conn.commit()
         assert load_patient_session(conn, token17) is None, \
@@ -822,10 +793,7 @@ def selftest():
         # last_seen_at is refreshed (WR-08). fails until
         # PATIENT_SESSION_MAX_HOURS exists and is checked against created_at.
         cf18 = "GRVN920010151500"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf18, "lifetime patient"),
-        )
+        _pidmod.seed_patient(conn, cf18, "lifetime patient")
         conn.commit()
         issue_pin(cf18, conn, "test-dentist", "dentist")
         token18 = create_patient_session(conn, cf18)
@@ -861,10 +829,7 @@ def selftest():
         # is required while must_change_pin is still set. pinned so a later
         # tightening cannot silently remove the exemption.
         cf19 = "FRCD940010151600"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf19, "forced change patient"),
-        )
+        _pidmod.seed_patient(conn, cf19, "forced change patient")
         conn.commit()
         issue_pin(cf19, conn, "test-dentist", "dentist")
         assert _credential(conn, cf19)["must_change_pin"] == 1, \
@@ -877,10 +842,7 @@ def selftest():
         # voluntary and requires the correct current pin. fails until
         # change_pin accepts and checks a current_pin argument.
         cf20 = "VLNT950010151700"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf20, "voluntary change patient"),
-        )
+        _pidmod.seed_patient(conn, cf20, "voluntary change patient")
         conn.commit()
         issue_pin(cf20, conn, "test-dentist", "dentist")
         change_pin(cf20, "15935728", conn)  # the compelled change - clears the flag
@@ -910,10 +872,7 @@ def selftest():
         # instead of the two old long sentences, and a non-digit pin is
         # subject to the weakness policy.
         cf21 = "WRFR960010151800"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf21, "wr04 patient"),
-        )
+        _pidmod.seed_patient(conn, cf21, "wr04 patient")
         conn.commit()
         pin21 = issue_pin(cf21, conn, "test-dentist", "dentist")
 
@@ -942,14 +901,8 @@ def selftest():
         # fails until change_pin calls destroy_patient_sessions.
         cf22 = "CHNG970010151900"
         other22 = "OTHR980010152000"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (cf22, "change session patient"),
-        )
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            (other22, "other change session patient"),
-        )
+        _pidmod.seed_patient(conn, cf22, "change session patient")
+        _pidmod.seed_patient(conn, other22, "other change session patient")
         conn.commit()
         issue_pin(cf22, conn, "test-dentist", "dentist")
         issue_pin(other22, conn, "test-dentist", "dentist")

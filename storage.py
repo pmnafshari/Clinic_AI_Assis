@@ -13,6 +13,8 @@ from chromadb.api.client import SharedSystemClient
 from auth import authorize, log_audit
 from dental_notes_schema import DentalNote
 
+import patient_id as _pidmod
+
 
 def connect(db_path):
     # the app, the upload worker and the watcher all write this file from
@@ -26,32 +28,29 @@ def connect(db_path):
     return conn
 
 
+class NeedsMigration(RuntimeError):
+    """This database predates Phase 51 and must be migrated deliberately."""
+
+
 def init_db(db_path):
     conn = connect(db_path)
+    # A PRE-PHASE-51 DATABASE IS REFUSED, NOT SILENTLY HALF-UPGRADED.
+    # `CREATE TABLE IF NOT EXISTS` would leave the old CF-keyed tables in place
+    # and then fail building an index on a column they do not have - a
+    # confusing error at a random line. Worse, a startup that quietly migrated
+    # would be a data change nobody asked for. The operator runs migrate_pid.
+    existing = {r["name"] for r in conn.execute("PRAGMA table_info(patients)")}
+    if existing and "patient_id" not in existing:
+        raise NeedsMigration(
+            f"{db_path} still keys patients on the codice fiscale (pre-Phase-51). "
+            "Run `python migrate_pid.py` - it takes a backup first, reports what it "
+            "will do, and can be re-run if it is interrupted. Nothing has been changed.")
+    # the patient-identity tables come from migrate_pid, which is the single
+    # definition of the v2 shape - a fresh database and a migrated one must not
+    # be able to disagree about it (Phase 51).
+    import migrate_pid
+    conn.executescript(migrate_pid.fresh_schema())
     conn.executescript("""
-        CREATE TABLE IF NOT EXISTS patients (
-            codice_fiscale TEXT PRIMARY KEY,
-            patient_name TEXT NOT NULL,
-            phone TEXT
-        );
-        CREATE TABLE IF NOT EXISTS visits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
-            visit_date TEXT,
-            procedures TEXT,
-            clinical_notes TEXT,
-            next_appointment TEXT,
-            source_path TEXT UNIQUE NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS invoices (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
-            visit_id INTEGER NOT NULL REFERENCES visits(id),
-            line_index INTEGER NOT NULL,
-            amount REAL NOT NULL,
-            description TEXT,
-            UNIQUE(visit_id, line_index)
-        );
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
@@ -87,26 +86,19 @@ def init_db(db_path):
             payload TEXT NOT NULL,
             created_at TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS appointments (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
-            dentist TEXT NOT NULL,
-            starts_at TEXT NOT NULL,
-            minutes INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'booked',
-            note TEXT,
-            period TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_appointments_day
-            ON appointments (starts_at);
     """)
+    for statement in migrate_pid.INDEXES_V2:
+        # the unique slot index goes through _ensure_slot_index, which survives
+        # a database that already holds a double booking from the P05 race. a
+        # plain execute here would raise and stop init_db, which is exactly the
+        # failure that helper exists to prevent.
+        if "idx_appointments_slot" in statement:
+            continue
+        conn.execute(statement)
     _ensure_slot_index(conn)
     _ensure_lockout_columns(conn)
     _ensure_audit_ip_column(conn)
     _ensure_audit_reason_column(conn)
-    _ensure_appointments_table(conn)
     conn.commit()
 
     # patient credential/session tables. deferred import because patient_auth
@@ -221,24 +213,31 @@ def upsert_note_sql(note, source_path, conn):
     # value, so that one still gets filled. phone keeps updating from the note.
     visit_date = note.visit_date.isoformat() if note.visit_date else None
 
+    # THE CODICE FISCALE IS RESOLVED TO AN IDENTITY AT THE BOUNDARY (Phase 51).
+    # A note arrives from a dentist's text and the text carries a codice
+    # fiscale, so that is still what comes in - but it is turned into a
+    # patient_id once, here, and nothing downstream stores it again.
+    import patient_id as _pid
+
     conn.execute("""
-        INSERT INTO patients (codice_fiscale, patient_name, phone)
-        VALUES (?, ?, ?)
+        INSERT INTO patients (patient_id, codice_fiscale, patient_name, phone)
+        VALUES (?, ?, ?, ?)
         ON CONFLICT(codice_fiscale) DO UPDATE SET
             patient_name = COALESCE(NULLIF(patients.patient_name, ''), excluded.patient_name),
             phone = excluded.phone
-    """, (note.codice_fiscale, note.patient_name, note.phone))
+    """, (_pid.new_id(), note.codice_fiscale, note.patient_name, note.phone))
+    pid = _pid.resolve(conn, note.codice_fiscale)
 
     conn.execute("""
         INSERT INTO visits
-            (codice_fiscale, visit_date, procedures, clinical_notes, next_appointment, source_path)
+            (patient_id, visit_date, procedures, clinical_notes, next_appointment, source_path)
         VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(source_path) DO UPDATE SET
             visit_date = excluded.visit_date,
             procedures = excluded.procedures,
             clinical_notes = excluded.clinical_notes,
             next_appointment = excluded.next_appointment
-    """, (note.codice_fiscale, visit_date, json.dumps(note.procedures),
+    """, (pid, visit_date, json.dumps(note.procedures),
           note.clinical_notes, note.next_appointment, source_path))
 
     visit_id = conn.execute(
@@ -250,27 +249,38 @@ def upsert_note_sql(note, source_path, conn):
     conn.execute("DELETE FROM invoices WHERE visit_id = ?", (visit_id,))
     for i, inv in enumerate(note.invoices):
         conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)",
-            (note.codice_fiscale, visit_id, i, inv.amount, inv.description),
+            (pid, visit_id, i, inv.amount, inv.description),
         )
 
     conn.commit()
 
 
-def lookup_patient(cf, conn):
+def lookup_patient(key, conn):
+    """Takes a codice fiscale, a patient_id, or a folded CF (Phase 51).
+
+    Resolved ONCE, here, through the single resolver. Callers pass whatever
+    their surface gave them - a URL carries either, a note carries a codice
+    fiscale, an old link carries one that has since been merged away.
+    """
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, key)
+    if pid is None:
+        return None
     patient = conn.execute(
-        "SELECT patient_name, phone FROM patients WHERE codice_fiscale = ?", (cf,)
+        "SELECT patient_name, phone FROM patients WHERE patient_id = ?", (pid,)
     ).fetchone()
     if patient is None:
         return None
 
     visits = conn.execute(
-        "SELECT visit_date FROM visits WHERE codice_fiscale = ? ORDER BY id", (cf,)
+        "SELECT visit_date FROM visits WHERE patient_id = ? ORDER BY id", (pid,)
     ).fetchall()
 
     invoices = conn.execute(
-        "SELECT amount, description FROM invoices WHERE codice_fiscale = ? ORDER BY id", (cf,)
+        "SELECT amount, description FROM invoices WHERE patient_id = ? ORDER BY id", (pid,)
     ).fetchall()
 
     return {
@@ -281,12 +291,17 @@ def lookup_patient(cf, conn):
     }
 
 
-def lookup_clinical(cf, conn):
+def lookup_clinical(key, conn):
     # dentist-only visit detail - kept separate from lookup_patient's
     # CRM-only contract so existing callers are unaffected
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, key)
+    if pid is None:
+        return []
     visits = conn.execute(
         "SELECT id, visit_date, procedures, clinical_notes, next_appointment"
-        " FROM visits WHERE codice_fiscale = ? ORDER BY id", (cf,)
+        " FROM visits WHERE patient_id = ? ORDER BY id", (pid,)
     ).fetchall()
 
     return [
@@ -839,7 +854,7 @@ def selftest():
         )
         upsert_note_sql(note3, "BNCS900010150300/notes/n1.json", conn)
         first_count = conn.execute(
-            "SELECT COUNT(*) c FROM invoices WHERE codice_fiscale = ?", (cf3,)
+            "SELECT COUNT(*) c FROM invoices WHERE patient_id = ?", (_pidmod.resolve(conn, cf3),)
         ).fetchone()["c"]
         assert first_count == 3, f"7: expected 3 invoices on first import, got {first_count}"
 
@@ -850,7 +865,7 @@ def selftest():
         )
         upsert_note_sql(note3_shrunk, "BNCS900010150300/notes/n1.json", conn)
         after_count = conn.execute(
-            "SELECT COUNT(*) c FROM invoices WHERE codice_fiscale = ?", (cf3,)
+            "SELECT COUNT(*) c FROM invoices WHERE patient_id = ?", (_pidmod.resolve(conn, cf3),)
         ).fetchone()["c"]
         assert after_count == 1, f"7: expected 1 invoice after shrink re-import, got {after_count}"
         assert lookup_patient(cf3, conn)["invoices"] == [{"amount": 10.0, "description": "a"}], \

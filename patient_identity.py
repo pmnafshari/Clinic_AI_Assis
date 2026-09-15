@@ -30,36 +30,25 @@ files view resolves through merged_sources_of() instead. See .planning/plans/
 P04.md section 4, plan 2, for why that is the safer half of the trade.
 """
 
+import patient_id as _pidmod
 import difflib
 import json
 import re
+import shutil
+import sqlite3
 import sys
 import unicodedata
 from datetime import datetime
+from pathlib import Path
 
 from auth import authorize, log_audit
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS patient_merges (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_cf TEXT NOT NULL UNIQUE,
-    target_cf TEXT NOT NULL REFERENCES patients(codice_fiscale),
-    merged_at TEXT NOT NULL,
-    merged_by TEXT NOT NULL,
-    source_row TEXT NOT NULL,
-    moved TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS patient_duplicate_dismissals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    cf_a TEXT NOT NULL,
-    cf_b TEXT NOT NULL,
-    dismissed_at TEXT NOT NULL,
-    dismissed_by TEXT NOT NULL,
-    reason TEXT,
-    UNIQUE(cf_a, cf_b)
-);
-"""
+# patient_merges and patient_duplicate_dismissals moved to
+# migrate_pid.TABLE_BODIES in Phase 51: they are keyed on patient_id now, and
+# `target_cf` lost its foreign key onto patients(codice_fiscale) - that key was
+# what kept the codice fiscale a relationship value and made correcting a
+# mistyped one impossible.
+SCHEMA = ""
 
 # how alike two names have to look before the pair is worth a human's time.
 # 0.88 keeps "Paola Rossi"/"Paolo Rossi" in and "Rossi"/"Bianchi" out. it is a
@@ -158,8 +147,8 @@ def _reasons(sig):
 
 
 def dismissed_pairs(conn):
-    return {(r["cf_a"], r["cf_b"]) for r in
-            conn.execute("SELECT cf_a, cf_b FROM patient_duplicate_dismissals")}
+    return {(r["patient_id_a"], r["patient_id_b"]) for r in
+            conn.execute("SELECT patient_id_a, patient_id_b FROM patient_duplicate_dismissals")}
 
 
 def merged_sources(conn):
@@ -174,16 +163,18 @@ def candidates(conn, limit=50):
     would defeat the whole point of the screen.
     """
     rows = conn.execute(
-        "SELECT codice_fiscale, patient_name, phone FROM patients ORDER BY codice_fiscale"
-    ).fetchall()
+        "SELECT patient_id, codice_fiscale, patient_name, phone FROM patients"
+        " ORDER BY codice_fiscale").fetchall()
     skip = dismissed_pairs(conn)
     gone = merged_sources(conn)
     order = {STRONG: 0, REVIEW: 1, WEAK: 2}
     found = []
     for i, a in enumerate(rows):
         for b in rows[i + 1:]:
-            pair = tuple(sorted((a["codice_fiscale"], b["codice_fiscale"])))
-            if pair in skip or pair[0] in gone or pair[1] in gone:
+            # the pair is identified by SURROGATE now, so a dismissal survives
+            # a codice fiscale being corrected on either side
+            pair = tuple(sorted((a["patient_id"], b["patient_id"])))
+            if pair in skip or a["codice_fiscale"] in gone or b["codice_fiscale"] in gone:
                 continue
             sig = signals(a, b)
             level = strength(sig)
@@ -210,13 +201,23 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
     if not authorize(actor_role, "manage_users"):
         log_audit(conn, actor, actor_role, "dismiss_duplicate", f"{cf_a}|{cf_b}", allowed=0)
         return False, f"not permitted: {actor_role} may not manage_users"
-    a, b = sorted((cf_a, cf_b))
-    if a == b:
+    import patient_id as _pid
+
+    pid_a, pid_b = _pid.resolve(conn, cf_a), _pid.resolve(conn, cf_b)
+    if pid_a is None or pid_b is None:
+        return False, "both records must exist"
+    if pid_a == pid_b:
         return False, "a record is not a duplicate of itself"
+    a, b = sorted((pid_a, pid_b))
+    cfs = dict(conn.execute(
+        "SELECT patient_id, codice_fiscale FROM patients WHERE patient_id IN (?, ?)",
+        (a, b)).fetchall())
     conn.execute(
         "INSERT OR IGNORE INTO patient_duplicate_dismissals"
-        " (cf_a, cf_b, dismissed_at, dismissed_by, reason) VALUES (?, ?, ?, ?, ?)",
-        (a, b, datetime.now().isoformat(), actor, (reason or "").strip() or None),
+        " (patient_id_a, patient_id_b, cf_a, cf_b, dismissed_at, dismissed_by, reason)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (a, b, cfs.get(a, ""), cfs.get(b, ""),
+         datetime.now().isoformat(), actor, (reason or "").strip() or None),
     )
     conn.commit()
     log_audit(conn, actor, actor_role, "dismiss_duplicate", f"{a}|{b}", allowed=1)
@@ -228,6 +229,10 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 # repoint collides whenever both sides hold a PIN, and a merged-away identity
 # must not keep an independent way to sign in. it is revoked instead.
 MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions")
+
+# Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
+# on `patient_merges.source_cf` because resolving an OLD one is that table's
+# whole job, but nothing here relates rows by it any more.
 
 
 def merge_target(conn, cf):
@@ -248,14 +253,33 @@ def merge_target(conn, cf):
     return row["target_cf"] if row else None
 
 
-def merged_sources_of(conn, target_cf):
-    """Every CF that was merged into this one. Flat, for the reason above."""
+def merge_target_pid(conn, cf):
+    """The surrogate a folded codice fiscale now belongs to."""
+    row = conn.execute(
+        "SELECT target_patient_id FROM patient_merges WHERE source_cf = ?", (cf,)).fetchone()
+    return row["target_patient_id"] if row else None
+
+
+def merged_sources_of(conn, target):
+    """Every codice fiscale folded into this patient. Flat, for the reason above.
+
+    Takes a patient_id or a codice fiscale. Kept after Phase 51 because old
+    audit rows, old links and old file paths still name those codici fiscali -
+    but it is NO LONGER how the files are found. The merge moves them now; see
+    merge().
+    """
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, target)
+    if pid is None:
+        return []
     return [r["source_cf"] for r in conn.execute(
-        "SELECT source_cf FROM patient_merges WHERE target_cf = ? ORDER BY merged_at",
-        (target_cf,))]
+        "SELECT source_cf FROM patient_merges WHERE target_patient_id = ? ORDER BY merged_at",
+        (pid,))]
 
 
-def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
+def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
+          sorted_root=None):
     """Fold source into target. THE DESTRUCTIVE ONE. Returns (ok, message).
 
     Only ever called from a human confirmation naming both sides - never from
@@ -267,12 +291,15 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
     the mapping. The reverse order would leave chunks pointing at a survivor
     whose relations had not moved.
 
-    Files are NOT touched. `sorted/<CF>/` is a storage location, not a claim
-    about identity, and `visits.source_path` is UNIQUE - moving the tree would
-    mean rewriting every path and handling collisions between the two patients,
-    with no transaction spanning SQLite and the filesystem. The files view
-    resolves through merged_sources_of() instead, so nothing on disk is mutated
-    and there is no half-move to recover from.
+    THE FILES MOVE TOO, since Phase 51. They did not before, and that was
+    MERGE-1: `agent.py` rebuilt a note path from the survivor's identity while
+    the file sat under the folded one's directory, so an edit to a merged-in
+    visit failed. Now the folded patient's directory is merged into the
+    survivor's and `visits.source_path` is rewritten with it. The move cannot
+    share a transaction with SQLite, so it is recorded in `migration_ops` the
+    same way the Phase 51 migration records its own work: if it cannot be
+    finished the op stays pending, visible and repairable, and nothing on disk
+    is deleted.
     """
     if not authorize(actor_role, "manage_users"):
         log_audit(conn, actor, actor_role, "merge_patient",
@@ -303,6 +330,7 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
         return False, f"no patient with codice fiscale {source_cf}"
     if target is None:
         return False, f"no patient with codice fiscale {target_cf}"
+    source_pid, target_pid = source["patient_id"], target["patient_id"]
     moved = {}
     try:
         # one transaction over every relation. sqlite3 opens one implicitly on
@@ -310,11 +338,11 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
         # rolls the whole thing back and nothing has moved.
         for table in MERGE_RELATIONS:
             cur = conn.execute(
-                f"UPDATE {table} SET codice_fiscale = ? WHERE codice_fiscale = ?",
-                (target_cf, source_cf))
+                f"UPDATE {table} SET patient_id = ? WHERE patient_id = ?",
+                (target_pid, source_pid))
             moved[table] = cur.rowcount
         cur = conn.execute(
-            "UPDATE patient_credentials SET active = 0 WHERE codice_fiscale = ?", (source_cf,))
+            "UPDATE patient_credentials SET active = 0 WHERE patient_id = ?", (source_pid,))
         moved["credentials_revoked"] = cur.rowcount
         # FLATTEN. anything already merged into the source is repointed at the
         # new survivor, in this same transaction. staff merge A into B and only
@@ -322,24 +350,36 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
         # the original target is kept on each affected row so the history is
         # still readable - the mapping is rewritten, not erased.
         rechained = conn.execute(
-            "SELECT source_cf, moved FROM patient_merges WHERE target_cf = ?",
-            (source_cf,)).fetchall()
+            "SELECT source_cf, moved FROM patient_merges WHERE target_patient_id = ?",
+            (source_pid,)).fetchall()
         for old_row in rechained:
             history = json.loads(old_row["moved"])
             history.setdefault("original_target", source_cf)
-            conn.execute("UPDATE patient_merges SET target_cf = ?, moved = ? WHERE source_cf = ?",
-                         (target_cf, json.dumps(history), old_row["source_cf"]))
+            conn.execute(
+                "UPDATE patient_merges SET target_cf = ?, target_patient_id = ?, moved = ?"
+                " WHERE source_cf = ?",
+                (target_cf, target_pid, json.dumps(history), old_row["source_cf"]))
         moved["rechained"] = [r["source_cf"] for r in rechained]
 
         conn.execute(
-            "INSERT INTO patient_merges (source_cf, target_cf, merged_at, merged_by,"
-            " source_row, moved) VALUES (?, ?, ?, ?, ?, ?)",
-            (source_cf, target_cf, datetime.now().isoformat(), actor,
+            "INSERT INTO patient_merges (source_cf, target_cf, target_patient_id, merged_at,"
+            " merged_by, source_row, moved) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (source_cf, target_cf, target_pid, datetime.now().isoformat(), actor,
              json.dumps(dict(source)), json.dumps(moved)))
         # the credential row still references the source patient, so it has to
         # go before the patients row does - the FK is ON
-        conn.execute("DELETE FROM patient_credentials WHERE codice_fiscale = ?", (source_cf,))
-        conn.execute("DELETE FROM patients WHERE codice_fiscale = ?", (source_cf,))
+        conn.execute("DELETE FROM patient_credentials WHERE patient_id = ?", (source_pid,))
+        conn.execute("DELETE FROM patients WHERE patient_id = ?", (source_pid,))
+        # the two stores that cannot join this transaction are enqueued inside
+        # it, so an interruption after the commit still leaves the work
+        # recorded rather than forgotten (the Phase 51 pattern)
+        import migrate_pid
+        conn.executescript(migrate_pid.OPS_SCHEMA)
+        conn.execute(
+            "INSERT OR REPLACE INTO migration_ops (migration, step, subject, state, payload,"
+            " updated_at) VALUES (?, ?, ?, 'pending', ?, ?)",
+            ("merge_files", migrate_pid.STEP_FS, target_pid, source_pid,
+             datetime.now().isoformat()))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -350,7 +390,7 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
     # name, and the only way to know which merges need re-pointing is a record
     # that says so. `index_pending` is what a repair pass looks for.
     if collection is not None:
-        moved["index_chunks"] = repoint_index(collection, source_cf, target_cf,
+        moved["index_chunks"] = repoint_index(collection, source_pid, target_pid,
                                               target["patient_name"])
     else:
         moved["index_chunks"] = None
@@ -359,12 +399,95 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None):
                  (json.dumps(moved), source_cf))
     conn.commit()
 
+    # same shape as the index step: do it now if we can, and if we cannot the
+    # op stays pending and visible rather than silently not happening
+    if sorted_root is not None:
+        moved["files"] = move_merged_files(conn, sorted_root)
+        conn.execute("UPDATE patient_merges SET moved = ? WHERE source_cf = ?",
+                     (json.dumps(moved), source_cf))
+        conn.commit()
+
     log_audit(conn, actor, actor_role, "merge_patient",
               f"{source_cf}->{target_cf}", allowed=1)
     return True, f"Merged into {target['patient_name']}."
 
 
-def repoint_index(collection, source_cf, target_cf, target_name):
+def move_merged_files(conn, sorted_root="sorted"):
+    """Fold each merged patient's directory into the survivor's. THE MERGE-1 FIX.
+
+    Before Phase 51 a merge left the folded patient's files where they were and
+    the file LIST resolved through the mapping - but `agent.py` rebuilt an edit
+    path from the surviving identity, so editing a merged-in visit looked for a
+    file that was not there. It failed closed rather than writing to the wrong
+    patient, which is why it was a defect to schedule rather than an emergency,
+    but it was still a real inconsistency.
+
+    Now the files move with the rows. This cannot share a transaction with the
+    SQLite half, so each move is a durable op: pending until it completes,
+    visible if it does not, and safe to re-run. Nothing is deleted - a name
+    collision is resolved by renaming the incoming file, the way
+    sort_files._move already does.
+    """
+    import migrate_pid
+
+    sorted_root = Path(sorted_root)
+    done = []
+    try:
+        ops = conn.execute(
+            "SELECT subject, payload FROM migration_ops"
+            " WHERE migration = 'merge_files' AND state = 'pending' ORDER BY id").fetchall()
+    except sqlite3.OperationalError:
+        return done
+
+    for op in ops:
+        target_pid, source_pid = op["subject"], op["payload"]
+        src, dest = sorted_root / source_pid, sorted_root / target_pid
+        try:
+            if not source_pid:
+                migrate_pid._mark(conn, migrate_pid.STEP_FS, target_pid, migrate_pid.FAILED,
+                                  "no source recorded", )
+                continue
+            if src.exists():
+                dest.mkdir(parents=True, exist_ok=True)
+                for item in sorted(src.rglob("*")):
+                    if not item.is_file():
+                        continue
+                    rel = item.relative_to(src)
+                    landing = dest / rel
+                    landing.parent.mkdir(parents=True, exist_ok=True)
+                    n = 1
+                    while landing.exists():
+                        landing = landing.parent / f"{rel.stem}_{n}{rel.suffix}"
+                        n += 1
+                    shutil.move(str(item), str(landing))
+                    conn.execute(
+                        "UPDATE visits SET source_path = ? WHERE source_path = ?",
+                        (str(Path(*landing.parts[-4:])) if len(landing.parts) >= 4
+                         else str(landing),
+                         str(Path(*item.parts[-4:])) if len(item.parts) >= 4 else str(item)))
+                shutil.rmtree(src, ignore_errors=True)
+            # whatever the paths looked like, make sure no row still names the
+            # folded directory
+            conn.execute(
+                "UPDATE visits SET source_path = replace(source_path, ?, ?)"
+                " WHERE source_path LIKE ?",
+                (f"/{source_pid}/", f"/{target_pid}/", f"%/{source_pid}/%"))
+            conn.execute(
+                "UPDATE migration_ops SET state = 'done', detail = ?, attempts = attempts + 1,"
+                " updated_at = ? WHERE migration = 'merge_files' AND subject = ?",
+                (f"{source_pid} -> {target_pid}", datetime.now().isoformat(), target_pid))
+            conn.commit()
+            done.append({"from": source_pid, "into": target_pid})
+        except Exception as e:
+            conn.execute(
+                "UPDATE migration_ops SET state = 'failed', detail = ?, attempts = attempts + 1,"
+                " updated_at = ? WHERE migration = 'merge_files' AND subject = ?",
+                (str(e)[:200], datetime.now().isoformat(), target_pid))
+            conn.commit()
+    return done
+
+
+def repoint_index(collection, source_pid, target_pid, target_name):
     """Point the source's chunks at the survivor. Metadata only.
 
     Chunk ids are opaque - note_chunk_id() builds them from the CF at upsert
@@ -372,21 +495,21 @@ def repoint_index(collection, source_cf, target_cf, target_name):
     staff Q&A cites, so leaving it stale would attribute the survivor's own
     notes to a patient who no longer exists.
     """
-    found = collection.get(where={"codice_fiscale": source_cf})
+    found = collection.get(where={"patient_id": source_pid})
     ids = found.get("ids") or []
     if not ids:
         return 0
     updated = []
     for meta in found.get("metadatas") or []:
         fresh = dict(meta)
-        fresh["codice_fiscale"] = target_cf
+        fresh["patient_id"] = target_pid
         fresh["patient_name"] = target_name
         updated.append(fresh)
     collection.update(ids=ids, metadatas=updated)
     return len(ids)
 
 
-def timeline(conn, cf, show_clinical=True):
+def timeline(conn, key, show_clinical=True):
     """One date-ordered record of everything that happened to a patient.
 
     The detail page already has a card per relation - visits here, appointments
@@ -403,11 +526,16 @@ def timeline(conn, cf, show_clinical=True):
     but not read_clinical, so they get the shape of the history - a visit
     happened on this date - without the clinical text.
     """
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, key)
+    if pid is None:
+        return []
     events = []
 
     for v in conn.execute(
             "SELECT id, visit_date, procedures, clinical_notes FROM visits"
-            " WHERE codice_fiscale = ? ORDER BY visit_date IS NULL, visit_date, id", (cf,)):
+            " WHERE patient_id = ? ORDER BY visit_date IS NULL, visit_date, id", (pid,)):
         procedures = json.loads(v["procedures"]) if v["procedures"] else []
         events.append({
             "date": v["visit_date"],
@@ -419,7 +547,7 @@ def timeline(conn, cf, show_clinical=True):
 
     for a in conn.execute(
             "SELECT starts_at, minutes, status, dentist FROM appointments"
-            " WHERE codice_fiscale = ? ORDER BY starts_at", (cf,)):
+            " WHERE patient_id = ? ORDER BY starts_at", (pid,)):
         # a request carries a date and a period, never a time - so the time
         # part of starts_at is meaningless on it and must not be rendered
         requested = a["status"] == "requested"
@@ -437,7 +565,7 @@ def timeline(conn, cf, show_clinical=True):
     for inv in conn.execute(
             "SELECT i.amount, i.description, v.visit_date FROM invoices i"
             " JOIN visits v ON v.id = i.visit_id"
-            " WHERE i.codice_fiscale = ? ORDER BY v.visit_date, i.line_index", (cf,)):
+            " WHERE i.patient_id = ? ORDER BY v.visit_date, i.line_index", (pid,)):
         events.append({
             "date": inv["visit_date"],
             "kind": "billed",
@@ -450,7 +578,7 @@ def timeline(conn, cf, show_clinical=True):
 
     for mrg in conn.execute(
             "SELECT source_cf, merged_at, merged_by, source_row FROM patient_merges"
-            " WHERE target_cf = ? ORDER BY merged_at", (cf,)):
+            " WHERE target_patient_id = ? ORDER BY merged_at", (pid,)):
         was = json.loads(mrg["source_row"])
         events.append({
             "date": mrg["merged_at"][:10],
@@ -478,9 +606,15 @@ def pending_index_repoints(conn):
     """
     out = []
     for row in conn.execute(
-            "SELECT source_cf, target_cf, moved FROM patient_merges ORDER BY merged_at"):
+            "SELECT source_cf, target_cf, target_patient_id, source_row, moved"
+            " FROM patient_merges ORDER BY merged_at"):
         if json.loads(row["moved"]).get("index_pending"):
-            out.append({"source_cf": row["source_cf"], "target_cf": row["target_cf"]})
+            out.append({"source_cf": row["source_cf"], "target_cf": row["target_cf"],
+                        "target_patient_id": row["target_patient_id"],
+                        # the folded patient's own surrogate, kept in the
+                        # source row - it is how its chunks are found
+                        "source_pid": json.loads(
+                            row["source_row"] or "{}").get("patient_id")})
     return out
 
 
@@ -489,12 +623,17 @@ def repair_index(conn, collection):
     done = []
     for job in pending_index_repoints(conn):
         target = conn.execute(
-            "SELECT patient_name FROM patients WHERE codice_fiscale = ?",
-            (job["target_cf"],)).fetchone()
+            "SELECT patient_name FROM patients WHERE patient_id = ?",
+            (job["target_patient_id"],)).fetchone()
         if target is None:
             continue    # the survivor was itself merged away; the flatten
-                        # rewrote target_cf, so the next pass picks it up
-        count = repoint_index(collection, job["source_cf"], job["target_cf"],
+                        # rewrote target_patient_id, so the next pass picks it up
+        if not job["source_pid"]:
+            # a merge recorded before the surrogate existed. its chunks cannot
+            # be found by patient_id, so this is left pending and visible
+            # rather than being marked repaired on no evidence.
+            continue
+        count = repoint_index(collection, job["source_pid"], job["target_patient_id"],
                               target["patient_name"])
         row = conn.execute("SELECT moved FROM patient_merges WHERE source_cf = ?",
                            (job["source_cf"],)).fetchone()
@@ -570,12 +709,9 @@ def selftest():
 
         # 7. DETECTION WRITES NOTHING. the whole module is a suggestion until a
         # human acts; a detector with a side effect is a merge engine.
-        conn.execute("INSERT INTO patients VALUES (?,?,?)",
-                     ("RSPS850010150900", "Paola Rossi", None))
-        conn.execute("INSERT INTO patients VALUES (?,?,?)",
-                     ("RSSP850010150900", "paola rossi", "555 0000"))
-        conn.execute("INSERT INTO patients VALUES (?,?,?)",
-                     ("BNCG800010150100", "Giulia Bianchi", None))
+        _pidmod.seed_patient(conn, "RSPS850010150900", "Paola Rossi", None)
+        _pidmod.seed_patient(conn, "RSSP850010150900", "paola rossi", "555 0000")
+        _pidmod.seed_patient(conn, "BNCG800010150100", "Giulia Bianchi", None)
         conn.commit()
         before = conn.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
         found = candidates(conn)
@@ -600,8 +736,12 @@ def selftest():
                           "anadmin", "admin", "different people, checked the records")
         assert ok, f"9: an admin may dismiss a pair - {msg}"
         assert candidates(conn) == [], "9: a dismissed pair leaves the review screen"
-        # order must not matter, or the same pair comes back reversed
-        assert dismissed_pairs(conn) == {("RSPS850010150900", "RSSP850010150900")}, \
+        # order must not matter, or the same pair comes back reversed. the
+        # pair is keyed on the SURROGATES now, so a dismissal survives either
+        # codice fiscale being corrected later.
+        _a = _pidmod.resolve(conn, "RSPS850010150900")
+        _b = _pidmod.resolve(conn, "RSSP850010150900")
+        assert dismissed_pairs(conn) == {tuple(sorted((_a, _b)))}, \
             "9: the pair is stored in a stable order"
 
         # 10. dismissing is the same judgement as merging and needs the same
@@ -625,36 +765,43 @@ def selftest():
         m = storage.init_db(str(Path(tmp) / "merge.sqlite"))
         KEEP, GONE, OTHER = "AAAA000000000001", "AAAA000000000002", "BBBB000000000003"
 
+        pids = {}
+
         def seed(cf, name):
-            m.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                      " VALUES (?, ?, NULL)", (cf, name))
+            pids[cf] = _pidmod.seed_patient(m, cf, name)
+            return pids[cf]
 
         def relations(cf):
+            # BY THE SURROGATE CAPTURED AT SEED TIME, not by resolving the
+            # codice fiscale: after a merge the folded CF resolves to the
+            # SURVIVOR, so resolving here would count the survivor's rows and
+            # check 14 would pass while nothing had moved.
+            pid = pids.get(cf) or _pidmod.resolve(m, cf)
             return {t: m.execute(
-                f"SELECT COUNT(*) c FROM {t} WHERE codice_fiscale = ?", (cf,)
+                f"SELECT COUNT(*) c FROM {t} WHERE patient_id = ?", (pid,)
             ).fetchone()["c"] for t in MERGE_RELATIONS}
 
         def give(cf, n=1, hour=9):
             for i in range(n):
                 m.execute(
-                    "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                    "INSERT INTO visits (patient_id, visit_date, procedures,"
                     " clinical_notes, next_appointment, source_path)"
                     " VALUES (?, '2026-01-01', '[]', 'note', NULL, ?)",
-                    (cf, f"sorted/{cf}/notes/n{i}.json"))
+                    (_pidmod.resolve(m, cf), f"sorted/{cf}/notes/n{i}.json"))
                 # each fixture patient gets its OWN hour, passed in rather
                 # than derived: P05 added a unique index over live rows and it
                 # caught this immediately - two patients were being booked into
                 # the identical slot, the exact thing the index exists to stop.
                 # hash(cf) would also work until PYTHONHASHSEED changed it.
                 m.execute(
-                    "INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+                    "INSERT INTO appointments (patient_id, dentist, starts_at, minutes,"
                     " status, created_at, updated_at)"
                     " VALUES (?, 'dr rossi', ?, 30, 'booked', '2026-01-01', '2026-01-01')",
-                    (cf, f"2026-0{i + 1}-05T{hour + i:02d}:00:00"))
+                    (_pidmod.resolve(m, cf), f"2026-0{i + 1}-05T{hour + i:02d}:00:00"))
 
-        seed(KEEP, "Paola Rossi")
-        seed(GONE, "paola rossi")
-        seed(OTHER, "Giulia Bianchi")
+        for _cf, _name in ((KEEP, "Paola Rossi"), (GONE, "paola rossi"),
+                           (OTHER, "Giulia Bianchi")):
+            seed(_cf, _name)
         give(KEEP, 1, hour=9)
         give(GONE, 2, hour=11)
         give(OTHER, 1, hour=15)
@@ -787,20 +934,22 @@ def selftest():
         seed("EEEE000000000006", "Survivor Rossi")
         seed("FFFF000000000007", "survivor rossi")
         m.commit()
+        # chunks are keyed on the SURROGATE since Phase 51
+        pid_keep17, pid_gone17 = pids["EEEE000000000006"], pids["FFFF000000000007"]
         coll.upsert(ids=["EEEE:n0"], documents=["kept note"],
-                    metadatas=[{"codice_fiscale": "EEEE000000000006",
+                    metadatas=[{"patient_id": pid_keep17,
                                 "patient_name": "Survivor Rossi"}])
         coll.upsert(ids=["FFFF:n0", "FFFF:n1"], documents=["moved note", "another"],
-                    metadatas=[{"codice_fiscale": "FFFF000000000007",
+                    metadatas=[{"patient_id": pid_gone17,
                                 "patient_name": "survivor rossi"}] * 2)
 
         ok17b, _ = merge(m, "FFFF000000000007", "EEEE000000000006",
                          "anadmin", "admin", collection=coll)
         assert ok17b, "17b: the merge itself should succeed"
-        left = coll.get(where={"codice_fiscale": "FFFF000000000007"})
+        left = coll.get(where={"patient_id": pid_gone17})
         assert left["ids"] == [], \
-            "17b: NO chunk may still carry the merged-away codice fiscale"
-        kept = coll.get(where={"codice_fiscale": "EEEE000000000006"})
+            "17b: NO chunk may still carry the merged-away identity"
+        kept = coll.get(where={"patient_id": pid_keep17})
         assert len(kept["ids"]) == 3, \
             f"17b: the survivor should hold all 3 chunks, got {len(kept['ids'])}"
         assert all(md["patient_name"] == "Survivor Rossi" for md in kept["metadatas"]), \
@@ -832,15 +981,16 @@ def selftest():
             "17c: and it must be listed as pending"
 
         coll2 = client.get_or_create_collection(name="pending_notes")
+        pid_gone17c = pids["HHHH000000000009"]
         coll2.upsert(ids=["HHHH:n0"], documents=["stranded note"],
-                     metadatas=[{"codice_fiscale": "HHHH000000000009",
+                     metadatas=[{"patient_id": pid_gone17c,
                                  "patient_name": "pending rossi"}])
         fixed = repair_index(m, coll2)
         mine = [f for f in fixed if f["source_cf"] == "HHHH000000000009"]
         assert len(mine) == 1 and mine[0]["chunks"] == 1, \
             f"17c: the repair must repoint this merge's chunk, got {fixed}"
-        assert coll2.get(where={"codice_fiscale": "HHHH000000000009"})["ids"] == [], \
-            "17c: after the repair no chunk carries the folded codice fiscale"
+        assert coll2.get(where={"patient_id": pid_gone17c})["ids"] == [], \
+            "17c: after the repair no chunk carries the folded identity"
         assert pending_index_repoints(m) == [], "17c: and nothing is left pending"
         assert repair_index(m, coll2) == [], "17c: re-running the repair is a no-op"
 
@@ -852,25 +1002,24 @@ def selftest():
         # --- the record timeline (plan 3) ---------------------------------
         t = storage.init_db(str(Path(tmp) / "timeline.sqlite"))
         TCF = "TTTT000000000001"
-        t.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                  " VALUES (?, 'Timeline Rossi', NULL)", (TCF,))
-        t.execute("INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+        TPID = _pidmod.seed_patient(t, TCF, "Timeline Rossi")
+        t.execute("INSERT INTO visits (patient_id, visit_date, procedures,"
                   " clinical_notes, next_appointment, source_path)"
                   " VALUES (?, '2026-03-02', '[\"comp 20\"]', 'filled the tooth', NULL, 't1.json')",
-                  (TCF,))
-        vid = t.execute("SELECT id FROM visits WHERE codice_fiscale = ?", (TCF,)).fetchone()["id"]
-        t.execute("INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
-                  " VALUES (?, ?, 0, 80.0, 'composite filling')", (TCF, vid))
-        t.execute("INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+                  (TPID,))
+        vid = t.execute("SELECT id FROM visits WHERE patient_id = ?", (TPID,)).fetchone()["id"]
+        t.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
+                  " VALUES (?, ?, 0, 80.0, 'composite filling')", (TPID, vid))
+        t.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes,"
                   " status, created_at, updated_at)"
-                  " VALUES (?, 'dr rossi', '2026-05-10T14:30:00', 30, 'booked', '', '')", (TCF,))
-        t.execute("INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+                  " VALUES (?, 'dr rossi', '2026-05-10T14:30:00', 30, 'booked', '', '')", (TPID,))
+        t.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes,"
                   " status, period, created_at, updated_at)"
-                  " VALUES (?, '', '2026-01-04T00:00:00', 0, 'requested', 'morning', '', '')", (TCF,))
+                  " VALUES (?, '', '2026-01-04T00:00:00', 0, 'requested', 'morning', '', '')", (TPID,))
         t.commit()
 
         # 19. one list, in date order, across every relation
-        tl = timeline(t, TCF)
+        tl = timeline(t, TPID)
         assert [e["date"] for e in tl] == sorted(e["date"] for e in tl), \
             "19: the timeline must be in date order"
         kinds = [e["kind"] for e in tl]
@@ -902,7 +1051,7 @@ def selftest():
 
         # 22. an assistant holds read_notes but not read_clinical, so they see
         # THAT a visit happened without reading what it said
-        plain = timeline(t, TCF, show_clinical=False)
+        plain = timeline(t, TPID, show_clinical=False)
         assert all("filled the tooth" not in e["detail"] for e in plain), \
             "22: clinical text must follow the caller's own gate"
         assert [e["kind"] for e in plain] == kinds, \
@@ -910,22 +1059,21 @@ def selftest():
 
         # 23. a merge appears on the survivor's own history. one that is only
         # in an audit log is one nobody reading the record will ever know about.
-        t.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                  " VALUES ('TTTT000000000002', 'timeline rossi', NULL)")
+        _pidmod.seed_patient(t, "TTTT000000000002", "timeline rossi")
         t.commit()
         merge(t, "TTTT000000000002", TCF, "anadmin", "admin")
-        merged_tl = timeline(t, TCF)
+        merged_tl = timeline(t, TPID)
         note = [e for e in merged_tl if e["kind"] == "merge"]
         assert len(note) == 1, "23: the merge must show on the surviving record"
         assert "timeline rossi" in note[0]["title"], "23: naming what it absorbed"
         assert "anadmin" in note[0]["detail"], "23: and who did it"
 
         # 24. an undated visit sorts last instead of crashing or claiming a date
-        t.execute("INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+        t.execute("INSERT INTO visits (patient_id, visit_date, procedures,"
                   " clinical_notes, next_appointment, source_path)"
-                  " VALUES (?, NULL, '[]', 'no date on this one', NULL, 't2.json')", (TCF,))
+                  " VALUES (?, NULL, '[]', 'no date on this one', NULL, 't2.json')", (TPID,))
         t.commit()
-        undated = timeline(t, TCF)
+        undated = timeline(t, TPID)
         assert undated[-1]["date"] is None, "24: an undated row sorts last"
         assert len(undated) == len(merged_tl) + 1, "24: and is not dropped"
 

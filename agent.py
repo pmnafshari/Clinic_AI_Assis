@@ -186,10 +186,95 @@ def confirm(input_fn=input):
     return answer in ("y", "yes")
 
 
-def update_field(cf, field, value, conn):
+
+def _apid(conn, key):
+    """Resolve whatever identifier reached this module to a patient_id."""
+    import patient_id as _pid
+
+    return _pid.resolve(conn, key)
+
+
+def note_json_path(source_path, sorted_root=Path("sorted"), pid=None):
+    """The note file for a visit, resolved from its STORED path.
+
+    THIS IS THE MERGE-1 FIX. These call sites used to rebuild the directory
+    from the patient's CODICE FISCALE - `sorted_root / cf / "notes" / stem` -
+    while a merged-in visit's file sat under the folded patient's directory.
+    The rebuilt path named a file that did not exist, so editing a merged-in
+    visit failed. It failed CLOSED, never writing to the wrong patient.
+
+    `visits.source_path` is normally the full path and the migration and the
+    merge both keep it correct, so there is nothing to rebuild. Older rows hold
+    a bare filename; those fall back to the patient's own directory, which is
+    named by the SURROGATE now - and since a merge moves the folded patient's
+    files into the survivor's directory, that fallback resolves correctly for a
+    merged-in visit too.
+    """
+    sorted_root = Path(sorted_root)
+    candidate = Path(source_path).with_suffix(".json")
+    if candidate.is_absolute():
+        return candidate
+    parts = candidate.parts
+    # a stored path may or may not carry the root segment, and under test the
+    # root is a temp directory whose name is not "sorted" - so strip a leading
+    # root segment by either name and always rebase onto the caller's root.
+    if parts and parts[0] in ("sorted", sorted_root.name):
+        parts = parts[1:]
+    if len(parts) > 1:
+        return sorted_root.joinpath(*parts)
+    if pid:
+        # a bare filename from an older row - the patient's own directory,
+        # named by the SURROGATE. a merge moves the folded patient's files into
+        # the survivor's directory, so this resolves for a merged-in visit too.
+        return sorted_root / pid / "notes" / candidate.name
+    return sorted_root.joinpath(*parts) if parts else sorted_root / candidate
+
+
+def update_field(cf, field, value, conn, collection=None):
+    import patient_id as _pid
+
     column = EDITABLE_FIELDS[field]
-    conn.execute(f"UPDATE patients SET {column} = ? WHERE codice_fiscale = ?", (value, cf))
+    pid = _pid.resolve(conn, cf)
+    conn.execute(f"UPDATE patients SET {column} = ? WHERE patient_id = ?", (value, pid))
     conn.commit()
+
+    # THE INDEX MUST NOT GO STALE (Phase 51). This wrote SQLite only, so after a
+    # rename the chunk metadata kept the OLD patient_name and staff Q&A cited a
+    # name the record no longer had. Silent index inconsistency is not an
+    # acceptable outcome: either the metadata is updated, or a durable pending
+    # op says it was not.
+    if column == "patient_name":
+        _reindex_name(conn, pid, value, collection)
+
+
+def _reindex_name(conn, pid, value, collection):
+    import migrate_pid
+
+    if collection is None:
+        conn.executescript(migrate_pid.OPS_SCHEMA)
+        conn.execute(
+            "INSERT OR REPLACE INTO migration_ops (migration, step, subject, state, payload,"
+            " updated_at) VALUES ('name_reindex', 'chroma', ?, 'pending', ?, ?)",
+            (pid, value, datetime.now().isoformat()))
+        conn.commit()
+        return False
+    try:
+        found = collection.get(where={"patient_id": pid})
+        ids = found.get("ids") or []
+        if ids:
+            collection.update(
+                ids=ids,
+                metadatas=[{**dict(m), "patient_name": value}
+                           for m in found.get("metadatas") or []])
+        return True
+    except Exception as e:
+        conn.executescript(migrate_pid.OPS_SCHEMA)
+        conn.execute(
+            "INSERT OR REPLACE INTO migration_ops (migration, step, subject, state, payload,"
+            " detail, updated_at) VALUES ('name_reindex', 'chroma', ?, 'pending', ?, ?, ?)",
+            (pid, value, str(e)[:200], datetime.now().isoformat()))
+        conn.commit()
+        return False
 
 
 def add_invoice(cf, amount, description, visit_date, sorted_root=Path("sorted")):
@@ -225,13 +310,13 @@ def pick_target_visit(cf, conn):
     # visit; nulls sort last so a dated visit always wins over an undated one
     row = conn.execute(
         "SELECT source_path, clinical_notes, visit_date FROM visits"
-        " WHERE codice_fiscale = ? ORDER BY visit_date IS NULL, visit_date DESC, id DESC LIMIT 1",
-        (cf,),
+        " WHERE patient_id = ? ORDER BY visit_date IS NULL, visit_date DESC, id DESC LIMIT 1",
+        (_apid(conn, cf),),
     ).fetchone()
     if row is None:
         return None
     count = conn.execute(
-        "SELECT COUNT(*) c FROM visits WHERE codice_fiscale = ?", (cf,)
+        "SELECT COUNT(*) c FROM visits WHERE patient_id = ?", (_apid(conn, cf),)
     ).fetchone()["c"]
     return row["source_path"], row["clinical_notes"], row["visit_date"], count
 
@@ -241,7 +326,7 @@ def append_note(cf, text, source_path, conn, collection, sorted_root=Path("sorte
     if not is_valid_cf(cf):
         raise ValueError(f"codice_fiscale must match ^[A-Z]{{4}}[0-9]{{12}}$, got {cf!r}")
 
-    json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+    json_path = note_json_path(source_path, sorted_root, _apid(conn, cf))
     note = DentalNote.model_validate_json(json_path.read_text())
     note.clinical_notes = (note.clinical_notes + "\n" + text) if note.clinical_notes else text
     json_path.write_text(note.model_dump_json())
@@ -257,13 +342,13 @@ def update_visit_field(cf, visit_id, value, conn, sorted_root=Path("sorted")):
 
     # ownership re-check - safe no matter who builds the ToolCall
     row = conn.execute(
-        "SELECT source_path FROM visits WHERE id = ? AND codice_fiscale = ?", (visit_id, cf)
+        "SELECT source_path FROM visits WHERE id = ? AND patient_id = ?", (visit_id, _apid(conn, cf))
     ).fetchone()
     if row is None:
         raise ValueError(f"no visit {visit_id} for {cf}")
     source_path = row["source_path"]
 
-    json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+    json_path = note_json_path(source_path, sorted_root, _apid(conn, cf))
     note = DentalNote.model_validate_json(json_path.read_text())
     note.next_appointment = value or None
     json_path.write_text(note.model_dump_json())
@@ -316,7 +401,7 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
         source_path, current_notes, visit_date, count = target
         # the sqlite row and the json sibling are separately mutable - bail
         # before the pending action is built for an edit that can't happen
-        json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+        json_path = note_json_path(source_path, sorted_root, _apid(conn, cf))
         if not json_path.exists():
             return None, f"note file missing for this visit ({json_path}) - fix the sorted tree first"
         diff_line = f"appending to visit from {visit_date} (most recent of {count})"
@@ -352,14 +437,14 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
         # patient resolves to no row
         row = conn.execute(
             "SELECT visit_date, next_appointment, source_path FROM visits"
-            " WHERE id = ? AND codice_fiscale = ?", (args.visit_id, cf)
+            " WHERE id = ? AND patient_id = ?", (args.visit_id, _apid(conn, cf))
         ).fetchone()
         if row is None:
             return None, f"no visit {args.visit_id} on record for {cf}"
 
         # the sqlite row and the json sibling are separately mutable - bail
         # before the pending action is built for an edit that can't happen
-        json_path = sorted_root / cf / "notes" / (Path(row["source_path"]).stem + ".json")
+        json_path = note_json_path(row["source_path"], sorted_root, _apid(conn, cf))
         if not json_path.exists():
             return None, f"note file missing for this visit ({json_path}) - fix the sorted tree first"
 
@@ -507,7 +592,7 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
             status, message = "restored", f"restored {field} to {entry['before']} for {cf}"
         elif kind == "edit_note":
             source_path = target[len("visit:"):]
-            json_path = sorted_root / cf / "notes" / (Path(source_path).stem + ".json")
+            json_path = note_json_path(source_path, sorted_root, _apid(conn, cf))
             note = DentalNote.model_validate_json(json_path.read_text())
             note.clinical_notes = entry["before"]
             json_path.write_text(note.model_dump_json())
@@ -534,6 +619,9 @@ def undo_last(conn, role, username, log_path=UNDO_LOG, collection=None, sorted_r
     return status, message
 
 
+import patient_id as _pidmod
+
+
 def selftest():
     import tempfile
     from datetime import date
@@ -544,10 +632,7 @@ def selftest():
 
         conn = init_db(db_path)
         cf = "RSSM800010150100"
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf, "mario rossi", "333 9999999"),
-        )
+        _pidmod.seed_patient(conn, cf, "mario rossi", "333 9999999")
         conn.commit()
 
         def fake_urlopen(req, timeout=120):

@@ -40,7 +40,7 @@ def _locked_patient(cf):
     # checked; the same name with "from the patient record" beside it is
     # something they have been handed and can disagree with.
     latest = conn.execute(
-        "SELECT visit_date FROM visits WHERE codice_fiscale = ? AND visit_date IS NOT NULL"
+        "SELECT visit_date FROM visits WHERE patient_id = ? AND visit_date IS NOT NULL"
         " ORDER BY visit_date DESC LIMIT 1", (cf,)).fetchone()
     return {
         "cf": cf,

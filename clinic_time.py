@@ -30,6 +30,8 @@ import sys
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+import patient_id as _pidmod
+
 TZ_ENV = "CLINIC_TZ"
 # the whole product is Italian - the codice fiscale, the clinic yaml, the
 # patient-facing strings. D07 (the owner's real timezone) is unanswered, so
@@ -216,15 +218,15 @@ def selftest():
 
     with tempfile.TemporaryDirectory() as tmp:
         conn = storage.init_db(str(Path(tmp) / "t.sqlite"))
-        conn.execute("INSERT INTO patients VALUES ('AAAA000000000001','Time Patient',NULL)")
+        tpid = _pidmod.seed_patient(conn, "AAAA000000000001", "Time Patient")
         conn.commit()
 
         # 6. today's data satisfies the contract, so the guard lets the apps up
         conn.execute(
-            "INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+            "INSERT INTO appointments (patient_id, dentist, starts_at, minutes,"
             " status, created_at, updated_at) VALUES"
-            " ('AAAA000000000001','dr rossi','2026-09-07T09:00:00',30,'booked',"
-            " '2026-09-07T08:00:00','2026-09-07T08:00:00')")
+            " (?,'dr rossi','2026-09-07T09:00:00',30,'booked',"
+            " '2026-09-07T08:00:00','2026-09-07T08:00:00')", (tpid,))
         conn.commit()
         assert contract_refusal(conn) is None, \
             "6: naive clinic-local rows are exactly what the contract expects"
@@ -234,10 +236,10 @@ def selftest():
         # at all, because a silent reinterpretation moves appointments by an
         # hour and leaves no trace.
         conn.execute(
-            "INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes,"
+            "INSERT INTO appointments (patient_id, dentist, starts_at, minutes,"
             " status, created_at, updated_at) VALUES"
-            " ('AAAA000000000001','dr rossi','2026-09-08T09:00:00+02:00',30,'booked',"
-            " '2026-09-08T08:00:00','2026-09-08T08:00:00')")
+            " (?,'dr rossi','2026-09-08T09:00:00+02:00',30,'booked',"
+            " '2026-09-08T08:00:00','2026-09-08T08:00:00')", (tpid,))
         conn.commit()
         reason = contract_refusal(conn)
         assert reason and "+02:00" in reason, f"7: the offending value must be named, got {reason}"

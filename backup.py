@@ -492,7 +492,7 @@ def selftest():
         # the relation survived, not just the row counts
         joined = dst.execute("SELECT p.patient_name, i.amount FROM invoices i"
                              " JOIN visits v ON v.id = i.visit_id"
-                             " JOIN patients p ON p.codice_fiscale = v.codice_fiscale").fetchall()
+                             " JOIN patients p ON p.patient_id = v.patient_id").fetchall()
         assert [tuple(r) for r in joined] == [("Zzb Backuptest", 120.5)], f"1: invoice->visit->patient: {joined}"
         src.close()
         dst.close()

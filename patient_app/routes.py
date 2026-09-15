@@ -150,8 +150,12 @@ def profile():
     # the chat uses - not a second query. a mismatched cf writes a
     # patient_scope_violation row there and returns nothing, exactly as it
     # does for the chat. no visit or invoice is read here.
+    # the ACCESSOR takes the surrogate, straight from the session - never from
+    # request input (Phase 51 re-keyed the scope; the property is unchanged).
+    # the codice fiscale is still shown back to the patient, so it rides along.
     cf = g.patient["codice_fiscale"]
-    demo = patient_accessor.get_demographics(cf, get_db(), ip=net.from_request(request))
+    demo = patient_accessor.get_demographics(
+        g.patient["patient_id"], get_db(), ip=net.from_request(request))
     return render_template("patient_profile.html", cf=cf, demo=demo)
 
 
@@ -244,7 +248,8 @@ def chat_page():
     cf = g.patient["codice_fiscale"]
 
     conn = get_db()
-    result = chat.answer_question(question, cf, conn, current_language(), ip=net.from_request(request))
+    result = chat.answer_question(question, g.patient["patient_id"], conn,
+                                  current_language(), ip=net.from_request(request))
 
     # no audit call here on purpose. CHAT-07's per-interaction row is written
     # inside chat.answer_question's wrapper, on this same code path, and the

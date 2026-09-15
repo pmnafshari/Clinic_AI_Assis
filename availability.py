@@ -18,6 +18,7 @@ import sys
 from datetime import timedelta
 
 import clinic_time
+import patient_id as _pidmod
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS clinic_hours (
@@ -258,11 +259,11 @@ def selftest():
         # it counts across dentists rather than per dentist
         conn.execute("UPDATE clinic_hours SET capacity = 1 WHERE weekday = 0")
         conn.commit()
-        conn.execute("INSERT INTO patients VALUES ('AAAA000000000001','Cap Patient',NULL)")
+        cpid = _pidmod.seed_patient(conn, "AAAA000000000001", "Cap Patient")
         conn.execute(
-            "INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes, status,"
-            " created_at, updated_at) VALUES ('AAAA000000000001','dr rossi',?,30,'booked','','')",
-            (f"{MON}T10:00:00",))
+            "INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status,"
+            " created_at, updated_at) VALUES (?,'dr rossi',?,30,'booked','','')",
+            (cpid, f"{MON}T10:00:00"))
         conn.commit()
         assert refusal(conn, "dr bianchi", f"{MON}T14:00", 30) is None, \
             "8: an hour with nothing booked in it is unaffected by capacity"

@@ -315,8 +315,12 @@ def selftest():
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
+        # joined back to the codice fiscale on purpose: the identity the note
+        # landed under is a patient_id now (Phase 51), and what this check is
+        # about is WHOSE record it reached - which is what the join answers.
         tampered_row = conn.execute(
-            "SELECT codice_fiscale FROM visits WHERE clinical_notes = ?",
+            "SELECT p.codice_fiscale FROM visits v JOIN patients p"
+            " ON p.patient_id = v.patient_id WHERE v.clinical_notes = ?",
             ("tampered clinical note text",),
         ).fetchone()
         conn.close()

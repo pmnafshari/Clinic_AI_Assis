@@ -22,9 +22,62 @@ import storage
 CF_A, CF_B = "RSSM800010150100", "BNCG850010150900"
 
 
+V1_SCHEMA = """
+CREATE TABLE patients (
+    codice_fiscale TEXT PRIMARY KEY, patient_name TEXT NOT NULL, phone TEXT);
+CREATE TABLE visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
+    visit_date TEXT, procedures TEXT, clinical_notes TEXT, next_appointment TEXT,
+    source_path TEXT UNIQUE NOT NULL);
+CREATE TABLE invoices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
+    visit_id INTEGER NOT NULL REFERENCES visits(id),
+    line_index INTEGER NOT NULL, amount REAL NOT NULL, description TEXT,
+    UNIQUE(visit_id, line_index));
+CREATE TABLE appointments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
+    dentist TEXT NOT NULL, starts_at TEXT NOT NULL, minutes INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'booked', note TEXT, period TEXT,
+    created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE patient_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    codice_fiscale TEXT NOT NULL UNIQUE REFERENCES patients(codice_fiscale),
+    pin_hash TEXT NOT NULL, must_change_pin INTEGER NOT NULL DEFAULT 1,
+    issued_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0, locked_until TEXT,
+    active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE patient_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, token_hash TEXT UNIQUE NOT NULL,
+    codice_fiscale TEXT NOT NULL REFERENCES patients(codice_fiscale),
+    created_at TEXT NOT NULL, last_seen_at TEXT NOT NULL);
+CREATE TABLE patient_merges (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, source_cf TEXT NOT NULL UNIQUE,
+    target_cf TEXT NOT NULL REFERENCES patients(codice_fiscale),
+    merged_at TEXT NOT NULL, merged_by TEXT NOT NULL,
+    source_row TEXT NOT NULL, moved TEXT NOT NULL);
+CREATE TABLE patient_duplicate_dismissals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, cf_a TEXT NOT NULL, cf_b TEXT NOT NULL,
+    dismissed_at TEXT NOT NULL, dismissed_by TEXT NOT NULL, reason TEXT,
+    UNIQUE(cf_a, cf_b));
+"""
+
+
 def _v1_db(path):
-    """A database in the pre-Phase-51 shape, built by the real init_db."""
-    conn = storage.init_db(str(path))
+    """A database in the pre-Phase-51 shape.
+
+    THIS IS THE ONE PLACE IN THE PROJECT THAT WRITES SCHEMA BY HAND, and it has
+    to be: `storage.init_db` now produces v2, so there is no longer any live
+    code that can build the shape this migration exists to read. Pinning the
+    old DDL here is what keeps the migration testable after the thing it
+    migrates from has stopped existing. It is a frozen historical artifact and
+    must not be "updated" to match the current schema.
+    """
+    conn = storage.connect(str(path))
+    conn.executescript(V1_SCHEMA)
+    conn.commit()
     for cf, name, phone in ((CF_A, "Mario Rossi", "333111222"),
                             (CF_B, "Giulia Bianchi", None)):
         conn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone)"
@@ -153,8 +206,13 @@ def selftest():
         conn.close()
 
         # --- T2: an empty database ----------------------------------------
+        # an EMPTY V1 one. a freshly created database is already v2, so the
+        # interesting empty case is a clinic that installed the old schema and
+        # never entered a patient - the migration must still move the schema.
         db2 = tmp / "t2.sqlite"
-        empty = storage.init_db(str(db2))
+        empty = storage.connect(str(db2))
+        empty.executescript(V1_SCHEMA)
+        empty.commit()
         pre2 = migrate_pid.preflight(empty, tmp / "nothing", None)
         assert pre2["patients"] == 0 and pre2["blockers"] == [], f"T2: {pre2}"
         r2 = migrate_pid.run(empty, tmp / "nothing", None)
@@ -163,6 +221,16 @@ def selftest():
         assert migrate_pid.run(empty, tmp / "nothing", None)["sqlite"]["skipped"], \
             "T2: and is idempotent"
         empty.close()
+
+        # T2b. a database created fresh today is already v2 and the migration
+        # must recognise that rather than trying to rebuild it
+        fresh = storage.init_db(str(tmp / "t2b.sqlite"))
+        assert migrate_pid.has_pid(fresh), "T2b: a new database is born migrated"
+        pre2b = migrate_pid.preflight(fresh, tmp / "nothing", None)
+        assert pre2b["already_migrated"] is True, f"T2b: {pre2b}"
+        assert migrate_pid.run(fresh, tmp / "nothing", None)["sqlite"]["skipped"], \
+            "T2b: and running the migration on it is a no-op"
+        fresh.close()
 
         # --- orphan guard: data loss refused ------------------------------
         db3 = tmp / "t3.sqlite"

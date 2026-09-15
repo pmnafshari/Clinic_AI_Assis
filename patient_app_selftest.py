@@ -214,6 +214,14 @@ def selftest():
             c.row_factory = sqlite3.Row
             return c
 
+        def pid_of(cf):
+            import patient_id as _pid
+            c = raw_db()
+            try:
+                return _pid.resolve(c, cf)
+            finally:
+                c.close()
+
         def count(sql, args=()):
             c = raw_db()
             n = c.execute(sql, args).fetchone()[0]
@@ -222,11 +230,9 @@ def selftest():
 
         def seed_and_issue(cf, name="test patient"):
             c = raw_db()
-            c.execute(
-                "INSERT OR IGNORE INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-                (cf, name),
-            )
-            c.commit()
+            import patient_id as _pid
+            if _pid.resolve(c, cf) is None:
+                _pid.seed_patient(c, cf, name)
             pin = patient_auth.issue_pin(cf, c, "test-dentist", "dentist")
             c.close()
             return pin
@@ -245,7 +251,7 @@ def selftest():
         client_ok, resp_ok = sign_in(cf_ok, pin_ok)
         assert resp_ok.status_code == 302, "10: a correct login should redirect"
         assert count(
-            "SELECT COUNT(*) FROM patient_sessions WHERE codice_fiscale = ?", (cf_ok,)
+            "SELECT COUNT(*) FROM patient_sessions WHERE patient_id = ?", (pid_of(cf_ok),)
         ) == 1, "10: a session row should exist for this codice fiscale"
 
         # 11. SC2 - nothing touches the staff tables. the criterion's literal
@@ -287,7 +293,8 @@ def selftest():
         assert client_forced.get("/").status_code == 200, \
             "12: the root should be reachable once the change is complete"
         assert count(
-            "SELECT must_change_pin FROM patient_credentials WHERE codice_fiscale = ?", (cf_forced,)
+            "SELECT must_change_pin FROM patient_credentials WHERE patient_id = ?",
+            (pid_of(cf_forced),)
         ) == 0, "12: must_change_pin should be cleared"
 
         # D-16 reconciliation (17.1-03). CHAT-03's original criterion said,
@@ -323,8 +330,8 @@ def selftest():
         pin_expired = seed_and_issue(cf_expired)
         c = raw_db()
         c.execute(
-            "UPDATE patient_credentials SET expires_at = ? WHERE codice_fiscale = ?",
-            ((datetime.now() - timedelta(days=1)).isoformat(), cf_expired),
+            "UPDATE patient_credentials SET expires_at = ? WHERE patient_id = ?",
+            ((datetime.now() - timedelta(days=1)).isoformat(), pid_of(cf_expired)),
         )
         c.commit()
         c.close()
@@ -737,7 +744,7 @@ def selftest():
         assert client21.get("/").status_code == 200, \
             "21: the same browser should stay signed in on the rotated token"
         assert count(
-            "SELECT COUNT(*) FROM patient_sessions WHERE codice_fiscale = ?", (cf21,)
+            "SELECT COUNT(*) FROM patient_sessions WHERE patient_id = ?", (pid_of(cf21),)
         ) == 1, "21: exactly one session row should remain for this patient"
 
         # 21b - the three messages reach the screen for a voluntary change
@@ -979,9 +986,10 @@ def selftest():
         def seed_visit(cf, visit_date, procedures, next_appointment, source_path):
             c = raw_db()
             c.execute(
-                "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                "INSERT INTO visits (patient_id, visit_date, procedures,"
                 " next_appointment, source_path) VALUES (?, ?, ?, ?, ?)",
-                (cf, visit_date, json.dumps(procedures), next_appointment, source_path),
+                (pid_of(cf), visit_date, json.dumps(procedures), next_appointment,
+                 source_path),
             )
             c.commit()
             visit_id = c.execute(
@@ -993,9 +1001,9 @@ def selftest():
         def seed_invoice(cf, visit_id, amount, description, line_index=0):
             c = raw_db()
             c.execute(
-                "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+                "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
                 " VALUES (?, ?, ?, ?, ?)",
-                (cf, visit_id, line_index, amount, description),
+                (pid_of(cf), visit_id, line_index, amount, description),
             )
             c.commit()
             c.close()
@@ -1288,9 +1296,13 @@ def selftest():
         # 25c. negative control. without this, 25b's zero-count assertion
         # could pass simply because the mechanism does not work - this proves
         # the counter can move.
-        mismatched_rows25c = [{"codice_fiscale": cf_p2, "value": "should be dropped"}]
+        # the scope key is the surrogate since Phase 51; the property under
+        # test - a row belonging to somebody else is dropped and audited - is
+        # unchanged, only the column it is keyed on
+        mismatched_rows25c = [{"patient_id": pid_of(cf_p2), "value": "should be dropped"}]
         conn25c = raw_db()
-        kept25c = patient_accessor._scope_rows(mismatched_rows25c, cf_p1, conn25c, "negative_control")
+        kept25c = patient_accessor._scope_rows(
+            mismatched_rows25c, pid_of(cf_p1), conn25c, "negative_control")
         conn25c.close()
         assert kept25c == [], f"25c: a mismatched row must be dropped, got {kept25c}"
         violations25c = count(
@@ -1343,7 +1355,7 @@ def selftest():
                     f"26: {question!r} must not render the error heading"
             deflect_rows26 = raw_db().execute(
                 "SELECT * FROM audit_log WHERE action = 'patient_deflect' AND username = ? AND target = ?",
-                (cf26, category),
+                (pid_of(cf26), category),
             ).fetchall()
             assert len(deflect_rows26) == 2, \
                 f"26: D-05 - expected 2 patient_deflect rows (it/en) for {category}, got {len(deflect_rows26)}"
@@ -1468,7 +1480,7 @@ def selftest():
         # and the fast suite does not touch the network.
         before_q26d = count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?",
-            (cf24,),
+            (pid_of(cf24),),
         )
         page26d = client24.get("/chat")
         question26d = t("chat_example_2", "it")
@@ -1477,7 +1489,7 @@ def selftest():
         })
         after_q26d = count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?",
-            (cf24,),
+            (pid_of(cf24),),
         )
         assert after_q26d == before_q26d + 1, (
             "26d: an answered POST /chat must leave exactly one patient_query row - "
@@ -1485,7 +1497,7 @@ def selftest():
         )
         row26d = raw_db().execute(
             "SELECT * FROM audit_log WHERE action = 'patient_query' AND username = ?"
-            " ORDER BY rowid DESC LIMIT 1", (cf24,)
+            " ORDER BY rowid DESC LIMIT 1", (pid_of(cf24),)
         ).fetchone()
         assert row26d["role"] == "patient", f"26d: role was {row26d['role']}"
         assert row26d["allowed"] == 1, "26d: a served answer must be allowed=1"
@@ -1494,11 +1506,11 @@ def selftest():
         # a deflecting POST writes the other action, and only that one
         before_d26d = count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_deflect' AND username = ?",
-            (cf26,),
+            (pid_of(cf26),),
         )
         before_dq26d = count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?",
-            (cf26,),
+            (pid_of(cf26),),
         )
         page26d2 = client26.get("/chat")
         question26d2 = "Dovrei preoccuparmi?"
@@ -1507,7 +1519,7 @@ def selftest():
         })
         assert count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_deflect' AND username = ?",
-            (cf26,),
+            (pid_of(cf26),),
         ) == before_d26d + 1, "26d: a deflected POST must leave one patient_deflect row"
         assert count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?"
@@ -1515,7 +1527,7 @@ def selftest():
         ) == 0, "26d: a deflection must not also write an allowed patient_query row"
         deflect_row26d = raw_db().execute(
             "SELECT * FROM audit_log WHERE action = 'patient_deflect' AND username = ?"
-            " ORDER BY rowid DESC LIMIT 1", (cf26,)
+            " ORDER BY rowid DESC LIMIT 1", (pid_of(cf26),)
         ).fetchone()
         assert deflect_row26d["allowed"] == 0, "26d: a deflection row must be allowed=0"
 

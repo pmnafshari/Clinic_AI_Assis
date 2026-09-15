@@ -18,6 +18,8 @@ broke the fast suite until each was updated; a new table must not join them.
 
 import re
 import sqlite3
+
+import patient_id
 import sys
 import tempfile
 from pathlib import Path
@@ -44,10 +46,7 @@ def _seed_user(db_path, username, role):
 
 def _seed_patient(db_path):
     conn = sqlite3.connect(db_path)
-    conn.execute(
-        "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-        (PATIENT_CF, PATIENT_NAME),
-    )
+    patient_id.seed_patient(conn, PATIENT_CF, PATIENT_NAME)
     conn.commit()
     conn.close()
 

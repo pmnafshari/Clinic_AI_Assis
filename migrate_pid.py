@@ -61,14 +61,21 @@ CREATE TABLE IF NOT EXISTS migration_ops (
 # The v2 shape. `codice_fiscale` is GONE from every child table on purpose: a
 # second copy of identity beside the real one is what lets the two drift, and
 # the drift is invisible until somebody reads the stale copy.
-SCHEMA_V2 = """
-CREATE TABLE patients_v2 (
-    patient_id TEXT PRIMARY KEY,
+# ONE DEFINITION PER TABLE. The migration renders these as `<name>_v2` while it
+# copies, and a fresh database renders them as `<name>`. Writing the DDL twice
+# is exactly how a migrated database and a newly created one come to disagree.
+TABLE_BODIES = {
+    "patients": """(
+    -- NOT NULL is not redundant beside PRIMARY KEY: SQLite permits a NULL in a
+    -- TEXT PRIMARY KEY (a documented quirk from before it enforced it), so
+    -- without this an INSERT that simply forgot the surrogate would succeed and
+    -- create a patient with no identity.
+    patient_id TEXT PRIMARY KEY NOT NULL,
     codice_fiscale TEXT UNIQUE NOT NULL,
     patient_name TEXT NOT NULL,
     phone TEXT
-);
-CREATE TABLE visits_v2 (
+)""",
+    "visits": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id TEXT NOT NULL REFERENCES patients(patient_id),
     visit_date TEXT,
@@ -76,8 +83,8 @@ CREATE TABLE visits_v2 (
     clinical_notes TEXT,
     next_appointment TEXT,
     source_path TEXT UNIQUE NOT NULL
-);
-CREATE TABLE invoices_v2 (
+)""",
+    "invoices": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id TEXT NOT NULL REFERENCES patients(patient_id),
     visit_id INTEGER NOT NULL REFERENCES visits(id),
@@ -85,8 +92,8 @@ CREATE TABLE invoices_v2 (
     amount REAL NOT NULL,
     description TEXT,
     UNIQUE(visit_id, line_index)
-);
-CREATE TABLE appointments_v2 (
+)""",
+    "appointments": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id TEXT NOT NULL REFERENCES patients(patient_id),
     dentist TEXT NOT NULL,
@@ -97,8 +104,8 @@ CREATE TABLE appointments_v2 (
     period TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
-);
-CREATE TABLE patient_credentials_v2 (
+)""",
+    "patient_credentials": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id TEXT NOT NULL UNIQUE REFERENCES patients(patient_id),
     pin_hash TEXT NOT NULL,
@@ -108,25 +115,20 @@ CREATE TABLE patient_credentials_v2 (
     failed_attempts INTEGER NOT NULL DEFAULT 0,
     locked_until TEXT,
     active INTEGER NOT NULL DEFAULT 1
-);
-CREATE TABLE patient_sessions_v2 (
+)""",
+    "patient_sessions": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     token_hash TEXT UNIQUE NOT NULL,
     patient_id TEXT NOT NULL REFERENCES patients(patient_id),
     created_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL
-);
-"""
-
-# The two alias tables are rebuilt as well, and NOT because it is tidy.
-# `patient_merges.target_cf` referenced `patients(codice_fiscale)`, which meant
-# the codice fiscale was still a relationship key AND was effectively
-# immutable - correcting a mistyped one raised FOREIGN KEY constraint failed.
-# That defeats the whole phase, and it was found by the test for it.
-# `source_cf` stays, without a foreign key: it is the historical record of what
-# the folded record was called, which is exactly what has to keep resolving.
-ALIAS_SCHEMA_V2 = """
-CREATE TABLE patient_merges_v2 (
+)""",
+    # The alias tables carry NO foreign key on a codice fiscale. target_cf used
+    # to reference patients(codice_fiscale), which kept the CF a relationship
+    # key and made correcting a mistyped one raise a foreign-key error - the
+    # exact thing this phase exists to remove. source_cf stays as the
+    # historical record of what the folded record was called.
+    "patient_merges": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     source_cf TEXT NOT NULL UNIQUE,
     target_cf TEXT NOT NULL,
@@ -135,8 +137,8 @@ CREATE TABLE patient_merges_v2 (
     merged_by TEXT NOT NULL,
     source_row TEXT NOT NULL,
     moved TEXT NOT NULL
-);
-CREATE TABLE patient_duplicate_dismissals_v2 (
+)""",
+    "patient_duplicate_dismissals": """(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     patient_id_a TEXT NOT NULL,
     patient_id_b TEXT NOT NULL,
@@ -146,8 +148,28 @@ CREATE TABLE patient_duplicate_dismissals_v2 (
     dismissed_by TEXT NOT NULL,
     reason TEXT,
     UNIQUE(patient_id_a, patient_id_b)
-);
-"""
+)""",
+}
+
+REBUILT = ("patients", "visits", "invoices", "appointments",
+           "patient_credentials", "patient_sessions",
+           "patient_merges", "patient_duplicate_dismissals")
+
+SCHEMA_V2 = "\n".join(
+    f"CREATE TABLE {name}_v2 {TABLE_BODIES[name]};"
+    for name in ("patients", "visits", "invoices", "appointments",
+                 "patient_credentials", "patient_sessions"))
+
+ALIAS_SCHEMA_V2 = "\n".join(
+    f"CREATE TABLE {name}_v2 {TABLE_BODIES[name]};"
+    for name in ("patient_merges", "patient_duplicate_dismissals"))
+
+
+def fresh_schema():
+    """The v2 shape for a database that has never held anything."""
+    return "\n".join(
+        f"CREATE TABLE IF NOT EXISTS {name} {body};" for name, body in TABLE_BODIES.items())
+
 
 # (v1 table, v2 table, columns after patient_id)
 CHILD_TABLES = [

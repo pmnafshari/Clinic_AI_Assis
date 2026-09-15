@@ -10,32 +10,34 @@ from pathlib import Path
 from auth import log_audit
 
 # the only module the patient surface may use to read db/clinic.sqlite.
-# every function filters on the session's own codice fiscale, sourced from
-# the caller - never from request input. the dentist's free-text clinical
+# every function filters on the session's own patient_id, sourced from the
+# caller - never from request input. (Phase 51: the scope key used to be the
+# codice fiscale. It is now the surrogate, which is what the session carries;
+# the property is unchanged and so is _scope_rows below.) the dentist's free-text clinical
 # notes field is excluded from every select list, even for the patient's
 # own row. there is no write function here by construction, not by policy.
 
 
-def get_demographics(cf, conn, ip=None):
+def get_demographics(pid, conn, ip=None):
     row = conn.execute(
-        "SELECT codice_fiscale, patient_name, phone FROM patients"
-        " WHERE codice_fiscale = ?", (cf,)
+        "SELECT patient_id, patient_name, phone FROM patients"
+        " WHERE patient_id = ?", (pid,)
     ).fetchone()
     if row is None:
         return None
-    rows = _scope_rows([row], cf, conn, "get_demographics", ip=ip)
+    rows = _scope_rows([row], pid, conn, "get_demographics", ip=ip)
     if not rows:
         return None
     row = rows[0]
     return {"patient_name": row["patient_name"], "phone": row["phone"]}
 
 
-def get_visits(cf, conn, ip=None):
+def get_visits(pid, conn, ip=None):
     rows = conn.execute(
-        "SELECT codice_fiscale, visit_date, procedures, next_appointment FROM visits"
-        " WHERE codice_fiscale = ? ORDER BY id", (cf,)
+        "SELECT patient_id, visit_date, procedures, next_appointment FROM visits"
+        " WHERE patient_id = ? ORDER BY id", (pid,)
     ).fetchall()
-    rows = _scope_rows(rows, cf, conn, "get_visits", ip=ip)
+    rows = _scope_rows(rows, pid, conn, "get_visits", ip=ip)
     return [
         {
             "visit_date": row["visit_date"],
@@ -46,25 +48,25 @@ def get_visits(cf, conn, ip=None):
     ]
 
 
-def get_next_appointment(cf, conn, ip=None):
+def get_next_appointment(pid, conn, ip=None):
     row = conn.execute(
-        "SELECT codice_fiscale, next_appointment FROM visits"
-        " WHERE codice_fiscale = ? ORDER BY id DESC LIMIT 1", (cf,)
+        "SELECT patient_id, next_appointment FROM visits"
+        " WHERE patient_id = ? ORDER BY id DESC LIMIT 1", (pid,)
     ).fetchone()
     if row is None:
         return None
-    rows = _scope_rows([row], cf, conn, "get_next_appointment", ip=ip)
+    rows = _scope_rows([row], pid, conn, "get_next_appointment", ip=ip)
     if not rows:
         return None
     return rows[0]["next_appointment"]
 
 
-def get_invoices(cf, conn, ip=None):
+def get_invoices(pid, conn, ip=None):
     rows = conn.execute(
-        "SELECT codice_fiscale, amount, description FROM invoices"
-        " WHERE codice_fiscale = ? ORDER BY id", (cf,)
+        "SELECT patient_id, amount, description FROM invoices"
+        " WHERE patient_id = ? ORDER BY id", (pid,)
     ).fetchall()
-    rows = _scope_rows(rows, cf, conn, "get_invoices", ip=ip)
+    rows = _scope_rows(rows, pid, conn, "get_invoices", ip=ip)
     return [{"amount": row["amount"], "description": row["description"]} for row in rows]
 
 
@@ -73,37 +75,42 @@ def get_invoices(cf, conn, ip=None):
 # with no source recorded is invisible after the fact. it defaults to None,
 # so a caller that passes nothing still gets its row with ip NULL.
 #
-# on the sqlite path a parameterised WHERE codice_fiscale = ? cannot return
+# on the sqlite path a parameterised WHERE patient_id = ? cannot return
 # another patient's row - this check is defence-in-depth against a future
 # JOIN widening the result set. it does not catch a note ingested under the
 # wrong CF at write time, because a correctly scoped query and a wrongly
 # attributed row read the same column.
-def _scope_rows(rows, cf, conn, fn_name, ip=None):
+def _scope_rows(rows, pid, conn, fn_name, ip=None):
     kept = []
     for row in rows:
-        if row["codice_fiscale"] == cf:
+        if row["patient_id"] == pid:
             kept.append(row)
         else:
-            log_audit(conn, cf, "patient", "patient_scope_violation", fn_name, allowed=0, ip=ip)
+            log_audit(conn, pid, "patient", "patient_scope_violation", fn_name, allowed=0, ip=ip)
     return kept
+
+
+import patient_id as _pidmod
 
 
 def selftest():
     # 0. fixture: a temp db with the tables this module reads, built by hand
     # rather than through storage.init_db - this module does not import
     # storage (D-08), and the selftest needs a schema to seed against.
+    # Phase 51: the scope key is patient_id, so the fixture carries it too.
     with tempfile.TemporaryDirectory() as tmp:
         conn = sqlite3.connect(str(Path(tmp) / "clinic.sqlite"))
         conn.row_factory = sqlite3.Row
         conn.executescript("""
             CREATE TABLE patients (
-                codice_fiscale TEXT PRIMARY KEY,
+                patient_id TEXT PRIMARY KEY NOT NULL,
+                codice_fiscale TEXT UNIQUE NOT NULL,
                 patient_name TEXT NOT NULL,
                 phone TEXT
             );
             CREATE TABLE visits (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                codice_fiscale TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
                 visit_date TEXT,
                 procedures TEXT,
                 clinical_notes TEXT,
@@ -112,7 +119,7 @@ def selftest():
             );
             CREATE TABLE invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                codice_fiscale TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
                 visit_id INTEGER NOT NULL,
                 line_index INTEGER NOT NULL,
                 amount REAL NOT NULL,
@@ -140,23 +147,17 @@ def selftest():
         cf_b = "BBBB850315150200"
         sentinel = "SENTINEL_DO_NOT_LEAK"
 
+        pid_a = _pidmod.seed_patient(conn, cf_a, "anna alfa", "111000111")
+        pid_b = _pidmod.seed_patient(conn, cf_b, "bruno beta", "222000222")
         conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf_a, "anna alfa", "111000111"),
-        )
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf_b, "bruno beta", "222000222"),
-        )
-        conn.execute(
-            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
             " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
-            (cf_a, "2026-06-01", json.dumps(["filling 14"]), sentinel, "2026-09-01", "a/n1.json"),
+            (pid_a, "2026-06-01", json.dumps(["filling 14"]), sentinel, "2026-09-01", "a/n1.json"),
         )
         conn.execute(
-            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
             " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
-            (cf_b, "2026-06-02", json.dumps(["cleaning"]), "cleaning done", "2026-09-02", "b/n1.json"),
+            (pid_b, "2026-06-02", json.dumps(["cleaning"]), "cleaning done", "2026-09-02", "b/n1.json"),
         )
         visit_id_a = conn.execute(
             "SELECT id FROM visits WHERE source_path = ?", ("a/n1.json",)
@@ -165,14 +166,14 @@ def selftest():
             "SELECT id FROM visits WHERE source_path = ?", ("b/n1.json",)
         ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)",
-            (cf_a, visit_id_a, 0, 80.0, "filling 14"),
+            (pid_a, visit_id_a, 0, 80.0, "filling 14"),
         )
         conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)",
-            (cf_b, visit_id_b, 0, 40.0, "cleaning"),
+            (pid_b, visit_id_b, 0, 40.0, "cleaning"),
         )
         conn.commit()
 
@@ -180,10 +181,10 @@ def selftest():
         # name, phone, visit date, procedure and invoice description appear
         # nowhere in the four results. this is CHAT-04's unit-level proof;
         # SC2's live proof is plan 18-06.
-        demo_a = get_demographics(cf_a, conn)
-        visits_a = get_visits(cf_a, conn)
-        next_a = get_next_appointment(cf_a, conn)
-        invoices_a = get_invoices(cf_a, conn)
+        demo_a = get_demographics(pid_a, conn)
+        visits_a = get_visits(pid_a, conn)
+        next_a = get_next_appointment(pid_a, conn)
+        invoices_a = get_invoices(pid_a, conn)
 
         assert demo_a == {"patient_name": "anna alfa", "phone": "111000111"}, \
             f"2: get_demographics returned {demo_a}"
@@ -214,13 +215,13 @@ def selftest():
 
         # 5. _scope_rows drops a mismatched row and audits exactly one
         # denial - the only way to exercise D-09, since a parameterised
-        # WHERE codice_fiscale = ? cannot itself produce a mismatch.
+        # WHERE patient_id = ? cannot itself produce a mismatch.
         before = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
         fake_rows = [
-            {"codice_fiscale": cf_a, "value": "keep"},
-            {"codice_fiscale": cf_b, "value": "drop"},
+            {"patient_id": pid_a, "value": "keep"},
+            {"patient_id": pid_b, "value": "drop"},
         ]
-        kept = _scope_rows(fake_rows, cf_a, conn, "get_demographics")
+        kept = _scope_rows(fake_rows, pid_a, conn, "get_demographics")
         assert len(kept) == 1 and kept[0]["value"] == "keep", f"5: _scope_rows kept {kept}"
         after = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
         assert after == before + 1, "5: exactly one denial row should be written"
@@ -238,7 +239,7 @@ def selftest():
         # D-07: the same drop, with a source address, records it. TEST-NET-3
         # so the fixture can never be confused for a real client.
         before_ip = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
-        kept_ip = _scope_rows(fake_rows, cf_a, conn, "get_visits", ip="203.0.113.9")
+        kept_ip = _scope_rows(fake_rows, pid_a, conn, "get_visits", ip="203.0.113.9")
         assert len(kept_ip) == 1, f"5: _scope_rows kept {kept_ip}"
         after_ip = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
         assert after_ip == before_ip + 1, "5: exactly one denial row should be written"
@@ -292,16 +293,19 @@ def selftest():
         scannable = "\n".join(scannable_lines)
 
         # 6. every get_* function's body carries the literal
-        # "codice_fiscale = ?" - discovered by name prefix, not hardcoded,
-        # so a fifth accessor added later cannot escape the check.
+        # "patient_id = ?" - discovered by name prefix, not hardcoded, so a
+        # fifth accessor added later cannot escape the check. Phase 51 moved
+        # the scope key off the codice fiscale; the PROPERTY this pins is
+        # unchanged - every read here is filtered to one patient by a bound
+        # parameter, never by string building.
         get_functions = [
             (name, fn) for name, fn in inspect.getmembers(sys.modules[__name__], inspect.isfunction)
             if name.startswith("get_")
         ]
         assert get_functions, "6: no get_* functions found - selftest fixture is broken"
         for name, fn in get_functions:
-            assert "codice_fiscale = ?" in inspect.getsource(fn), \
-                f"6: {name} is missing the literal codice_fiscale = ? filter"
+            assert "patient_id = ?" in inspect.getsource(fn), \
+                f"6: {name} is missing the literal patient_id = ? filter"
 
         # 7. the excluded free-text clinical column never appears anywhere
         # in the scannable source (D-10).

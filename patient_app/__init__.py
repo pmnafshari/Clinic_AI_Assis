@@ -165,7 +165,7 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
         from .routes import get_db
 
         demo = patient_accessor.get_demographics(
-            g.patient["codice_fiscale"], get_db(), ip=net.from_request(_request)
+            g.patient["patient_id"], get_db(), ip=net.from_request(_request)
         )
         name = demo["patient_name"].split()[0] if demo and demo.get("patient_name") else None
 
@@ -175,7 +175,7 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
         # one tab over. a request is counted, never timed (PAPT-05).
         import appointments
 
-        booked, requested = appointments.open_for_patient(get_db(), g.patient["codice_fiscale"])
+        booked, requested = appointments.open_for_patient(get_db(), g.patient["patient_id"])
         next_appt = booked[0]["starts_at"] if booked else None
         return render_template(
             "patient_home.html",

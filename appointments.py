@@ -130,7 +130,15 @@ def _check_schedule(conn, dentist, start, minutes, exclude_id=None):
 SLOT_TAKEN = "that slot overlaps another appointment for this dentist"
 
 
-def book(conn, codice_fiscale, dentist, starts_at, minutes, note=None):
+def book(conn, patient, dentist, starts_at, minutes, note=None):
+    # `patient` is a codice fiscale, a patient_id, or a folded CF - resolved
+    # once at the boundary (Phase 51) so nothing below stores a second copy of
+    # identity.
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, patient)
+    if pid is None:
+        raise ValueError(f"no patient with identifier {patient!r}")
     minutes = _check_minutes(minutes)
     start, _ = _window(starts_at, minutes)
     if not dentist:
@@ -142,9 +150,9 @@ def book(conn, codice_fiscale, dentist, starts_at, minutes, note=None):
     try:
         cur = conn.execute(
             "INSERT INTO appointments"
-            " (codice_fiscale, dentist, starts_at, minutes, status, note, created_at, updated_at)"
+            " (patient_id, dentist, starts_at, minutes, status, note, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (codice_fiscale, dentist, start, minutes, BOOKED, note, ts, ts),
+            (pid, dentist, start, minutes, BOOKED, note, ts, ts),
         )
     except sqlite3.IntegrityError as e:
         # the unique slot index, i.e. someone else took it between the check
@@ -210,13 +218,18 @@ def _check_date(day):
     return parsed
 
 
-def request(conn, codice_fiscale, day, period, reason=None):
+def request(conn, patient, day, period, reason=None):
     """A patient asks for a day and a half of it. Returns the new row id.
 
     Deliberately does NOT check overlaps: a request occupies nothing, and
     refusing one because a dentist happens to be busy would leak that dentist's
     calendar to whoever asked.
     """
+    import patient_id as _pid
+
+    _rpid = _pid.resolve(conn, patient)
+    if _rpid is None:
+        raise ValueError(f"no patient with identifier {patient!r}")
     period = _check_period(period)
     parsed = _check_date(day)
     if parsed < datetime.now().date():
@@ -224,12 +237,12 @@ def request(conn, codice_fiscale, day, period, reason=None):
     ts = _now()
     cur = conn.execute(
         "INSERT INTO appointments"
-        " (codice_fiscale, dentist, starts_at, minutes, status, note, period,"
+        " (patient_id, dentist, starts_at, minutes, status, note, period,"
         "  created_at, updated_at)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         # dentist '' and minutes 0 are the unassigned markers, not defaults
         # anyone should read as real. status is what makes that unambiguous.
-        (codice_fiscale, "", f"{parsed.isoformat()}T00:00:00", 0, REQUESTED,
+        (_rpid, "", f"{parsed.isoformat()}T00:00:00", 0, REQUESTED,
          reason, period, ts, ts),
     )
     conn.commit()
@@ -295,13 +308,13 @@ def decline(conn, appointment_id, reason=None):
 def pending_requests(conn):
     return conn.execute(
         "SELECT a.*, p.patient_name FROM appointments a"
-        " JOIN patients p ON p.codice_fiscale = a.codice_fiscale"
+        " JOIN patients p ON p.patient_id = a.patient_id"
         " WHERE a.status = ? ORDER BY a.starts_at, a.created_at",
         (REQUESTED,),
     ).fetchall()
 
 
-def owned_by(conn, appointment_id, codice_fiscale):
+def owned_by(conn, appointment_id, patient):
     """Does this appointment belong to this patient?
 
     A function rather than an `if` in a route: there are three patient-facing
@@ -311,7 +324,10 @@ def owned_by(conn, appointment_id, codice_fiscale):
     row = conn.execute(
         "SELECT * FROM appointments WHERE id = ?", (appointment_id,)
     ).fetchone()
-    if row is None or row["codice_fiscale"] != codice_fiscale:
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, patient)
+    if row is None or pid is None or row["patient_id"] != pid:
         return None
     return row
 
@@ -321,7 +337,7 @@ def agenda(conn, day):
     # does not need a second query per row
     return conn.execute(
         "SELECT a.*, p.patient_name FROM appointments a"
-        " JOIN patients p ON p.codice_fiscale = a.codice_fiscale"
+        " JOIN patients p ON p.patient_id = a.patient_id"
         " WHERE a.status = ? AND a.starts_at >= ? AND a.starts_at < ?"
         " ORDER BY a.starts_at",
         (BOOKED, f"{day}T00:00:00", f"{day}T23:59:59.999999"),
@@ -354,32 +370,41 @@ def month_counts(conn, first_day, next_first):
     return counts
 
 
-def for_patient(conn, codice_fiscale):
+def for_patient(conn, patient):
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, patient)
     return conn.execute(
-        "SELECT * FROM appointments WHERE codice_fiscale = ? ORDER BY starts_at DESC",
-        (codice_fiscale,),
+        "SELECT * FROM appointments WHERE patient_id = ? ORDER BY starts_at DESC",
+        (pid,),
     ).fetchall()
 
 
-def open_for_patient(conn, codice_fiscale):
+def open_for_patient(conn, patient):
     """-> (booked, requested) for the patient's own surface.
 
     Cancelled and declined rows are kept in the table but are not what the
     patient came to see. Booked rows are filtered to today onward - a past
     appointment is history, and offering Cancel beside one is nonsense.
     """
+    import patient_id as _pid
+
+    pid = _pid.resolve(conn, patient)
     today = datetime.now().date().isoformat()
     booked = conn.execute(
-        "SELECT * FROM appointments WHERE codice_fiscale = ? AND status = ?"
+        "SELECT * FROM appointments WHERE patient_id = ? AND status = ?"
         " AND starts_at >= ? ORDER BY starts_at",
-        (codice_fiscale, BOOKED, f"{today}T00:00:00"),
+        (pid, BOOKED, f"{today}T00:00:00"),
     ).fetchall()
     requested = conn.execute(
-        "SELECT * FROM appointments WHERE codice_fiscale = ? AND status = ?"
+        "SELECT * FROM appointments WHERE patient_id = ? AND status = ?"
         " ORDER BY starts_at",
-        (codice_fiscale, REQUESTED),
+        (pid, REQUESTED),
     ).fetchall()
     return booked, requested
+
+
+import patient_id as _pidmod
 
 
 def selftest():
@@ -392,10 +417,7 @@ def selftest():
 
     with tempfile.TemporaryDirectory() as tmp:
         conn = storage.init_db(str(Path(tmp) / "t.sqlite"))
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name) VALUES (?, ?)",
-            ("ZZA00A00A000A", "Test Patient"),
-        )
+        _pidmod.seed_patient(conn, "ZZA00A00A000A", "Test Patient")
         # P05: the clinic has to be open and the dentists rostered, or every
         # booking below is refused before it reaches the rule under test. an
         # UNCONFIGURED clinic refusing everything is the correct default and is
@@ -484,13 +506,19 @@ def selftest():
         except ValueError:
             pass
 
-        # 10. an unknown patient is refused by the foreign key, which connect()
-        # turns on with PRAGMA foreign_keys = ON
+        # 10. an unknown patient is refused, and NOTHING is written. since
+        # Phase 51 the refusal comes from the identity resolver with a legible
+        # message, before any SQL runs; the foreign key is still there behind
+        # it. what this pins is the property - a booking for somebody who is
+        # not on record does not happen - not which layer says no.
+        before10 = conn.execute("SELECT COUNT(*) c FROM appointments").fetchone()["c"]
         try:
             book(conn, "NOSUCHPATIENT", "dr rossi", "2026-09-08T09:00", 30)
             raise AssertionError("10: an unknown codice fiscale must be refused")
-        except Exception as e:
-            assert "FOREIGN KEY" in str(e).upper(), f"10: expected a foreign key refusal, got {e}"
+        except ValueError as e:
+            assert "NOSUCHPATIENT" in str(e), f"10: the refusal must name the input, got {e}"
+        assert conn.execute("SELECT COUNT(*) c FROM appointments").fetchone()["c"] == before10, \
+            "10: and a refused booking must write nothing"
 
         # 11. bad input is refused before it reaches sql
         for bad in (0, -30, "half an hour", None):
@@ -516,8 +544,7 @@ def selftest():
 
 
         # --- requests (phase 42) ------------------------------------------
-        conn.execute("INSERT INTO patients (codice_fiscale, patient_name)"
-                     " VALUES (?, ?)", ("ZZB00B00B000B", "Other Patient"))
+        _pidmod.seed_patient(conn, "ZZB00B00B000B", "Other Patient")
         conn.commit()
         OTHER = "ZZB00B00B000B"
         from datetime import date, timedelta as _td
@@ -617,7 +644,8 @@ def selftest():
             "18: a declined request is not shown back as if it were live"
         # and one patient's rows never leak into another's
         obk, orq = open_for_patient(conn, OTHER)
-        assert all(x["codice_fiscale"] == OTHER for x in obk + orq), \
+        other_pid = _pidmod.resolve(conn, OTHER)
+        assert all(x["patient_id"] == other_pid for x in obk + orq), \
             "18: open_for_patient must be scoped to the patient asked for"
 
         # --- month_counts (phase 48) --------------------------------------
@@ -629,15 +657,14 @@ def selftest():
         # month_counts is a read - what it has to get right is what the table
         # actually holds.
         mc = storage.init_db(str(Path(tmp) / "months.sqlite"))
-        mc.execute("INSERT INTO patients (codice_fiscale, patient_name)"
-                   " VALUES (?, ?)", (CF, "Test Patient"))
+        _pidmod.seed_patient(mc, CF, "Test Patient")
 
         def put(starts_at, status):
             mc.execute(
-                "INSERT INTO appointments (codice_fiscale, dentist, starts_at,"
+                "INSERT INTO appointments (patient_id, dentist, starts_at,"
                 " minutes, status, created_at, updated_at)"
                 " VALUES (?, 'dr rossi', ?, 30, ?, '2026-01-01', '2026-01-01')",
-                (CF, starts_at, status),
+                (_pidmod.resolve(mc, CF), starts_at, status),
             )
 
         # 19. a month of 30 days. two bookings share a day, one sits alone, and
@@ -706,8 +733,7 @@ def selftest():
         # that actually closes.
         sched = storage.init_db(str(Path(tmp) / "sched.sqlite"))
         availability.seed_fixture_hours(sched)
-        sched.execute("INSERT INTO patients (codice_fiscale, patient_name)"
-                      " VALUES ('ZZC00C00C000C', 'Schedule Patient')")
+        _pidmod.seed_patient(sched, 'ZZC00C00C000C', 'Schedule Patient')
         sched.execute("INSERT INTO dentist_schedule (dentist, weekday, starts, ends)"
                       " VALUES ('dr rossi', 0, '09:00', '18:00')")
         sched.commit()
@@ -756,8 +782,7 @@ def selftest():
         rconn = storage.init_db(race_db)
         availability.seed_fixture_hours(rconn)
         rconn.execute("UPDATE clinic_hours SET opens='00:00', closes='23:59', closed=0")
-        rconn.execute("INSERT INTO patients (codice_fiscale, patient_name)"
-                      " VALUES ('ZZD00D00D000D', 'Race Patient')")
+        _pidmod.seed_patient(rconn, 'ZZD00D00D000D', 'Race Patient')
         for wd in range(7):
             rconn.execute("INSERT INTO dentist_schedule (dentist, weekday, starts, ends)"
                           " VALUES ('dr rossi', ?, '00:00', '23:59')", (wd,))
@@ -811,19 +836,19 @@ def selftest():
         legacy_db = str(Path(tmp) / "legacy.sqlite")
         raw = sqlite3.connect(legacy_db)
         raw.executescript("""
-            CREATE TABLE patients (codice_fiscale TEXT PRIMARY KEY,
-                patient_name TEXT NOT NULL, phone TEXT);
+            CREATE TABLE patients (patient_id TEXT PRIMARY KEY NOT NULL,
+                codice_fiscale TEXT UNIQUE NOT NULL, patient_name TEXT NOT NULL, phone TEXT);
             CREATE TABLE appointments (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                codice_fiscale TEXT NOT NULL, dentist TEXT NOT NULL, starts_at TEXT NOT NULL,
+                patient_id TEXT NOT NULL, dentist TEXT NOT NULL, starts_at TEXT NOT NULL,
                 minutes INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'booked', note TEXT,
                 period TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-            INSERT INTO patients VALUES ('ZZE00E00E000E','Legacy Patient',NULL);
-            INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes, status,
+            INSERT INTO patients VALUES ('pid_0000000000000001','ZZE00E00E000E','Legacy Patient',NULL);
+            INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status,
                 created_at, updated_at)
-                VALUES ('ZZE00E00E000E','dr rossi','2026-05-05T09:00:00',30,'booked','','');
-            INSERT INTO appointments (codice_fiscale, dentist, starts_at, minutes, status,
+                VALUES ('pid_0000000000000001','dr rossi','2026-05-05T09:00:00',30,'booked','','');
+            INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status,
                 created_at, updated_at)
-                VALUES ('ZZE00E00E000E','dr rossi','2026-05-05T09:00:00',30,'booked','','');
+                VALUES ('pid_0000000000000001','dr rossi','2026-05-05T09:00:00',30,'booked','','');
         """)
         raw.commit()
         raw.close()

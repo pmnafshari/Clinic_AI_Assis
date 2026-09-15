@@ -1,5 +1,7 @@
 import re
 import sqlite3
+
+import patient_id
 import sys
 import tempfile
 from datetime import datetime, timedelta
@@ -472,10 +474,7 @@ def selftest():
             ("KPIB800010150100", "Kpi Due"),
             ("KPIC800010150100", "Kpi Tre"),
         ]:
-            seed_conn.execute(
-                "INSERT INTO patients (codice_fiscale, patient_name, phone)"
-                " VALUES (?, ?, ?)", (cf, name, None),
-            )
+            patient_id.seed_patient(seed_conn, cf, name, None)
         # two distinct months so the series has a shape, and the month labels
         # are distinctive enough to grep an assistant's response body for
         for i, (cf, date) in enumerate([
@@ -484,7 +483,7 @@ def selftest():
             ("KPIC800010150100", "2031-07-22"),
         ]):
             seed_conn.execute(
-                "INSERT INTO visits (codice_fiscale, visit_date, procedures,"
+                "INSERT INTO visits (patient_id, visit_date, procedures,"
                 " clinical_notes, next_appointment, source_path)"
                 " VALUES (?, ?, ?, ?, ?, ?)",
                 (cf, date, "[]", None, None, f"sorted/kpi_{i}.txt"),
@@ -705,8 +704,7 @@ def selftest():
         # ^[A-Z]{4}[0-9]{12}$ rejected every one), and opening a record is
         # audited for the reader who was allowed, not only the one refused.
         real_conn = sqlite3.connect(db_path)
-        real_conn.execute("INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-                          ("RSSMRA85T10A562S", "Zzr Realcode", None))
+        patient_id.seed_patient(real_conn, "RSSMRA85T10A562S", "Zzr Realcode", None)
         real_conn.commit()
         real_conn.close()
 

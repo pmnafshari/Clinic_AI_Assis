@@ -135,10 +135,12 @@ def answer_exact(cf, field, conn):
     if data is None:
         return f"no patient on record with codice fiscale {cf}"
 
+    import patient_id as _pid
+
     visits = conn.execute(
         "SELECT source_path, visit_date, next_appointment FROM visits"
-        " WHERE codice_fiscale = ? ORDER BY id",
-        (cf,),
+        " WHERE patient_id = ? ORDER BY id",
+        (_pid.resolve(conn, cf),),
     ).fetchall()
 
     if field == "phone":

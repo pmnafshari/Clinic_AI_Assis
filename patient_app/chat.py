@@ -443,19 +443,23 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
 # and that tradeoff is accepted by decision, not by accident.
 
 
+import patient_id as _pidmod
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         conn = sqlite3.connect(str(Path(tmp) / "clinic.sqlite"))
         conn.row_factory = sqlite3.Row
         conn.executescript("""
             CREATE TABLE patients (
-                codice_fiscale TEXT PRIMARY KEY,
+                patient_id TEXT PRIMARY KEY NOT NULL,
+                codice_fiscale TEXT UNIQUE NOT NULL,
                 patient_name TEXT NOT NULL,
                 phone TEXT
             );
             CREATE TABLE visits (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                codice_fiscale TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
                 visit_date TEXT,
                 procedures TEXT,
                 clinical_notes TEXT,
@@ -464,7 +468,7 @@ def selftest():
             );
             CREATE TABLE invoices (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                codice_fiscale TEXT NOT NULL,
+                patient_id TEXT NOT NULL,
                 visit_id INTEGER NOT NULL,
                 line_index INTEGER NOT NULL,
                 amount REAL NOT NULL,
@@ -491,21 +495,15 @@ def selftest():
         cf_b = "BBBB850315150200"
         missing_cf = "ZZZZ000000000000"
 
+        _pidmod.seed_patient(conn, cf_a, "anna alfa", "111000111")
+        _pidmod.seed_patient(conn, cf_b, "bruno beta", "222000222")
         conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf_a, "anna alfa", "111000111"),
-        )
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf_b, "bruno beta", "222000222"),
-        )
-        conn.execute(
-            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
             " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
             (cf_a, "2026-06-01", json.dumps(["filling 14"]), "note a", "2026-09-01", "a/n1.json"),
         )
         conn.execute(
-            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
             " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
             (cf_b, "2026-06-02", json.dumps(["cleaning"]), "note b", "2026-09-02", "b/n1.json"),
         )
@@ -516,12 +514,12 @@ def selftest():
             "SELECT id FROM visits WHERE source_path = ?", ("b/n1.json",)
         ).fetchone()["id"]
         conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)",
             (cf_a, visit_id_a, 0, 80.0, "filling 14"),
         )
         conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)",
             (cf_b, visit_id_b, 0, 40.0, "cleaning"),
         )
@@ -1001,7 +999,7 @@ def selftest():
             assert format_amount(80.0, lang) in r9["body"], "9: patient A's own line is listed"
             assert format_amount(40.0, lang) not in r9["body"], "9: patient B's line must never appear"
         conn.execute(
-            "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount, description)"
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)", (cf_a, visit_id_a, 1, 20.5, "xray"))
         conn.commit()
         r9 = answer_question("Quanto devo pagare?", cf_a, conn, "it", urlopen=raising_urlopen)
