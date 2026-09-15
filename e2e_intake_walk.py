@@ -108,8 +108,15 @@ def cleanup():
     marks = ",".join("?" * len(ALL_CFS))
     # child-first. no try/except: a delete that cannot run is a cleanup that
     # did not happen and it should be loud.
-    for table in ("invoices", "visits", "patients"):
-        conn.execute(f"DELETE FROM {table} WHERE codice_fiscale IN ({marks})", ALL_CFS)
+    # child tables are keyed on the surrogate since Phase 51; `patients` is
+    # still where the codice fiscale lives, so it is deleted by CF as before.
+    pids = [r[0] for r in conn.execute(
+        f"SELECT patient_id FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS)]
+    if pids:
+        pmarks = ",".join("?" * len(pids))
+        for table in ("invoices", "visits"):
+            conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
+    conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS)
     conn.execute("DELETE FROM audit_log WHERE username = ?", (STAFF_USER,))
     # the staff user is not the only key these rows carry: sort_files and the
     # sync audit under other actors with the cf in target. delete on both or
@@ -161,7 +168,8 @@ def procedures_for(cf, deadline):
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT procedures FROM visits WHERE codice_fiscale = ? ORDER BY id DESC LIMIT 1",
+            "SELECT v.procedures FROM visits v JOIN patients p ON p.patient_id = v.patient_id"
+            " WHERE p.codice_fiscale = ? ORDER BY v.id DESC LIMIT 1",
             (cf,),
         ).fetchone()
         conn.close()
