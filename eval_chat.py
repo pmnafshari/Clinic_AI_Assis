@@ -51,13 +51,14 @@ def build_db(patients):
     conn.row_factory = sqlite3.Row
     conn.executescript("""
         CREATE TABLE patients (
-            codice_fiscale TEXT PRIMARY KEY,
+            patient_id TEXT PRIMARY KEY NOT NULL,
+            codice_fiscale TEXT UNIQUE NOT NULL,
             patient_name TEXT NOT NULL,
             phone TEXT
         );
         CREATE TABLE visits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            codice_fiscale TEXT NOT NULL,
+            patient_id TEXT NOT NULL,
             visit_date TEXT,
             procedures TEXT,
             clinical_notes TEXT,
@@ -66,7 +67,7 @@ def build_db(patients):
         );
         CREATE TABLE invoices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            codice_fiscale TEXT NOT NULL,
+            patient_id TEXT NOT NULL,
             visit_id INTEGER NOT NULL,
             line_index INTEGER NOT NULL,
             amount REAL NOT NULL,
@@ -85,13 +86,13 @@ def build_db(patients):
         );
     """)
     for i, p in enumerate(patients):
-        _pidmod.seed_patient(conn, p["cf"], p["name"], p["phone"])
+        _epid = _pidmod.seed_patient(conn, p["cf"], p["name"], p["phone"])
         for j, visit in enumerate(patient_visits(p)):
             source_path = f"eval/{i}-{j}.json"
             conn.execute(
-                "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+                "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
                 " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
-                (p["cf"], visit["visit_date"], json.dumps(visit["procedures"]), "",
+                (_epid, visit["visit_date"], json.dumps(visit["procedures"]), "",
                  visit["next_appointment"], source_path),
             )
             visit_id = conn.execute(
@@ -99,9 +100,9 @@ def build_db(patients):
             ).fetchone()["id"]
             for k, invoice in enumerate(visit["invoices"]):
                 conn.execute(
-                    "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount,"
+                    "INSERT INTO invoices (patient_id, visit_id, line_index, amount,"
                     " description) VALUES (?, ?, ?, ?, ?)",
-                    (p["cf"], visit_id, k, invoice["amount"], invoice["description"]),
+                    (_epid, visit_id, k, invoice["amount"], invoice["description"]),
                 )
     conn.commit()
     return conn
@@ -291,9 +292,10 @@ def selftest():
     amounts = [r["amount"] for r in
                conn.execute("SELECT amount FROM invoices ORDER BY id").fetchall()]
     assert amounts == [90.0, 340.0, 150.0], f"7: invoice rows were {amounts}"
-    visits = patient_accessor.get_visits(multi["cf"], conn)
+    visits = patient_accessor.get_visits(_pidmod.resolve(conn, multi["cf"]), conn)
     assert [v["visit_date"] for v in visits] == dates, "7: accessor lost or reordered a visit"
-    assert patient_accessor.get_next_appointment(multi["cf"], conn) == "2026-10-05", \
+    assert patient_accessor.get_next_appointment(
+            _pidmod.resolve(conn, multi["cf"]), conn) == "2026-10-05", \
         "7: next appointment must come from the last visit, not the first"
 
     print("selftest ok")
@@ -317,7 +319,9 @@ def main():
     answer_passed = 0
 
     for row in rows:
-        result = answer_question(row["question"], row["patient"]["cf"], conn, row["lang"])
+        result = answer_question(row["question"],
+                                 _pidmod.resolve(conn, row["patient"]["cf"]),
+                                 conn, row["lang"])
         ok, detail = score_case(result, row)
         total += 1
         passed += int(ok)

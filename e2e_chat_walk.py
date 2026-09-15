@@ -28,6 +28,7 @@ import urllib.parse
 import urllib.request
 
 import patient_auth
+import patient_id
 from eval_chat import date_variants
 from patient_app.strings import t
 
@@ -69,11 +70,9 @@ def seed():
         (CARLA, "Carla Bianchi", "3495550003"),
         (DARIO, "Dario Costa", "3386660004"),
     ]
-    for cf, name, phone in rows:
-        conn.execute(
-            "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-            (cf, name, phone),
-        )
+    # patients are created through the current API, which assigns the
+    # surrogate; the codice fiscale stays the lookup value a patient types
+    pids = {cf: patient_id.seed_patient(conn, cf, name, phone) for cf, name, phone in rows}
     visits = [
         (ANNA, "2026-03-04", ["filling 47"], "2026-09-15", "e2e/anna.json",
          [(120.50, "otturazione")]),
@@ -88,18 +87,18 @@ def seed():
     ]
     for cf, date, procs, nxt, path, lines in visits:
         conn.execute(
-            "INSERT INTO visits (codice_fiscale, visit_date, procedures, clinical_notes,"
+            "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
             " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
-            (cf, date, json.dumps(procs), "", nxt, path),
+            (pids[cf], date, json.dumps(procs), "", nxt, path),
         )
         visit_id = conn.execute(
             "SELECT id FROM visits WHERE source_path = ?", (path,)
         ).fetchone()["id"]
         for idx, (amount, desc) in enumerate(lines):
             conn.execute(
-                "INSERT INTO invoices (codice_fiscale, visit_id, line_index, amount,"
+                "INSERT INTO invoices (patient_id, visit_id, line_index, amount,"
                 " description) VALUES (?, ?, ?, ?, ?)",
-                (cf, visit_id, idx, amount, desc),
+                (pids[cf], visit_id, idx, amount, desc),
             )
     conn.commit()
     pins = {cf: patient_auth.issue_pin(cf, conn, "dentist", "dentist") for cf, _, _ in rows}
@@ -111,14 +110,22 @@ def cleanup():
     conn = sqlite3.connect(DB_PATH)
     cfs = (ANNA, BRUNO, CARLA, DARIO)
     marks = ",".join("?" * len(cfs))
-    # child-first, same order the manual walk's task 3 used. every table here
-    # is keyed by codice_fiscale - patient_login_attempts deliberately is not
-    # on the list, because it is keyed by ip and holds no patient rows to
-    # delete. no try/except: a delete that cannot run is a cleanup that did
-    # not happen, and it should be loud.
-    for table in ("invoices", "visits", "patient_sessions",
-                  "patient_credentials", "patients"):
-        conn.execute(f"DELETE FROM {table} WHERE codice_fiscale IN ({marks})", cfs)
+    # child-first. every child table is keyed by the SURROGATE since Phase 51,
+    # so they are deleted by patient_id resolved from the fixture CFs;
+    # `patients` still carries the codice fiscale and is deleted by it.
+    # patient_login_attempts is deliberately not on the list - it is keyed by
+    # ip and holds no patient rows. no try/except: a delete that cannot run is
+    # a cleanup that did not happen, and it should be loud.
+    pids = [r[0] for r in conn.execute(
+        f"SELECT patient_id FROM patients WHERE codice_fiscale IN ({marks})", cfs)]
+    if pids:
+        pmarks = ",".join("?" * len(pids))
+        for table in ("invoices", "visits", "patient_sessions", "patient_credentials"):
+            conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
+        conn.execute(
+            f"DELETE FROM audit_log WHERE username IN ({pmarks}) OR target IN ({pmarks})",
+            pids + pids)
+    conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", cfs)
     # audit rows land under two different keys. the patient app logs with
     # username = codice fiscale, but seed()'s issue_pin logs under the dentist
     # with the cf in target. deleting on username alone leaves the second set

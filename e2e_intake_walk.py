@@ -195,20 +195,69 @@ def upload_audit_count(deadline, want):
     return n
 
 
-def needs_review_row(deadline):
+def needs_review_row(deadline, name=BAD_NOTE_NAME):
+    """Wait for THIS file to reach its terminal state, not for any file's.
+
+    THE BUG THIS FIXES. It used to match any needs_review row for the user, and
+    the walk uploads six notes. It returned as soon as the first one landed,
+    which could be a different file - and the badge check then ran while THIS
+    file's worker was still going, so its queue_upload row was the newest for
+    its filename and /upload/recent correctly rendered `Queued`. The gate read
+    as a badge bug; it was the test asking the wrong question.
+
+    A file is terminal when the worker has written ITS OWN upload_file row. No
+    fixed sleep: this polls the durable audit row the worker writes, and
+    returns None on timeout so the caller fails loudly rather than racing on.
+    """
     while time.time() < deadline:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
             "SELECT * FROM audit_log WHERE username = ? AND action = 'upload_file'"
-            " AND target LIKE '%needs_review%' ORDER BY id DESC LIMIT 1",
-            (STAFF_USER,),
+            " AND target LIKE '%needs_review%' AND target LIKE ?"
+            " ORDER BY id DESC LIMIT 1",
+            (STAFF_USER, f"%{name}"),
         ).fetchone()
         conn.close()
         if row:
             return row
         time.sleep(0.25)
     return None
+
+
+def worker_settled(deadline, name=BAD_NOTE_NAME):
+    """True once no queue_upload row for `name` outranks its upload_file row.
+
+    The fragment collapses to one row per filename, newest id wins. That is the
+    contract the badge depends on, so this waits on exactly it rather than on a
+    clock.
+    """
+    while time.time() < deadline:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        top = conn.execute(
+            "SELECT action FROM audit_log WHERE username = ?"
+            " AND action IN ('queue_upload', 'upload_file', 'sync_note')"
+            " AND target LIKE ? ORDER BY id DESC LIMIT 1",
+            (STAFF_USER, f"%{name}"),
+        ).fetchone()
+        conn.close()
+        if top and top["action"] != "queue_upload":
+            return True
+        time.sleep(0.25)
+    return False
+
+
+def rows_for(name=BAD_NOTE_NAME):
+    """Every intake row for one file, for a failure note that is worth reading."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT id, action, target FROM audit_log WHERE username = ?"
+        " AND action IN ('queue_upload', 'upload_file', 'sync_note')"
+        " AND target LIKE ? ORDER BY id", (STAFF_USER, f"%{name}%")).fetchall()
+    conn.close()
+    return [f"{r['id']}:{r['action']}:{r['target']}" for r in rows]
 
 
 # --- the walk -------------------------------------------------------------
@@ -309,6 +358,14 @@ def walk(browser, note_paths):
         check("6 needs_review carries a reason",
               row["reason"] == sort_files.REASON_EXTRACT_FAILED,
               f"reason {row['reason']!r}")
+
+    # the fragment shows Queued until this file's own worker row lands. wait
+    # for that exact transition - bounded, and loud if it never happens.
+    settled = worker_settled(deadline)
+    check("6b the worker reaches a terminal state for this file",
+          settled,
+          f"no non-queue audit row won for the failing note before the deadline. "
+          f"rows seen: {rows_for()}")
 
     page.goto(f"{STAFF_URL}/upload/recent")
     body = page.content()

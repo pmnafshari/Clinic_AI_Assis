@@ -38,6 +38,7 @@ cleans up nothing - so those shots may live in the repo.
 
 import sqlite3
 import sys
+import patient_id
 import tempfile
 from pathlib import Path
 
@@ -127,10 +128,7 @@ def seed():
         )
     # the patients list needs at least one row or the table cannot overflow and
     # the measurement would be vacuous on the worst-affected page
-    conn.execute(
-        "INSERT INTO patients (codice_fiscale, patient_name, phone) VALUES (?, ?, ?)",
-        (CF, "Zzs Shotpatient", "3330000000"),
-    )
+    patient_id.seed_patient(conn, CF, "Zzs Shotpatient", "3330000000")
     conn.commit()
     conn.close()
 
@@ -139,8 +137,11 @@ def cleanup():
     conn = sqlite3.connect(DB_PATH)
     # child-first. no try/except: a delete that cannot run is a cleanup that did
     # not happen and it should be loud.
-    for table in ("invoices", "visits", "patients"):
-        conn.execute(f"DELETE FROM {table} WHERE codice_fiscale = ?", (CF,))
+    pid = patient_id.resolve(conn, CF)
+    if pid:
+        for table in ("invoices", "visits"):
+            conn.execute(f"DELETE FROM {table} WHERE patient_id = ?", (pid,))
+    conn.execute("DELETE FROM patients WHERE codice_fiscale = ?", (CF,))
     for name, _ in USERS:
         conn.execute("DELETE FROM audit_log WHERE username = ?", (name,))
         conn.execute("DELETE FROM users WHERE username = ?", (name,))
