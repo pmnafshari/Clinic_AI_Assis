@@ -449,6 +449,34 @@ def move_merged_files(conn, sorted_root="sorted"):
                 continue
             if src.exists():
                 dest.mkdir(parents=True, exist_ok=True)
+                # DRIVEN BY THE VISIT ROWS, not by walking the tree. Both
+                # patients can hold a `notes/n1.json`, so the incoming file is
+                # renamed on collision - and a blind string replace on
+                # source_path would then point the row at the SURVIVOR's own
+                # file instead of the one that moved. Each row is updated with
+                # the name its file actually landed under.
+                rows = conn.execute(
+                    "SELECT id, source_path FROM visits WHERE source_path LIKE ?",
+                    (f"%/{source_pid}/%",)).fetchall()
+                for row in rows:
+                    stored = Path(row["source_path"])
+                    rel = Path(*stored.parts[stored.parts.index(source_pid) + 1:])
+                    item = src / rel
+                    landing = dest / rel
+                    landing.parent.mkdir(parents=True, exist_ok=True)
+                    n = 1
+                    while landing.exists():
+                        landing = landing.parent / f"{rel.stem}_{n}{rel.suffix}"
+                        n += 1
+                    if item.exists():
+                        shutil.move(str(item), str(landing))
+                    head = stored.parts[:stored.parts.index(source_pid)]
+                    conn.execute(
+                        "UPDATE visits SET source_path = ? WHERE id = ?",
+                        (str(Path(*head, target_pid, *landing.relative_to(dest).parts)),
+                         row["id"]))
+                # anything left in the directory is not referenced by a visit -
+                # images, records - and is merged without clobbering
                 for item in sorted(src.rglob("*")):
                     if not item.is_file():
                         continue
@@ -460,18 +488,7 @@ def move_merged_files(conn, sorted_root="sorted"):
                         landing = landing.parent / f"{rel.stem}_{n}{rel.suffix}"
                         n += 1
                     shutil.move(str(item), str(landing))
-                    conn.execute(
-                        "UPDATE visits SET source_path = ? WHERE source_path = ?",
-                        (str(Path(*landing.parts[-4:])) if len(landing.parts) >= 4
-                         else str(landing),
-                         str(Path(*item.parts[-4:])) if len(item.parts) >= 4 else str(item)))
                 shutil.rmtree(src, ignore_errors=True)
-            # whatever the paths looked like, make sure no row still names the
-            # folded directory
-            conn.execute(
-                "UPDATE visits SET source_path = replace(source_path, ?, ?)"
-                " WHERE source_path LIKE ?",
-                (f"/{source_pid}/", f"/{target_pid}/", f"%/{source_pid}/%"))
             conn.execute(
                 "UPDATE migration_ops SET state = 'done', detail = ?, attempts = attempts + 1,"
                 " updated_at = ? WHERE migration = 'merge_files' AND subject = ?",
