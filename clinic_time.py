@@ -33,10 +33,14 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import patient_id as _pidmod
 
 TZ_ENV = "CLINIC_TZ"
-# the whole product is Italian - the codice fiscale, the clinic yaml, the
-# patient-facing strings. D07 (the owner's real timezone) is unanswered, so
-# this is the recorded safe default, not a decision made on their behalf.
-DEFAULT_TZ = "Europe/Rome"
+
+# A FIXTURE, NOT A PRODUCTION DEFAULT (Phase 52). D07 named Europe/Rome as this
+# clinic's real zone on 2026-09-16, and that belongs in CLINIC_TZ in the
+# deployment - not baked in here. Production refuses to start without an
+# explicit valid IANA identifier, and NEVER falls back to the machine's zone:
+# a server moved to another region would silently reinterpret every appointment.
+FIXTURE_TZ = "Europe/Rome"
+DEFAULT_TZ = FIXTURE_TZ          # development convenience only; see is_production
 
 LEGACY_ASSUMPTION = (
     "Stored datetimes are naive local time in the clinic's timezone. Every writer is "
@@ -46,8 +50,60 @@ LEGACY_ASSUMPTION = (
 
 
 def zone_name(env=None):
+    """The configured zone, or the dev fixture. Production must be explicit."""
     env = os.environ if env is None else env
-    return (env.get(TZ_ENV) or DEFAULT_TZ).strip() or DEFAULT_TZ
+    configured = (env.get(TZ_ENV) or "").strip()
+    if configured:
+        return configured
+    import codice_fiscale
+    if codice_fiscale.is_production(env):
+        raise ValueError(
+            f"{TZ_ENV} is not set. Production must name the clinic's IANA timezone "
+            f"explicitly (for example CLINIC_TZ=Europe/Rome) - it is never inferred from "
+            f"the machine, the language or the country.")
+    return DEFAULT_TZ
+
+
+def to_utc(local_naive, env=None):
+    """Clinic-local wall time -> an aware UTC instant.
+
+    Refuses a time that does not exist (the hour DST skips) and one that
+    happens twice (the hour DST repeats) rather than picking a side. Both are
+    a question for a person: 02:30 on the fall-back Sunday is two different
+    real moments an hour apart.
+    """
+    if local_naive.tzinfo is not None:
+        raise ValueError("to_utc takes a naive clinic-local time, not an aware one")
+    if is_dst_nonexistent(local_naive, env):
+        raise AmbiguousLocalTime(
+            f"{local_naive.isoformat()} does not exist in {zone_name(env)} - the clocks go forward")
+    if is_dst_ambiguous(local_naive, env):
+        raise AmbiguousLocalTime(
+            f"{local_naive.isoformat()} happens twice in {zone_name(env)} - the clocks go back")
+    return local_naive.replace(tzinfo=clinic_zone(env)).astimezone(ZoneInfo("UTC"))
+
+
+def to_local(instant, env=None):
+    """An aware UTC instant -> naive clinic-local wall time, for display."""
+    if instant.tzinfo is None:
+        raise ValueError("to_local takes an aware instant, not a naive value")
+    return instant.astimezone(clinic_zone(env)).replace(tzinfo=None)
+
+
+def same_date(value):
+    """A date-only value passes through untouched.
+
+    Appointment REQUESTS, visit dates, closures and absence ranges are dates,
+    not instants (P52 §1c). Converting one would invent a time nobody chose -
+    a request carries a preferred day and a period, and that is all it means.
+    """
+    if not isinstance(value, str) or len(value) != 10 or value[4] != "-":
+        raise ValueError(f"{value!r} is not a bare YYYY-MM-DD date")
+    return value
+
+
+class AmbiguousLocalTime(ValueError):
+    """A local time that does not exist, or that happens twice."""
 
 
 def clinic_zone(env=None):
@@ -252,6 +308,72 @@ def selftest():
         after = conn.execute("SELECT starts_at FROM appointments ORDER BY id").fetchall()
         assert [r["starts_at"] for r in before] == [r["starts_at"] for r in after], \
             "8: the contract guard must not modify a single stored value"
+
+    # --- Phase 52: config, conversion, DST, date-only ------------------
+    from datetime import datetime as _dt
+
+    # 9. PRODUCTION MUST BE EXPLICIT, and must never inherit the machine's zone.
+    # a server moved to another region would otherwise reinterpret every stored
+    # appointment silently.
+    try:
+        zone_name({"CLINIC_ENV": "production"})
+        raise AssertionError("9: production with no CLINIC_TZ must refuse")
+    except ValueError as e:
+        assert TZ_ENV in str(e), "9: and must name the variable it needs"
+    assert zone_name({"CLINIC_ENV": "production", TZ_ENV: "Europe/Rome"}) == "Europe/Rome", \
+        "9: production with a valid zone starts"
+    try:
+        clinic_zone({"CLINIC_ENV": "production", TZ_ENV: "Mars/Olympus"})
+        raise AssertionError("9: an invalid IANA identifier must be refused")
+    except ValueError:
+        pass
+    assert zone_name({}) == FIXTURE_TZ, "9: development still has a fixture to work with"
+
+    # 10. round trip, in both directions
+    ROME = {TZ_ENV: "Europe/Rome"}
+    winter, summer = _dt(2026, 1, 15, 9, 0), _dt(2026, 7, 15, 9, 0)
+    assert to_utc(winter, ROME).isoformat() == "2026-01-15T08:00:00+00:00", "10: CET is +1"
+    assert to_utc(summer, ROME).isoformat() == "2026-07-15T07:00:00+00:00", "10: CEST is +2"
+    for local in (winter, summer, _dt(2026, 12, 31, 23, 30), _dt(2027, 1, 1, 0, 30)):
+        assert to_local(to_utc(local, ROME), ROME) == local, f"10: round trip failed for {local}"
+    try:
+        to_utc(to_utc(winter, ROME), ROME)
+        raise AssertionError("10: to_utc must refuse an already-aware value")
+    except ValueError:
+        pass
+    try:
+        to_local(winter, ROME)
+        raise AssertionError("10: to_local must refuse a naive value")
+    except ValueError:
+        pass
+
+    # 11. DST. NEITHER IS RESOLVED BY GUESSING - 02:30 on the fall-back Sunday
+    # is two real moments an hour apart, and picking one silently moves an
+    # appointment.
+    try:
+        to_utc(_dt(2026, 3, 29, 2, 30), ROME)
+        raise AssertionError("11: a nonexistent local time must be refused")
+    except AmbiguousLocalTime as e:
+        assert "does not exist" in str(e)
+    try:
+        to_utc(_dt(2026, 10, 25, 2, 30), ROME)
+        raise AssertionError("11: an ambiguous local time must be refused")
+    except AmbiguousLocalTime as e:
+        assert "twice" in str(e)
+    # the hours either side are ordinary and must still convert
+    for fine in (_dt(2026, 3, 29, 4, 30), _dt(2026, 10, 25, 4, 30)):
+        assert to_local(to_utc(fine, ROME), ROME) == fine, f"11: {fine} is an ordinary hour"
+
+    # 12. A DATE IS NOT AN INSTANT. an appointment REQUEST carries a preferred
+    # day and a period (PAPT-01); converting it would invent a time the patient
+    # never chose.
+    assert same_date("2026-09-07") == "2026-09-07", "12: a date passes through untouched"
+    for bad in ("2026-09-07T09:00", "07/09/2026", "", None, 20260907):
+        try:
+            same_date(bad)
+            raise AssertionError(f"12: {bad!r} is not a bare date and must be refused")
+        except ValueError:
+            pass
 
     print("selftest ok")
 
