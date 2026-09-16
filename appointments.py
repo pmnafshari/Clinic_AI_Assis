@@ -24,11 +24,24 @@ Two rules live here rather than in the routes:
 Times are ISO-8601 text, like `visits.visit_date` and `audit_log.ts`. SQLite
 compares ISO strings correctly, so an overlap is a string comparison and there is
 no epoch column to keep in sync.
+
+PHASE 52: A BOOKED START IS A UTC INSTANT. `starts_at` on a booked row is
+UTC-aware text; the clinic-local wall time is what the form posts and what the
+screen shows, and `clinic_time` is the only thing that converts between them.
+A REQUESTED row is untouched - it stays a bare local date marker, because its
+time part never meant anything (PAPT-01).
+
+NO READ PATH SLICES A STORED TIME TO GET A DAY. A local day is not a UTC day,
+so `day_bounds_utc()` bounds the query and `local_date()` decides the day. The
+old `substr(starts_at, 1, 10)` and `f"{day}T00:00:00"` forms were correct for
+naive local text and are silently wrong for an instant.
 """
 
 import sqlite3
 import sys
 from datetime import datetime, timedelta
+
+import clinic_time
 
 BOOKED = "booked"
 CANCELLED = "cancelled"
@@ -45,15 +58,20 @@ PERIODS = (MORNING, AFTERNOON)
 
 
 def _now():
-    return datetime.now().isoformat()
+    # a machine instant: when the row was written. UTC-aware since phase 52.
+    return clinic_time.stamp()
 
 
 def _parse(starts_at):
-    # accepts what the form posts ("2026-09-07T09:00") and what we store
+    # the CLINIC-LOCAL wall time a form posts ("2026-09-07T09:00"). not a
+    # stored instant - read_instant is what reads one of those back.
     try:
-        return datetime.fromisoformat(starts_at)
+        parsed = datetime.fromisoformat(starts_at)
     except (TypeError, ValueError):
         raise ValueError("start time is not a valid date and time")
+    if parsed.tzinfo is not None:
+        raise ValueError("pick a time in the clinic's own timezone, without an offset")
+    return parsed
 
 
 # a dental appointment is not longer than a working day. the cap is not
@@ -76,11 +94,22 @@ def _check_minutes(minutes):
 
 
 def _window(starts_at, minutes):
+    """Local wall time in -> (local text, stored UTC text) out.
+
+    Both, because the two rules downstream want different ones and guessing
+    which is which is exactly the mistake this phase is about. The schedule
+    rule is a civil-time question - does 09:00 fall inside opening hours - and
+    the overlap rule is an instant question.
+
+    REFUSES a nonexistent or ambiguous local time by way of clinic_time.to_utc,
+    so a slot on a DST boundary is a refusal a receptionist can read rather
+    than an appointment silently an hour out.
+    """
     start = _parse(starts_at)
-    return start.isoformat(), (start + timedelta(minutes=minutes)).isoformat()
+    return start.isoformat(), clinic_time.to_utc_text(start)
 
 
-def _overlaps(conn, dentist, starts_at, minutes, exclude_id=None):
+def _overlaps(conn, dentist, stored_start, minutes, exclude_id=None):
     # half-open intervals: 10:00-10:30 and 10:30-11:00 touch, they do not
     # overlap, and a clinic books back-to-back all day.
     #
@@ -89,21 +118,25 @@ def _overlaps(conn, dentist, starts_at, minutes, exclude_id=None):
     # history rather than with the day. an appointment cannot overlap one on
     # another date - MAX_MINUTES caps it at a working day - so the window is
     # the day either side of the slot.
-    start, end = _window(starts_at, minutes)
-    day = _parse(starts_at).date()
-    lo = (day - timedelta(days=1)).isoformat()
-    hi = (day + timedelta(days=1)).isoformat()
+    # INSTANTS, not text. `stored_start` is already UTC-aware, so the window is
+    # arithmetic on real moments and the DST boundary stops being a special
+    # case: two appointments either overlap in real time or they do not.
+    start = clinic_time.read_instant(stored_start)
+    end = start + timedelta(minutes=minutes)
     sql = (
         "SELECT id, starts_at, minutes FROM appointments"
         " WHERE dentist = ? AND status = ?"
         " AND starts_at >= ? AND starts_at < ?"
     )
-    params = [dentist, BOOKED, f"{lo}T00:00:00", f"{hi}T23:59:59.999999"]
+    params = [dentist, BOOKED,
+              clinic_time.to_storage(start - timedelta(days=1)),
+              clinic_time.to_storage(end + timedelta(days=1))]
     if exclude_id is not None:
         sql += " AND id != ?"
         params.append(exclude_id)
     for row in conn.execute(sql, params).fetchall():
-        other_start, other_end = _window(row["starts_at"], row["minutes"])
+        other_start = clinic_time.read_instant(row["starts_at"])
+        other_end = other_start + timedelta(minutes=row["minutes"])
         if start < other_end and other_start < end:
             return True
     return False
@@ -140,11 +173,13 @@ def book(conn, patient, dentist, starts_at, minutes, note=None):
     if pid is None:
         raise ValueError(f"no patient with identifier {patient!r}")
     minutes = _check_minutes(minutes)
-    start, _ = _window(starts_at, minutes)
+    # local decides the schedule rule, stored decides the overlap rule and is
+    # what lands in the column
+    local, stored = _window(starts_at, minutes)
     if not dentist:
         raise ValueError("an appointment needs a dentist")
-    _check_schedule(conn, dentist, start, minutes)
-    if _overlaps(conn, dentist, start, minutes):
+    _check_schedule(conn, dentist, local, minutes)
+    if _overlaps(conn, dentist, stored, minutes):
         raise ValueError(SLOT_TAKEN)
     ts = _now()
     try:
@@ -152,7 +187,7 @@ def book(conn, patient, dentist, starts_at, minutes, note=None):
             "INSERT INTO appointments"
             " (patient_id, dentist, starts_at, minutes, status, note, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (pid, dentist, start, minutes, BOOKED, note, ts, ts),
+            (pid, dentist, stored, minutes, BOOKED, note, ts, ts),
         )
     except sqlite3.IntegrityError as e:
         # the unique slot index, i.e. someone else took it between the check
@@ -179,7 +214,7 @@ def cancel(conn, appointment_id):
 
 def reschedule(conn, appointment_id, starts_at, minutes):
     minutes = _check_minutes(minutes)
-    start, _ = _window(starts_at, minutes)
+    local, stored = _window(starts_at, minutes)
     row = conn.execute(
         "SELECT dentist, status FROM appointments WHERE id = ?", (appointment_id,)
     ).fetchone()
@@ -187,13 +222,13 @@ def reschedule(conn, appointment_id, starts_at, minutes):
         raise ValueError("no such appointment")
     if row["status"] != BOOKED:
         raise ValueError("a cancelled appointment cannot be moved")
-    _check_schedule(conn, row["dentist"], start, minutes, exclude_id=appointment_id)
-    if _overlaps(conn, row["dentist"], start, minutes, exclude_id=appointment_id):
+    _check_schedule(conn, row["dentist"], local, minutes, exclude_id=appointment_id)
+    if _overlaps(conn, row["dentist"], stored, minutes, exclude_id=appointment_id):
         raise ValueError(SLOT_TAKEN)
     try:
         conn.execute(
             "UPDATE appointments SET starts_at = ?, minutes = ?, updated_at = ? WHERE id = ?",
-            (start, minutes, _now(), appointment_id),
+            (stored, minutes, _now(), appointment_id),
         )
     except sqlite3.IntegrityError as e:
         if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
@@ -232,7 +267,10 @@ def request(conn, patient, day, period, reason=None):
         raise ValueError(f"no patient with identifier {patient!r}")
     period = _check_period(period)
     parsed = _check_date(day)
-    if parsed < datetime.now().date():
+    # the CLINIC's today. on a machine in another region datetime.now() can be
+    # a different date, and "that date has already passed" would be wrong for
+    # the people using it.
+    if parsed < clinic_time.now().date():
         raise ValueError("that date has already passed")
     ts = _now()
     cur = conn.execute(
@@ -258,7 +296,7 @@ def confirm(conn, appointment_id, dentist, starts_at, minutes):
     dentist's roster, is refused exactly as a booking is.
     """
     minutes = _check_minutes(minutes)
-    start, _ = _window(starts_at, minutes)
+    local, stored = _window(starts_at, minutes)
     if not dentist:
         raise ValueError("an appointment needs a dentist")
     row = conn.execute(
@@ -271,14 +309,14 @@ def confirm(conn, appointment_id, dentist, starts_at, minutes):
     # the SAME schedule rule as book(). a request is not a way around the
     # clinic's opening hours or a dentist's roster - the patient asked for a
     # date and a period, and this is where a real time gets chosen.
-    _check_schedule(conn, dentist, start, minutes, exclude_id=appointment_id)
-    if _overlaps(conn, dentist, start, minutes, exclude_id=appointment_id):
+    _check_schedule(conn, dentist, local, minutes, exclude_id=appointment_id)
+    if _overlaps(conn, dentist, stored, minutes, exclude_id=appointment_id):
         raise ValueError(SLOT_TAKEN)
     try:
         conn.execute(
             "UPDATE appointments SET dentist = ?, starts_at = ?, minutes = ?,"
             " status = ?, period = NULL, updated_at = ? WHERE id = ?",
-            (dentist, start, minutes, BOOKED, _now(), appointment_id),
+            (dentist, stored, minutes, BOOKED, _now(), appointment_id),
         )
     except sqlite3.IntegrityError as e:
         if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
@@ -333,15 +371,23 @@ def owned_by(conn, appointment_id, patient):
 
 
 def agenda(conn, day):
-    # one day, booked only, with the patient's name joined in so the caller
-    # does not need a second query per row
-    return conn.execute(
+    # one CLINIC-LOCAL day, booked only, with the patient's name joined in so
+    # the caller does not need a second query per row.
+    #
+    # BOUNDED IN UTC, THEN FILTERED EXACTLY. day_bounds_utc is never narrower
+    # than the local day but can be an hour wider at a DST edge, so the rows it
+    # returns are then filtered on local_date. Slicing starts_at to ten
+    # characters instead would ask a UTC question: a 00:30 local appointment is
+    # stored under the previous date and would vanish from its own day.
+    lo, hi = clinic_time.day_bounds_utc(day)
+    rows = conn.execute(
         "SELECT a.*, p.patient_name FROM appointments a"
         " JOIN patients p ON p.patient_id = a.patient_id"
         " WHERE a.status = ? AND a.starts_at >= ? AND a.starts_at < ?"
         " ORDER BY a.starts_at",
-        (BOOKED, f"{day}T00:00:00", f"{day}T23:59:59.999999"),
+        (BOOKED, lo, hi),
     ).fetchall()
+    return [r for r in rows if clinic_time.local_date(r["starts_at"]) == day]
 
 
 def month_counts(conn, first_day, next_first):
@@ -356,17 +402,34 @@ def month_counts(conn, first_day, next_first):
     real appointments. Cancelled and declined rows are excluded - a cancelled
     appointment is history, not something on the month.
     """
+    # TWO QUERIES, BECAUSE THE TWO STATUSES ARE STORED DIFFERENTLY. a booked
+    # start is a UTC instant and its day is a conversion; a requested one is
+    # already a bare local date marker and converting it would invent an hour.
+    # The old single GROUP BY substr() query was correct only while both were
+    # naive local text, and would have silently mis-filed booked rows near
+    # midnight once they became instants.
     counts = {}
-    rows = conn.execute(
-        "SELECT substr(starts_at, 1, 10) AS d, status, COUNT(*) AS n"
-        " FROM appointments"
-        " WHERE starts_at >= ? AND starts_at < ? AND status IN (?, ?)"
-        " GROUP BY d, status",
-        (f"{first_day}T00:00:00", f"{next_first}T00:00:00", BOOKED, REQUESTED),
-    ).fetchall()
-    for row in rows:
-        day = counts.setdefault(row["d"], {BOOKED: 0, REQUESTED: 0})
-        day[row["status"]] = row["n"]
+
+    def bump(day, status, n):
+        if first_day <= day < next_first:
+            counts.setdefault(day, {BOOKED: 0, REQUESTED: 0})[status] = n
+
+    lo, _ = clinic_time.day_bounds_utc(first_day)
+    _, hi = clinic_time.day_bounds_utc(next_first)
+    per_day = {}
+    for row in conn.execute(
+            "SELECT starts_at FROM appointments WHERE status = ?"
+            " AND starts_at >= ? AND starts_at < ?", (BOOKED, lo, hi)).fetchall():
+        day = clinic_time.local_date(row["starts_at"])
+        per_day[day] = per_day.get(day, 0) + 1
+    for day, n in per_day.items():
+        bump(day, BOOKED, n)
+
+    for row in conn.execute(
+            "SELECT substr(starts_at, 1, 10) AS d, COUNT(*) AS n FROM appointments"
+            " WHERE status = ? AND starts_at >= ? AND starts_at < ? GROUP BY d",
+            (REQUESTED, f"{first_day}T00:00:00", f"{next_first}T00:00:00")).fetchall():
+        bump(row["d"], REQUESTED, row["n"])
     return counts
 
 
@@ -390,11 +453,14 @@ def open_for_patient(conn, patient):
     import patient_id as _pid
 
     pid = _pid.resolve(conn, patient)
-    today = datetime.now().date().isoformat()
+    # the CLINIC's today, and its start as an instant - "from the beginning of
+    # today" is a local question with a UTC answer
+    today = clinic_time.now().date().isoformat()
+    lo, _ = clinic_time.day_bounds_utc(today)
     booked = conn.execute(
         "SELECT * FROM appointments WHERE patient_id = ? AND status = ?"
         " AND starts_at >= ? ORDER BY starts_at",
-        (pid, BOOKED, f"{today}T00:00:00"),
+        (pid, BOOKED, lo),
     ).fetchall()
     requested = conn.execute(
         "SELECT * FROM appointments WHERE patient_id = ? AND status = ?"
@@ -488,7 +554,11 @@ def selftest():
         held = conn.execute(
             "SELECT starts_at, minutes FROM appointments WHERE id = ?", (again,)
         ).fetchone()
-        assert held["starts_at"].endswith("09:00:00"), "8: it should still be at 09:00"
+        # asserted in CLINIC TIME. the stored value is a UTC instant, so
+        # asserting on its text would assert an offset rather than the time the
+        # clinic booked.
+        assert clinic_time.local_hhmm(held["starts_at"]) == "09:00", \
+            f"8: it should still be at 09:00, stored {held['starts_at']}"
         assert held["minutes"] == 30, "8: and still 30 minutes"
 
         # 8b. and a move to a genuinely free slot goes through
@@ -496,7 +566,8 @@ def selftest():
         moved = conn.execute(
             "SELECT starts_at, minutes FROM appointments WHERE id = ?", (again,)
         ).fetchone()
-        assert moved["starts_at"].endswith("11:00:00"), "8b: it should have moved to 11:00"
+        assert clinic_time.local_hhmm(moved["starts_at"]) == "11:00", \
+            f"8b: it should have moved to 11:00, stored {moved['starts_at']}"
         assert moved["minutes"] == 45, "8b: and taken its new length"
 
         # 9. a cancelled appointment cannot be moved
@@ -660,11 +731,19 @@ def selftest():
         _pidmod.seed_patient(mc, CF, "Test Patient")
 
         def put(starts_at, status):
+            # seeded the way the write paths store it: a row that carries a real
+            # slot holds a UTC INSTANT, a request or a decline holds the bare
+            # local date marker it was always given. Seeding both as naive text
+            # would be seeding an unmigrated database and would prove nothing
+            # about how month_counts reads a converted one.
+            if status in (BOOKED, CANCELLED):
+                starts_at = clinic_time.to_utc_text(clinic_time.parse(starts_at))
+            ts = clinic_time.stamp()
             mc.execute(
                 "INSERT INTO appointments (patient_id, dentist, starts_at,"
                 " minutes, status, created_at, updated_at)"
-                " VALUES (?, 'dr rossi', ?, 30, ?, '2026-01-01', '2026-01-01')",
-                (_pidmod.resolve(mc, CF), starts_at, status),
+                " VALUES (?, 'dr rossi', ?, 30, ?, ?, ?)",
+                (_pidmod.resolve(mc, CF), starts_at, status, ts, ts),
             )
 
         # 19. a month of 30 days. two bookings share a day, one sits alone, and
@@ -711,14 +790,27 @@ def selftest():
         assert "2027-01-01" not in month_counts(mc, "2026-12-01", "2027-01-01"), \
             "21: and not to december"
 
-        # 22. ONE query for the whole grid, not one per day. a calendar drawn
-        # day by day is 28-31 round trips on a page that already runs two other
-        # queries, and nothing in the rendered output would show the difference.
+        # 22. A FIXED NUMBER OF QUERIES for the whole grid, not one per day. A
+        # calendar drawn day by day is 28-31 round trips on a page that already
+        # runs two other queries, and nothing in the rendered output would show
+        # the difference.
+        #
+        # Two, not one, since P52: booked rows are UTC instants whose local day
+        # is a conversion, requested rows are already local date markers, and
+        # one GROUP BY cannot answer both without being wrong about one of
+        # them. The invariant that matters is that this does not grow with the
+        # length of the month.
         seen = []
         mc.set_trace_callback(lambda sql: seen.append(sql))
         month_counts(mc, "2026-09-01", "2026-10-01")
         mc.set_trace_callback(None)
-        assert len(seen) == 1, f"22: month_counts must run exactly 1 query, ran {len(seen)}"
+        assert len(seen) == 2, f"22: month_counts must run exactly 2 queries, ran {len(seen)}"
+        longer = []
+        mc.set_trace_callback(lambda sql: longer.append(sql))
+        month_counts(mc, "2026-01-01", "2026-02-01")
+        mc.set_trace_callback(None)
+        assert len(longer) == len(seen), \
+            "22: and the count must not grow with the number of days in the month"
 
         # 23. an empty month is empty, not missing. the template walks the grid
         # and looks each day up, so {} has to be a usable answer.
@@ -763,9 +855,12 @@ def selftest():
         except ValueError as e:
             assert "opens at 09:00" in str(e), f"25: confirm must use the same rule, got {e}"
         confirm(sched, r25, "dr rossi", f"{soon25}T10:00", 30)
-        assert sched.execute("SELECT starts_at FROM appointments WHERE id = ?",
-                             (r25,)).fetchone()["starts_at"].startswith(f"{soon25}T10:00"), \
-            "25: a valid confirm lands"
+        landed = sched.execute("SELECT starts_at FROM appointments WHERE id = ?",
+                               (r25,)).fetchone()["starts_at"]
+        # in clinic time: the request named a day, and staff chose 10:00 on it
+        assert clinic_time.local_date(landed) == soon25 \
+            and clinic_time.local_hhmm(landed) == "10:00", \
+            f"25: a valid confirm lands, stored {landed}"
         try:
             reschedule(sched, r25, f"{soon25}T22:00", 30)
             raise AssertionError("25: rescheduling outside hours must be refused")

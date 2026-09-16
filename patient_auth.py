@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 
 from werkzeug.security import check_password_hash, generate_password_hash
 
+import clinic_time
 import storage
 from auth import log_audit
 from codice_fiscale import is_valid as is_valid_cf
@@ -148,8 +149,11 @@ def issue_pin(cf, conn, issued_by, issued_by_role="staff", now=None):
     # supersedes the previous credential and clears any lockout, which is the
     # only recovery path in the design.
     _require_cf(cf)
+    # aware UTC (P52 1a). a credential's validity and its lockout are durations
+    # between instants; measuring them on a wall clock would hand out a free
+    # hour on the fall-back Sunday and take one back in the spring.
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
 
     pin = _generate_pin()
     expires = now + timedelta(days=CREDENTIAL_VALIDITY_DAYS)
@@ -191,7 +195,7 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     # real credential, and telling them to contact the clinic is a success
     # criterion.
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
     # this is what the socket reports and nothing more. it is attacker-controlled
     # at the network layer, and once cloudflare fronts this app it becomes the
     # tunnel's address unless a forwarded-for header is honoured - which carries
@@ -226,7 +230,7 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
 
     # WR-01: a cooldown that has already passed must not carry its counter
     # into this attempt
-    if row["locked_until"] and now >= datetime.fromisoformat(row["locked_until"]):
+    if row["locked_until"] and now >= clinic_time.read_instant(row["locked_until"]):
         conn.execute(
             "UPDATE patient_credentials SET failed_attempts = 0, locked_until = NULL"
             " WHERE patient_id = ?", (_pid(conn, cf),)
@@ -256,9 +260,9 @@ def verify_pin(cf, pin, conn, now=None, ip=None):
     # reachable only once the submitted pin is provably correct - that is
     # what removes the enrolment oracle. the locked branch still creates no
     # session (the 17-01 property).
-    if row["must_change_pin"] and datetime.fromisoformat(row["expires_at"]) <= now:
+    if row["must_change_pin"] and clinic_time.read_instant(row["expires_at"]) <= now:
         return _refuse("expired")
-    if row["locked_until"] and now < datetime.fromisoformat(row["locked_until"]):
+    if row["locked_until"] and now < clinic_time.read_instant(row["locked_until"]):
         return _refuse("locked")
 
     # a successful login records no attempt row - a busy clinic behind one
@@ -326,7 +330,7 @@ def _hash_token(token):
 
 def create_patient_session(conn, cf, now=None):
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
     token = secrets.token_urlsafe(32)
     ts = now.isoformat()
     conn.execute(
@@ -342,7 +346,7 @@ def load_patient_session(conn, token, now=None):
     if not token:
         return None
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
 
     token_hash = _hash_token(token)
     # join credentials so a revoked pin also kills its live sessions, and use
@@ -362,12 +366,12 @@ def load_patient_session(conn, token, now=None):
 
     # checked before the idle window, so a session already past the absolute
     # cap is never touched by the last_seen_at UPDATE below (WR-08)
-    if now - datetime.fromisoformat(row["created_at"]) > timedelta(hours=PATIENT_SESSION_MAX_HOURS):
+    if now - clinic_time.read_instant(row["created_at"]) > timedelta(hours=PATIENT_SESSION_MAX_HOURS):
         conn.execute("DELETE FROM patient_sessions WHERE token_hash = ?", (token_hash,))
         conn.commit()
         return None
 
-    if now - datetime.fromisoformat(row["last_seen_at"]) > timedelta(minutes=PATIENT_IDLE_MINUTES):
+    if now - clinic_time.read_instant(row["last_seen_at"]) > timedelta(minutes=PATIENT_IDLE_MINUTES):
         conn.execute("DELETE FROM patient_sessions WHERE token_hash = ?", (token_hash,))
         conn.commit()
         return None
@@ -425,8 +429,8 @@ def selftest():
         row = _credential(conn, cf)
         assert pin not in row["pin_hash"], "2: the plaintext pin must not be in the stored hash"
         assert row["must_change_pin"] == 1, "2: a fresh credential must force a change"
-        issued = datetime.fromisoformat(row["issued_at"])
-        expires = datetime.fromisoformat(row["expires_at"])
+        issued = clinic_time.read_instant(row["issued_at"])
+        expires = clinic_time.read_instant(row["expires_at"])
         assert (expires - issued).days == CREDENTIAL_VALIDITY_DAYS, "2: validity window"
         audited = conn.execute(
             "SELECT COUNT(*) c FROM audit_log WHERE action = 'issue_patient_pin' AND target = ?",
@@ -446,7 +450,7 @@ def selftest():
 
         conn.execute(
             "UPDATE patient_credentials SET expires_at = ? WHERE patient_id = ?",
-            ((datetime.now() - timedelta(days=1)).isoformat(), _pid(conn, cf)),
+            ((clinic_time.now_utc() - timedelta(days=1)).isoformat(), _pid(conn, cf)),
         )
         conn.commit()
         assert verify_pin(cf, pin, conn)[0] == "expired", "3: expired temp credential"
@@ -487,7 +491,7 @@ def selftest():
         assert load_patient_session(conn, token) is None, "7: destroyed session"
 
         token2 = create_patient_session(conn, cf)
-        stale = datetime.now() + timedelta(minutes=PATIENT_IDLE_MINUTES + 1)
+        stale = clinic_time.now_utc() + timedelta(minutes=PATIENT_IDLE_MINUTES + 1)
         assert load_patient_session(conn, token2, now=stale) is None, "7: idle expiry"
         assert conn.execute(
             "SELECT COUNT(*) c FROM patient_sessions WHERE token_hash = ?", (_hash_token(token2),)
@@ -529,7 +533,7 @@ def selftest():
 
         ip_a = "203.0.113.9"
         ip_b = "203.0.113.10"
-        now9 = datetime.now()
+        now9 = clinic_time.now_utc()
         assert _ip_throttled(conn, ip_a, now9) is False, "9: fresh table should not throttle"
 
         for _ in range(PATIENT_IP_ATTEMPT_THRESHOLD):
@@ -591,7 +595,7 @@ def selftest():
         pin10b = issue_pin(cf10b, conn, "test-dentist", "dentist")
         conn.execute(
             "UPDATE patient_credentials SET expires_at = ? WHERE patient_id = ?",
-            ((datetime.now() - timedelta(days=1)).isoformat(), _pid(conn, cf10b)),
+            ((clinic_time.now_utc() - timedelta(days=1)).isoformat(), _pid(conn, cf10b)),
         )
         conn.commit()
         assert verify_pin(cf10b, "wrongpin", conn)[0] == "wrong", \
@@ -649,7 +653,7 @@ def selftest():
             verify_pin(cf12, "00000000", conn)
         locked12 = _credential(conn, cf12)
         assert locked12["locked_until"] is not None, "12: setup - the account should be locked"
-        after_cooldown = datetime.fromisoformat(locked12["locked_until"]) + timedelta(minutes=1)
+        after_cooldown = clinic_time.read_instant(locked12["locked_until"]) + timedelta(minutes=1)
 
         status12, _ = verify_pin(cf12, "wrongpin", conn, now=after_cooldown)
         assert status12 == "wrong", "12: a typo right after the cooldown should read as wrong"
@@ -778,7 +782,7 @@ def selftest():
         cf17 = "PZZL910010151400"
         _pidmod.seed_patient(conn, cf17, "orphan patient")
         conn.commit()
-        now17 = datetime.now()
+        now17 = clinic_time.now_utc()
         token17 = "orphan-token-17"
         conn.execute(
             "INSERT INTO patient_sessions (token_hash, patient_id, created_at, last_seen_at)"
@@ -801,7 +805,7 @@ def selftest():
         assert "PATIENT_SESSION_MAX_HOURS" in globals(), \
             "18: expected a module-level PATIENT_SESSION_MAX_HOURS"
 
-        past_cap = datetime.now() + timedelta(hours=PATIENT_SESSION_MAX_HOURS, minutes=1)
+        past_cap = clinic_time.now_utc() + timedelta(hours=PATIENT_SESSION_MAX_HOURS, minutes=1)
         conn.execute(
             "UPDATE patient_sessions SET last_seen_at = ? WHERE token_hash = ?",
             (past_cap.isoformat(), _hash_token(token18)),
@@ -814,7 +818,7 @@ def selftest():
         ).fetchone()["c"] == 0, "18: a session past the absolute cap should be deleted"
 
         token18b = create_patient_session(conn, cf18)
-        inside_cap = datetime.now() + timedelta(hours=PATIENT_SESSION_MAX_HOURS - 1)
+        inside_cap = clinic_time.now_utc() + timedelta(hours=PATIENT_SESSION_MAX_HOURS - 1)
         # refresh last_seen_at to the same moment, so this checks only the
         # absolute cap - not the unrelated 15-minute idle window
         conn.execute(

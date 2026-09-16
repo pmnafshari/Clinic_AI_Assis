@@ -30,6 +30,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import clinic_time
 import patient_id
 
 MIGRATION = "p51_surrogate_id"
@@ -195,7 +196,7 @@ INDEXES_V2 = [
 
 
 def _now():
-    return datetime.now().isoformat()
+    return clinic_time.stamp()
 
 
 def has_pid(conn):

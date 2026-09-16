@@ -3,6 +3,7 @@ from pathlib import Path
 from flask import Flask, flash, g, redirect, request, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
+import clinic_time
 import web_session
 from auth import authorize
 from env_config import load_secret_key
@@ -21,6 +22,33 @@ WHITELIST_ENDPOINTS = {"static", "shared", "auth.login"}
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave
 CHANGE_PW_ALLOWED = {"static", "shared", "auth.login", "auth.change_password", "auth.logout"}
+
+
+def appt_time(value):
+    """The clinic-local HH:MM of a stored appointment start.
+
+    A requested row has no time - its stored value is a date marker - so this
+    returns "" for one rather than the 00:00 that would invent a slot.
+    """
+    if not value:
+        return ""
+    if not clinic_time.has_offset(value):
+        return ""
+    return clinic_time.local_hhmm(value)
+
+
+def appt_date(value):
+    """The clinic-local YYYY-MM-DD of a stored appointment start.
+
+    Slicing the stored text instead would be a UTC question: a late booking is
+    stored under the previous date and would land on the wrong day, including
+    in the date input a reschedule form is prefilled with.
+    """
+    if not value:
+        return ""
+    if not clinic_time.has_offset(value):
+        return value[:10]
+    return clinic_time.local_date(value)
 
 
 def create_app():
@@ -42,6 +70,12 @@ def create_app():
     # avatars: initials on a stable tint (phase 43). presentation, not a figure
     app.jinja_env.filters["initials"] = initials
     app.jinja_env.filters["tint"] = tint
+    # appointment times, rendered through one place rather than sliced in the
+    # markup (P52). a booked starts_at is a UTC instant and a requested one is
+    # a bare local date marker; slicing worked while both were naive local text
+    # and silently shows the UTC hour now that one of them is not.
+    app.jinja_env.filters["appt_time"] = appt_time
+    app.jinja_env.filters["appt_date"] = appt_date
 
     # read db.DB_PATH at call time (not imported by value) so a selftest
     # can point create_app() at a temp db by patching app.db.DB_PATH

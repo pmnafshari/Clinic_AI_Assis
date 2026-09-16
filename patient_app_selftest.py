@@ -11,6 +11,7 @@ from flask import url_for
 from markupsafe import escape as html_escape
 
 import auth
+import clinic_time
 import patient_accessor
 import patient_app
 import patient_auth
@@ -331,7 +332,7 @@ def selftest():
         c = raw_db()
         c.execute(
             "UPDATE patient_credentials SET expires_at = ? WHERE patient_id = ?",
-            ((datetime.now() - timedelta(days=1)).isoformat(), pid_of(cf_expired)),
+            ((clinic_time.now_utc() - timedelta(days=1)).isoformat(), pid_of(cf_expired)),
         )
         c.commit()
         c.close()

@@ -4,6 +4,8 @@ import secrets
 import sys
 from datetime import datetime, timedelta
 
+import clinic_time
+
 PENDING_ACTION_EXPIRY_MINUTES = 15
 
 
@@ -12,8 +14,9 @@ def _hash_token(token):
 
 
 def create_pending_action(conn, username, role, payload, now=None):
+    # aware UTC (P52 1a) - the expiry is a duration, not a wall-clock time
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
 
     # sweep abandoned rows on every create - "Discard change" is just a link
     # and expired rows are only pruned when their exact token is loaded again,
@@ -34,7 +37,7 @@ def create_pending_action(conn, username, role, payload, now=None):
 
 def load_pending_action(conn, token, username, now=None):
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
 
     token_hash = _hash_token(token)
     # username scoping closes the IDOR gap - a token created by one user
@@ -46,7 +49,7 @@ def load_pending_action(conn, token, username, now=None):
     if row is None:
         return None
 
-    created_at = datetime.fromisoformat(row["created_at"])
+    created_at = clinic_time.read_instant(row["created_at"])
     if now - created_at > timedelta(minutes=PENDING_ACTION_EXPIRY_MINUTES):
         # expired - fixed window, never slides on read (unlike sessions).
         # username-scoped like the load and consume, so the delete stays uniform
@@ -96,7 +99,7 @@ def selftest():
             "3: unknown token should return None"
 
         # 4. an expired pending action returns None and its row is deleted
-        far_future = datetime.now() + timedelta(minutes=PENDING_ACTION_EXPIRY_MINUTES + 1)
+        far_future = clinic_time.now_utc() + timedelta(minutes=PENDING_ACTION_EXPIRY_MINUTES + 1)
         assert load_pending_action(conn, token, "drossi", now=far_future) is None, \
             "4: expired pending action should return None"
         count = conn.execute("SELECT COUNT(*) c FROM pending_actions").fetchone()["c"]

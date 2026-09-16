@@ -1,6 +1,8 @@
 import sys
 from datetime import datetime
 
+import clinic_time
+
 VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
@@ -36,7 +38,7 @@ def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, r
     # text - extract_note's ValueError can carry a codice fiscale. sort_files
     # owns the vocabulary.
     if ts is None:
-        ts = datetime.now().isoformat()
+        ts = clinic_time.stamp()
     conn.execute(
         "INSERT INTO audit_log (ts, username, role, action, target, allowed, ip, reason)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",

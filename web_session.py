@@ -4,6 +4,7 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import clinic_time
 from storage import init_db
 
 SESSION_IDLE_MINUTES = 30
@@ -15,8 +16,12 @@ def _hash_token(token):
 
 
 def create_session(conn, username, role, now=None):
+    # an aware UTC instant (P52 1a). the idle window is a duration between two
+    # instants, so it must not be measured against a wall clock that jumps an
+    # hour twice a year - on the fall-back Sunday a naive clock would hand
+    # every live session a free extra hour.
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
 
     token = secrets.token_urlsafe(32)
     ts = now.isoformat()
@@ -31,7 +36,7 @@ def create_session(conn, username, role, now=None):
 
 def load_session(conn, token, now=None):
     if now is None:
-        now = datetime.now()
+        now = clinic_time.now_utc()
 
     token_hash = _hash_token(token)
     # join users so deactivating an account also kills its live sessions
@@ -44,7 +49,7 @@ def load_session(conn, token, now=None):
     if row is None:
         return None
 
-    last_seen = datetime.fromisoformat(row["last_seen_at"])
+    last_seen = clinic_time.read_instant(row["last_seen_at"])
     if now - last_seen > timedelta(minutes=SESSION_IDLE_MINUTES):
         conn.execute("DELETE FROM sessions WHERE token_hash = ?", (token_hash,))
         conn.commit()
@@ -110,18 +115,18 @@ def selftest():
             "3: unknown token should return None"
 
         # 4. an idle-expired session returns None and its row is deleted
-        far_future = datetime.now() + timedelta(minutes=SESSION_IDLE_MINUTES + 1)
+        far_future = clinic_time.now_utc() + timedelta(minutes=SESSION_IDLE_MINUTES + 1)
         assert load_session(conn, token, now=far_future) is None, \
             "4: expired session should return None"
         count = conn.execute("SELECT COUNT(*) c FROM sessions").fetchone()["c"]
         assert count == 0, "4: expired session row should be deleted"
 
         # 5. a valid read slides last_seen_at forward
-        token2 = create_session(conn, "aassist", "assistant", now=datetime.now())
+        token2 = create_session(conn, "aassist", "assistant", now=clinic_time.now_utc())
         before = conn.execute(
             "SELECT last_seen_at FROM sessions WHERE token_hash = ?", (_hash_token(token2),)
         ).fetchone()["last_seen_at"]
-        later = datetime.fromisoformat(before) + timedelta(minutes=5)
+        later = clinic_time.read_instant(before) + timedelta(minutes=5)
         load_session(conn, token2, now=later)
         after = conn.execute(
             "SELECT last_seen_at FROM sessions WHERE token_hash = ?", (_hash_token(token2),)

@@ -6,6 +6,7 @@ from pathlib import Path
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 from werkzeug.utils import secure_filename
 
+import clinic_time
 import sort_files
 import upload_worker
 from auth import authorize, log_audit
@@ -150,12 +151,13 @@ def _intake_state(row):
 
 
 def _ts_display(ts):
-    # audit_log stores ISO text. "2026-09-10T14:09:33.812445" is a timestamp a
-    # machine reads; the person watching their upload land wants "10 Sep 2026,
-    # 14:09". the raw value stays on the row for the <time datetime> attribute,
-    # so nothing machine-readable is lost.
+    # audit_log.ts is a UTC instant (P52 1a). "2026-09-10T12:09:33+00:00" is a
+    # timestamp a machine reads; the person watching their upload land wants
+    # "10 Sep 2026, 14:09" - THEIR time, which is the clinic's. The raw UTC
+    # value stays on the row for the <time datetime> attribute, so nothing
+    # machine-readable is lost and the two do not disagree.
     try:
-        return datetime.fromisoformat(ts).strftime("%-d %b %Y, %H:%M")
+        return clinic_time.local_of(ts).strftime("%-d %b %Y, %H:%M")
     except (TypeError, ValueError):
         return ts
 

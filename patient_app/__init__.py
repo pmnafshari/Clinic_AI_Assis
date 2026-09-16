@@ -12,6 +12,7 @@ from datetime import date, datetime
 from flask import Flask, g, redirect, render_template, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
+import clinic_time
 import patient_auth
 import storage
 from env_config import load_secret_key
@@ -111,7 +112,19 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
     }
 
     def _dt(value):
+        """A stored appointment time -> clinic-local wall time.
+
+        TWO STORED SHAPES REACH THIS, AND THEY ARE NOT THE SAME THING (P52). A
+        BOOKED row holds a UTC instant and has to be converted, or the portal
+        shows the patient a UTC hour and the staff agenda shows the clinic's -
+        the same appointment, two different times, on two screens. A REQUESTED
+        row holds a bare local date marker with no time in it at all, so it is
+        read as-is; converting it would invent the hour appt_day exists to
+        avoid printing.
+        """
         try:
+            if clinic_time.has_offset(value):
+                return clinic_time.local_of(value)
             return datetime.fromisoformat(value)
         except (TypeError, ValueError):
             return None
@@ -177,11 +190,14 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
 
         booked, requested = appointments.open_for_patient(get_db(), g.patient["patient_id"])
         next_appt = booked[0]["starts_at"] if booked else None
+        # the clinic's wall time. slicing the stored instant would print the
+        # UTC hour, and the overview and the appointments tab - one click
+        # apart, same row - would disagree about when the patient is due.
         return render_template(
             "patient_home.html",
             name=name,
             next_appt=next_appt,
-            next_time=next_appt[11:16] if next_appt else None,
+            next_time=clinic_time.local_hhmm(next_appt) if next_appt else None,
             request_count=len(requested),
         )
 

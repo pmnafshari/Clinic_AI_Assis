@@ -31,6 +31,7 @@ P04.md section 4, plan 2, for why that is the safer half of the trade.
 """
 
 import patient_id as _pidmod
+import clinic_time
 import difflib
 import json
 import re
@@ -217,7 +218,7 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
         " (patient_id_a, patient_id_b, cf_a, cf_b, dismissed_at, dismissed_by, reason)"
         " VALUES (?, ?, ?, ?, ?, ?, ?)",
         (a, b, cfs.get(a, ""), cfs.get(b, ""),
-         datetime.now().isoformat(), actor, (reason or "").strip() or None),
+         clinic_time.stamp(), actor, (reason or "").strip() or None),
     )
     conn.commit()
     log_audit(conn, actor, actor_role, "dismiss_duplicate", f"{a}|{b}", allowed=1)
@@ -364,7 +365,7 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
         conn.execute(
             "INSERT INTO patient_merges (source_cf, target_cf, target_patient_id, merged_at,"
             " merged_by, source_row, moved) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (source_cf, target_cf, target_pid, datetime.now().isoformat(), actor,
+            (source_cf, target_cf, target_pid, clinic_time.stamp(), actor,
              json.dumps(dict(source)), json.dumps(moved)))
         # the credential row still references the source patient, so it has to
         # go before the patients row does - the FK is ON
@@ -379,7 +380,7 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
             "INSERT OR REPLACE INTO migration_ops (migration, step, subject, state, payload,"
             " updated_at) VALUES (?, ?, ?, 'pending', ?, ?)",
             ("merge_files", migrate_pid.STEP_FS, target_pid, source_pid,
-             datetime.now().isoformat()))
+             clinic_time.stamp()))
         conn.commit()
     except Exception:
         conn.rollback()
@@ -492,14 +493,14 @@ def move_merged_files(conn, sorted_root="sorted"):
             conn.execute(
                 "UPDATE migration_ops SET state = 'done', detail = ?, attempts = attempts + 1,"
                 " updated_at = ? WHERE migration = 'merge_files' AND subject = ?",
-                (f"{source_pid} -> {target_pid}", datetime.now().isoformat(), target_pid))
+                (f"{source_pid} -> {target_pid}", clinic_time.stamp(), target_pid))
             conn.commit()
             done.append({"from": source_pid, "into": target_pid})
         except Exception as e:
             conn.execute(
                 "UPDATE migration_ops SET state = 'failed', detail = ?, attempts = attempts + 1,"
                 " updated_at = ? WHERE migration = 'merge_files' AND subject = ?",
-                (str(e)[:200], datetime.now().isoformat(), target_pid))
+                (str(e)[:200], clinic_time.stamp(), target_pid))
             conn.commit()
     return done
 
@@ -566,16 +567,24 @@ def timeline(conn, key, show_clinical=True):
             "SELECT starts_at, minutes, status, dentist FROM appointments"
             " WHERE patient_id = ? ORDER BY starts_at", (pid,)):
         # a request carries a date and a period, never a time - so the time
-        # part of starts_at is meaningless on it and must not be rendered
+        # part of starts_at is meaningless on it and must not be rendered.
+        # a booked row is the other case: a UTC instant (P52), whose day and
+        # hour are both a conversion. slicing it would put a late-evening
+        # appointment on the wrong day of the patient's own timeline.
         requested = a["status"] == "requested"
+        if requested or not clinic_time.has_offset(a["starts_at"]):
+            day, hhmm = a["starts_at"][:10], a["starts_at"][11:16]
+        else:
+            local = clinic_time.local_of(a["starts_at"])
+            day, hhmm = local.date().isoformat(), local.strftime("%H:%M")
         events.append({
-            "date": a["starts_at"][:10],
+            "date": day,
             "kind": "appointment",
             "title": {"booked": "Appointment", "requested": "Requested an appointment",
                       "cancelled": "Appointment cancelled",
                       "declined": "Request declined"}.get(a["status"], a["status"]),
             "detail": "" if requested else
-                      f"{a['starts_at'][11:16]} with {a['dentist']} ({a['minutes']} min)",
+                      f"{hhmm} with {a['dentist']} ({a['minutes']} min)",
             "source": "scheduling",
         })
 

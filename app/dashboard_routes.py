@@ -6,6 +6,7 @@ from flask import Blueprint, g, redirect, render_template, url_for
 
 import agent
 import appointments
+import clinic_time
 from auth import authorize
 from shared.names import initials, tint
 
@@ -66,11 +67,14 @@ def _agenda_view(rows, now):
     # the same clock that decided which day "today" is.
     view = []
     for r in rows:
-        start = datetime.fromisoformat(r["starts_at"])
+        # the CLINIC's wall time. starts_at is a UTC instant since P52, so
+        # slicing it would print the UTC hour - an agenda an hour or two out
+        # all summer, which is exactly the kind of wrong that looks fine.
+        start = clinic_time.local_of(r["starts_at"])
         end_minutes = start.hour * 60 + start.minute + r["minutes"]
         now_minutes = now.hour * 60 + now.minute
         view.append({
-            "time": r["starts_at"][11:16],
+            "time": start.strftime("%H:%M"),
             "patient_name": r["patient_name"],
             "initials": initials(r["patient_name"]),
             "tint": tint(r["patient_name"]),
@@ -217,7 +221,7 @@ def index():
     # there is anything to draw. permitted-with-nothing-booked and
     # not-permitted are different renders.
     show_agenda = authorize(g.user["role"], "manage_appointments")
-    now = datetime.now()
+    now = clinic_time.now()
     agenda = None
     agenda_dentists = None
     next_start = None

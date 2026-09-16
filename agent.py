@@ -11,6 +11,7 @@ from typing import Literal
 import openpyxl
 from pydantic import BaseModel, field_validator
 
+import clinic_time
 from ask import resolve_cf
 from auth import authorize, log_audit
 from cli_session import read_session
@@ -255,7 +256,7 @@ def _reindex_name(conn, pid, value, collection):
         conn.execute(
             "INSERT OR REPLACE INTO migration_ops (migration, step, subject, state, payload,"
             " updated_at) VALUES ('name_reindex', 'chroma', ?, 'pending', ?, ?)",
-            (pid, value, datetime.now().isoformat()))
+            (pid, value, clinic_time.stamp()))
         conn.commit()
         return False
     try:
@@ -272,7 +273,7 @@ def _reindex_name(conn, pid, value, collection):
         conn.execute(
             "INSERT OR REPLACE INTO migration_ops (migration, step, subject, state, payload,"
             " detail, updated_at) VALUES ('name_reindex', 'chroma', ?, 'pending', ?, ?, ?)",
-            (pid, value, str(e)[:200], datetime.now().isoformat()))
+            (pid, value, str(e)[:200], clinic_time.stamp()))
         conn.commit()
         return False
 
@@ -416,7 +417,9 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
 
     elif call.tool == "add_invoice":
         data = lookup_patient(cf, conn)
-        visit_date = datetime.now().date().isoformat()
+        # a DATE (P52 1c), and the CLINIC's date - not the machine's, which can
+        # already be tomorrow
+        visit_date = clinic_time.now().date().isoformat()
         diff_line = (f"add invoice row for {data['patient_name']} ({cf}): "
                      f"{visit_date} | {args.amount} | {args.description}")
         xlsx_path = sorted_root / cf / "records" / "invoices.xlsx"
@@ -490,7 +493,7 @@ def apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG,
         update_visit_field(pending["cf"], visit_id, args["value"], conn, sorted_root)
 
     write_undo_entry({
-        "ts": datetime.now().isoformat(),
+        "ts": clinic_time.stamp(),
         "tool": pending["tool"],
         "codice_fiscale": pending["cf"],
         "target": pending["target"],

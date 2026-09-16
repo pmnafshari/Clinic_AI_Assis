@@ -11,6 +11,7 @@ from werkzeug.security import generate_password_hash
 
 import agent
 import app.dashboard_routes as dashboard_routes
+import clinic_time
 import app.db as app_db
 from app import create_app
 from auth import log_audit
@@ -111,7 +112,9 @@ def selftest():
             data={"username": "drossi", "password": "goodpass", "csrf_token": csrf_e},
         )
         raw_token = client_e.get_cookie("session_token").value
-        past = datetime.now() - timedelta(minutes=SESSION_IDLE_MINUTES + 1)
+        # an INSTANT, like the column holds - a naive value here is an
+        # unmigrated row, and read_instant refuses it rather than guessing
+        past = clinic_time.now_utc() - timedelta(minutes=SESSION_IDLE_MINUTES + 1)
         conn = sqlite3.connect(db_path)
         conn.execute(
             "UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?",

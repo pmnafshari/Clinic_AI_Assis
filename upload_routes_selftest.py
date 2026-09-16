@@ -380,17 +380,28 @@ def selftest():
         # parseable; what changes is what a person reads.
         _seed_user(db_path, "unote9", "goodpass", "assistant")
         client11j = _login(app, "unote9", "goodpass")
+        # the stored value is a UTC INSTANT (P52 1a) and the reader is in Rome,
+        # so 12:09 UTC is the 14:09 they saw on the clock when they uploaded.
+        # THE TWO MUST NOT AGREE BY ACCIDENT: a CEST date is used precisely so
+        # that a display path which forgot to convert would print 12:09 and
+        # fail here, rather than passing all winter and breaking in March.
+        STORED_TS = "2026-09-10T12:09:33.812445+00:00"
         conn11.execute(
             "INSERT INTO audit_log (ts, username, role, action, target, allowed)"
-            " VALUES ('2026-09-10T14:09:33.812445', 'unote9', 'assistant',"
-            " 'upload_file', 'sorted/media/scan11j.pdf', 1)")
+            " VALUES (?, 'unote9', 'assistant',"
+            " 'upload_file', 'sorted/media/scan11j.pdf', 1)", (STORED_TS,))
         conn11.commit()
         resp11j = client11j.get("/upload/recent").text
         assert "10 Sep 2026, 14:09" in resp11j, \
-            "11j: the upload list must show a readable time"
-        assert '<time datetime="2026-09-10T14:09:33.812445">' in resp11j, \
+            "11j: the upload list must show the time in CLINIC hours, not UTC"
+        # the UTC hour is allowed in the datetime ATTRIBUTE - that is the
+        # machine-readable value. what must never appear is the UTC hour as the
+        # text a person reads.
+        assert "10 Sep 2026, 12:09" not in resp11j, \
+            "11j: and must not show the UTC hour as the readable time"
+        assert f'<time datetime="{STORED_TS}">' in resp11j, \
             "11j: and keep the exact stored value in the datetime attribute"
-        assert ">2026-09-10T14:09:33.812445<" not in resp11j, \
+        assert f">{STORED_TS}<" not in resp11j, \
             "11j: the raw ISO string must not be what the user reads"
         # a row whose ts is not parseable still renders - the list is a status
         # view, and one odd row must not take the whole fragment down

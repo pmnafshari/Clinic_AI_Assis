@@ -85,7 +85,7 @@
           {% for r in rows %}
           <li class="appt-item">
             <div class="ds-row">
-              <span class="ds-row-time">{{ r.starts_at[11:16] }}</span>
+              <span class="ds-row-time">{{ r.starts_at | appt_time }}</span>
               <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.patient_name | tint }}" aria-hidden="true">{{ r.patient_name | initials }}</span>
               <span class="ds-row-main">
                 <span class="ds-row-title">{{ r.patient_name }}</span>
@@ -114,12 +114,12 @@
                 <input type="hidden" name="day" value="{{ day }}">
                 <div>
                   <label class="form-label small" for="rdate-{{ r.id }}">Move to</label>
-                  <input type="date" id="rdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}"
+                  <input type="date" id="rdate-{{ r.id }}" name="date" value="{{ r.starts_at | appt_date }}"
                          class="form-control form-control-sm" required>
                 </div>
                 <div>
                   <label class="form-label small" for="rtime-{{ r.id }}">Time</label>
-                  <input type="time" id="rtime-{{ r.id }}" name="time" value="{{ r.starts_at[11:16] }}"
+                  <input type="time" id="rtime-{{ r.id }}" name="time" value="{{ r.starts_at | appt_time }}"
                          class="form-control form-control-sm" required>
                 </div>
                 <div>

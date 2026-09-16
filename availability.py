@@ -12,6 +12,13 @@ refusal is what makes it true.
 THE DURATION IS PART OF THE QUESTION. A 30-minute appointment starting fifteen
 minutes before closing does not fit, and checking only the start time is the
 obvious version of this that is wrong.
+
+CIVIL TIME, DELIBERATELY (Phase 52). Every rule in here is a wall-clock
+question: does 09:00 fall inside opening hours, is the dentist rostered, is it
+a holiday. Opening hours and roster windows are civil times of day and the
+field audit keeps them that way, so `refusal()` takes the CLINIC-LOCAL start
+and never a stored instant. The one place it has to read stored rows - the
+capacity count - converts them back to local first.
 """
 
 import sys
@@ -160,13 +167,20 @@ def refusal(conn, dentist, starts_at, minutes, exclude_id=None):
         # concurrent appointments across every dentist, not per dentist: the
         # limit is chairs and staff, which the whole clinic shares
         overlapping = 0
+        # the day's booked rows, bounded as instants and then filtered on the
+        # clinic's own date - the same rule agenda() follows, and for the same
+        # reason: slicing a UTC string to ten characters asks a UTC question.
+        lo, hi = clinic_time.day_bounds_utc(day)
         for row in conn.execute(
                 "SELECT id, starts_at, minutes FROM appointments"
                 " WHERE status = 'booked' AND starts_at >= ? AND starts_at < ?",
-                (f"{day}T00:00:00", f"{day}T23:59:59.999999")).fetchall():
+                (lo, hi)).fetchall():
             if exclude_id is not None and row["id"] == exclude_id:
                 continue
-            other_start = clinic_time.parse(row["starts_at"])
+            if clinic_time.local_date(row["starts_at"]) != day:
+                continue
+            # back to local, because `start` and `end` above are local
+            other_start = clinic_time.local_of(row["starts_at"])
             other_end = other_start + timedelta(minutes=row["minutes"])
             if start < other_end and other_start < end:
                 overlapping += 1
@@ -260,10 +274,14 @@ def selftest():
         conn.execute("UPDATE clinic_hours SET capacity = 1 WHERE weekday = 0")
         conn.commit()
         cpid = _pidmod.seed_patient(conn, "AAAA000000000001", "Cap Patient")
+        # stored as an INSTANT, the way book() writes one - a naive row here
+        # would not be a weaker fixture, it would be an unmigrated one, and
+        # read_instant refuses it
+        ts = clinic_time.stamp()
         conn.execute(
             "INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status,"
-            " created_at, updated_at) VALUES (?,'dr rossi',?,30,'booked','','')",
-            (cpid, f"{MON}T10:00:00"))
+            " created_at, updated_at) VALUES (?,'dr rossi',?,30,'booked',?,?)",
+            (cpid, clinic_time.to_utc_text(clinic_time.parse(f"{MON}T10:00:00")), ts, ts))
         conn.commit()
         assert refusal(conn, "dr bianchi", f"{MON}T14:00", 30) is None, \
             "8: an hour with nothing booked in it is unaffected by capacity"

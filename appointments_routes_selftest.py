@@ -27,6 +27,7 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 import app.db as app_db
+import clinic_time
 from app import create_app
 
 PATIENT_CF = "ZZS00A00A000S"
@@ -192,10 +193,35 @@ def selftest():
             "date": DAY, "time": "14:00", "minutes": "45", "day": DAY,
         })
         moved = _rows(db_path, "SELECT * FROM appointments WHERE id = ?", (appt_id,))[0]
-        assert moved["starts_at"].endswith("14:00:00"), "9: the appointment should have moved"
+        # asserted in CLINIC TIME, which is what the receptionist typed and what
+        # the screen shows. the stored value is a UTC instant since P52, so
+        # asserting on its text would be asserting an offset - green in winter,
+        # red in summer, and about the wrong thing in both.
+        assert clinic_time.local_hhmm(moved["starts_at"]) == "14:00", \
+            f"9: the appointment should have moved, stored {moved['starts_at']}"
+        assert clinic_time.local_date(moved["starts_at"]) == DAY, \
+            "9: and stayed on the same clinic day"
         assert moved["minutes"] == 45, "9: and taken its new length"
         assert _rows(db_path, "SELECT * FROM audit_log WHERE action = 'reschedule_appointment'"), \
             "9: rescheduling must be audited"
+
+        # 9b. THE PAGE ITSELF SHOWS CLINIC TIME. this is a separate claim from
+        # 9: the row can be stored correctly and the markup can still slice the
+        # UTC text and print the wrong hour. It did exactly that - the staff day
+        # view rendered the UTC hour while the patient portal rendered the
+        # clinic's, for the same appointment, and only the browser flow caught
+        # it because nothing here was looking at the page.
+        page = dentist.get(f"/appointments?day={DAY}", follow_redirects=True).text
+        assert "14:00" in page, "9b: the staff day view must show the clinic's time"
+        utc_hhmm = clinic_time.read_instant(moved["starts_at"]).strftime("%H:%M")
+        assert utc_hhmm != "14:00", "9b: the fixture must not be a season where the two agree"
+        assert f'class="ds-row-time">{utc_hhmm}<' not in page, \
+            f"9b: and must never render the UTC hour {utc_hhmm} as the time"
+
+        # 9c. and the reschedule form is prefilled with that same clinic time,
+        # so reopening it and pressing save does not quietly move the booking
+        assert f'value="14:00"' in page, "9c: the reschedule form prefills the clinic time"
+        assert f'value="{DAY}"' in page, "9c: and the clinic date"
 
         # 10. cancel sets a status, the row survives, and it is audited
         dentist.post(f"/appointments/{appt_id}/cancel", data={"day": DAY})
