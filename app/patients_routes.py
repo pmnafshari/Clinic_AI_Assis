@@ -6,6 +6,7 @@ import sqlite3
 
 import agent
 import ask
+import consent
 import patient_auth
 import patient_identity
 import pending_actions
@@ -212,6 +213,7 @@ def detail_view(cf):
         # than carrying a gate of its own - an assistant sees that a visit
         # happened without reading what it said (RBAC-03)
         timeline=patient_identity.timeline(conn, cf, show_clinical=show_clinical),
+        consents=consent.state(conn, pid, "en"),
     )
 
 
@@ -317,6 +319,29 @@ def revoke_pin_submit(cf):
     patient_auth.destroy_patient_sessions(conn, cf)
 
     return render_template("_patient_pin_revoked.html", cf=cf)
+
+
+@patients_bp.route("/patients/<cf>/consent", methods=["POST"])
+def consent_submit(cf):
+    # staff record what the patient said at the desk; the patient can also
+    # grant or withdraw from the portal profile. either way it is a new row.
+    if not authorize(g.user["role"], "record_consent"):
+        log_audit(get_db(), g.user["username"], g.user["role"], "record_consent", cf, allowed=0)
+        flash("You don't have permission to record consent.", "danger")
+        return redirect(url_for("dashboard.index"))
+
+    if not is_valid_cf(cf):
+        abort(404)
+    pid = patient_identity_pid(cf)
+    if pid is None:
+        abort(404)
+
+    note = request.form.get("note", "").strip()[:200] or None
+    ok, message = consent.record(get_db(), pid, request.form.get("purpose", ""),
+                                 request.form.get("granted") == "1",
+                                 g.user["username"], g.user["role"], note)
+    flash("Consent recorded." if ok else f"Not recorded: {message}.", "success" if ok else "danger")
+    return redirect(url_for("patients.detail_view", cf=cf) + "#consent-title")
 
 
 @patients_bp.route("/patients/<cf>/edit-form")

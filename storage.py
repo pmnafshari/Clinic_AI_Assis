@@ -138,6 +138,11 @@ def init_db(db_path):
     # is not an open-all-hours clinic.
     from availability import SCHEMA as AVAILABILITY_SCHEMA
     conn.executescript(AVAILABILITY_SCHEMA)
+
+    # consent records (P06). after the audit lock above, whose unlock table
+    # its delete trigger reads
+    from consent import SCHEMA as CONSENT_SCHEMA
+    conn.executescript(CONSENT_SCHEMA)
     conn.commit()
     return conn
 

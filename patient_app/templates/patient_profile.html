@@ -32,4 +32,32 @@
 <a href="{{ url_for('patient.change_pin') }}" class="btn btn-outline-secondary"><i class="bi bi-key" aria-hidden="true"></i> {{ t('profile_change_pin', lang) }}</a>
 </div>
 </section>
+
+<section class="ds-card patient-profile-card mt-3" aria-labelledby="consent">
+<div class="ds-card-body">
+<h2 class="h5" id="consent">{{ t('consent_heading', lang) }}</h2>
+<p class="text-secondary small">{{ t('consent_template_note', lang) }}</p>
+{% for c in consents %}
+<div class="patient-consent">
+  <h3 class="h6 mb-1">{{ t('consent_' ~ c.purpose, lang) }}</h3>
+  <p class="small mb-1">{{ c.text }}</p>
+  <p class="small text-secondary mb-2">
+    {% if c.granted and not c.outdated %}{{ t('consent_given', lang) }}{% elif c.outdated %}{{ t('consent_outdated', lang) }}{% elif c.recorded %}{{ t('consent_withdrawn', lang) }}{% else %}{{ t('consent_not_asked', lang) }}{% endif %}
+  </p>
+  <form method="post" action="{{ url_for('patient.consent_submit') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="purpose" value="{{ c.purpose }}">
+    {% if c.granted and not c.outdated %}
+    <input type="hidden" name="granted" value="0">
+    <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('consent_withdraw', lang) }}</button>
+    {% else %}
+    <input type="hidden" name="granted" value="1">
+    <button type="submit" class="btn btn-primary btn-sm">{{ t('consent_give', lang) }}</button>
+    {% endif %}
+  </form>
+</div>
+{% if not loop.last %}<hr>{% endif %}
+{% endfor %}
+</div>
+</section>
 {% endblock %}

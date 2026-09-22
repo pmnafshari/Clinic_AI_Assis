@@ -11,6 +11,7 @@ from flask import Blueprint, current_app, g, redirect, render_template, request,
 
 from codice_fiscale import normalize as normalize_cf
 import appointments
+import consent
 import patient_accessor
 import patient_auth
 import storage
@@ -156,7 +157,18 @@ def profile():
     cf = g.patient["codice_fiscale"]
     demo = patient_accessor.get_demographics(
         g.patient["patient_id"], get_db(), ip=net.from_request(request))
-    return render_template("patient_profile.html", cf=cf, demo=demo)
+    consents = consent.state(get_db(), g.patient["patient_id"], current_language())
+    return render_template("patient_profile.html", cf=cf, demo=demo, consents=consents)
+
+
+@patient_bp.route("/consent", methods=["POST"])
+def consent_submit():
+    # the patient speaks for themselves only: the id comes from the session,
+    # never from the form
+    pid = g.patient["patient_id"]
+    consent.record(get_db(), pid, request.form.get("purpose", ""),
+                   request.form.get("granted") == "1", pid, "patient")
+    return redirect(url_for("patient.profile") + "#consent")
 
 
 @patient_bp.route("/logout", methods=["POST"])
@@ -228,6 +240,14 @@ def change_pin():
 # whitelist being a whitelist (§5.4's default-deny guard)
 @patient_bp.route("/chat", methods=["GET", "POST"], endpoint="chat")
 def chat_page():
+    # the assistant reads the patient's records with a model, so it waits for
+    # a current ai_assistant consent (P06.02). no consent, no model call.
+    if not consent.allows(get_db(), g.patient["patient_id"], "ai_assistant"):
+        if request.method == "POST":
+            log_audit(get_db(), g.patient["patient_id"], "patient", "patient_query",
+                      "consent_required", allowed=0, ip=net.from_request(request))
+        return render_template("patient_chat.html", consent_needed=True)
+
     if request.method == "GET":
         return render_template("patient_chat.html")
 

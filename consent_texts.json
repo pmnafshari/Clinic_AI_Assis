@@ -1,0 +1,18 @@
+{
+  "_template": "DEMO TEMPLATE. These texts are placeholders for a demo clinic with synthetic patients. They are not legal advice and not any real clinic's consent wording; a real clinic replaces them after review by its own adviser.",
+  "ai_assistant": {
+    "version": "demo-2026-09-22",
+    "it": "Acconsento a che l'assistente del portale legga i miei dati registrati in clinica (visite, appuntamenti, fatture) per rispondere alle mie domande. L'assistente gira sui computer della clinica. Posso ritirare il consenso quando voglio dal mio profilo.",
+    "en": "I agree that the portal assistant may read my clinic records (visits, appointments, invoices) to answer my questions. The assistant runs on the clinic's own computers. I can withdraw this at any time from my profile."
+  },
+  "messaging": {
+    "version": "demo-2026-09-22",
+    "it": "Acconsento a ricevere dalla clinica promemoria e messaggi sugli appuntamenti al numero di telefono registrato. Posso ritirare il consenso quando voglio.",
+    "en": "I agree to receive appointment reminders and messages from the clinic at the phone number on file. I can withdraw this at any time."
+  },
+  "recording": {
+    "version": "demo-2026-09-22",
+    "it": "Acconsento alla registrazione delle chiamate con l'assistente vocale della clinica, conservate secondo la politica di conservazione della clinica. Posso ritirare il consenso quando voglio.",
+    "en": "I agree that calls with the clinic's voice assistant may be recorded and kept under the clinic's retention policy. I can withdraw this at any time."
+  }
+}

@@ -28,6 +28,7 @@ import urllib.parse
 import urllib.request
 
 import auth
+import consent
 import patient_auth
 import patient_id
 from eval_chat import date_variants
@@ -103,6 +104,9 @@ def seed():
             )
     conn.commit()
     pins = {cf: patient_auth.issue_pin(cf, conn, "dentist", "dentist") for cf, _, _ in rows}
+    # the assistant waits for consent since P06; these patients have given it
+    for cf, _, _ in rows:
+        consent.record(conn, pids[cf], "ai_assistant", True, "dentist", "dentist")
     conn.close()
     return pins
 
@@ -123,6 +127,7 @@ def cleanup():
         pmarks = ",".join("?" * len(pids))
         for table in ("invoices", "visits", "patient_sessions", "patient_credentials"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
+        consent.erase(conn, pids)
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", cfs)
     conn.commit()
     # audit rows land under two different keys. the patient app logs with the

@@ -1094,6 +1094,24 @@ def selftest():
                      " AND allowed = 0 AND username = 'aadmin'"), \
             "46: the refusal is audited"
 
+        # 47. staff record consent at the desk (P06.02): a row naming the
+        # staff member and the wording, shown back on the record
+        page47 = dentist_client.get(f"/patients/{mg_keep}")
+        assert "Not asked" in page47.text and "Wording to read out" in page47.text, \
+            "47: the consent card shows state and the wording to read"
+        dentist_client.post(f"/patients/{mg_keep}/consent", data={
+            "purpose": "messaging", "granted": "1", "csrf_token": _csrf_from(page47.text)})
+        row47 = _rows(db_path, "SELECT actor, actor_role, granted FROM consent_records"
+                      " WHERE purpose = 'messaging' AND patient_id ="
+                      " (SELECT patient_id FROM patients WHERE codice_fiscale = ?)", (mg_keep,))
+        assert [tuple(r) for r in row47] == [("drossi", "dentist", 1)], f"47: {row47}"
+        assert "Record withdrawal" in dentist_client.get(f"/patients/{mg_keep}").text, \
+            "47: a given consent offers withdrawal"
+        dentist_client.post(f"/patients/{mg_keep}/consent", data={
+            "purpose": "messaging", "granted": "0", "csrf_token": _csrf_from(page47.text)})
+        assert "Withdrawn" in dentist_client.get(f"/patients/{mg_keep}").text, \
+            "47: and the withdrawal shows"
+
     print("selftest ok")
 
 

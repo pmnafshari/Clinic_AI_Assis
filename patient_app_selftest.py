@@ -12,6 +12,7 @@ from markupsafe import escape as html_escape
 
 import auth
 import clinic_time
+import consent
 import patient_accessor
 import patient_app
 import patient_auth
@@ -229,12 +230,17 @@ def selftest():
             c.close()
             return n
 
-        def seed_and_issue(cf, name="test patient"):
+        def seed_and_issue(cf, name="test patient", with_consent=True):
             c = raw_db()
             import patient_id as _pid
             if _pid.resolve(c, cf) is None:
                 _pid.seed_patient(c, cf, name)
             pin = patient_auth.issue_pin(cf, c, "test-dentist", "dentist")
+            # the chat waits for consent since P06; the chat checks below are
+            # about the chat, so their patients have given it. section 32
+            # covers the gate itself with a patient who has not.
+            if with_consent and not consent.allows(c, _pid.resolve(c, cf), "ai_assistant"):
+                consent.record(c, _pid.resolve(c, cf), "ai_assistant", True, "test-dentist", "dentist")
             c.close()
             return pin
 
@@ -1992,6 +1998,68 @@ def selftest():
             "31g: B has no requests - A's must not be counted on B's overview"
         assert on_page(t("kpi_requests_wait", "it"), home_a), \
             "31g: A's pending request is counted on A's overview"
+
+        # 32. consent gates the assistant (P06.02). no consent, no model call;
+        # the patient grants and withdraws for themselves only, and every
+        # change is a row with the time and the wording
+        cf32, cf32_other = "ZZCG800101010101", "ZZCG800101010102"
+        pin32 = seed_and_issue(cf32, "consent patient", with_consent=False)
+        seed_and_issue(cf32_other, "other patient", with_consent=False)
+        client32, _ = sign_in(cf32, pin32)
+        page32 = client32.get("/change-pin")
+        client32.post("/change-pin", data={"pin": "15935728", "confirm": "15935728",
+                                           "csrf_token": _csrf_from(page32.text)})
+        calls32 = []
+        real_answer = patient_routes.chat.answer_question
+
+        def fake_answer(question, pid, conn, lang, ip=None):
+            calls32.append(pid)
+            return {"state": "answer", "body": "stub answer", "target": "visits"}
+
+        patient_routes.chat.answer_question = fake_answer
+        try:
+            empty = client32.get("/chat").text
+            assert on_page(t("chat_consent_needed", "it"), empty), "32a: the gate must explain itself"
+            assert 'id="chat-form"' not in empty, "32a: no composer without consent"
+            client32.post("/chat", data={"question": "che visite ho fatto?",
+                                         "csrf_token": _csrf_from(empty)})
+            assert calls32 == [], "32a: without consent the model must not be called"
+            assert count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query'"
+                         " AND target = 'consent_required' AND username = ?", (pid_of(cf32),)) == 1, \
+                "32a: a refused question is audited"
+
+            profile32 = client32.get("/profile").text
+            assert on_page(t("consent_not_asked", "it"), profile32), "32b: profile shows the state"
+            # a form naming another patient changes nothing for them: the id
+            # comes from the session
+            client32.post("/consent", data={"purpose": "ai_assistant", "granted": "1",
+                                            "patient_id": pid_of(cf32_other),
+                                            "csrf_token": _csrf_from(profile32)})
+            c32 = raw_db()
+            assert consent.allows(c32, pid_of(cf32), "ai_assistant"), "32b: the grant is the patient's"
+            assert not consent.allows(c32, pid_of(cf32_other), "ai_assistant"), \
+                "32b: a posted patient_id must be ignored"
+            row32 = consent.current(c32, pid_of(cf32), "ai_assistant")
+            assert row32["actor"] == pid_of(cf32) and row32["actor_role"] == "patient", \
+                "32b: the patient is recorded as the one who agreed"
+            c32.close()
+
+            chat32 = client32.get("/chat").text
+            client32.post("/chat", data={"question": "che visite ho fatto?",
+                                         "csrf_token": _csrf_from(chat32)})
+            assert calls32 == [pid_of(cf32)], "32c: with consent the question reaches the model"
+
+            profile32 = client32.get("/profile").text
+            client32.post("/consent", data={"purpose": "ai_assistant", "granted": "0",
+                                            "csrf_token": _csrf_from(profile32)})
+            client32.post("/chat", data={"question": "e adesso?",
+                                         "csrf_token": _csrf_from(profile32)})
+            assert calls32 == [pid_of(cf32)], "32d: after withdrawal the model is not called again"
+            client32.get("/lang/en", follow_redirects=True)
+            assert on_page(t("consent_withdrawn", "en"), client32.get("/profile").text), \
+                "32d: the profile says withdrawn, in english too"
+        finally:
+            patient_routes.chat.answer_question = real_answer
 
     print("selftest ok")
 

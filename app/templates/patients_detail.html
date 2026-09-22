@@ -77,6 +77,44 @@
     </section>
     {% endif %}
 
+    <section class="card dash-card" aria-labelledby="consent-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="consent-title">Consent</h2>
+          <p class="ds-card-sub">Demo template wording - not a real clinic's consent text</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        <ul class="ds-rows">
+          {% for c in consents %}
+          <li class="ds-row">
+            <span class="ds-row-main">
+              <span class="ds-row-title">{{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}</span>
+              <span class="ds-row-sub">
+                {% if c.granted and not c.outdated %}Given{% elif c.outdated %}Given to older wording - ask again{% elif c.recorded %}Withdrawn{% else %}Not asked{% endif %}
+                {% if c.ts %} · {{ c.ts | appt_date }} by {{ c.actor_role }}{% endif %}
+              </span>
+              <details class="small text-secondary"><summary>Wording to read out ({{ c.version }})</summary>{{ c.text }}</details>
+            </span>
+            {% if authorize(g.user.role, 'record_consent') %}
+            <form method="post" action="{{ url_for('patients.consent_submit', cf=cf) }}" class="ms-auto">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="purpose" value="{{ c.purpose }}">
+              {% if c.granted and not c.outdated %}
+              <input type="hidden" name="granted" value="0">
+              <button type="submit" class="btn btn-outline-secondary btn-sm">Record withdrawal</button>
+              {% else %}
+              <input type="hidden" name="granted" value="1">
+              <button type="submit" class="btn btn-outline-primary btn-sm">Record consent</button>
+              {% endif %}
+            </form>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+
     <section class="card dash-card" aria-labelledby="visits-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="visits-title">Visit dates</h2>

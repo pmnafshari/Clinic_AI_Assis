@@ -133,6 +133,27 @@ STRINGS = {
     },
     "profile_change_pin": {"it": "Cambia il PIN", "en": "Change your PIN"},
 
+    # consent (P06). the wording itself lives in consent_texts.json
+    "consent_heading": {"it": "I tuoi consensi", "en": "Your consents"},
+    "consent_template_note": {
+        "it": "Testi dimostrativi: questa è una clinica di prova, non un testo legale reale.",
+        "en": "Demo wording: this is a demo clinic, not a real legal text.",
+    },
+    "consent_ai_assistant": {"it": "Assistente del portale", "en": "Portal assistant"},
+    "consent_messaging": {"it": "Messaggi e promemoria", "en": "Messages and reminders"},
+    "consent_recording": {"it": "Registrazione delle chiamate", "en": "Call recording"},
+    "consent_given": {"it": "Dato", "en": "Given"},
+    "consent_withdrawn": {"it": "Ritirato", "en": "Withdrawn"},
+    "consent_not_asked": {"it": "Non ancora chiesto", "en": "Not asked yet"},
+    "consent_outdated": {"it": "Il testo è cambiato: conferma di nuovo", "en": "The wording changed: please confirm again"},
+    "consent_give": {"it": "Acconsento", "en": "I agree"},
+    "consent_withdraw": {"it": "Ritira il consenso", "en": "Withdraw"},
+    "chat_consent_needed": {
+        "it": "Per usare l'assistente serve il tuo consenso. Puoi darlo o ritirarlo dal tuo profilo.",
+        "en": "The assistant needs your consent first. You can give or withdraw it from your profile.",
+    },
+    "chat_consent_link": {"it": "Vai al profilo", "en": "Go to your profile"},
+
     "brand_line": {
         "it": "I tuoi dati clinici, quando ti servono.",
         "en": "Your clinical records, when you need them.",
