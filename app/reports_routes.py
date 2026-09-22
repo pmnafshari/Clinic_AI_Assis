@@ -2,6 +2,7 @@ import json
 
 from flask import Blueprint, g, redirect, render_template, url_for
 
+import ledger
 from auth import authorize
 from dental_notes_schema import KNOWN_PROCEDURES
 
@@ -61,11 +62,11 @@ def _procedure_distribution(conn, top_n=TOP_N):
 
 
 def _billed_by_month(conn, months=12):
-    # invoices carry no status and there is no payments table, so this is
-    # what was BILLED. it is never called revenue - nothing in this system
-    # shows that any of it was collected.
+    # what was BILLED, from the lines' cents. it is never called revenue: the
+    # ledger (P07) records payments staff typed in, and invoices from before
+    # it are of unknown status - see _recorded_payments
     rows = conn.execute(
-        "SELECT substr(v.visit_date, 1, 7) AS month, ROUND(SUM(i.amount), 2) AS billed"
+        "SELECT substr(v.visit_date, 1, 7) AS month, SUM(i.amount_cents) / 100.0 AS billed"
         " FROM invoices i JOIN visits v ON v.id = i.visit_id"
         " WHERE v.visit_date IS NOT NULL AND v.visit_date != ''"
         " GROUP BY month ORDER BY month DESC LIMIT ?",
@@ -73,6 +74,14 @@ def _billed_by_month(conn, months=12):
     ).fetchall()
     rows = list(reversed(rows))
     return [r["month"] for r in rows], [r["billed"] for r in rows]
+
+
+def _recorded_payments(conn):
+    # net of refunds and reversals; payments recorded by hand, not money seen
+    # moving - there is no payment provider
+    return conn.execute(
+        "SELECT COALESCE(SUM(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)"
+        " FROM payments").fetchone()[0]
 
 
 @reports_bp.route("/reports")
@@ -98,6 +107,7 @@ def index():
         proc_uncoded=proc_uncoded,
         proc_has_data=bool(proc_values),
         billed_months=billed_months,
+        recorded=ledger.fmt(_recorded_payments(conn), "en"),
         billed_values=billed_values,
         billed_has_data=bool(billed_values),
     )

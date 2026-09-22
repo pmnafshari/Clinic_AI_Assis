@@ -22,7 +22,9 @@
   <div>
     <strong class="ds-alert-title">What this page can and cannot show</strong>
     Figures come from filed notes and their invoice lines. <strong>Amounts are billed, not
-    collected</strong> — this system records no payments. New-patient growth cannot be shown at
+    collected.</strong> Payments recorded by staff since the ledger started come to {{ recorded }}
+    net of refunds; invoices from before it are of unknown status until reconciled, and no money
+    moves through this system. New-patient growth cannot be shown at
     all, because patient records carry no created date. Appointments are recorded now, but are
     not charted on this page yet.
   </div>
@@ -66,7 +68,7 @@
       {% if billed_has_data %}
       <div class="chart-box"><canvas id="billed-chart"></canvas></div>
       <p class="text-secondary small mb-0 mt-3">
-        Billed, not collected. No invoice in this system carries a payment status.
+        Billed, not collected. Recorded payments are on the Billing page.
       </p>
       {% else %}
       <div class="chart-empty">

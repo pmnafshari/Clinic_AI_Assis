@@ -88,6 +88,7 @@ def create_app():
     from .agent_routes import agent_bp
     from .appointments_routes import appointments_bp
     from .auth_routes import auth_bp
+    from .billing_routes import billing_bp
     from .dashboard_routes import dashboard_bp
     from .data_requests_routes import data_requests_bp
     from .notes_routes import notes_bp
@@ -99,6 +100,7 @@ def create_app():
     app.register_blueprint(agent_bp)
     app.register_blueprint(appointments_bp)
     app.register_blueprint(auth_bp)
+    app.register_blueprint(billing_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(data_requests_bp)
     app.register_blueprint(notes_bp)

@@ -29,6 +29,7 @@ STRINGS = {
     "nav_overview": {"it": "Riepilogo", "en": "Overview"},
     "nav_chat": {"it": "Assistente", "en": "Assistant"},
     "nav_profile": {"it": "Profilo", "en": "Profile"},
+    "nav_billing": {"it": "Pagamenti", "en": "Payments"},
 
     # phase 45 - the reference's header and overview. the brand names the
     # surface, never the clinic: this app has no clinic name to show.
@@ -153,6 +154,32 @@ STRINGS = {
         "en": "The assistant needs your consent first. You can give or withdraw it from your profile.",
     },
     "chat_consent_link": {"it": "Vai al profilo", "en": "Go to your profile"},
+
+    # billing (P07). figures come from the ledger, the same as the staff page
+    "bill_heading": {"it": "Fatture e pagamenti", "en": "Invoices and payments"},
+    "bill_notice": {
+        "it": "I pagamenti sono registrati dalla clinica. Da questo portale non si paga e non passa denaro.",
+        "en": "Payments are recorded by the clinic. You cannot pay through this portal and no money passes through it.",
+    },
+    "bill_outstanding": {"it": "Da pagare", "en": "Still to pay"},
+    "bill_unknown_count": {
+        "it": "{n} fattura/e in verifica: la clinica non ha ancora registrato se sono state pagate, quindi non sono conteggiate.",
+        "en": "{n} invoice(s) being checked: the clinic has not yet recorded whether they were paid, so they are not counted.",
+    },
+    "bill_visit": {"it": "Visita del {date}", "en": "Visit of {date}"},
+    "bill_total": {"it": "Totale", "en": "Total"},
+    "bill_paid": {"it": "Pagato", "en": "Paid"},
+    "bill_due": {"it": "Scadenza", "en": "Due"},
+    "bill_installments": {"it": "Rate", "en": "Installments"},
+    "bill_covered": {"it": "saldata", "en": "covered"},
+    "bill_open": {"it": "da pagare", "en": "open"},
+    "bill_none": {"it": "Nessuna fattura registrata.", "en": "No invoices on record."},
+    "bill_state_unknown": {"it": "In verifica", "en": "Being checked"},
+    "bill_state_draft": {"it": "In preparazione", "en": "Being prepared"},
+    "bill_state_issued": {"it": "Da pagare", "en": "To pay"},
+    "bill_state_partially_paid": {"it": "Pagata in parte", "en": "Partly paid"},
+    "bill_state_paid": {"it": "Pagata", "en": "Paid"},
+    "bill_state_void": {"it": "Annullata", "en": "Cancelled"},
 
     # data rights (P06)
     "rights_heading": {"it": "I tuoi dati", "en": "Your data"},
@@ -348,8 +375,24 @@ STRINGS = {
     "inv_on_record": {"it": "Fatture registrate: {lines}.", "en": "Invoices on record: {lines}."},
     "inv_billed_total": {"it": "Totale fatturato: {total}.", "en": "Total billed: {total}."},
     "inv_not_recorded": {
-        "it": "Il sistema non registra i pagamenti, quindi non può dirti quanto resta da pagare: per questo chiedi alla clinica.",
-        "en": "This system does not record payments, so it cannot tell you what is still to pay: please ask the clinic.",
+        "it": "La clinica non ha ancora registrato se queste fatture sono state pagate, quindi non posso dirti quanto resta da pagare: per questo chiedi alla clinica.",
+        "en": "The clinic has not yet recorded whether these invoices were paid, so I cannot tell you what is still to pay: please ask the clinic.",
+    },
+    "inv_some_unknown": {
+        "it": "Per alcune fatture la clinica non ha ancora registrato il pagamento: non sono incluse in questo importo.",
+        "en": "For some invoices the clinic has not yet recorded payment: they are not included in that amount.",
+    },
+    "inv_outstanding": {
+        "it": "Secondo i pagamenti registrati dalla clinica, restano da pagare {total}.",
+        "en": "According to the payments the clinic has recorded, {total} is still to pay.",
+    },
+    "inv_next_installment": {
+        "it": "Prossima rata: {amount} entro il {date}.",
+        "en": "Next installment: {amount} by {date}.",
+    },
+    "inv_settled": {
+        "it": "Secondo i pagamenti registrati dalla clinica, non resta nulla da pagare.",
+        "en": "According to the payments the clinic has recorded, nothing is left to pay.",
     },
 
     # --- glossary phrase templates, one per dental_shorthand_glossary.json code ---

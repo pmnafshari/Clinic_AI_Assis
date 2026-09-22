@@ -147,11 +147,19 @@ def answer_exact(cf, field, conn):
         value = data["phone"] or "not recorded"
         answer = f"{data['patient_name']}'s phone: {value}"
     elif field == "invoice":
-        if not data["invoices"]:
+        # the ledger's summary, the same one the billing page and the portal
+        # show (P07.02) - never a sum of the float column
+        import ledger
+        summary = ledger.patient_summary(conn, _pid.resolve(conn, cf))
+        live = [i for i in summary["invoices"] if i["state"] != "void"]
+        if not live:
             answer = f"{data['patient_name']} has no invoices on record"
         else:
-            total = sum(i["amount"] for i in data["invoices"])
-            answer = f"{data['patient_name']}'s invoice total: {total}"
+            billed = sum(i["total_cents"] for i in live)
+            answer = (f"{data['patient_name']}: billed {ledger.fmt(billed, 'en')},"
+                      f" still to pay {ledger.fmt(summary['outstanding_cents'], 'en')}")
+            if summary["unknown"]:
+                answer += f" ({summary['unknown']} invoice(s) not yet reconciled, not counted)"
     elif field == "appointment":
         next_appt = visits[-1]["next_appointment"] if visits else None
         value = next_appt or "not recorded"

@@ -176,7 +176,7 @@
     <section class="card dash-card" aria-labelledby="invoices-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="invoices-title">Invoices</h2>
+          <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
           <p class="ds-card-sub">Billed lines - no paid or unpaid status is recorded</p>
         </div>
       </div>

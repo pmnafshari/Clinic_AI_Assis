@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow"><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></p>
+    <h1 class="ds-page-title">Billing</h1>
+    <p class="ds-page-meta">Still to pay {{ fmt(summary.outstanding_cents, 'en') }}{% if summary.unknown %} · {{ summary.unknown }} invoice(s) of unknown status, not counted{% endif %}{% if summary.next_due %} · next installment {{ summary.next_due }}{% endif %}</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div>Payments are recorded by hand after money changed hands elsewhere. No money moves through
+  this system and no fiscal invoice is issued.{% if not can_change %} You can see billing but not change it.{% endif %}</div>
+</div>
+
+{% for inv in summary.invoices %}
+<section class="card dash-card mb-3" aria-labelledby="inv-{{ loop.index }}">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="inv-{{ loop.index }}">Visit {{ inv.visit_date or 'undated' }} · {{ inv.state | replace('_', ' ') }}</h2>
+      <p class="ds-card-sub">billed {{ fmt(inv.total_cents, 'en') }} · paid {{ fmt(inv.paid_cents, 'en') }} · still to pay {{ fmt(inv.outstanding_cents, 'en') }}{% if inv.due_date %} · due {{ inv.due_date }}{% endif %}{% if inv.void_reason %} · void: {{ inv.void_reason }}{% endif %}</p>
+    </div>
+    {% if inv.id %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('billing.preview', invoice_id=inv.id) }}">Preview</a>{% endif %}
+  </div>
+  <div class="dash-card-body">
+    <ul class="ds-rows">
+      {% for line in inv.lines %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ line.description or 'line ' ~ (line.line_index + 1) }}</span></span><span class="ds-numeral ms-auto">{{ fmt(line.amount_cents, 'en') }}</span></li>
+      {% endfor %}
+    </ul>
+    {% if inv.installments %}
+    <p class="small mb-1 mt-3"><strong>Installments</strong> - covered {{ order }} (default, awaiting owner approval)</p>
+    <ul class="ds-rows">
+      {% for i in inv.installments %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ i.seq }}. due {{ i.due_date }}</span><span class="ds-row-sub">{{ fmt(i.amount_cents, 'en') }}</span></span><span class="ms-auto small">{% if i.open_cents %}{{ fmt(i.open_cents, 'en') }} open{% else %}covered{% endif %}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if can_change and inv.id %}
+    <div class="d-flex flex-wrap gap-3 mt-3">
+      {% if inv.state == 'draft' %}
+      <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='issue') }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label class="form-label small" for="due-{{ inv.id }}">Due date</label>
+        <input class="form-control form-control-sm" type="date" id="due-{{ inv.id }}" name="due_date"></div>
+        <button class="btn btn-primary btn-sm" type="submit">Issue</button>
+      </form>
+      {% endif %}
+      {% if inv.state == 'unknown' %}
+      <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='reconcile') }}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="key" value="{{ key() }}">
+        <div><label class="form-label small" for="out-{{ inv.id }}">What the records show</label>
+        <select class="form-select form-select-sm" id="out-{{ inv.id }}" name="outcome">
+          <option value="unpaid">Not paid</option><option value="paid">Paid in full</option><option value="partial">Partly paid</option>
+        </select></div>
+        <div><label class="form-label small" for="ramt-{{ inv.id }}">Amount if partly paid</label>
+        <input class="form-control form-control-sm" id="ramt-{{ inv.id }}" name="amount" inputmode="decimal" placeholder="0,00"></div>
+        <div><label class="form-label small" for="rmeth-{{ inv.id }}">Method</label>
+        <select class="form-select form-select-sm" id="rmeth-{{ inv.id }}" name="method">{% for m in methods %}<option value="{{ m }}">{{ m | replace('_', ' ') }}</option>{% endfor %}</select></div>
+        <button class="btn btn-primary btn-sm" type="submit">Reconcile</button>
+      </form>
+      {% endif %}
+      {% if inv.state in ('issued', 'partially_paid') %}
+      <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='pay') }}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="key" value="{{ key() }}">
+        <div><label class="form-label small" for="amt-{{ inv.id }}">Amount received</label>
+        <input class="form-control form-control-sm" id="amt-{{ inv.id }}" name="amount" inputmode="decimal" placeholder="0,00" required></div>
+        <div><label class="form-label small" for="meth-{{ inv.id }}">Method</label>
+        <select class="form-select form-select-sm" id="meth-{{ inv.id }}" name="method">{% for m in methods %}<option value="{{ m }}">{{ m | replace('_', ' ') }}</option>{% endfor %}</select></div>
+        <div><label class="form-label small" for="ref-{{ inv.id }}">Receipt no.</label>
+        <input class="form-control form-control-sm" id="ref-{{ inv.id }}" name="reference" maxlength="60"></div>
+        <button class="btn btn-primary btn-sm" type="submit">Record payment</button>
+      </form>
+      {% if not inv.installments %}
+      <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='plan') }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label class="form-label small" for="cnt-{{ inv.id }}">Installments</label>
+        <input class="form-control form-control-sm" type="number" min="2" max="24" id="cnt-{{ inv.id }}" name="count" value="3"></div>
+        <div><label class="form-label small" for="first-{{ inv.id }}">First due</label>
+        <input class="form-control form-control-sm" type="date" id="first-{{ inv.id }}" name="first_due" required></div>
+        <button class="btn btn-outline-primary btn-sm" type="submit">Split</button>
+      </form>
+      {% endif %}
+      {% endif %}
+      {% if inv.state in ('draft', 'issued') and inv.paid_cents == 0 %}
+      <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='void') }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label class="form-label small" for="vr-{{ inv.id }}">Reason to void</label>
+        <input class="form-control form-control-sm" id="vr-{{ inv.id }}" name="reason" maxlength="300" required></div>
+        <button class="btn btn-outline-danger btn-sm" type="submit">Void</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% else %}
+<p class="dash-empty-line">No invoices on record.</p>
+{% endfor %}
+
+<section class="card dash-card" aria-labelledby="pay-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="pay-title">Payment history</h2></div>
+  <div class="dash-card-body">
+    {% if payments %}
+    <ul class="ds-rows">
+      {% for p in payments %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">#{{ p.id }} {{ p.kind }} · {{ fmt(p.amount_cents, 'en') }} · {{ p.method | replace('_', ' ') }}</span>
+          <span class="ds-row-sub">received {{ p.received_on }} · recorded by {{ p.recorded_by }} ({{ p.source | replace('_', ' ') }}){% if p.reference %} · receipt {{ p.reference }}{% endif %}{% if p.reverses_payment_id %} · against #{{ p.reverses_payment_id }}{% endif %}{% if p.note %} · {{ p.note }}{% endif %}</span>
+        </span>
+        {% if can_change and p.kind == 'payment' %}
+        <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='refund') }}" class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="key" value="{{ key() }}">
+          <label class="ds-sr-only" for="ra-{{ p.id }}">Refund amount</label>
+          <input class="form-control form-control-sm" id="ra-{{ p.id }}" name="amount" inputmode="decimal" placeholder="amount" style="max-width:7rem">
+          <label class="ds-sr-only" for="rr-{{ p.id }}">Reason</label>
+          <input class="form-control form-control-sm" id="rr-{{ p.id }}" name="reason" placeholder="reason" required style="max-width:10rem">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Refund</button>
+          <button class="btn btn-outline-danger btn-sm" type="submit" formaction="{{ url_for('billing.payment_action', payment_id=p.id, action='reverse') }}">Reverse (entered by mistake)</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No payments recorded.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

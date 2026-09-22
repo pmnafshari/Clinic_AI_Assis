@@ -5,7 +5,7 @@
 
 | Type | Kept for | On erasure | Sweep |
 |---|---|---|---|
-| Invoices | 3650 days | **held**, with the name and codice fiscale they were issued to | report only |
+| Invoices, with their payments, refunds and installments | 3650 days | **held**, with the name and codice fiscale they were issued to | report only |
 | Clinical records | 3650 days | erased | report only |
 | Audit trail | 730 days | kept - surrogate ids only, paths redacted | deleted, and the purge is itself audited |
 | Exports | 24 hours | deleted | deleted |

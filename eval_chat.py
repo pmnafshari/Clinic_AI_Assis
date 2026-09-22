@@ -71,6 +71,8 @@ def build_db(patients):
             visit_id INTEGER NOT NULL,
             line_index INTEGER NOT NULL,
             amount REAL NOT NULL,
+            -- the ledger reads cents (P07); derived here, as storage backfills it
+            amount_cents INTEGER GENERATED ALWAYS AS (CAST(round(amount * 100) AS INTEGER)),
             description TEXT
         );
         CREATE TABLE audit_log (
@@ -85,6 +87,8 @@ def build_db(patients):
             reason TEXT
         );
     """)
+    import ledger
+    conn.executescript(ledger.SCHEMA)
     for i, p in enumerate(patients):
         _epid = _pidmod.seed_patient(conn, p["cf"], p["name"], p["phone"])
         for j, visit in enumerate(patient_visits(p)):

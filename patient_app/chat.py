@@ -233,25 +233,41 @@ def visit_context_lines(rows, lang):
     return lines
 
 
-def invoice_answer(rows, lang):
-    """the invoice route's whole answer, built here and never by the model.
+def invoice_answer(summary, lang):
+    """the invoice route's whole answer, built here from the ledger and never
+    by the model (P02.03 containment, P07 ledger).
 
-    containment for a money defect (P02.03): invoices carry no payment
-    status, so a total of the lines is what was BILLED, not what is owed. the
-    model used to restate it - asked "quanto devo pagare?" it answered "Devi
-    pagare € 580,00" for lines that may long since have been paid. an llm is
-    not the source of truth for a debt (R09), so the amounts are formatted in
-    python, called billed, and followed by a fixed sentence that says the
-    system cannot know what is still to pay. the real balance is P07's ledger.
+    the model once answered "Devi pagare € 580,00" for lines that may long
+    since have been paid. an llm is not the source of truth for a debt, so
+    every figure comes from ledger.patient_summary - the same computation the
+    staff billing page and the portal show - and is formatted in python. an
+    invoice the clinic has not reconciled is never presented as owed.
     """
-    lines = render_invoices(rows, lang)
+    import ledger
+    live = [inv for inv in summary["invoices"] if inv["state"] != "void"]
+    lines = [f"{ledger.fmt(line['amount_cents'], lang)} - {line['description']}"
+             if line["description"] else ledger.fmt(line["amount_cents"], lang)
+             for inv in live for line in inv["lines"]]
     parts = [t("inv_on_record", lang).format(lines="; ".join(lines))]
-    # rounded before formatting: these are floats, and 0.1 + 0.2 must not
-    # reach format_amount as 0.30000000000000004. one line is its own total.
-    if len(rows) > 1:
-        total = round(sum(row["amount"] for row in rows), 2)
-        parts.append(t("inv_billed_total", lang).format(total=format_amount(total, lang)))
-    parts.append(t("inv_not_recorded", lang))
+    if len(lines) > 1:
+        total = sum(inv["total_cents"] for inv in live)
+        parts.append(t("inv_billed_total", lang).format(total=ledger.fmt(total, lang)))
+    known = [inv for inv in live if inv["state"] not in ("unknown", "draft")]
+    if known:
+        if summary["outstanding_cents"] > 0:
+            parts.append(t("inv_outstanding", lang).format(
+                total=ledger.fmt(summary["outstanding_cents"], lang)))
+            upcoming = sorted((i["due_date"], i["open_cents"]) for inv in known
+                              for i in inv["installments"] if i["open_cents"] > 0)
+            if upcoming:
+                day = upcoming[0][0]
+                parts.append(t("inv_next_installment", lang).format(
+                    amount=ledger.fmt(upcoming[0][1], lang),
+                    date=f"{day[8:10]}/{day[5:7]}/{day[:4]}"))
+        else:
+            parts.append(t("inv_settled", lang))
+    if any(inv["state"] in ("unknown", "draft") for inv in live):
+        parts.append(t("inv_some_unknown" if known else "inv_not_recorded", lang))
     return " ".join(parts)
 
 
@@ -335,7 +351,9 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     if route == "next_appointment":
         data = patient_accessor.get_next_appointment(cf, conn, ip=ip)
     elif route == "invoices":
-        data = patient_accessor.get_invoices(cf, conn, ip=ip)
+        data = patient_accessor.get_billing(cf, conn, ip=ip)
+        if data is not None and not data["invoices"]:
+            data = None
     elif route == "demographics":
         data = patient_accessor.get_demographics(cf, conn, ip=ip)
     else:
@@ -472,6 +490,8 @@ def selftest():
                 visit_id INTEGER NOT NULL,
                 line_index INTEGER NOT NULL,
                 amount REAL NOT NULL,
+            -- the ledger reads cents (P07); derived here, as storage backfills it
+            amount_cents INTEGER GENERATED ALWAYS AS (CAST(round(amount * 100) AS INTEGER)),
                 description TEXT
             );
             CREATE TABLE audit_log (
@@ -486,6 +506,8 @@ def selftest():
                 reason TEXT
             );
         """)
+        import ledger
+        conn.executescript(ledger.SCHEMA)
         conn.commit()
 
         # 0. fixture: two patients, each with a visit, a next appointment
@@ -903,7 +925,7 @@ def selftest():
                 self.calls = []
 
             def __getattr__(self, name):
-                empty = None if name in ("get_next_appointment", "get_demographics") else []
+                empty = None if name in ("get_next_appointment", "get_demographics", "get_billing") else []
 
                 def _call(cf, conn, ip=None):
                     self.calls.append((name, ip))

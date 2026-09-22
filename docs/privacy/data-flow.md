@@ -27,6 +27,7 @@ public site :5002 ──(VOICE_DEMO=1 only)──► Deepgram, ElevenLabs   [dem
 | Visits, procedures, clinical notes | `visits`, `sorted/<id>/notes` | staff app, local model, search index | no |
 | Invoices | `invoices`, `sorted/<id>/records` | staff app, patient app | no |
 | Appointments | `appointments` | staff app, patient app | no |
+| Invoice status, payments, installments | `billing_invoices`, `payments`, `payment_allocations`, `installments` | staff app (dentist changes, assistant views), patient app (own only) | no - payments are typed in by staff; no provider, no money moves |
 | Consent records | `consent_records` | staff app, patient app | no |
 | Data requests and exports | `data_requests`, `exports/` (24 h) | staff app, patient app | only when handed to the patient |
 | Audit trail | `audit_log` (surrogate ids only) | all apps | no |

@@ -13,6 +13,7 @@ from flask import (Blueprint, current_app, g, redirect, render_template, request
 from codice_fiscale import normalize as normalize_cf
 import appointments
 import consent
+import ledger
 import data_rights
 import patient_accessor
 import patient_auth
@@ -188,6 +189,15 @@ def data_download(req_id):
               ip=net.from_request(request))
     return send_file(path.resolve(), as_attachment=True,
                      download_name=f"my-data-{req_id}.zip", max_age=0)
+
+
+@patient_bp.route("/billing")
+def billing():
+    # the patient's own invoices, from the session id only, through the same
+    # scope-checked accessor the chat uses (P07.05)
+    summary = patient_accessor.get_billing(g.patient["patient_id"], get_db(),
+                                           ip=net.from_request(request))
+    return render_template("patient_billing.html", summary=summary, fmt=ledger.fmt)
 
 
 @patient_bp.route("/consent", methods=["POST"])

@@ -18,6 +18,7 @@ from werkzeug.security import generate_password_hash
 import app.db as app_db
 import auth
 import clinic_time
+import ledger
 import patient_id
 import pending_actions
 import web_session
@@ -67,12 +68,22 @@ def _seed(db_path, root):
         " requested_at) VALUES (?, 'export', ?, 'patient', '2026-09-22T08:00:00+00:00')",
         (pid, pid))
     req_id = cur.lastrowid
+    conn.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents,"
+                 " description) VALUES (?, ?, 0, 120.0, 12000, 'visita')", (pid, visit_id))
+    conn.commit()
+    conn.row_factory = sqlite3.Row
+    invoice_id = ledger.ensure_invoice(conn, pid, visit_id)
+    conn.commit()
+    ledger.issue(conn, invoice_id, "rb_dentist", "dentist")
+    payment_id, _ = ledger.record_payment(conn, invoice_id, "20,00", "cash", "rb-seed",
+                                          "rb_dentist", "dentist")
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
     notes.mkdir(parents=True)
     (notes / "rb1.json").write_text("{}")
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
+            "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "username": "rb_target", "filename": "app.css"}
 
 

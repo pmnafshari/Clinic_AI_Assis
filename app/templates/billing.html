@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Billing</p>
+    <h1 class="ds-page-title">Invoices and payments</h1>
+    <p class="ds-page-meta">Payments recorded by staff · no money moves through this system</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div>
+    <strong class="ds-alert-title">Demo clinic - synthetic data</strong>
+    Every payment here was typed in by a person after money changed hands elsewhere. There is no
+    payment provider and no fiscal invoice is issued. Invoices from before the ledger stay
+    <strong>unknown</strong> - never counted as owed - until someone reconciles them.
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-sm-4"><section class="card dash-card"><div class="dash-card-body">
+    <p class="ds-card-sub mb-1">Still to pay (issued invoices)</p>
+    <p class="h4 mb-0 ds-numeral">{{ fmt(owed, 'en') }}</p>
+  </div></section></div>
+  <div class="col-sm-4"><section class="card dash-card"><div class="dash-card-body">
+    <p class="ds-card-sub mb-1">Recorded payments, net of refunds</p>
+    <p class="h4 mb-0 ds-numeral">{{ fmt(recorded, 'en') }}</p>
+  </div></section></div>
+  <div class="col-sm-4"><section class="card dash-card"><div class="dash-card-body">
+    <p class="ds-card-sub mb-1">Unknown status, to reconcile</p>
+    <p class="h4 mb-0 ds-numeral">{{ work.unknown | length }}</p>
+  </div></section></div>
+</div>
+
+{% for key, title, empty in [('owed', 'Owed, by due date', 'Nothing owed on issued invoices.'),
+                             ('unknown', 'Unknown status - reconcile', 'Nothing to reconcile.'),
+                             ('draft', 'Drafts - not yet issued', 'No drafts.')] %}
+<section class="card dash-card mb-3" aria-labelledby="bill-{{ key }}">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="bill-{{ key }}">{{ title }}</h2></div>
+  <div class="dash-card-body">
+    {% if work[key] %}
+    <ul class="ds-rows">
+      {% for s in work[key] %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <a class="ds-row-title" href="{{ url_for('billing.patient', cf=s.cf) }}">{{ s.patient_name }}</a>
+          <span class="ds-row-sub">visit {{ s.visit_date or 'undated' }} · billed {{ fmt(s.total_cents, 'en') }}{% if key == 'owed' %} · due {{ s.due_date }}{% endif %}</span>
+        </span>
+        {% if key == 'owed' %}<span class="ds-numeral ms-auto">{{ fmt(s.outstanding_cents, 'en') }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ empty }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

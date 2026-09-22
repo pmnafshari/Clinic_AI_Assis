@@ -138,6 +138,14 @@ def _rows(conn, sql, pid):
     return [dict(r) for r in conn.execute(sql, (pid,)).fetchall()]
 
 
+def _billing(conn, pid):
+    import ledger
+    summary = ledger.patient_summary(conn, pid)
+    return [{k: inv[k] for k in ("visit_date", "state", "currency", "due_date", "lines",
+                                 "total_cents", "paid_cents", "outstanding_cents", "installments")}
+            for inv in summary["invoices"]]
+
+
 def patient_data(conn, pid):
     patient = conn.execute("SELECT patient_id, codice_fiscale, patient_name, phone FROM patients"
                            " WHERE patient_id = ?", (pid,)).fetchone()
@@ -153,6 +161,9 @@ def patient_data(conn, pid):
                                     " FROM appointments WHERE patient_id = ? ORDER BY id", pid),
         "consent": _rows(conn, "SELECT purpose, text_version, granted, actor_role, ts"
                                " FROM consent_records WHERE patient_id = ? ORDER BY id", pid),
+        "billing": _billing(conn, pid),
+        "payments": _rows(conn, "SELECT kind, amount_cents, method, received_on, reference"
+                                " FROM payments WHERE patient_id = ? ORDER BY id", pid),
         "requests": _rows(conn, "SELECT kind, status, requested_at, reviewed_at, reason,"
                                 " hold_reason FROM data_requests WHERE patient_id = ?"
                                 " ORDER BY id", pid),

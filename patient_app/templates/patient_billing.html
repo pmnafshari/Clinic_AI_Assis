@@ -1,0 +1,40 @@
+{% extends "patient_base.html" %}
+{% block card_class %}patient-card--wide patient-card--dash{% endblock %}
+{% block lang_class %}patient-lang--wide{% endblock %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ t('nav_billing', lang) }}</p>
+    <h1 class="ds-page-title">{{ t('bill_heading', lang) }}</h1>
+  </div>
+</div>
+<p class="small text-secondary">{{ t('bill_notice', lang) }}</p>
+
+{% if summary and summary.invoices %}
+<section class="ds-card patient-profile-card mb-3">
+  <div class="ds-card-body">
+    <p class="mb-1">{{ t('bill_outstanding', lang) }}: <strong class="ds-numeral">{{ fmt(summary.outstanding_cents, lang) }}</strong></p>
+    {% if summary.unknown %}<p class="small text-secondary mb-0">{{ t('bill_unknown_count', lang).format(n=summary.unknown) }}</p>{% endif %}
+  </div>
+</section>
+{% for inv in summary.invoices %}
+<section class="ds-card patient-profile-card mb-3">
+  <div class="ds-card-body">
+    <h2 class="h6 mb-1">{{ t('bill_visit', lang).format(date=inv.visit_date | appt_day(lang) if inv.visit_date else '-') }} · {{ t('bill_state_' ~ inv.state, lang) }}</h2>
+    <ul class="list-unstyled small mb-2">
+      {% for line in inv.lines %}<li>{{ line.description or '-' }}: {{ fmt(line.amount_cents, lang) }}</li>{% endfor %}
+    </ul>
+    <p class="small mb-1">{{ t('bill_total', lang) }} {{ fmt(inv.total_cents, lang) }}{% if inv.state not in ('unknown', 'draft') %} · {{ t('bill_paid', lang) }} {{ fmt(inv.paid_cents, lang) }} · {{ t('bill_outstanding', lang) }} {{ fmt(inv.outstanding_cents, lang) }}{% endif %}{% if inv.due_date and inv.outstanding_cents %} · {{ t('bill_due', lang) }} {{ inv.due_date | appt_day(lang) }}{% endif %}</p>
+    {% if inv.installments %}
+    <p class="small mb-1"><strong>{{ t('bill_installments', lang) }}</strong></p>
+    <ul class="list-unstyled small mb-0">
+      {% for i in inv.installments %}<li>{{ i.due_date | appt_day(lang) }}: {{ fmt(i.amount_cents, lang) }} - {{ t('bill_open', lang) if i.open_cents else t('bill_covered', lang) }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</section>
+{% endfor %}
+{% else %}
+<p>{{ t('bill_none', lang) }}</p>
+{% endif %}
+{% endblock %}

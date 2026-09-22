@@ -73,8 +73,27 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
         conn.execute("INSERT INTO audit_unlock (reason) VALUES ('erasure')")
         if _has(conn, "consent_records"):
             conn.execute("DELETE FROM consent_records WHERE patient_id = ?", (pid,))
+        if _has(conn, "billing_events"):
+            # queued reminders are not fiscal records; they go whatever is held
+            conn.execute("DELETE FROM billing_events WHERE patient_id = ?", (pid,))
+        if not hold_invoices and _has(conn, "billing_invoices"):
+            # the ledger is fiscal: it goes only when invoices are not held
+            conn.execute("DELETE FROM payment_allocations WHERE payment_id IN"
+                         " (SELECT id FROM payments WHERE patient_id = ?)", (pid,))
+            conn.execute("DELETE FROM payments WHERE patient_id = ? AND reverses_payment_id"
+                         " IS NOT NULL", (pid,))
+            conn.execute("DELETE FROM payments WHERE patient_id = ?", (pid,))
+            conn.execute("DELETE FROM installments WHERE plan_id IN (SELECT p.id FROM"
+                         " installment_plans p JOIN billing_invoices b ON b.id = p.invoice_id"
+                         " WHERE b.patient_id = ?)", (pid,))
+            conn.execute("DELETE FROM installment_plans WHERE invoice_id IN"
+                         " (SELECT id FROM billing_invoices WHERE patient_id = ?)", (pid,))
+            conn.execute("DELETE FROM billing_invoices WHERE patient_id = ?", (pid,))
         if not hold_invoices:
             conn.execute("DELETE FROM invoices WHERE patient_id = ?", (pid,))
+        if not invoiced and _has(conn, "billing_invoices"):
+            # hold requested but nothing invoiced: no ledger row can remain
+            conn.execute("DELETE FROM billing_invoices WHERE patient_id = ?", (pid,))
         if invoiced:
             conn.execute(f"DELETE FROM visits WHERE patient_id = ? AND id NOT IN ({marks})",
                          [pid] + invoiced)
@@ -317,6 +336,13 @@ def selftest():
 
         gone = seed("ZZER800101010101", "Ezio Gone", invoice=False)
         held = seed("ZZER800101010102", "Hilda Held", invoice=True)
+        import ledger
+        hv = conn.execute("SELECT visit_id FROM invoices WHERE patient_id = ?", (held,)).fetchone()[0]
+        conn.execute("UPDATE invoices SET amount_cents = 9000 WHERE patient_id = ?", (held,))
+        hinv = ledger.ensure_invoice(conn, held, hv)
+        conn.commit()
+        ledger.issue(conn, hinv, "drossi", "dentist")
+        ledger.record_payment(conn, hinv, "40,00", "card", "er-1", "drossi", "dentist")
         stay = seed("ZZER800101010103", "Stan Stays", invoice=False)
 
         # 1. only a role that may approve erasures can run one
@@ -355,6 +381,35 @@ def selftest():
                              " WHERE patient_id = ?", (held,)).fetchone()
         assert tuple(visit) == ("2026-05-01", "", "[]"), f"3: visit shell {tuple(visit)}"
         assert [p.name for p in (sorted_root / held).iterdir()] == ["records"], "3: records kept"
+        assert ledger.summary(conn, hinv)["paid_cents"] == 4000, "3: the ledger is held with them"
+        assert conn.execute("SELECT COUNT(*) FROM billing_events WHERE patient_id = ?",
+                            (held,)).fetchone()[0] == 0, "3: queued reminders go"
+
+        # 3b. with no invoice hold, the ledger goes too: payments, allocations,
+        # plans, invoices, events - through the unlock, nothing left
+        free = seed("ZZER800101010104", "Fabio Free", invoice=True)
+        fv = conn.execute("SELECT visit_id FROM invoices WHERE patient_id = ?", (free,)).fetchone()[0]
+        conn.execute("UPDATE invoices SET amount_cents = 6000 WHERE patient_id = ?", (free,))
+        finv = ledger.ensure_invoice(conn, free, fv)
+        conn.commit()
+        ledger.issue(conn, finv, "drossi", "dentist")
+        fp, _ = ledger.record_payment(conn, finv, "30,00", "cash", "er-2", "drossi", "dentist")
+        ledger.refund(conn, fp, "10,00", "er-3", "drossi", "dentist", "goodwill")
+        ledger.plan_installments(conn, finv, 2, "2030-02-01", "drossi", "dentist")
+        policy = root / "no-hold.json"
+        types = json.loads(RETENTION.read_text())["types"]
+        types["invoices"]["hold_on_erasure"] = False
+        policy.write_text(json.dumps({"types": types}))
+        result = erase(conn, free, "drossi", "dentist", 4, sorted_root, drop, undo, collection,
+                       tombstones=stones, policy_path=policy)
+        assert result["held"] == [] and not any(result["left"].values()), f"3b: {result}"
+        for table in ("payments", "billing_invoices", "billing_events", "invoices", "patients"):
+            assert conn.execute(f"SELECT COUNT(*) FROM {table} WHERE patient_id = ?",
+                                (free,)).fetchone()[0] == 0, f"3b: {table} kept a row"
+        assert conn.execute("SELECT COUNT(*) FROM payment_allocations WHERE invoice_id = ?",
+                            (finv,)).fetchone()[0] == 0, "3b: allocations kept"
+        assert conn.execute("SELECT COUNT(*) FROM installment_plans WHERE invoice_id = ?",
+                            (finv,)).fetchone()[0] == 0, "3b: plan kept"
 
         # 4. another patient is untouched
         assert conn.execute("SELECT phone FROM patients WHERE patient_id = ?",
@@ -365,7 +420,7 @@ def selftest():
         # 5. the tombstone holds no codice fiscale and no name
         text = stones.read_text()
         assert "ZZER" not in text.upper() and "Ezio" not in text, f"5: {text}"
-        assert len(text.splitlines()) == 2, "5: one tombstone per erasure"
+        assert len(text.splitlines()) == 3, "5: one tombstone per erasure"
 
         # 6. a copy taken before the erasure is cleaned again by reapply
         conn.close()

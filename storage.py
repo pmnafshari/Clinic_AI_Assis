@@ -145,6 +145,12 @@ def init_db(db_path):
     conn.executescript(CONSENT_SCHEMA)
     from data_rights import SCHEMA as DATA_RIGHTS_SCHEMA
     conn.executescript(DATA_RIGHTS_SCHEMA)
+
+    # the payment ledger (P07). its delete triggers read audit_unlock too
+    import ledger
+    _ensure_invoice_cents(conn)
+    conn.executescript(ledger.SCHEMA)
+    conn.executescript(ledger.APPEND_ONLY)
     conn.commit()
     return conn
 
@@ -212,6 +218,24 @@ def _ensure_audit_reason_column(conn):
         conn.execute("ALTER TABLE audit_log ADD COLUMN reason TEXT")
 
 
+def _ensure_invoice_cents(conn):
+    # money as integer cents (P07). the REAL amount stays for what already
+    # reads it; the ledger only ever sums amount_cents. filled from the decimal
+    # text of the stored value, never by multiplying a float.
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(invoices)").fetchall()}
+    if "amount_cents" not in existing:
+        conn.execute("ALTER TABLE invoices ADD COLUMN amount_cents INTEGER")
+    # a writer that only knows the old column still gets its cents: the value
+    # is rounded to the nearest cent, exact for any amount with two decimals
+    conn.execute("CREATE TRIGGER IF NOT EXISTS invoices_cents AFTER INSERT ON invoices"
+                 " WHEN NEW.amount_cents IS NULL BEGIN UPDATE invoices SET amount_cents ="
+                 " CAST(round(NEW.amount * 100) AS INTEGER) WHERE id = NEW.id; END")
+    from ledger import cents
+    for row in conn.execute("SELECT id, amount FROM invoices WHERE amount_cents IS NULL").fetchall():
+        conn.execute("UPDATE invoices SET amount_cents = ? WHERE id = ?",
+                     (cents(repr(row["amount"])), row["id"]))
+
+
 def _ensure_appointments_table(conn):
     # CREATE TABLE IF NOT EXISTS above already reaches an old database for the
     # table itself. this is here for the columns it will grow later - the same
@@ -268,15 +292,34 @@ def upsert_note_sql(note, source_path, conn):
         "SELECT id FROM visits WHERE source_path = ?", (source_path,)
     ).fetchone()["id"]
 
-    # invoices are positional; wipe and re-insert so the set stays authoritative
-    # when a re-imported note has fewer lines than before
-    conn.execute("DELETE FROM invoices WHERE visit_id = ?", (visit_id,))
-    for i, inv in enumerate(note.invoices):
+    # invoice lines are updated IN PLACE on (visit_id, line_index), so a line
+    # keeps its id across re-syncs and payments can point at it (P07.00). a
+    # line the note no longer has is removed.
+    import ledger
+    wanted = [(i, inv.amount, ledger.cents(repr(inv.amount)), inv.description)
+              for i, inv in enumerate(note.invoices)]
+    stored = [(r["line_index"], r["amount_cents"], r["description"]) for r in conn.execute(
+        "SELECT line_index, amount_cents, description FROM invoices WHERE visit_id = ?"
+        " ORDER BY line_index", (visit_id,))]
+    if stored != [(i, c, d) for i, _, c, d in wanted] and ledger.lines_locked(conn, visit_id):
+        # an issued, void or paid invoice does not change under a re-filed
+        # note. the sync fails where staff can see it; the fix is to void and
+        # reissue, which keeps the history
+        conn.rollback()
+        raise ValueError("this visit's invoice is issued or paid, so its lines cannot change"
+                         " from a note - void it and issue a new one")
+    for i, amount, amount_cents, description in wanted:
         conn.execute(
-            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
-            " VALUES (?, ?, ?, ?, ?)",
-            (pid, visit_id, i, inv.amount, inv.description),
+            "INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents,"
+            " description) VALUES (?, ?, ?, ?, ?, ?)"
+            " ON CONFLICT(visit_id, line_index) DO UPDATE SET amount = excluded.amount,"
+            " amount_cents = excluded.amount_cents, description = excluded.description",
+            (pid, visit_id, i, amount, amount_cents, description),
         )
+    conn.execute("DELETE FROM invoices WHERE visit_id = ? AND line_index >= ?",
+                 (visit_id, len(wanted)))
+    if wanted:
+        ledger.ensure_invoice(conn, pid, visit_id)
 
     conn.commit()
 

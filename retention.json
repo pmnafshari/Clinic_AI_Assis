@@ -6,7 +6,7 @@
     "invoices": {
       "keep_days": 3650,
       "hold_on_erasure": true,
-      "basis": "demo placeholder for fiscal record-keeping; kept with the name and codice fiscale they were issued to",
+      "basis": "demo placeholder for fiscal record-keeping; kept with the name and codice fiscale they were issued to, together with their payments, refunds and installments (P07)",
       "sweep": "report"
     },
     "clinical_records": {

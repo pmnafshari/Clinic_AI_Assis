@@ -31,7 +31,7 @@
       </a>
       {% if patient and not patient.must_change_pin %}
       <nav class="patient-nav ds-pill-nav {% block nav_class %}{% endblock %}" aria-label="{{ t('nav_overview', lang) }}">
-        {% for endpoint, key in [('home', 'nav_overview'), ('patient.appointments_page', 'nav_appointments'), ('patient.chat', 'nav_chat'), ('patient.profile', 'nav_profile')] %}
+        {% for endpoint, key in [('home', 'nav_overview'), ('patient.appointments_page', 'nav_appointments'), ('patient.billing', 'nav_billing'), ('patient.chat', 'nav_chat'), ('patient.profile', 'nav_profile')] %}
         <a href="{{ url_for(endpoint) }}"
            class="patient-nav-link{{ ' active' if request.endpoint == endpoint else '' }}"
            {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ t(key, lang) }}</a>

@@ -126,6 +126,12 @@
           </div>
           {# an occasional task, so it sits here rather than in a top bar that
              is already full at 1440px for a dentist (P06) #}
+          {% if authorize(g.user.role, 'view_billing') %}
+          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('billing.') else '' }}"
+             href="{{ url_for('billing.index') }}">
+            <i class="bi bi-receipt"></i> Billing
+          </a>
+          {% endif %}
           {% if authorize(g.user.role, 'manage_data_requests') %}
           <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('data_requests.') else '' }}"
              href="{{ url_for('data_requests.index') }}">

@@ -70,6 +70,22 @@ def get_invoices(pid, conn, ip=None):
     return [{"amount": row["amount"], "description": row["description"]} for row in rows]
 
 
+def get_billing(pid, conn, ip=None):
+    # the ledger's own summary - the one computation staff, the portal and the
+    # chat all read (P07.02). scope-checked like every other patient read.
+    # the check is this module's own scoped read: every invoice in the
+    # summary must be a visit this patient's own lines belong to
+    import ledger
+    own = {row["visit_id"] for row in conn.execute(
+        "SELECT visit_id FROM invoices WHERE patient_id = ?", (pid,)).fetchall()}
+    summary = ledger.patient_summary(conn, pid)
+    rows = _scope_rows([{"patient_id": i["patient_id"] if i["visit_id"] in own else None}
+                        for i in summary["invoices"]], pid, conn, "get_billing", ip=ip)
+    if len(rows) != len(summary["invoices"]):
+        return None
+    return summary
+
+
 # ip rides along so the mismatch row records where the request came from.
 # this is the most security-relevant of the three patient rows, and a sweep
 # with no source recorded is invisible after the fact. it defaults to None,

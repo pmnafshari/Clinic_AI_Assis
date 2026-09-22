@@ -88,6 +88,8 @@ ROLE_PAGES = {
         ("reports", "/reports"),
         ("appointments", "/appointments"),
         ("data-requests", "/data-requests"),
+        ("billing", "/billing"),
+        ("patient-billing", f"/patients/{CF}/billing"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -99,6 +101,8 @@ ROLE_PAGES = {
         # shot here as well because it is a different render from the
         # dentist's, not the same page behind the same gate
         ("appointments", "/appointments"),
+        # an assistant sees billing without the forms - a different render
+        ("patient-billing", f"/patients/{CF}/billing"),
     ],
     "admin": [
         ("admin-users", "/admin/users"),
