@@ -14,7 +14,6 @@ import app.agent_routes as agent_routes
 import app.db as app_db
 import pending_actions
 from app import create_app
-from web_session import _hash_token
 
 
 def _seed_user(db_path, username, password, role):
@@ -147,12 +146,8 @@ def selftest():
         token2 = _token_from(build_resp2.text)
         csrf_confirm2 = _csrf_from(build_resp2.text)
 
-        raw_session_token = client.get_cookie("session_token").value
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "UPDATE sessions SET role = 'assistant' WHERE token_hash = ?",
-            (_hash_token(raw_session_token),),
-        )
+        conn.execute("UPDATE users SET role = 'assistant' WHERE username = 'drossi'")
         conn.commit()
         conn.close()
 
@@ -170,12 +165,9 @@ def selftest():
         assert len(denied_rows) == 1, "RBAC-01/SC4: denied confirm should log exactly one denied row"
         assert denied_rows[0]["username"] == "drossi", "denied row should carry the acting username"
 
-        # restore the live session's role for the remaining assertions
+        # restore the account's role for the remaining assertions
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "UPDATE sessions SET role = 'dentist' WHERE token_hash = ?",
-            (_hash_token(raw_session_token),),
-        )
+        conn.execute("UPDATE users SET role = 'dentist' WHERE username = 'drossi'")
         conn.commit()
         conn.close()
 

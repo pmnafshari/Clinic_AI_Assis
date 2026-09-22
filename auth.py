@@ -20,6 +20,59 @@ PERMISSIONS = {
 }
 
 
+# staff endpoint -> the capability its view checks. "public" needs no session,
+# "login" needs any signed-in account. rbac_selftest walks every endpoint in
+# the app for every role against this table, and fails on an endpoint that is
+# missing from it - a new route has to be given a policy to pass the suite.
+ROUTE_POLICY = {
+    "static": "public",
+    "shared": "public",
+    "auth.login": "public",
+    "auth.logout": "login",
+    "auth.change_password": "login",
+    "dashboard.index": "login",
+    "admin.users_view": "manage_users",
+    "admin.create": "manage_users",
+    "admin.apply": "manage_users",
+    "admin.confirm_fragment": "manage_users",
+    "agent.command_page": "update_field",
+    "agent.edit_page": "update_field",
+    # confirm and undo act on a pending action the same user created; the
+    # capability checked is the pending tool's own, re-checked in agent.py
+    "agent.confirm_change": "update_field",
+    "agent.undo_change": "update_field",
+    "appointments.index": "manage_appointments",
+    "appointments.book": "manage_appointments",
+    "appointments.cancel": "manage_appointments",
+    "appointments.confirm": "manage_appointments",
+    "appointments.decline": "manage_appointments",
+    "appointments.reschedule": "manage_appointments",
+    "notes.new_note": "append_note",
+    "patients.list_view": "read_notes",
+    "patients.search_fragment": "read_notes",
+    "patients.detail_view": "read_notes",
+    "patients.edit_form_fragment": "read_notes",
+    # the form is read_notes; the change it proposes is gated as update_field
+    # when the pending action is built
+    "patients.edit_submit": "read_notes",
+    "patients.files_fragment": "read_clinical",
+    "patients.visit_edit_form_fragment": "read_clinical",
+    "patients.visit_edit_submit": "read_clinical",
+    "patients.issue_pin_submit": "issue_patient_pin",
+    "patients.revoke_pin_submit": "revoke_patient_pin",
+    # duplicate review is admin's, by the P04 decision - the one place admin
+    # sees patient names and codici fiscali. recorded in P06 as an exception.
+    "patients.duplicates_view": "manage_users",
+    "patients.duplicates_dismiss": "manage_users",
+    "patients.duplicates_merge": "manage_users",
+    "qa.qa_page": "read_notes",
+    "reports.index": "read_clinical",
+    "upload.submit_dashboard": "upload_file",
+    "upload.submit_patient": "upload_file",
+    "upload.recent_intake": "upload_file",
+}
+
+
 def authorize(role, action):
     # unknown role -> empty set -> denies everything
     return action in PERMISSIONS.get(role, set())

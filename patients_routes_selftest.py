@@ -14,7 +14,6 @@ import app.patients_routes as patients_routes
 from app import create_app
 from auth import authorize
 from dental_notes_schema import DentalNote
-from web_session import _hash_token
 
 
 def _seed_user(db_path, username, password, role):
@@ -304,7 +303,7 @@ def selftest():
             "confirming should apply the frozen new value"
 
         # 9. RBAC re-check (SC4) - build as dentist (authorized), then
-        # downgrade the live session's role before confirming. The denial
+        # demote the account before confirming. The denial
         # must come from the independent check inside apply, not the UI.
         edit_form_resp2 = dentist_client.get(f"/patients/{cf}/edit-form?field=phone")
         edit_csrf2 = _csrf_from(edit_form_resp2.text)
@@ -315,12 +314,8 @@ def selftest():
         token2 = _token_from(build_resp2.text)
         confirm_csrf2 = _csrf_from(build_resp2.text)
 
-        raw_session_token = dentist_client.get_cookie("session_token").value
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "UPDATE sessions SET role = 'assistant' WHERE token_hash = ?",
-            (_hash_token(raw_session_token),),
-        )
+        conn.execute("UPDATE users SET role = 'assistant' WHERE username = 'drossi'")
         conn.commit()
         conn.close()
 
@@ -342,12 +337,9 @@ def selftest():
         assert len(denied_rows) == 1, \
             f"RBAC re-check: expected 1 denied update_field row, got {len(denied_rows)}"
 
-        # restore the live session's role for any assertions added later
+        # restore the account's role for any assertions added later
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "UPDATE sessions SET role = 'dentist' WHERE token_hash = ?",
-            (_hash_token(raw_session_token),),
-        )
+        conn.execute("UPDATE users SET role = 'dentist' WHERE username = 'drossi'")
         conn.commit()
         conn.close()
 
@@ -540,12 +532,8 @@ def selftest():
         recheck_token = _token_from(recheck_build_resp.text)
         recheck_confirm_csrf = _csrf_from(recheck_build_resp.text)
 
-        raw_session_token2 = dentist_client.get_cookie("session_token").value
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "UPDATE sessions SET role = 'assistant' WHERE token_hash = ?",
-            (_hash_token(raw_session_token2),),
-        )
+        conn.execute("UPDATE users SET role = 'assistant' WHERE username = 'drossi'")
         conn.commit()
         conn.close()
 
@@ -573,10 +561,7 @@ def selftest():
             f"expected 1 denied update_visit_field row, got {len(denied_visit_rows)}"
 
         conn = sqlite3.connect(db_path)
-        conn.execute(
-            "UPDATE sessions SET role = 'dentist' WHERE token_hash = ?",
-            (_hash_token(raw_session_token2),),
-        )
+        conn.execute("UPDATE users SET role = 'dentist' WHERE username = 'drossi'")
         conn.commit()
         conn.close()
 

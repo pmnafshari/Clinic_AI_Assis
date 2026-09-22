@@ -204,8 +204,10 @@ def selftest():
         )
         assert admin_login_resp.status_code == 302, "admin login should redirect"
 
+        # the form itself is gated now (P06), not only the save
         admin_new_get = client_admin.get("/notes/new")
-        csrf_admin_notes = _csrf_from(admin_new_get.text)
+        assert admin_new_get.status_code == 302, "a role without append_note gets no note form"
+        csrf_admin_notes = _csrf_from(client_admin.get("/", follow_redirects=True).text)
 
         denied_cf = "BNCH900010150500"
         denied_resp = client_admin.post(
@@ -220,8 +222,9 @@ def selftest():
                 "csrf_token": csrf_admin_notes,
             },
         )
-        assert denied_resp.status_code == 200, "denied submit should re-render, not redirect"
-        assert "permission to add notes" in denied_resp.text, "denied submit should show the permission message"
+        assert denied_resp.status_code == 302, "denied submit should go back to the dashboard"
+        assert "permission to add notes" in client_admin.get("/", follow_redirects=True).text, \
+            "denied submit should show the permission message"
 
         assert not (Path(tmp) / "sorted" / denied_cf).exists(), "denied role should write no file"
 

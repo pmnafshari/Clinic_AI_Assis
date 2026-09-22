@@ -39,9 +39,11 @@ def load_session(conn, token, now=None):
         now = clinic_time.now_utc()
 
     token_hash = _hash_token(token)
-    # join users so deactivating an account also kills its live sessions
+    # join users so deactivating an account also kills its live sessions. the
+    # role comes from users too, not from the copy taken at login - otherwise
+    # a demoted account keeps its old role for as long as it stays active (P06)
     row = conn.execute(
-        "SELECT s.username, s.role, s.last_seen_at, u.must_change_password FROM sessions s"
+        "SELECT s.username, u.role, s.last_seen_at, u.must_change_password FROM sessions s"
         " JOIN users u ON u.username = s.username"
         " WHERE s.token_hash = ? AND u.active = 1",
         (token_hash,),

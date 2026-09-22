@@ -3,6 +3,7 @@ from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import patient_id
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from dental_notes_schema import DentalNote
@@ -41,7 +42,7 @@ def _locked_patient(cf):
     # something they have been handed and can disagree with.
     latest = conn.execute(
         "SELECT visit_date FROM visits WHERE patient_id = ? AND visit_date IS NOT NULL"
-        " ORDER BY visit_date DESC LIMIT 1", (cf,)).fetchone()
+        " ORDER BY visit_date DESC LIMIT 1", (patient_id.resolve(conn, cf),)).fetchone()
     return {
         "cf": cf,
         "patient_name": patient["patient_name"],
@@ -52,17 +53,17 @@ def _locked_patient(cf):
 
 @notes_bp.route("/notes/new", methods=["GET", "POST"])
 def new_note():
+    # one gate for every step. the extract step used to run ungated, and with
+    # ?cf= it rendered the locked patient's name to any signed-in role (P06)
+    if not authorize(g.user["role"], "append_note"):
+        cf = request.values.get("cf", "")
+        log_audit(get_db(), g.user["username"], g.user["role"], "append_note",
+                  target=cf or None, allowed=0)
+        flash("You don't have permission to add notes.", "danger")
+        return redirect(url_for("dashboard.index"))
+
     if request.method == "GET":
         cf = request.args.get("cf", "")
-        if cf:
-            # ?cf= turns an empty form into a patient-name disclosure - gate
-            # it on append_note same as the write itself, the no-cf GET stays
-            # ungated
-            if not authorize(g.user["role"], "append_note"):
-                log_audit(get_db(), g.user["username"], g.user["role"], "append_note",
-                           target=cf, allowed=0)
-                flash("You don't have permission to add notes.", "danger")
-                return redirect(url_for("dashboard.index"))
         locked = _locked_patient(cf)
         if locked:
             # who was handed which patient's details, and when. a prefill is a
@@ -139,13 +140,6 @@ def new_note():
         )
     except Exception as e:
         return render_template("notes_new.html", error=f"invalid fields: {e}", locked=locked)
-
-    if not authorize(g.user["role"], "append_note"):
-        log_audit(get_db(), g.user["username"], g.user["role"], "append_note",
-                   target=note.codice_fiscale, allowed=0)
-        return render_template(
-            "notes_new.html", error="You don't have permission to add notes.", locked=locked
-        )
 
     status = save_new_note(
         note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT
