@@ -115,6 +115,44 @@
       </div>
     </section>
 
+    <section class="card dash-card" aria-labelledby="rights-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="rights-title">Data requests</h2>
+          <p class="ds-card-sub">Access, copy, correction or erasure - reviewed by a dentist</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if requests %}
+        <ul class="ds-rows">
+          {% for r in requests %}
+          <li class="ds-row"><span class="ds-row-main">
+            <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
+            <span class="ds-row-sub">filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}{% if r.reason %} · {{ r.reason }}{% endif %}</span>
+          </span></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty-line">No requests.</p>
+        {% endif %}
+        {% if authorize(g.user.role, 'file_data_request') %}
+        <form method="post" action="{{ url_for('data_requests.file_for_patient', cf=cf) }}" class="d-flex gap-2 flex-wrap mt-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="ds-sr-only" for="rights-kind">Request</label>
+          <select class="form-select form-select-sm w-auto" id="rights-kind" name="kind">
+            <option value="access">Access</option>
+            <option value="export">Copy of data</option>
+            <option value="amend">Correction</option>
+            <option value="erasure">Erasure</option>
+          </select>
+          <label class="ds-sr-only" for="rights-detail">Details</label>
+          <input type="text" class="form-control form-control-sm w-auto flex-grow-1" id="rights-detail" name="detail" placeholder="What the patient asked for" maxlength="1000">
+          <button type="submit" class="btn btn-outline-primary btn-sm">File request</button>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
     <section class="card dash-card" aria-labelledby="visits-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="visits-title">Visit dates</h2>

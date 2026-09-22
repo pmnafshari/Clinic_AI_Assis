@@ -60,6 +60,12 @@
             <i class="bi bi-graph-up"></i> Reports
           </a>
           {% endif %}
+          {% if authorize(g.user.role, 'manage_data_requests') %}
+          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('data_requests.') else '' }}"
+             href="{{ url_for('data_requests.index') }}">
+            <i class="bi bi-shield-lock"></i> Data requests
+          </a>
+          {% endif %}
           {% if authorize(g.user.role, 'manage_users') %}
           <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('admin.') else '' }}"
              href="{{ url_for('admin.users_view') }}">

@@ -7,6 +7,7 @@ import sqlite3
 import agent
 import ask
 import consent
+import data_rights
 import patient_auth
 import patient_identity
 import pending_actions
@@ -214,6 +215,7 @@ def detail_view(cf):
         # happened without reading what it said (RBAC-03)
         timeline=patient_identity.timeline(conn, cf, show_clinical=show_clinical),
         consents=consent.state(conn, pid, "en"),
+        requests=data_rights.for_patient(conn, pid),
     )
 
 

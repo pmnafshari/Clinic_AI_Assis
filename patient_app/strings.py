@@ -154,6 +154,28 @@ STRINGS = {
     },
     "chat_consent_link": {"it": "Vai al profilo", "en": "Go to your profile"},
 
+    # data rights (P06)
+    "rights_heading": {"it": "I tuoi dati", "en": "Your data"},
+    "rights_intro": {
+        "it": "Puoi chiedere una copia dei tuoi dati, una correzione o la cancellazione. La clinica esamina ogni richiesta.",
+        "en": "You can ask for a copy of your data, a correction, or erasure. The clinic reviews every request.",
+    },
+    "rights_kind_access": {"it": "Vedere i miei dati", "en": "See my data"},
+    "rights_kind_export": {"it": "Copia dei miei dati", "en": "A copy of my data"},
+    "rights_kind_amend": {"it": "Correggere i miei dati", "en": "Correct my data"},
+    "rights_kind_erasure": {"it": "Cancellare i miei dati", "en": "Erase my data"},
+    "rights_detail_label": {"it": "Dettagli (facoltativo)", "en": "Details (optional)"},
+    "rights_submit": {"it": "Invia la richiesta", "en": "Send request"},
+    "rights_status_open": {"it": "In attesa", "en": "Waiting for review"},
+    "rights_status_approved": {"it": "Approvata", "en": "Approved"},
+    "rights_status_rejected": {"it": "Respinta", "en": "Refused"},
+    "rights_status_done": {"it": "Completata", "en": "Done"},
+    "rights_download": {"it": "Scarica la copia (24 ore)", "en": "Download the copy (24 hours)"},
+    "rights_erasure_note": {
+        "it": "Alcuni dati, come le fatture, possono dover essere conservati per legge: in quel caso la clinica ti dirà quali e perché.",
+        "en": "Some data, such as invoices, may have to be kept by law: if so the clinic will tell you which and why.",
+    },
+
     "brand_line": {
         "it": "I tuoi dati clinici, quando ti servono.",
         "en": "Your clinical records, when you need them.",

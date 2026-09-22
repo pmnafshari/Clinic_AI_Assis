@@ -60,4 +60,38 @@
 {% endfor %}
 </div>
 </section>
+
+<section class="ds-card patient-profile-card mt-3" aria-labelledby="rights">
+<div class="ds-card-body">
+<h2 class="h5" id="rights">{{ t('rights_heading', lang) }}</h2>
+<p class="small">{{ t('rights_intro', lang) }}</p>
+{% if requests %}
+<ul class="list-unstyled small">
+  {% for r in requests %}
+  <li class="mb-1">
+    {{ t('rights_kind_' ~ r.kind, lang) }} · {{ t('rights_status_' ~ r.status, lang) }}
+    {% if r.reason %} · {{ r.reason }}{% endif %}
+    {% if r.hold_reason %} · {{ r.hold_reason }}{% endif %}
+    {% if r.export_file %} · <a href="{{ url_for('patient.data_download', req_id=r.id) }}">{{ t('rights_download', lang) }}</a>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}
+<form method="post" action="{{ url_for('patient.data_request') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset class="mb-2">
+    {% for kind in ('export', 'access', 'amend', 'erasure') %}
+    <div class="form-check">
+      <input class="form-check-input" type="radio" name="kind" id="kind-{{ kind }}" value="{{ kind }}" {% if loop.first %}checked{% endif %}>
+      <label class="form-check-label" for="kind-{{ kind }}">{{ t('rights_kind_' ~ kind, lang) }}</label>
+    </div>
+    {% endfor %}
+  </fieldset>
+  <label class="form-label small" for="rights-detail">{{ t('rights_detail_label', lang) }}</label>
+  <textarea class="form-control mb-2" id="rights-detail" name="detail" rows="2" maxlength="1000"></textarea>
+  <p class="text-secondary small">{{ t('rights_erasure_note', lang) }}</p>
+  <button type="submit" class="btn btn-outline-primary btn-sm">{{ t('rights_submit', lang) }}</button>
+</form>
+</div>
+</section>
 {% endblock %}

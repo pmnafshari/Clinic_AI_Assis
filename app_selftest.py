@@ -813,8 +813,10 @@ def selftest():
         # into the avatar menu. PROPERTY UNCHANGED - the count is still per
         # role, and the two moved links are asserted present below so they
         # cannot have simply vanished.
-        assert shell.data.count(b'class="nav-link') == 6, \
-            f'20: a dentist should see 6 nav tabs, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        # 6 -> 7 in P06: Data requests behind manage_data_requests, which only
+        # a dentist holds. an assistant must not gain it - asserted in 20a.
+        assert shell.data.count(b'class="nav-link') == 7, \
+            f'20: a dentist should see 7 nav tabs, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
         menu = re.findall(rb'class="dropdown-item[^"]*"[^>]*>\s*<i[^>]*></i>\s*([^<]+?)\s*<', shell.data)
         assert b"Change password" in menu and b"Logout" in menu, \
             f"20: the avatar menu must carry Change password and Logout, got {menu}"
@@ -834,6 +836,8 @@ def selftest():
         asst_shell = client_asst.get("/")
         assert b"Reports" not in asst_shell.data, \
             "20a: an assistant must not be offered Reports"
+        assert b"Data requests" not in asst_shell.data, \
+            "20a: an assistant files requests but does not review them"
         # APPT-05, the other direction: reception books, so an assistant DOES
         # hold manage_appointments and must be offered the link. asserting only
         # the absences would let the capability be dropped from assistant

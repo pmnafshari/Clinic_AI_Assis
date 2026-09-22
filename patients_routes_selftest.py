@@ -1,3 +1,4 @@
+import os
 import re
 import sqlite3
 
@@ -1111,6 +1112,52 @@ def selftest():
             "purpose": "messaging", "granted": "0", "csrf_token": _csrf_from(page47.text)})
         assert "Withdrawn" in dentist_client.get(f"/patients/{mg_keep}").text, \
             "47: and the withdrawal shows"
+
+        # 48. data requests from the staff side (P06.05/06): filed at the desk,
+        # approved by a dentist, the copy downloaded and audited, and an
+        # erasure that needs its tick and then leaves the record gone
+        import erasure
+        from app import data_requests_routes
+        data_requests_routes.SORTED_ROOT = sorted_root
+        data_requests_routes.EXPORTS_DIR = Path(tmp) / "exports"
+        erasure.TOMBSTONES = Path(tmp) / "erasures.jsonl"
+        os.environ[erasure.KEY_ENV] = str(Path(tmp) / "erasure.key")
+        cf48 = "ZZRQ800101010101"
+        c48 = sqlite3.connect(db_path)
+        patient_id.seed_patient(c48, cf48, "Rita Request", "3331234567")
+        c48.commit()
+        c48.close()
+        page48 = assistant_client.get(f"/patients/{cf48}")
+        assistant_client.post(f"/patients/{cf48}/data-request", data={
+            "kind": "export", "detail": "asked at the desk", "csrf_token": _csrf_from(page48.text)})
+        req48 = _rows(db_path, "SELECT id, requested_role FROM data_requests WHERE detail ="
+                      " 'asked at the desk'")
+        assert [r[1] for r in req48] == ["assistant"], "48a: an assistant files for the patient"
+        listing = dentist_client.get("/data-requests")
+        assert "Rita Request" in listing.text, "48a: the dentist sees it to review"
+        dentist_client.post(f"/data-requests/{req48[0][0]}/review", data={
+            "decision": "approve", "csrf_token": _csrf_from(listing.text)})
+        got48 = dentist_client.get(f"/data-requests/{req48[0][0]}/download")
+        assert got48.status_code == 200 and got48.data[:2] == b"PK", "48b: the copy downloads"
+        assert _rows(db_path, "SELECT 1 FROM audit_log WHERE action = 'download_export'"
+                     " AND username = 'drossi'"), "48b: and the download is audited"
+
+        dentist_client.post(f"/patients/{cf48}/data-request", data={
+            "kind": "erasure", "csrf_token": _csrf_from(listing.text)})
+        erase48 = _rows(db_path, "SELECT id FROM data_requests WHERE kind = 'erasure'")[0][0]
+        dentist_client.post(f"/data-requests/{erase48}/review", data={
+            "decision": "approve", "csrf_token": _csrf_from(listing.text)})
+        assert dentist_client.get(f"/patients/{cf48}").status_code == 200, \
+            "48c: without the tick nothing is erased"
+        dentist_client.post(f"/data-requests/{erase48}/review", data={
+            "decision": "approve", "confirm": "yes", "csrf_token": _csrf_from(listing.text)})
+        assert dentist_client.get(f"/patients/{cf48}").status_code == 404, \
+            "48c: with the tick the patient is gone"
+        status48 = _rows(db_path, "SELECT status FROM data_requests WHERE id = ?", (erase48,))
+        assert status48[0][0] == "done", "48c: and the request is closed"
+        assert "Rita Request" not in dentist_client.get("/data-requests").text, \
+            "48c: the request list no longer names the erased patient"
+        del os.environ[erasure.KEY_ENV]
 
     print("selftest ok")
 

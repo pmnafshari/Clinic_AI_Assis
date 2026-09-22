@@ -7,11 +7,13 @@ place, the same shape app/__init__.py uses for CHANGE_PW_ALLOWED.
 
 from pathlib import Path
 
-from flask import Blueprint, current_app, g, redirect, render_template, request, url_for
+from flask import (Blueprint, current_app, g, redirect, render_template, request, send_file,
+                   url_for)
 
 from codice_fiscale import normalize as normalize_cf
 import appointments
 import consent
+import data_rights
 import patient_accessor
 import patient_auth
 import storage
@@ -34,6 +36,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 # pattern as app/db.py's DB_PATH. stays a plain string, not REPO_ROOT itself,
 # so a selftest can still reassign it.
 DB_PATH = str(REPO_ROOT / "db" / "clinic.sqlite")
+EXPORTS_DIR = data_rights.EXPORTS_DIR
 
 # reachable with no patient session at all
 NO_SESSION_ALLOWED = {"static", "vendor", "shared", "patient.login", "set_language"}
@@ -158,7 +161,33 @@ def profile():
     demo = patient_accessor.get_demographics(
         g.patient["patient_id"], get_db(), ip=net.from_request(request))
     consents = consent.state(get_db(), g.patient["patient_id"], current_language())
-    return render_template("patient_profile.html", cf=cf, demo=demo, consents=consents)
+    requests = data_rights.for_patient(get_db(), g.patient["patient_id"])
+    return render_template("patient_profile.html", cf=cf, demo=demo, consents=consents,
+                           requests=requests)
+
+
+@patient_bp.route("/data-request", methods=["POST"])
+def data_request():
+    pid = g.patient["patient_id"]
+    data_rights.file_request(get_db(), pid, request.form.get("kind", ""), pid, "patient",
+                             request.form.get("detail"))
+    return redirect(url_for("patient.profile") + "#rights")
+
+
+@patient_bp.route("/data-requests/<int:req_id>/download")
+def data_download(req_id):
+    conn = get_db()
+    pid = g.patient["patient_id"]
+    path, row = data_rights.export_path(conn, req_id, pid, EXPORTS_DIR)
+    if path is None:
+        if row is not None and row["patient_id"] != pid:
+            # someone else's request number. same response as a missing one
+            _deny(conn, pid, "patient_export_download")
+        return redirect(url_for("patient.profile") + "#rights")
+    log_audit(conn, pid, "patient", "download_export", pid, allowed=1,
+              ip=net.from_request(request))
+    return send_file(path.resolve(), as_attachment=True,
+                     download_name=f"my-data-{req_id}.zip", max_age=0)
 
 
 @patient_bp.route("/consent", methods=["POST"])

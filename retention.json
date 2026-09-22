@@ -1,0 +1,30 @@
+{
+  "_template": "DEMO TEMPLATE. Retention periods and holds for a demo clinic with synthetic data. They are placeholders chosen to exercise the code, not legal advice and not any real clinic's policy. A real clinic sets them with its own adviser before any real data is loaded.",
+  "types": {
+    "invoices": {
+      "keep_days": 3650,
+      "hold_on_erasure": true,
+      "basis": "demo placeholder for fiscal record-keeping; kept with the name and codice fiscale they were issued to"
+    },
+    "clinical_records": {
+      "keep_days": 3650,
+      "hold_on_erasure": false,
+      "basis": "demo placeholder; a real clinic's clinical-record duty must be confirmed by an adviser"
+    },
+    "audit_log": {
+      "keep_days": 730,
+      "hold_on_erasure": true,
+      "basis": "demo placeholder; rows name patients only by surrogate id, which stops resolving after erasure"
+    },
+    "exports": {
+      "keep_days": 1,
+      "hold_on_erasure": false,
+      "basis": "a copy handed to the patient; deleted after 24 hours"
+    },
+    "closed_data_requests": {
+      "keep_days": 1095,
+      "hold_on_erasure": true,
+      "basis": "demo placeholder; the record that a request was handled, with no personal details kept"
+    }
+  }
+}

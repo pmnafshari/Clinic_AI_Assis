@@ -342,7 +342,8 @@ def verify(archive, key_path=None):
     return manifest, problems
 
 
-def restore(archive, into, key_path=None, apply=False, rebuild_index=False):
+def restore(archive, into, key_path=None, apply=False, rebuild_index=False, tombstones=None,
+            erasure_key=None):
     into = Path(into)
     # never into the live data, and never over something that is already
     # there - a restore that silently merges into an existing tree is how a
@@ -360,11 +361,43 @@ def restore(archive, into, key_path=None, apply=False, rebuild_index=False):
     extract(Path(archive), key_path, key, into)
     (into / "manifest.json").unlink()
     problems = check_restored(into, manifest)
+    # an archive older than an erasure still holds the erased patient. every
+    # tombstone is applied to the restored copy before anything reads it, and
+    # before the index is rebuilt from its notes (P06.06). tombstones live
+    # outside the backup set, so the live file is the default.
+    reapplied = []
+    if not problems:
+        reapplied = reapply_erasures(into, tombstones, erasure_key, problems)
     rebuilt = None
     if rebuild_index and not problems:
         rebuilt = rebuild(into)
     return {"applied": True, "problems": problems, "manifest_counts": manifest["table_counts"],
-            "chroma": manifest["chroma"], "rebuilt": rebuilt}
+            "chroma": manifest["chroma"], "rebuilt": rebuilt, "reapplied_erasures": reapplied}
+
+
+def reapply_erasures(root, tombstones=None, erasure_key=None, problems=None):
+    # the restored sqlite is only opened when there is something to apply, and
+    # without init_db - a restore leaves the schema exactly as the backup had it
+    import erasure
+    import storage
+    stones = Path(tombstones or erasure.TOMBSTONES)
+    if not stones.exists() or not stones.read_text().strip():
+        return []
+    conn = storage.connect(str(Path(root) / DB_REL))
+    try:
+        columns = {r["name"] for r in conn.execute("PRAGMA table_info(patients)")}
+        if "patient_id" not in columns:
+            if problems is not None:
+                problems.append("this archive predates the surrogate patient id, so recorded "
+                                "erasures cannot be re-applied to it yet: run migrate_pid on the "
+                                "restored copy, then `python erasure.py reapply --root <dir>`, "
+                                "before using it")
+            return None
+        conn.executescript(storage.AUDIT_APPEND_ONLY)
+        return erasure.reapply(conn, Path(root) / "sorted", Path(root) / "drop",
+                               Path(root) / "db" / "undo_log.jsonl", stones, key_path=erasure_key)
+    finally:
+        conn.close()
 
 
 def rebuild(root):
@@ -478,7 +511,8 @@ def selftest():
         assert dry["applied"] is False and not dry["problems"], f"1: dry run verifies clean: {dry}"
         assert not into.exists(), "1: a dry run writes nothing"
 
-        done = restore(archive, into, key, apply=True, rebuild_index=True)
+        no_stones = tmp_root / "no-erasures.jsonl"
+        done = restore(archive, into, key, apply=True, rebuild_index=True, tombstones=no_stones)
         staged = Path(tempfile.mkdtemp(dir=tmp_root))
         extract(archive, *read_key(key), staged)
         dry_db_sha = sha256_file(staged / DB_REL)
@@ -592,12 +626,12 @@ def selftest():
         # and leaves the archive untouched
         archive_sha = sha256_file(archive)
         try:
-            restore(archive, into, key, apply=True)
+            restore(archive, into, key, apply=True, tombstones=no_stones)
             raise AssertionError("7: restore into a non-empty dir must be refused")
         except BackupError as e:
             assert "not empty" in str(e), f"7: {e}"
         try:
-            restore(archive, ROOT / "db", key, apply=True)
+            restore(archive, ROOT / "db", key, apply=True, tombstones=no_stones)
             raise AssertionError("7: restore into the live db dir must be refused")
         except BackupError as e:
             assert "live data" in str(e), f"7: {e}"
@@ -612,6 +646,35 @@ def selftest():
         assert left == ["clinic-20260101T000001Z.cbk", "clinic-20260101T000003Z.cbk"], f"8: kept {left}"
         assert removed == ["clinic-20260101T000000Z.cbk"], f"8: removed {removed}"
         assert (dest / "unrelated.txt").exists(), "8: rotation must not delete files it did not make"
+
+        # 9. P06.T3 - an archive from before an erasure, restored into a
+        # separate directory, does not bring the patient back
+        import erasure
+        stones = tmp_root / "erasures.jsonl"
+        ekey = tmp_root / "erasure.key"
+        archive9 = Path(create(data, dest, key, stamp="20260101T000009Z")["archive"])
+        live = storage.init_db(str(data / DB_REL))
+        pid9 = live.execute("SELECT patient_id FROM patients WHERE codice_fiscale ="
+                            " 'ZZBK800101010101'").fetchone()[0]
+        erasure.erase(live, pid9, "zzb_dentist", "dentist", 9, sorted_root=data / "sorted",
+                      drop_dir=data / "drop", undo_log=data / "db" / "undo_log.jsonl",
+                      tombstones=stones, key_path=ekey)
+        live.close()
+        into9 = tmp_root / "restored-after-erasure"
+        done9 = restore(archive9, into9, key, apply=True, rebuild_index=True, tombstones=stones,
+                        erasure_key=ekey)
+        assert done9["applied"] and done9["reapplied_erasures"] == [pid9], f"9: {done9}"
+        back = storage.connect(str(into9 / DB_REL))
+        name9 = back.execute("SELECT patient_name, phone FROM patients WHERE patient_id = ?",
+                             (pid9,)).fetchone()
+        clinical9 = back.execute("SELECT COUNT(*) FROM visits WHERE patient_id = ? AND"
+                                 " clinical_notes LIKE '%zzb marker%'", (pid9,)).fetchone()[0]
+        back.close()
+        # the demo policy holds invoices, so the row stays as the invoice's shell
+        assert name9 is None or name9[1] is None, f"9: the phone came back: {name9}"
+        assert clinical9 == 0, "9: the clinical note came back"
+        assert done9["rebuilt"]["indexed"] == 0, f"9: an erased note was re-indexed: {done9['rebuilt']}"
+        assert not any((into9 / "sorted").rglob("*.json")), "9: an erased note file came back"
     finally:
         shutil.rmtree(tmp_root, ignore_errors=True)
     print("selftest ok")

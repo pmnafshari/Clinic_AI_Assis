@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Privacy</p>
+    <h1 class="ds-page-title">Data requests</h1>
+    <p class="ds-page-meta">Access, export, correction and erasure requests · dentist only</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div>
+    <strong class="ds-alert-title">Demo clinic</strong>
+    Approving an access or export request builds a copy of that patient's record, downloadable
+    for 24 hours and then deleted. Approving an erasure removes the patient from every store
+    except what the retention policy holds, and the reason is recorded. The policy is a demo
+    template, not a legal position.
+  </div>
+</div>
+
+<section class="card dash-card">
+  <div class="dash-card-body">
+    {% if rows %}
+    <ul class="ds-rows">
+      {% for r in rows %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
+          <span class="ds-row-sub">
+            {% if r.patient_name %}{{ r.patient_name }} ({{ r.codice_fiscale }}){% else %}erased patient{% endif %}
+            · filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}
+            {% if r.reason %} · {{ r.reason }}{% endif %}
+            {% if r.hold_reason %} · held: {{ r.hold_reason }}{% endif %}
+          </span>
+          {% if r.detail %}<span class="ds-row-sub">"{{ r.detail }}"</span>{% endif %}
+        </span>
+        {% if r.status == 'open' %}
+        <form method="post" action="{{ url_for('data_requests.review', req_id=r.id) }}" class="ms-auto d-flex gap-2 align-items-center flex-wrap">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="ds-sr-only" for="reason-{{ r.id }}">Reason</label>
+          <input type="text" class="form-control form-control-sm" id="reason-{{ r.id }}" name="reason" placeholder="Reason (needed to refuse)" maxlength="500">
+          {% if r.kind == 'erasure' %}
+          <label class="small"><input type="checkbox" name="confirm" value="yes"> Erase for good - this cannot be undone</label>
+          {% endif %}
+          <button type="submit" name="decision" value="approve" class="btn btn-primary btn-sm">Approve</button>
+          <button type="submit" name="decision" value="reject" class="btn btn-outline-secondary btn-sm">Refuse</button>
+        </form>
+        {% elif r.export_file %}
+        <a class="btn btn-outline-primary btn-sm ms-auto" href="{{ url_for('data_requests.download', req_id=r.id) }}">Download copy</a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No data requests.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

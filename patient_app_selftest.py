@@ -13,6 +13,7 @@ from markupsafe import escape as html_escape
 import auth
 import clinic_time
 import consent
+import data_rights
 import patient_accessor
 import patient_app
 import patient_auth
@@ -2060,6 +2061,42 @@ def selftest():
                 "32d: the profile says withdrawn, in english too"
         finally:
             patient_routes.chat.answer_question = real_answer
+
+        # 33. data rights from the portal (P06.05): the patient asks, a dentist
+        # approves, the patient downloads their own copy and nobody else can
+        patient_routes.EXPORTS_DIR = Path(tmp) / "exports"
+        profile33 = client32.get("/profile").text
+        client32.post("/data-request", data={"kind": "export", "detail": "per favore",
+                                             "patient_id": pid_of(cf32_other),
+                                             "csrf_token": _csrf_from(profile33)})
+        c33 = raw_db()
+        mine = data_rights.for_patient(c33, pid_of(cf32))
+        assert [(r["kind"], r["status"], r["requested_role"]) for r in mine] == \
+            [("export", "open", "patient")], "33a: the request is the session patient's"
+        assert data_rights.for_patient(c33, pid_of(cf32_other)) == [], "33a: never another's"
+        ok33, _ = data_rights.review(c33, mine[0]["id"], True, "test-dentist", "dentist", "",
+                                     sorted_root=Path(tmp) / "sorted",
+                                     exports_dir=patient_routes.EXPORTS_DIR)
+        c33.close()
+        assert ok33, "33b: a dentist approves"
+        req33 = mine[0]["id"]
+        page33 = client32.get("/profile").text
+        assert f"/data-requests/{req33}/download" in page33, "33b: the profile offers the copy"
+        got = client32.get(f"/data-requests/{req33}/download")
+        assert got.status_code == 200 and got.data[:2] == b"PK", "33b: the patient gets a zip"
+        assert "attachment" in got.headers.get("Content-Disposition", ""), "33b: as a download"
+
+        pin33 = seed_and_issue(cf32_other, "other patient")
+        other33, _ = sign_in(cf32_other, pin33)
+        page = other33.get("/change-pin")
+        other33.post("/change-pin", data={"pin": "15935728", "confirm": "15935728",
+                                          "csrf_token": _csrf_from(page.text)})
+        before33 = count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_scope_violation'")
+        stolen = other33.get(f"/data-requests/{req33}/download")
+        assert stolen.status_code == 302 and stolen.data[:2] != b"PK", \
+            "33c: another patient's copy must not be served"
+        assert count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_scope_violation'") \
+            == before33 + 1, "33c: and the attempt is logged as a scope violation"
 
     print("selftest ok")
 

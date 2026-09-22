@@ -11,16 +11,20 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
     # patient record at all, so granting any of them would widen admin's reach
     # into patient data. an appointment says a named person is attending this
     # clinic on a date, which is exactly that kind of data.
     "admin": {"manage_users"},
+    # manage_data_requests (P06) is the dentist's alone: approving an export
+    # hands over a whole record and approving an erasure destroys one, so it
+    # sits with the role that already holds read_clinical.
     # system: the automated sync actor (watcher/backfill), no user row
-    "system": {"append_note"},
+    # reapply_erasure: a restore erasing again everyone a tombstone names
+    "system": {"append_note", "reapply_erasure"},
 }
 
 
@@ -65,6 +69,10 @@ ROUTE_POLICY = {
     "patients.issue_pin_submit": "issue_patient_pin",
     "patients.revoke_pin_submit": "revoke_patient_pin",
     "patients.consent_submit": "record_consent",
+    "data_requests.index": "manage_data_requests",
+    "data_requests.review": "manage_data_requests",
+    "data_requests.download": "manage_data_requests",
+    "data_requests.file_for_patient": "file_data_request",
     # duplicate review is admin's, by the P04 decision - the one place admin
     # sees patient names and codici fiscali. recorded in P06 as an exception.
     "patients.duplicates_view": "manage_users",

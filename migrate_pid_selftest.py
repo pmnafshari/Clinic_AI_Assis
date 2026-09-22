@@ -388,6 +388,16 @@ def selftest():
             "T16: with its patients intact"
         back.close()
 
+        # P06: a recorded erasure cannot be re-applied to this old shape, and
+        # the restore says so instead of handing back data that includes them
+        stones = tmp / "erasures.jsonl"
+        stones.write_text('{"patient_id": "pid_0000000000000000", "cf_hmac": [],'
+                          ' "request_id": 1, "held": []}\n')
+        problems = []
+        assert backup.reapply_erasures(restored, stones, problems=problems) is None, \
+            "T16: nothing can be re-applied to a pre-surrogate database"
+        assert problems and "migrate_pid" in problems[0], f"T16: and it must say why: {problems}"
+
     print("selftest ok")
 
 

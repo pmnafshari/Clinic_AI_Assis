@@ -62,12 +62,17 @@ def _seed(db_path, root):
         (pid,),
     )
     appt_id = cur.lastrowid
+    cur = conn.execute(
+        "INSERT INTO data_requests (patient_id, kind, requested_by, requested_role,"
+        " requested_at) VALUES (?, 'export', ?, 'patient', '2026-09-22T08:00:00+00:00')",
+        (pid, pid))
+    req_id = cur.lastrowid
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
     notes.mkdir(parents=True)
     (notes / "rb1.json").write_text("{}")
-    return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id,
+    return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "username": "rb_target", "filename": "app.css"}
 
 

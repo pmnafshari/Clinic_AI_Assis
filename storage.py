@@ -143,6 +143,8 @@ def init_db(db_path):
     # its delete trigger reads
     from consent import SCHEMA as CONSENT_SCHEMA
     conn.executescript(CONSENT_SCHEMA)
+    from data_rights import SCHEMA as DATA_RIGHTS_SCHEMA
+    conn.executescript(DATA_RIGHTS_SCHEMA)
     conn.commit()
     return conn
 
