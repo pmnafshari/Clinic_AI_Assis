@@ -91,6 +91,7 @@ ROLE_PAGES = {
         ("billing", "/billing"),
         ("patient-billing", f"/patients/{CF}/billing"),
         ("stock", "/stock"),
+        ("reminders", "/reminders"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -105,6 +106,7 @@ ROLE_PAGES = {
         # an assistant sees billing without the forms - a different render
         ("patient-billing", f"/patients/{CF}/billing"),
         ("stock", "/stock"),
+        ("reminders", "/reminders"),
     ],
     "admin": [
         ("admin-users", "/admin/users"),

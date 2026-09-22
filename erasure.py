@@ -76,6 +76,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
         if _has(conn, "billing_events"):
             # queued reminders are not fiscal records; they go whatever is held
             conn.execute("DELETE FROM billing_events WHERE patient_id = ?", (pid,))
+        if _has(conn, "reminder_jobs"):
+            # P09: the queue itself, sent rows included. a sent reminder is not
+            # evidence of anything fiscal - what it was about is in the ledger
+            conn.execute("DELETE FROM reminder_jobs WHERE patient_id = ?", (pid,))
         if not hold_invoices and _has(conn, "billing_invoices"):
             # the ledger is fiscal: it goes only when invoices are not held
             conn.execute("DELETE FROM payment_allocations WHERE payment_id IN"
@@ -384,6 +388,8 @@ def selftest():
         assert ledger.summary(conn, hinv)["paid_cents"] == 4000, "3: the ledger is held with them"
         assert conn.execute("SELECT COUNT(*) FROM billing_events WHERE patient_id = ?",
                             (held,)).fetchone()[0] == 0, "3: queued reminders go"
+        assert conn.execute("SELECT COUNT(*) FROM reminder_jobs WHERE patient_id = ?",
+                            (held,)).fetchone()[0] == 0, "3: the reminder queue goes too"
 
         # 3b. with no invoice hold, the ledger goes too: payments, allocations,
         # plans, invoices, events - through the unlock, nothing left

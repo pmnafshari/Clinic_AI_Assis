@@ -155,6 +155,11 @@ def init_db(db_path):
     # clinic stock (P08). no patient data
     from inventory import SCHEMA as INVENTORY_SCHEMA
     conn.executescript(INVENTORY_SCHEMA)
+
+    # the reminder queue (P09). patient_id is the surrogate, never a codice
+    # fiscale, and no message text is stored - it is built at send time
+    from reminders import SCHEMA as REMINDERS_SCHEMA
+    conn.executescript(REMINDERS_SCHEMA)
     conn.commit()
     return conn
 

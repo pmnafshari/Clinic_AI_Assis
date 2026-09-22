@@ -80,6 +80,12 @@ def _seed(db_path, root):
                                           "rb_dentist", "dentist")
     item_id = inventory.create_item(conn, "Guanti rb", "conf", 5, "rb_dentist", "dentist")
     alert_id = inventory.open_alerts(conn)[0]["id"]
+    # a failed reminder, the one state the retry route acts on (P09)
+    job_id = conn.execute(
+        "INSERT INTO reminder_jobs (kind, patient_id, subject_id, version, idempotency_key,"
+        " send_at, status, attempts, last_error, created_at) VALUES ('appointment', ?, ?,"
+        " 'rb', 'appointment:rb:rb', ?, 'failed', 3, 'transport_unavailable', ?)",
+        (pid, appt_id, "2026-09-23T06:00:00+00:00", "2026-09-23T06:00:00+00:00")).lastrowid
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -87,7 +93,7 @@ def _seed(db_path, root):
     (notes / "rb1.json").write_text("{}")
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
-            "item_id": item_id, "alert_id": alert_id,
+            "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "username": "rb_target", "filename": "app.css"}
 
 

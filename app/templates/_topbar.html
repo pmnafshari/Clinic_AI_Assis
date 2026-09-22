@@ -138,6 +138,12 @@
             <i class="bi bi-receipt"></i> Billing
           </a>
           {% endif %}
+          {% if authorize(g.user.role, 'view_reminders') %}
+          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('reminders.') else '' }}"
+             href="{{ url_for('reminders.index') }}">
+            <i class="bi bi-bell"></i> Reminders
+          </a>
+          {% endif %}
           {% if authorize(g.user.role, 'manage_data_requests') %}
           <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('data_requests.') else '' }}"
              href="{{ url_for('data_requests.index') }}">

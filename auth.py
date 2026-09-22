@@ -11,8 +11,8 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
     # patient record at all, so granting any of them would widen admin's reach
@@ -29,6 +29,10 @@ PERMISSIONS = {
     # stock (P08): use_inventory - see stock, receive, consume, count,
     # acknowledge an alert - is reception's too; manage_inventory (new items,
     # thresholds, corrections) is the dentist's. admin holds neither.
+    # reminders (P09): view_reminders and retry_reminder are the dentist's and
+    # reception's. the queue names patients, so admin holds neither - the same
+    # line drawn for appointments above. nothing here sends anything: there is
+    # no provider (D01, P11), so a retry only puts a job back in the queue.
     # system: the automated sync actor (watcher/backfill), no user row
     # reapply_erasure: a restore erasing again everyone a tombstone names
     "system": {"append_note", "reapply_erasure"},
@@ -91,6 +95,8 @@ ROUTE_POLICY = {
     "stock.acknowledge": "use_inventory",
     "stock.create": "manage_inventory",
     "stock.threshold": "manage_inventory",
+    "reminders.index": "view_reminders",
+    "reminders.retry": "retry_reminder",
     "billing.payment_action": "manage_billing",
     # duplicate review is admin's, by the P04 decision - the one place admin
     # sees patient names and codici fiscali. recorded in P06 as an exception.

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Reminders</p>
+    <h1 class="ds-page-title">Send queue</h1>
+    <p class="ds-page-meta">Last run {{ last_run.started_at | appt_date ~ ' ' ~ (last_run.started_at | appt_time) if last_run else 'never' }}{% if last_run and last_run.status != 'ok' %} ({{ last_run.status }}){% endif %} · schedule: {{ schedule }}</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div><strong class="ds-alert-title">Sending is off</strong>
+  Nothing is sent: {{ sending_off }}. Due reminders wait here as scheduled; the queue is worked out
+  when <strong>reminder_job.py</strong> is run, and no automatic schedule is set up. Timings and
+  wording below are demo defaults and have not been approved.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="counts-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="counts-title">By state</h2>
+    {% if status %}<a href="{{ url_for('reminders.index') }}">Show all</a>{% endif %}
+  </div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for state, n in counts.items() %}
+    <li class="ds-row">
+      <span class="ds-row-main">
+        <a class="ds-row-title" href="{{ url_for('reminders.index', status=state) }}">{{ state | capitalize }}</a>
+        {% if state == 'delivered' %}<span class="ds-row-sub">no channel reports delivery yet</span>{% endif %}
+      </span>
+      <span class="ds-numeral ms-auto">{{ n }}</span>
+    </li>
+    {% endfor %}
+  </ul></div>
+</section>
+
+<section class="card dash-card" aria-labelledby="queue-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' reminders') if status else 'Latest reminders' }}</h2>
+  </div>
+  <div class="dash-card-body">
+    {% if jobs %}
+    <ul class="ds-rows">
+      {% for j in jobs %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ j.patient_name or 'Erased patient' }} · {{ j.kind }}</span>
+          <span class="ds-row-sub">
+            {{ j.status }} · due {{ j.send_at | appt_date }} {{ j.send_at | appt_time }}
+            {%- if j.cancel_reason %} · {{ j.cancel_reason.replace('_', ' ') }}{% endif %}
+            {%- if j.last_error %} · {{ j.last_error.replace('_', ' ') }}{% endif %}
+            {%- if j.attempts %} · {{ j.attempts }} attempt{{ 's' if j.attempts != 1 }}{% endif %}
+          </span>
+        </span>
+        {% if can_retry and j.status == 'failed' %}
+        <form method="post" action="{{ url_for('reminders.retry', job_id=j.id) }}" class="ms-auto">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="status" value="{{ status or '' }}">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Try again</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ 'Nothing in that state.' if status else 'Nothing is queued.' }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
