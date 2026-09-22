@@ -1,8 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
+    <li aria-current="page">Billing</li>
+  </ol>
+</nav>
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow"><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></p>
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
     <h1 class="ds-page-title">Billing</h1>
     <p class="ds-page-meta">Still to pay {{ fmt(summary.outstanding_cents, 'en') }}{% if summary.unknown %} · {{ summary.unknown }} invoice(s) of unknown status, not counted{% endif %}{% if summary.next_due %} · next installment {{ summary.next_due }}{% endif %}</p>
   </div>
