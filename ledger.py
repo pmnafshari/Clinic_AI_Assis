@@ -61,7 +61,7 @@ SCHEMA = """
         kind TEXT NOT NULL CHECK (kind IN ('payment', 'refund', 'reversal')),
         amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
         method TEXT NOT NULL,
-        source TEXT NOT NULL CHECK (source IN ('manual', 'reconciliation', 'demo_fixture')),
+        source TEXT NOT NULL CHECK (source IN ('manual', 'reconciliation', 'demo_fixture', 'provider')),
         idempotency_key TEXT NOT NULL UNIQUE,
         reference TEXT,
         reverses_payment_id INTEGER REFERENCES payments(id),

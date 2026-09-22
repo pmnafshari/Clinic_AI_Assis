@@ -93,6 +93,7 @@ ROLE_PAGES = {
         ("stock", "/stock"),
         ("reminders", "/reminders"),
         ("handoffs", "/handoffs"),
+        ("providers", "/providers"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -109,6 +110,7 @@ ROLE_PAGES = {
         ("stock", "/stock"),
         ("reminders", "/reminders"),
         ("handoffs", "/handoffs"),
+        ("providers", "/providers"),
     ],
     "admin": [
         ("admin-users", "/admin/users"),

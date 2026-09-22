@@ -21,9 +21,21 @@ the answer so an eval run and an audit row can both say which wording they saw.
 import re
 import sys
 
-VERSION = "2026-09-22.1"
+VERSION = "2026-09-22.2"
 
 ADMIN, CLINICAL = "administrative", "clinical"
+
+# POL-6, open. site_app/clinic.yaml still carries PLACEHOLDER contact details -
+# "06 1234 5678", info@example-clinic.it, and an emergency line that rings
+# nothing. The public site renders them behind its own placeholder notice; an
+# assistant reading them out to a patient in pain is a different thing
+# entirely, so it does not. Entries marked `needs_contact_approval` answer
+# "not available in the demo" and offer a person instead.
+#
+# This flag is flipped by a human editing this file once real details are
+# approved, exactly like `approved` on the clinical entries. Nothing at
+# runtime may set it.
+CONTACT_APPROVED = False
 
 
 def _hours(c):
@@ -49,6 +61,7 @@ ENTRIES = (
     },
     {
         "key": "address", "kind": ADMIN, "topic": "other", "approved": True,
+        "needs_contact_approval": True,
         "source": "site_app/clinic.yaml:contact",
         "triggers": (r"dove siete", r"indirizzo", r"come arrivo", r"parcheggi\w*",
                      r"where are you", r"address", r"directions", r"parking", r"how do i get"),
@@ -59,6 +72,7 @@ ENTRIES = (
     },
     {
         "key": "contact", "kind": ADMIN, "topic": "other", "approved": True,
+        "needs_contact_approval": True,
         "source": "site_app/clinic.yaml:contact",
         "triggers": (r"telefono dello studio", r"numero dello studio", r"come vi contatto",
                      r"clinic phone", r"your phone number", r"how do i contact you"),
@@ -69,6 +83,7 @@ ENTRIES = (
     },
     {
         "key": "emergency", "kind": ADMIN, "topic": "other", "approved": True,
+        "needs_contact_approval": True,
         "source": "site_app/clinic.yaml:contact.emergency_phone",
         "triggers": (r"emergenza", r"numero di emergenza", r"fuori orario",
                      r"emergency number", r"out of hours", r"urgent number"),
@@ -143,8 +158,16 @@ def answer(question, clinic, lang="it"):
             "source": entry["source"], "version": VERSION}
     if not entry["approved"]:
         return "unapproved", None, meta
+    if entry.get("needs_contact_approval") and not CONTACT_APPROVED:
+        # POL-6: the detail exists in clinic.yaml and is a placeholder. Saying
+        # so is the honest answer; reading it out is not.
+        return "unavailable", None, meta
     builder = entry["text"].get(lang) or entry["text"]["it"]
     return "answer", builder(clinic), meta
+
+
+def contact_entries():
+    return tuple(e["key"] for e in ENTRIES if e.get("needs_contact_approval"))
 
 
 def approve(*_args, **_kwargs):
@@ -194,8 +217,29 @@ def selftest():
     assert _hours(clinic) in body, "3: the hours are the file's, not retyped"
     state, body, _ = answer("what are your opening hours?", clinic, "en")
     assert state == "answer" and body.startswith("Opening hours"), f"3: EN {body!r}"
-    state, body, _ = answer("where are you?", clinic, "en")
-    assert state == "answer" and clinic["contact"]["address_line"] in body, "3: address from file"
+
+    # 3b. POL-6 - the placeholder contact details are NOT read out. every one
+    # of them answers "not available", in both languages, and no placeholder
+    # value from clinic.yaml appears in any body the patient could be given.
+    placeholders = [clinic["contact"]["phone"], clinic["contact"]["email"],
+                    clinic["contact"]["emergency_phone"], clinic["contact"]["address_line"]]
+    for question in ("dove siete?", "come vi contatto?", "qual e il numero di emergenza?",
+                     "where are you?", "how do i contact you?", "emergency number"):
+        for lang in ("it", "en"):
+            state, body, meta = answer(question, clinic, lang)
+            assert state == "unavailable" and body is None, \
+                f"3b: {question!r} leaked a placeholder contact detail: {state} {body!r}"
+            assert meta["key"] in contact_entries()
+    assert not CONTACT_APPROVED, "3b: POL-6 is open - this flag is a human's edit"
+    assert contact_entries() == ("address", "contact", "emergency")
+    # and nothing servable anywhere contains a placeholder value
+    for entry in ENTRIES:
+        if not entry["approved"] or entry.get("needs_contact_approval"):
+            continue
+        for lang in ("it", "en"):
+            out = entry["text"][lang](clinic)
+            for bad in placeholders:
+                assert bad not in out, f"3b: {entry['key']}/{lang} carries {bad!r}"
 
     # 4. nothing matched is 'none', not a guess
     state, body, meta = answer("quanto costa un impianto?", clinic, "it")

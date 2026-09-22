@@ -375,6 +375,13 @@ def _answer(question, cf, conn, lang, ip, urlopen):
         hid, created = handoff.raise_request(conn, cf, "no_content", faq_meta["topic"])
         return {"state": "deflection", "body": None, "target": f"unapproved:{faq_meta['key']}",
                 "handoff": hid, "handoff_created": created}
+    if faq_state == "unavailable":
+        # POL-6: the clinic's contact details in clinic.yaml are placeholders.
+        # Saying they are not available is honest; reading them out to someone
+        # who may be in pain is not. A person is queued instead.
+        hid, created = handoff.raise_request(conn, cf, "no_content", faq_meta["topic"])
+        return {"state": "unavailable", "body": None, "target": f"unavailable:{faq_meta['key']}",
+                "handoff": hid, "handoff_created": created}
 
     # 3. D-04: an unroutable question refuses with a capability hint (the
     # hint copy lives in the template, not here) and never reaches an
@@ -490,6 +497,10 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     elif state == "handoff":
         # a person was asked for and queued: served, not denied
         action, allowed = "patient_handoff", 1
+    elif state == "unavailable":
+        # POL-6: withheld on purpose, and a person queued. a denial, not a
+        # served answer - the patient did not get what they asked for.
+        action, allowed = "patient_query", 0
     elif state.startswith("agent_"):
         # P10: one row per agent turn. the target says which step it was -
         # book:need_day, cancel:proposed, book:requested - and never what the

@@ -59,6 +59,8 @@
     <i class="bi bi-telephone chat-response-icon" aria-hidden="true"></i> {{ t('deflect_heading', lang) }}
     {% elif state == 'handoff' %}
     <i class="bi bi-telephone chat-response-icon" aria-hidden="true"></i> {{ t('handoff_heading', lang) }}
+    {% elif state == 'unavailable' %}
+    <i class="bi bi-dash-circle chat-response-icon" aria-hidden="true"></i> {{ t('unavailable_heading', lang) }}
     {% elif state.startswith('agent_') %}
     <i class="bi bi-calendar-check chat-response-icon" aria-hidden="true"></i> {{ t('agent_heading', lang) }}
     {% elif state == 'error' %}
@@ -72,6 +74,8 @@
     {{ t('refusal_body', lang) }}
     {% elif state == 'deflection' %}
     {{ t('deflect_body', lang) }}
+    {% elif state == 'unavailable' %}
+    {{ t('unavailable_body', lang) }}
     {% elif state == 'handoff' or state.startswith('agent_') %}
     {{ body }}
     {% elif state == 'error' %}

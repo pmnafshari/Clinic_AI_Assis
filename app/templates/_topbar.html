@@ -138,6 +138,12 @@
             <i class="bi bi-receipt"></i> Billing
           </a>
           {% endif %}
+          {% if authorize(g.user.role, 'view_providers') %}
+          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('providers.') else '' }}"
+             href="{{ url_for('providers.index') }}">
+            <i class="bi bi-plug"></i> Outside connections
+          </a>
+          {% endif %}
           {% if authorize(g.user.role, 'handle_handoff') %}
           <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('handoff.') else '' }}"
              href="{{ url_for('handoff.index') }}">

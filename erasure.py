@@ -80,6 +80,12 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # P09: the queue itself, sent rows included. a sent reminder is not
             # evidence of anything fiscal - what it was about is in the ledger
             conn.execute("DELETE FROM reminder_jobs WHERE patient_id = ?", (pid,))
+        if _has(conn, "delivery_receipts"):
+            # P11: receipts for this patient's reminders. the reminder rows
+            # themselves go above, so a receipt pointing at nothing is worse
+            # than no receipt
+            conn.execute("DELETE FROM delivery_receipts WHERE job_id IN"
+                         " (SELECT id FROM reminder_jobs WHERE patient_id = ?)", (pid,))
         for table in ("patient_agent_actions", "handoff_requests"):
             # P10: a half-finished booking and a queued call-back are neither
             # clinical nor fiscal; they go with the patient whatever is held

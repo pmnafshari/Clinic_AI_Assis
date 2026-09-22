@@ -377,6 +377,15 @@ STRINGS = {
     # --- handoff (P10.05). NO ETA, ever. either the clinic is open, or the
     # next opening time is stated as a fact about the hours - never a promise
     # about when someone will reply.
+    "unavailable_heading": {"it": "Non disponibile nella demo", "en": "Not available in the demo"},
+    "unavailable_body": {
+        "it": "I recapiti dello studio non sono ancora confermati in questa demo, quindi non te "
+              "li do: preferisco non darti un numero sbagliato. Ho segnalato la tua richiesta "
+              "allo studio.",
+        "en": "The clinic's contact details are not confirmed in this demo, so I won't give them "
+              "to you — I'd rather not hand you a wrong number. I've passed your request to the "
+              "clinic.",
+    },
     "handoff_heading": {"it": "Ti richiamiamo", "en": "We'll get back to you"},
     "handoff_body": {
         "it": "Ho segnalato la tua richiesta allo studio.",

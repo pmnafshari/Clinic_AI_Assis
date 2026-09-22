@@ -1,4 +1,5 @@
 import json
+import re
 import sqlite3
 import sys
 import threading
@@ -151,6 +152,7 @@ def init_db(db_path):
     _ensure_invoice_cents(conn)
     conn.executescript(ledger.SCHEMA)
     conn.executescript(ledger.APPEND_ONLY)
+    _ensure_payment_source_provider(conn)
 
     # clinic stock (P08). no patient data
     from inventory import SCHEMA as INVENTORY_SCHEMA
@@ -167,8 +169,73 @@ def init_db(db_path):
     conn.executescript(AGENT_SCHEMA)
     from handoff import SCHEMA as HANDOFF_SCHEMA
     conn.executescript(HANDOFF_SCHEMA)
+
+    # the provider gate (P11). everything external defaults to off; no table
+    # here holds a secret, a URL or any card data
+    from providers import SCHEMA as PROVIDERS_SCHEMA
+    conn.executescript(PROVIDERS_SCHEMA)
+    from payments import SCHEMA as PAYMENTS_SCHEMA
+    conn.executescript(PAYMENTS_SCHEMA)
+    from delivery import SCHEMA as DELIVERY_SCHEMA
+    conn.executescript(DELIVERY_SCHEMA)
     conn.commit()
     return conn
+
+
+def _ensure_payment_source_provider(conn):
+    """P11: allow `source = 'provider'` on payments.
+
+    A payment recorded from a verified provider webhook is not a manual entry
+    and not a reconciliation, and calling it either would misattribute money in
+    the audit. SQLite cannot widen a CHECK in place, so the table is rebuilt -
+    but ONLY when the old constraint is actually there, so this is a no-op on
+    every run after the first and on every fresh database.
+
+    The table is append-only by trigger. The triggers are dropped and put back
+    inside the same transaction, and the row count is compared before and
+    after: a rebuild that loses a payment row must fail loudly, not quietly.
+    """
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table'"
+                       " AND name = 'payments'").fetchone()
+    if row is None or "'provider'" in row[0]:
+        return
+    import ledger
+    before = conn.execute("SELECT COUNT(*) FROM payments").fetchone()[0]
+    columns = [r[1] for r in conn.execute("PRAGMA table_info(payments)")]
+    names = ", ".join(columns)
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for trigger in ("payments_no_update", "payments_no_delete"):
+            conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+        # the name may be quoted: a table that has been through ALTER TABLE
+        # ... RENAME comes back from sqlite_master as CREATE TABLE "payments".
+        # a plain string replace misses that and the rebuild then collides
+        # with the table it is replacing.
+        new_sql, count = re.subn(r'CREATE\s+TABLE\s+(?:"payments"|payments|\[payments\]|`payments`)',
+                                 "CREATE TABLE payments_rebuilt", row[0], count=1)
+        if count != 1:
+            raise RuntimeError("could not rename the payments table in its own DDL")
+        new_sql, count = re.subn(r"'manual',\s*'reconciliation',\s*'demo_fixture'",
+                                 "'manual', 'reconciliation', 'demo_fixture', 'provider'",
+                                 new_sql, count=1)
+        if count != 1:
+            raise RuntimeError("could not widen the payments source constraint")
+        conn.execute(new_sql)
+        conn.execute(f"INSERT INTO payments_rebuilt ({names}) SELECT {names} FROM payments")
+        conn.execute("DROP TABLE payments")
+        conn.execute("ALTER TABLE payments_rebuilt RENAME TO payments")
+        after = conn.execute("SELECT COUNT(*) FROM payments").fetchone()[0]
+        if after != before:
+            raise RuntimeError(f"payments rebuild lost rows: {before} -> {after}")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.executescript(ledger.APPEND_ONLY)
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.commit()
 
 
 def _ensure_slot_index(conn):

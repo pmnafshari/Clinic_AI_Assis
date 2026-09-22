@@ -94,6 +94,7 @@ def create_app():
     from .data_requests_routes import data_requests_bp
     from .notes_routes import notes_bp
     from .patients_routes import patients_bp
+    from .provider_routes import providers_bp
     from .qa_routes import qa_bp
     from .reminders_routes import reminders_bp
     from .reports_routes import reports_bp
@@ -109,6 +110,7 @@ def create_app():
     app.register_blueprint(data_requests_bp)
     app.register_blueprint(notes_bp)
     app.register_blueprint(patients_bp)
+    app.register_blueprint(providers_bp)
     app.register_blueprint(qa_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)

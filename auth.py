@@ -11,8 +11,8 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
     # patient record at all, so granting any of them would widen admin's reach
@@ -36,9 +36,20 @@ PERMISSIONS = {
     # handoff (P10): handle_handoff is the dentist's and reception's - taking
     # a call-back is reception's daily work. admin none, same reason again.
     # a claimed handoff is released only by its holder or a dentist.
+    # providers (P11): view_providers sees the switches and may HIT THE KILL
+    # SWITCH - stopping the outside world is reception's to do without asking.
+    # manage_providers, the dentist's alone, is what RE-ARMS it. admin holds
+    # neither: the operator screen names patients in its error list.
     # system: the automated sync actor (watcher/backfill), no user row
     # reapply_erasure: a restore erasing again everyone a tombstone names
     "system": {"append_note", "reapply_erasure"},
+    # provider (P11): the verified payment webhook, and nothing else. it holds
+    # record_payment ALONE - not manage_billing, so it cannot issue, void,
+    # refund, reverse or reconcile, and not append_note, so it cannot touch a
+    # record. it is deliberately its own role rather than a capability added to
+    # `system`: widening `system` would hand the file watcher the ability to
+    # record money, which it has no business having. no user row, no login.
+    "provider": {"record_payment"},
 }
 
 
@@ -103,6 +114,9 @@ ROUTE_POLICY = {
     "handoff.index": "handle_handoff",
     "handoff.claim": "handle_handoff",
     "handoff.resolve": "handle_handoff",
+    "providers.index": "view_providers",
+    "providers.kill": "view_providers",
+    "providers.rearm": "manage_providers",
     "billing.payment_action": "manage_billing",
     # duplicate review is admin's, by the P04 decision - the one place admin
     # sees patient names and codici fiscali. recorded in P06 as an exception.

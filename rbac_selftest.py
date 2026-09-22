@@ -99,7 +99,7 @@ def _seed(db_path, root):
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
-            "handoff_id": handoff_id,
+            "handoff_id": handoff_id, "kind": "messaging",
             "username": "rb_target", "filename": "app.css"}
 
 

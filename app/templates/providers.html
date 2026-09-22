@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">System</p>
+    <h1 class="ds-page-title">Outside connections</h1>
+    <p class="ds-page-meta">Messaging and payments — both off</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div><strong class="ds-alert-title">Nothing can reach the outside world</strong>
+  No messaging or payment provider has been chosen, and no live connector exists in this build —
+  it is not switched off, it is absent. Real sending and real payments stay <strong>blocked</strong>
+  until a provider, its cost and a data agreement are approved.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="switches-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="switches-title">Switches</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for r in rows %}
+    <li class="ds-row">
+      <span class="ds-row-main">
+        <span class="ds-row-title">{{ r.kind | capitalize }}</span>
+        <span class="ds-row-sub">
+          connector: {{ r.adapter }} · feature {{ 'on' if r.feature_enabled else 'off' }} ·
+          stop switch {{ 'ON' if r.killed else 'off' }} ·
+          spend {{ r.spent_cents }}/{{ r.spend_cap_cents }}
+          {%- if not r.can_send %} · <strong>blocked: {{ r.reason.replace('_', ' ') }}</strong>{% endif %}
+          {%- if r.updated_by %} · last changed by {{ r.updated_by }}{% endif %}
+        </span>
+      </span>
+      {% if not r.killed %}
+      <form method="post" action="{{ url_for('providers.kill', kind=r.kind) }}" class="ms-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Stop everything</button>
+      </form>
+      {% elif can_rearm %}
+      <form method="post" action="{{ url_for('providers.rearm', kind=r.kind) }}" class="ms-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Clear the stop</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul></div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="receipts-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="receipts-title">Delivery</h2></div>
+  <div class="dash-card-body">
+    <ul class="ds-rows">
+      {% for state, n in receipts.items() %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ state | capitalize }}</span>
+          {% if state == 'accepted' %}<span class="ds-row-sub">taken by a provider — not the same as arrived</span>{% endif %}
+          {% if state == 'unknown' %}<span class="ds-row-sub">outcome genuinely unknown; nothing is re-sent on its own</span>{% endif %}
+        </span>
+        <span class="ds-numeral ms-auto">{{ n }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if unresolved %}
+    <p class="dash-empty-line">{{ unresolved | length }} waiting to be reconciled by hand.</p>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card dash-card" aria-labelledby="events-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="events-title">Recent</h2></div>
+  <div class="dash-card-body">
+    {% if events %}
+    <ul class="ds-rows">
+      {% for e in events %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ e.kind }} · {{ e.event.replace('_', ' ') }}</span>
+          <span class="ds-row-sub">
+            {{ e.at | appt_date }} {{ e.at | appt_time }}
+            {%- if e.reason %} · {{ e.reason.replace('_', ' ') }}{% endif %}
+            {%- if e.ref %} · {{ e.ref }}{% endif %}
+          </span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">Nothing has been attempted.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}
