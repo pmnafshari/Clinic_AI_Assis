@@ -167,12 +167,17 @@ def _methods(rule):
     return [m for m in ("GET", "POST") if m in rule.methods]
 
 
-def _request(client, rule, method, args, extra=None):
+def _url(rule, args):
     url = rule.rule
     for name in rule.arguments:
         url = url.replace(f"<int:{name}>", str(args[name]))
         url = url.replace(f"<path:{name}>", str(args[name]))
         url = url.replace(f"<{name}>", str(args[name]))
+    return url
+
+
+def _request(client, rule, method, args, extra=None):
+    url = _url(rule, args)
     if method == "GET":
         return method, client.get(url)
     data = _form(rule.endpoint)
@@ -298,6 +303,38 @@ def selftest():
         assert admin_patient == ["patients.duplicates_dismiss", "patients.duplicates_merge",
                                  "patients.duplicates_view"], \
             f"4: admin reaches patient routes beyond duplicate review: {admin_patient}"
+
+        # 4b. the exception is only what was decided: admin sees patient names
+        # and codici fiscali on duplicate review and nowhere else, and each
+        # look is audited
+        conn = sqlite3.connect(db_path)
+        token = web_session.create_session(conn, "rb_admin", "admin")
+        conn.close()
+        admin = app.test_client()
+        admin.set_cookie(web_session.COOKIE_NAME, token)
+        conn = sqlite3.connect(db_path)
+        # the merge above folded one canary into the other; seed a fresh pair
+        patient_id.seed_patient(conn, "ZZRB800101010103", "Zelda Canary", None)
+        patient_id.seed_patient(conn, "ZZRB800101010104", "zelda canary", "3330009999")
+        conn.commit()
+        conn.close()
+        for rule in rules:
+            if "GET" not in rule.methods or auth.ROUTE_POLICY[rule.endpoint] == "public":
+                continue
+            if rule.endpoint == "patients.duplicates_view":
+                continue
+            body = admin.get(_url(rule, args), follow_redirects=True).get_data(as_text=True)
+            for secret in ("Zelda Canary", "ZZRB80010101010"):
+                assert secret not in body, f"4b: admin saw {secret!r} on {rule.rule}"
+        before = sqlite3.connect(db_path).execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'review_duplicates' AND allowed = 1"
+            " AND username = 'rb_admin'").fetchone()[0]
+        page = admin.get("/patients/duplicates").get_data(as_text=True)
+        assert "Zelda Canary" in page, "4b: duplicate review is where admin does see the pair"
+        after = sqlite3.connect(db_path).execute(
+            "SELECT COUNT(*) FROM audit_log WHERE action = 'review_duplicates' AND allowed = 1"
+            " AND username = 'rb_admin'").fetchone()[0]
+        assert after == before + 1, "4b: every look at duplicate review is audited"
 
         # 5. the patient portal: every route outside its short public list
         # needs a patient session. the portal takes no patient id from the

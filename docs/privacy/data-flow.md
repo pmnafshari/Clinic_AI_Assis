@@ -31,7 +31,7 @@ public site :5002 ──(VOICE_DEMO=1 only)──► Deepgram, ElevenLabs   [dem
 | Data requests and exports | `data_requests`, `exports/` (24 h) | staff app, patient app | only when handed to the patient |
 | Audit trail | `audit_log` (surrogate ids only) | all apps | no |
 | Portal traffic | - | Cloudflare tunnel (TLS termination) | **yes - Cloudflare is a processor** |
-| Voice demo audio | - | Deepgram, ElevenLabs | **yes - demo only, off by default, refused behind the tunnel** |
+| Voice demo audio | - | Deepgram, ElevenLabs | **yes - demo only, off by default, refused behind the tunnel; public-site visitors, never a patient session** |
 | Backups | `backups/*.cbk`, encrypted | `backup.py` | no (off-machine destination BLOCKED on D08) |
 | Training data | synthetic only | Google Colab, a cloud model as dataset teacher | yes, synthetic only - never real records |
 
@@ -42,6 +42,10 @@ public site :5002 ──(VOICE_DEMO=1 only)──► Deepgram, ElevenLabs   [dem
 | Cloudflare | tunnel in front of the patient portal | **BLOCKED** - DPA not signed (GDPR-01) |
 | Deepgram, ElevenLabs | voice demo speech-to-text and speech | **none - must never receive real patient audio** |
 | Google (Colab) | model training on synthetic data | not needed while only synthetic data is used |
+
+Nothing sends a message or records a call today. Consent for messaging and call recording is
+recorded and withdrawable now so the reminder engine (P09) and voice scheduling (P12) find it in
+place; each must check it at the moment it acts.
 
 The model, the embeddings and the search index run on the clinic's own machine. Fonts and icons
 are served locally so no third party sees a visitor.

@@ -1,5 +1,6 @@
 {
   "_template": "DEMO TEMPLATE. Retention periods and holds for a demo clinic with synthetic data. They are placeholders chosen to exercise the code, not legal advice and not any real clinic's policy. A real clinic sets them with its own adviser before any real data is loaded.",
+  "_review": "Approved for demo use only — not legally reviewed and not production compliance evidence. (2026-09-22)",
   "_sweep": "retention.py deletes only the types marked sweep=delete. types marked report are counted and listed for a person to decide on; nothing clinical or fiscal is deleted automatically.",
   "types": {
     "invoices": {
@@ -31,6 +32,12 @@
       "hold_on_erasure": true,
       "basis": "demo placeholder; the record that a request was handled, with no personal details kept",
       "sweep": "delete"
+    },
+    "call_recordings": {
+      "keep_days": 90,
+      "hold_on_erasure": false,
+      "basis": "demo placeholder; nothing records calls yet (voice scheduling is P12) - named here because the recording consent text refers to this policy",
+      "sweep": "report"
     }
   }
 }

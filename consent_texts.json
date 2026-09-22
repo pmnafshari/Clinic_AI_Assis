@@ -1,5 +1,6 @@
 {
   "_template": "DEMO TEMPLATE. These texts are placeholders for a demo clinic with synthetic patients. They are not legal advice and not any real clinic's consent wording; a real clinic replaces them after review by its own adviser.",
+  "_review": "Approved for demo use only — not legally reviewed and not production compliance evidence. (2026-09-22)",
   "ai_assistant": {
     "version": "demo-2026-09-22",
     "it": "Acconsento a che l'assistente del portale legga i miei dati registrati in clinica (visite, appuntamenti, fatture) per rispondere alle mie domande. L'assistente gira sui computer della clinica. Posso ritirare il consenso quando voglio dal mio profilo.",

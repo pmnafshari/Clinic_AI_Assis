@@ -12,7 +12,7 @@
 | Categories of data | identity (name, codice fiscale, phone); health data (visits, procedures, notes, x-rays); billing; appointments; consent records; access logs |
 | Special categories | health data (GDPR art. 9) |
 | Legal basis | **BLOCKED** - to be set by the adviser per purpose. The code does not assume consent is the basis for keeping clinical records; consent is recorded only for the portal assistant, messaging and call recording |
-| Recipients | Cloudflare (tunnel) - see data-flow.md; no other recipient receives patient data |
+| Recipients | Cloudflare (tunnel) - see data-flow.md; no other recipient receives patient data. The voice demo's providers receive public-site visitors' audio only, never a patient session |
 | Transfers outside the EU | **BLOCKED** - depends on Cloudflare's terms and region |
 | Retention | [retention.md](retention.md) - placeholders |
 | Security measures | [keys-and-encryption.md](keys-and-encryption.md), README status table |

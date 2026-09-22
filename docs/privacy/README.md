@@ -28,6 +28,15 @@
 | Encryption of the live database | **not built** - relies on full-disk encryption | see keys-and-encryption.md |
 | Controller, processing basis, processor agreements | **BLOCKED** - needs a real clinic and an adviser | ropa.md, dpia.md |
 | Off-machine backup destination | **BLOCKED on D08** | [../backup-runbook.md](../backup-runbook.md) |
+| Offline copies of the backup and erasure keys | **BLOCKED** - no approved encrypted removable destination | keys-and-encryption.md |
+
+## Review
+
+**Approved for demo use only — not legally reviewed and not production compliance evidence.**
+Reviewed 2026-09-22 for consistency with the code and with each other: consent wording
+(`consent_texts.json`), retention periods (`retention.json`) and every document in this folder.
+Owner decision the same day: admin may see patient names and codici fiscali on duplicate review
+only, audited, pinned by tests.
 
 Real use stays closed until every BLOCKED line is resolved. The code guards already refuse to
 start in production with synthetic codici fiscali allowed (`codice_fiscale.guard_or_exit`).
