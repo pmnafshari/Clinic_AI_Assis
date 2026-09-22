@@ -36,7 +36,14 @@ keeping a second copy somewhere safe is the owner's job, not this script's.
     .venv/bin/python backup.py verify --archive backups/clinic-....cbk
     .venv/bin/python backup.py restore --archive X --into /tmp/restore   # dry run
     .venv/bin/python backup.py restore --archive X --into /tmp/restore --apply [--rebuild-index]
+    .venv/bin/python backup.py rekey --new-key-file NEW [--dest backups]
     .venv/bin/python backup.py --selftest
+
+rekey re-encrypts every archive under a new key (key rotation). plaintext
+never reaches the disk: openssl decrypts straight into openssl encrypting, and
+each archive is verified under the new key before it replaces the old one. the
+old key file is left alone - swap the files once rekey reports every archive
+done, per docs/privacy/key-rotation.md.
 
 a backup on the same disk as the data is a local snapshot, not disaster
 recovery. an off-machine destination is an owner decision (D08).
@@ -311,6 +318,52 @@ def extract(archive, key_path, key, into):
     return json.loads((Path(into) / "manifest.json").read_text())
 
 
+def rekey(dest, new_key_path, key_path=None):
+    old_path, old_key = read_key(key_path)
+    new_path, new_key = read_key(new_key_path)
+    if old_key == new_key:
+        raise BackupError("the new key is the same as the old one")
+    done = []
+    for archive in sorted(Path(dest).glob(f"{NAME_PREFIX}*{SUFFIX}")):
+        cipher_len = check_mac(archive, old_key)
+        partial = archive.with_suffix(SUFFIX + ".rekey")
+        try:
+            with open(partial, "wb") as out:
+                dec = subprocess.Popen(
+                    [openssl(), "enc", "-d", "-aes-256-cbc", "-pbkdf2", "-iter", PBKDF2_ITER,
+                     "-pass", f"file:{old_path}"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+                enc = subprocess.Popen(
+                    [openssl(), "enc", "-aes-256-cbc", "-pbkdf2", "-iter", PBKDF2_ITER, "-salt",
+                     "-pass", f"file:{new_path}"], stdin=dec.stdout, stdout=out)
+                dec.stdout.close()
+                with open(archive, "rb") as f:
+                    remaining = cipher_len
+                    while remaining:
+                        block = f.read(min(1 << 20, remaining))
+                        dec.stdin.write(block)
+                        remaining -= len(block)
+                dec.stdin.close()
+                if dec.wait() != 0 or enc.wait() != 0:
+                    raise BackupError(f"re-encrypting {archive.name} failed")
+            tag = hmac.new(mac_key(new_key), digestmod=hashlib.sha256)
+            with open(partial, "rb") as f:
+                for block in iter(lambda: f.read(1 << 20), b""):
+                    tag.update(block)
+            with open(partial, "ab") as f:
+                f.write(tag.digest())
+                f.flush()
+                os.fsync(f.fileno())
+            _, problems = verify(partial, new_path)
+            if problems:
+                raise BackupError(f"{archive.name} did not verify under the new key: {problems}")
+            os.replace(partial, archive)
+            done.append(archive.name)
+        finally:
+            if partial.exists():
+                partial.unlink()
+    return done
+
+
 def check_restored(root, manifest):
     root = Path(root)
     problems = []
@@ -452,6 +505,10 @@ def main(argv):
                               "table_counts": manifest["table_counts"], "files": len(manifest["files"]),
                               "problems": problems}, indent=2))
             return 1 if problems else 0
+        elif cmd == "rekey":
+            print(json.dumps({"rekeyed": rekey(arg(argv, "--dest") or ROOT / "backups",
+                                               arg(argv, "--new-key-file"),
+                                               arg(argv, "--key-file"))}, indent=2))
         elif cmd == "restore":
             result = restore(arg(argv, "--archive"), arg(argv, "--into"), arg(argv, "--key-file"),
                              apply="--apply" in argv, rebuild_index="--rebuild-index" in argv)
@@ -646,6 +703,22 @@ def selftest():
         assert left == ["clinic-20260101T000001Z.cbk", "clinic-20260101T000003Z.cbk"], f"8: kept {left}"
         assert removed == ["clinic-20260101T000000Z.cbk"], f"8: removed {removed}"
         assert (dest / "unrelated.txt").exists(), "8: rotation must not delete files it did not make"
+
+        # 8b. P06.07 - rekey moves every archive to a new key; the old key no
+        # longer opens them, the new one does, and the content is unchanged
+        new_key = tmp_root / "new.key"
+        init_key(new_key)
+        before = {a.name: verify(a, key)[0]["files"] for a in sorted(dest.glob(f"*{SUFFIX}"))}
+        assert rekey(dest, new_key, key) == sorted(before), "8b: every archive rekeyed"
+        for a in sorted(dest.glob(f"*{SUFFIX}")):
+            assert verify(a, new_key)[0]["files"] == before[a.name], "8b: content unchanged"
+            try:
+                check_mac(a, read_key(key)[1])
+                raise AssertionError("8b: the old key must not open a rekeyed archive")
+            except BackupError:
+                pass
+        assert not list(dest.glob("*.rekey")), "8b: no partial left behind"
+        key = new_key
 
         # 9. P06.T3 - an archive from before an erasure, restored into a
         # separate directory, does not bring the patient back
