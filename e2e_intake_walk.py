@@ -33,6 +33,7 @@ from pathlib import Path
 
 from werkzeug.security import generate_password_hash
 
+import auth
 import sort_files
 
 STAFF_URL = "http://127.0.0.1:5000"
@@ -118,22 +119,22 @@ def cleanup():
         for table in ("invoices", "visits"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS)
-    conn.execute("DELETE FROM audit_log WHERE username = ?", (STAFF_USER,))
-    # the staff user is not the only key these rows carry: sort_files and the
-    # sync audit under other actors with the cf in target. delete on both or
-    # the fixtures survive in the audit trail after the patients are gone.
-    conn.execute(f"DELETE FROM audit_log WHERE username IN ({marks})", ALL_CFS)
-    conn.execute(f"DELETE FROM audit_log WHERE target IN ({marks})", ALL_CFS)
     conn.execute("DELETE FROM users WHERE username = ?", (STAFF_USER,))
     conn.commit()
+    # the staff user is not the only key these rows carry: sort_files and the
+    # sync audit under other actors with the patient in target. since P06 an
+    # identity field holds the surrogate, not the cf, so both are matched. the
+    # audit trail is append-only; purge_audit is the sanctioned way out, and
+    # it leaves one row saying how many fixture rows it removed.
+    keys = tuple(ALL_CFS) + tuple(pids)
+    kmarks = ",".join("?" * len(keys))
+    where = f"username = ? OR username IN ({kmarks}) OR target IN ({kmarks})"
+    params = (STAFF_USER,) + keys + keys
+    auth.purge_audit(conn, where, params, "e2e_intake_walk", "e2e fixture cleanup")
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS
     ).fetchone()[0]
-    audit_left = conn.execute(
-        f"SELECT COUNT(*) FROM audit_log WHERE username = ?"
-        f" OR username IN ({marks}) OR target IN ({marks})",
-        (STAFF_USER,) + tuple(ALL_CFS) + tuple(ALL_CFS)
-    ).fetchone()[0]
+    audit_left = conn.execute(f"SELECT COUNT(*) FROM audit_log WHERE {where}", params).fetchone()[0]
     conn.close()
 
     # the search index too. a filed note is embedded into chroma with its cf in

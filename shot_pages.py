@@ -38,6 +38,7 @@ cleans up nothing - so those shots may live in the repo.
 
 import sqlite3
 import sys
+import auth
 import patient_id
 import tempfile
 from pathlib import Path
@@ -143,11 +144,15 @@ def cleanup():
             conn.execute(f"DELETE FROM {table} WHERE patient_id = ?", (pid,))
     conn.execute("DELETE FROM patients WHERE codice_fiscale = ?", (CF,))
     for name, _ in USERS:
-        conn.execute("DELETE FROM audit_log WHERE username = ?", (name,))
         conn.execute("DELETE FROM users WHERE username = ?", (name,))
     conn.commit()
-    conn.execute("DELETE FROM audit_log WHERE target = ?", (CF,))
-    conn.commit()
+    # append-only trail: fixture rows leave through purge_audit, matched on the
+    # surrogate as well as the cf since identity fields hold the surrogate (P06)
+    names = [name for name, _ in USERS]
+    keys = [CF] + ([pid] if pid else [])
+    where = (f"username IN ({','.join('?' * len(names))})"
+             f" OR target IN ({','.join('?' * len(keys))})")
+    auth.purge_audit(conn, where, names + keys, "shot_pages", "fixture cleanup")
     users_left = conn.execute(
         "SELECT COUNT(*) FROM users WHERE username LIKE 'zzs%'"
     ).fetchone()[0]
@@ -159,6 +164,7 @@ def cleanup():
     audit_left = conn.execute(
         "SELECT COUNT(*) FROM audit_log"
         " WHERE username LIKE 'zzs%' OR username LIKE 'ZZS%' OR target LIKE 'ZZS%'"
+        f" OR target IN ({','.join('?' * len(keys))})", keys
     ).fetchone()[0]
     conn.close()
     return users_left, pats_left, audit_left

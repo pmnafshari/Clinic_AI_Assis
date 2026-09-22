@@ -1,7 +1,11 @@
+import re
+import sqlite3
 import sys
 from datetime import datetime
 
 import clinic_time
+import codice_fiscale
+import patient_id
 
 VALID_ROLES = ("dentist", "assistant", "admin")
 
@@ -78,6 +82,26 @@ def authorize(role, action):
     return action in PERMISSIONS.get(role, set())
 
 
+def _pseudonymise(conn, text):
+    # the audit trail is kept after an erasure, so an identity field must not
+    # hold the one identifier that names a person. a username or target that IS
+    # a codice fiscale becomes the patient's surrogate id, which stops resolving
+    # to anyone once they are erased (P06). a codice fiscale inside a file path
+    # is left alone here: filenames are what the intake list groups on, and the
+    # erasure step redacts those rows for the patient it removes.
+    if not text:
+        return text
+    upper = text.strip().upper()
+    if not (codice_fiscale.SYNTHETIC.match(upper) or codice_fiscale.REAL.match(upper)):
+        return text
+    try:
+        pid = patient_id.resolve(conn, upper)
+    except sqlite3.OperationalError:
+        # a database older than the surrogate tables; still never keep the cf
+        pid = None
+    return pid or "cf-unknown"
+
+
 def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, reason=None):
     # ip: the source address behind the row. the patient surface sets it on
     # login, logout, chat and scope-violation rows; staff paths still pass None.
@@ -92,12 +116,35 @@ def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, r
     # owns the vocabulary.
     if ts is None:
         ts = clinic_time.stamp()
+    username = _pseudonymise(conn, username)
+    target = _pseudonymise(conn, target)
     conn.execute(
         "INSERT INTO audit_log (ts, username, role, action, target, allowed, ip, reason)"
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (ts, username, role, action, target, allowed, ip, reason),
     )
     conn.commit()
+
+
+def purge_audit(conn, where, params, actor, reason):
+    """Delete audit rows matching `where`, the one sanctioned way.
+
+    Used by the retention sweep and by test harnesses removing their own
+    fixtures from a dev database. The purge is itself audited, with the count,
+    so a gap in the trail always has a row saying who made it and why.
+    """
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("INSERT INTO audit_unlock (reason) VALUES (?)", (reason,))
+        count = conn.execute(f"DELETE FROM audit_log WHERE {where}", params).rowcount
+        conn.execute("DELETE FROM audit_unlock")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
+    log_audit(conn, actor, "system", "audit_purge", f"{count} rows", allowed=1, reason=reason)
+    return count
 
 
 def selftest():
@@ -207,6 +254,45 @@ def selftest():
         assert shift_row["reason"] is None, "8: that caller supplied no reason"
 
         assert "reason" in audit_columns, "8: audit_log should have a reason column"
+
+        # 9. an identity field never holds a codice fiscale (P06.04): a known
+        # one becomes the surrogate, an unknown one a placeholder
+        pid = patient_id.seed_patient(conn, "ZZAU800101010101", "audit person")
+        log_audit(conn, "ZZAU800101010101", "patient", "patient_login", "ZZAU800101010101", 1)
+        log_audit(conn, "drossi", "dentist", "read_notes", "ZZAU800101010199", 0)
+        log_audit(conn, "drossi", "dentist", "read_notes", f"sorted/{pid}/notes/a.json", 1)
+        rows = conn.execute("SELECT username, target FROM audit_log ORDER BY id DESC LIMIT 3"
+                            ).fetchall()[::-1]
+        assert rows[0]["username"] == pid, f"9: patient username kept a cf: {rows[0]['username']}"
+        assert rows[0]["target"] == pid, f"9: target kept a cf: {rows[0]['target']}"
+        assert rows[1]["target"] == "cf-unknown", f"9: unknown cf kept: {rows[1]['target']}"
+        assert rows[2]["target"] == f"sorted/{pid}/notes/a.json", "9: a path is left as written"
+        assert re.match(r"^pid_[0-9a-f]{16}$", pid), "9: the surrogate is not itself cf-shaped"
+
+        # 10. append-only: update and delete refused, purge is the one way out
+        # and it leaves a row saying so
+        for sql in ("UPDATE audit_log SET allowed = 1", "DELETE FROM audit_log"):
+            try:
+                conn.execute(sql)
+                raise AssertionError(f"10: {sql} should be refused")
+            except sqlite3.IntegrityError:
+                pass
+        conn.rollback()
+        total = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+        gone = purge_audit(conn, "username = ?", ("u4",), "selftest", "fixture cleanup")
+        assert gone == 1, f"10: purge should remove the one u4 row, removed {gone}"
+        after = conn.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
+        assert after == total, "10: purge removes its rows and adds one saying so"
+        last = conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
+        assert last["action"] == "audit_purge" and last["target"] == "1 rows", \
+            "10: the purge must audit itself"
+        assert conn.execute("SELECT COUNT(*) c FROM audit_unlock").fetchone()["c"] == 0, \
+            "10: the unlock must not outlive the purge"
+        try:
+            conn.execute("DELETE FROM audit_log")
+            raise AssertionError("10: the lock must be back after a purge")
+        except sqlite3.IntegrityError:
+            conn.rollback()
 
     print("selftest passed")
 

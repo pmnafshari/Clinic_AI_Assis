@@ -707,31 +707,34 @@ def selftest():
         # ^[A-Z]{4}[0-9]{12}$ rejected every one), and opening a record is
         # audited for the reader who was allowed, not only the one refused.
         real_conn = sqlite3.connect(db_path)
-        patient_id.seed_patient(real_conn, "RSSMRA85T10A562S", "Zzr Realcode", None)
+        real_pid = patient_id.seed_patient(real_conn, "RSSMRA85T10A562S", "Zzr Realcode", None)
         real_conn.commit()
         real_conn.close()
 
         def view_rows(action):
             c = sqlite3.connect(db_path)
             try:
+                # the row names the patient by surrogate, never by the cf (P06)
                 return c.execute("SELECT username, target, allowed FROM audit_log WHERE action = ?"
-                                 " AND target = 'RSSMRA85T10A562S'", (action,)).fetchall()
+                                 " AND target = ?", (action, real_pid)).fetchall()
             finally:
                 c.close()
 
         real_page = client_dent.get("/patients/RSSMRA85T10A562S")
         assert real_page.status_code == 200 and b"Zzr Realcode" in real_page.data, \
             f"19c: a real codice fiscale must resolve, got {real_page.status_code}"
-        assert view_rows("view_record_clinical") == [("drossi", "RSSMRA85T10A562S", 1)], \
+        assert view_rows("view_record_clinical") == [("drossi", real_pid, 1)], \
             f"19c: the dentist's view must write exactly one audit row: {view_rows('view_record_clinical')}"
         client_asst.get("/patients/RSSMRA85T10A562S")
-        assert view_rows("view_record") == [("aneri", "RSSMRA85T10A562S", 1)], \
+        assert view_rows("view_record") == [("aneri", real_pid, 1)], \
             "19c: the assistant's view is audited under its own action"
         # the row says who opened whose record - never what was in it
         c = sqlite3.connect(db_path)
-        stored = c.execute("SELECT * FROM audit_log WHERE target = 'RSSMRA85T10A562S'").fetchall()
+        stored = c.execute("SELECT * FROM audit_log WHERE target = ?", (real_pid,)).fetchall()
         c.close()
         assert not any("Zzr" in str(v) for row in stored for v in row), "19c: no record content in the log"
+        assert not any("RSSMRA85T10A562S" in str(v) for row in stored for v in row), \
+            "19c: no codice fiscale in the log"
 
         # fail-closed: if the audit write fails, the record is not served
         import app.patients_routes as pr

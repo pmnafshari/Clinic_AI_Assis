@@ -374,7 +374,9 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
     args = call.parsed_args()
 
     if not authorize(role, call.tool):
-        log_audit(conn, username, role, call.tool, target=args.patient, allowed=0)
+        # the patient is still whatever name was typed at this point; a name is
+        # not written to the audit trail, so the refusal carries no target
+        log_audit(conn, username, role, call.tool, target=None, allowed=0)
         return None, f"not permitted: {role} may not {call.tool}"
 
     cf, reason = resolve_patient(args.patient, conn, choose_cf)
@@ -683,7 +685,8 @@ def selftest():
         assert len(allowed_rows) == 1, \
             f"confirmed dentist write should log exactly 1 allowed row, got {len(allowed_rows)}"
         assert allowed_rows[0]["username"] == "test-dentist", "allowed row should carry the acting username"
-        assert allowed_rows[0]["target"] == cf, "allowed row target should be the cf"
+        assert allowed_rows[0]["target"] == _pidmod.resolve(conn, cf), \
+            "allowed row target should be the patient id, never the cf"
 
         # c2. an unauthorized role is denied: phone stays unchanged, no new undo
         # line, and exactly one denied audit_log row is recorded (RBAC-05, AUDIT-01)
@@ -750,7 +753,8 @@ def selftest():
         ).fetchone()["c"]
         assert allowed_after == allowed_before + 1, "allowed undo should add exactly one allowed audit row"
         assert last_allowed["username"] == "test-dentist", "allowed undo row should carry the acting username"
-        assert last_allowed["target"] == cf, "allowed undo row target should be the cf"
+        assert last_allowed["target"] == _pidmod.resolve(conn, cf), \
+            "allowed undo row target should be the patient id, never the cf"
 
         # e. invalid tool JSON and unreachable Ollama are rejected cleanly
         try:

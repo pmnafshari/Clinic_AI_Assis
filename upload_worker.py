@@ -92,7 +92,7 @@ def _record_worker_failure(path, username, role, exc):
     except Exception as inner:
         print(f"worker failure row lost ({inner}), original: {exc}", file=sys.stderr)
     try:
-        log_action(path, "-", f"worker failed: {exc}", LOG_PATH)
+        log_action(path, "-", f"worker failed: {type(exc).__name__}", LOG_PATH)
     except Exception as inner:
         print(f"worker failure log lost ({inner}), original: {exc}", file=sys.stderr)
 

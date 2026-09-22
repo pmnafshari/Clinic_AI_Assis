@@ -843,7 +843,7 @@ def selftest():
         ).fetchone()["failed_attempts"]
         before_checks = conn_g.execute(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_pin_check' AND target = ?",
-            (revoke_cf,),
+            (patient_id.resolve(conn_g, revoke_cf),),
         ).fetchone()[0]
         status, row = patient_auth.verify_pin(revoke_cf, revoke_pin, conn_g)
         assert status == "wrong", \
@@ -854,7 +854,7 @@ def selftest():
         ).fetchone()["failed_attempts"]
         after_checks = conn_g.execute(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_pin_check' AND target = ?",
-            (revoke_cf,),
+            (patient_id.resolve(conn_g, revoke_cf),),
         ).fetchone()[0]
         conn_g.close()
         assert after_attempts == before_attempts + 1, \
@@ -1074,7 +1074,8 @@ def selftest():
         assert "Nothing is saved until you" in form, \
             "45: and say that nothing auto-saves"
         assert _rows(db_path, "SELECT * FROM audit_log WHERE action = 'prefill_note'"
-                     " AND target = ?", (mg_keep,)), \
+                     " AND target = (SELECT patient_id FROM patients WHERE codice_fiscale = ?)",
+                     (mg_keep,)), \
             "45: handing over a patient's details is itself auditable"
 
         # 46. and the prefill gate is the write gate - an empty form with a ?cf

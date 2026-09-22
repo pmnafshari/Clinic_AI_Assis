@@ -434,7 +434,7 @@ def selftest():
         assert (expires - issued).days == CREDENTIAL_VALIDITY_DAYS, "2: validity window"
         audited = conn.execute(
             "SELECT COUNT(*) c FROM audit_log WHERE action = 'issue_patient_pin' AND target = ?",
-            (cf,),
+            (_pid(conn, cf),),
         ).fetchone()["c"]
         assert audited == 1, "2: issuance should be audited"
         leaked = conn.execute(

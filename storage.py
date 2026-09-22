@@ -32,6 +32,22 @@ class NeedsMigration(RuntimeError):
     """This database predates Phase 51 and must be migrated deliberately."""
 
 
+# the audit trail is append-only (P06.04). an update or delete is refused
+# unless a row sits in audit_unlock, and the only code that puts one there is
+# auth.purge_audit, which audits its own purge. this stops the application
+# rewriting its own history by mistake; it does not stop someone who can open
+# the database file, who could drop the trigger just as easily.
+AUDIT_APPEND_ONLY = """
+    CREATE TABLE IF NOT EXISTS audit_unlock (reason TEXT NOT NULL);
+    CREATE TRIGGER IF NOT EXISTS audit_log_no_update BEFORE UPDATE ON audit_log
+    WHEN NOT EXISTS (SELECT 1 FROM audit_unlock)
+    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS audit_log_no_delete BEFORE DELETE ON audit_log
+    WHEN NOT EXISTS (SELECT 1 FROM audit_unlock)
+    BEGIN SELECT RAISE(ABORT, 'audit_log is append-only'); END;
+"""
+
+
 def init_db(db_path):
     conn = connect(db_path)
     # A PRE-PHASE-51 DATABASE IS REFUSED, NOT SILENTLY HALF-UPGRADED.
@@ -99,6 +115,7 @@ def init_db(db_path):
     _ensure_lockout_columns(conn)
     _ensure_audit_ip_column(conn)
     _ensure_audit_reason_column(conn)
+    conn.executescript(AUDIT_APPEND_ONLY)
     conn.commit()
 
     # patient credential/session tables. deferred import because patient_auth

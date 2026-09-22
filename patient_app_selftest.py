@@ -1524,7 +1524,7 @@ def selftest():
         ) == before_d26d + 1, "26d: a deflected POST must leave one patient_deflect row"
         assert count(
             "SELECT COUNT(*) FROM audit_log WHERE action = 'patient_query' AND username = ?"
-            " AND allowed = 1", (cf26,),
+            " AND allowed = 1", (pid_of(cf26),),
         ) == 0, "26d: a deflection must not also write an allowed patient_query row"
         deflect_row26d = raw_db().execute(
             "SELECT * FROM audit_log WHERE action = 'patient_deflect' AND username = ?"
@@ -1696,7 +1696,7 @@ def selftest():
                 c = raw_db()
                 row = c.execute(
                     "SELECT ip FROM audit_log WHERE username = ? AND action = 'patient_login'"
-                    " ORDER BY rowid DESC LIMIT 1", (cf,)
+                    " ORDER BY rowid DESC LIMIT 1", (pid_of(cf),)
                 ).fetchone()
                 c.close()
                 return row["ip"] if row else None
@@ -1835,7 +1835,7 @@ def selftest():
         row30b = c30b.execute(
             "SELECT ip FROM audit_log WHERE username = ? AND action = 'patient_change_pin'"
             " ORDER BY id DESC LIMIT 1",
-            (cf30b,),
+            (pid_of(cf30b),),
         ).fetchone()
         c30b.close()
         assert row30b is not None, "30b: no patient_change_pin audit row was written"

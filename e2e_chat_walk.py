@@ -27,6 +27,7 @@ import sys
 import urllib.parse
 import urllib.request
 
+import auth
 import patient_auth
 import patient_id
 from eval_chat import date_variants
@@ -122,23 +123,23 @@ def cleanup():
         pmarks = ",".join("?" * len(pids))
         for table in ("invoices", "visits", "patient_sessions", "patient_credentials"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
-        conn.execute(
-            f"DELETE FROM audit_log WHERE username IN ({pmarks}) OR target IN ({pmarks})",
-            pids + pids)
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", cfs)
-    # audit rows land under two different keys. the patient app logs with
-    # username = codice fiscale, but seed()'s issue_pin logs under the dentist
-    # with the cf in target. deleting on username alone leaves the second set
-    # behind - 61 of them had piled up by 2026-08-27.
-    conn.execute(f"DELETE FROM audit_log WHERE username IN ({marks})", cfs)
-    conn.execute(f"DELETE FROM audit_log WHERE target IN ({marks})", cfs)
     conn.commit()
+    # audit rows land under two different keys. the patient app logs with the
+    # patient as username, but seed()'s issue_pin logs under the dentist with
+    # the patient in target. deleting on username alone leaves the second set
+    # behind - 61 of them had piled up by 2026-08-27. since P06 the patient is
+    # the surrogate in both, and the purge goes through purge_audit because the
+    # trail is append-only.
+    keys = tuple(cfs) + tuple(pids)
+    kmarks = ",".join("?" * len(keys))
+    where = f"username IN ({kmarks}) OR target IN ({kmarks})"
+    auth.purge_audit(conn, where, keys + keys, "e2e_chat_walk", "e2e fixture cleanup")
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", cfs
     ).fetchone()[0]
     audit_left = conn.execute(
-        f"SELECT COUNT(*) FROM audit_log"
-        f" WHERE username IN ({marks}) OR target IN ({marks})", cfs + cfs
+        f"SELECT COUNT(*) FROM audit_log WHERE {where}", keys + keys
     ).fetchone()[0]
     conn.close()
     return left, audit_left

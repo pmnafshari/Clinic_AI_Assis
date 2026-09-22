@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash
 
 import app.db as app_db
 import app.notes_routes as notes_routes
+import patient_id
 from app import create_app
 
 FAKE_CF = "PLLM900010150400"
@@ -274,11 +275,11 @@ def selftest():
         gated_audit = conn.execute(
             "SELECT 1 FROM audit_log WHERE username = ? AND action = 'append_note'"
             " AND allowed = 0 AND target = ?",
-            ("aadmin", FAKE_CF),
+            ("aadmin", patient_id.resolve(conn, FAKE_CF)),
         ).fetchone()
         conn.close()
         assert gated_audit is not None, \
-            "5: gated ?cf= GET should log an allowed=0 audit row targeting the cf"
+            "5: gated ?cf= GET should log an allowed=0 audit row targeting the patient"
 
         # 6. mismatch notice, and the lock holding on a tampered step 2 (D-02, D-03)
         notes_routes._urlopen = mismatch_urlopen

@@ -40,7 +40,7 @@ def sync_dropped(dest, sorted_root, log_path):
             log_action(dest, "-", "sync failed", log_path)
     except Exception as exc:
         # a daemon must not die on one bad note
-        log_action(dest, "-", f"sync failed: {exc}", log_path)
+        log_action(dest, "-", f"sync failed: {type(exc).__name__}", log_path)
     finally:
         if conn is not None:
             conn.close()
@@ -54,7 +54,7 @@ def route_and_sync(src, sorted_root, log_path):
     try:
         dest = route_file(src, sorted_root, log_path, extract=_extract)
     except Exception as exc:
-        log_action(src, "-", f"route failed: {exc}", log_path)
+        log_action(src, "-", f"route failed: {type(exc).__name__}", log_path)
         return
     sync_dropped(dest, sorted_root, log_path)
 

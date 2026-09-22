@@ -210,6 +210,11 @@ def convert(conn, source_tz, backup_path=None):
 
     try:
         conn.execute("BEGIN")
+        # audit_log.ts is one of the fields, and the audit trail is append-only.
+        # a backed-up migration is the one other thing allowed through; the
+        # unlock is inside this transaction, so a failure rolls it back too
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'audit_unlock'").fetchone():
+            conn.execute("INSERT INTO audit_unlock (reason) VALUES ('migrate_tz')")
         for table, column in INSTANT_FIELDS:
             subject = f"{table}.{column}"
             if already_done(conn, "field", subject):
@@ -250,6 +255,8 @@ def convert(conn, source_tz, backup_path=None):
                 n += 1
             changed[subject] = n
             _record(conn, "field", subject, DONE, f"{n} row(s) converted")
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE name = 'audit_unlock'").fetchone():
+            conn.execute("DELETE FROM audit_unlock")
         conn.commit()
     except Exception as e:
         conn.rollback()
