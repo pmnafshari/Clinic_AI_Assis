@@ -60,12 +60,6 @@
             <i class="bi bi-graph-up"></i> Reports
           </a>
           {% endif %}
-          {% if authorize(g.user.role, 'manage_data_requests') %}
-          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('data_requests.') else '' }}"
-             href="{{ url_for('data_requests.index') }}">
-            <i class="bi bi-shield-lock"></i> Data requests
-          </a>
-          {% endif %}
           {% if authorize(g.user.role, 'manage_users') %}
           <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('admin.') else '' }}"
              href="{{ url_for('admin.users_view') }}">
@@ -130,6 +124,14 @@
             <div class="app-user-name">{{ g.user.username }}</div>
             <div class="app-user-role">{{ g.user.role }}</div>
           </div>
+          {# an occasional task, so it sits here rather than in a top bar that
+             is already full at 1440px for a dentist (P06) #}
+          {% if authorize(g.user.role, 'manage_data_requests') %}
+          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('data_requests.') else '' }}"
+             href="{{ url_for('data_requests.index') }}">
+            <i class="bi bi-shield-lock"></i> Data requests
+          </a>
+          {% endif %}
           <a class="dropdown-item{{ ' active' if request.endpoint == 'auth.change_password' else '' }}"
              href="{{ url_for('auth.change_password') }}">
             <i class="bi bi-key"></i> Change password

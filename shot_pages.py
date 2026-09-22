@@ -87,6 +87,7 @@ ROLE_PAGES = {
         ("qa", "/qa"),
         ("reports", "/reports"),
         ("appointments", "/appointments"),
+        ("data-requests", "/data-requests"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],

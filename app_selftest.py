@@ -813,11 +813,13 @@ def selftest():
         # into the avatar menu. PROPERTY UNCHANGED - the count is still per
         # role, and the two moved links are asserted present below so they
         # cannot have simply vanished.
-        # 6 -> 7 in P06: Data requests behind manage_data_requests, which only
-        # a dentist holds. an assistant must not gain it - asserted in 20a.
-        assert shell.data.count(b'class="nav-link') == 7, \
-            f'20: a dentist should see 7 nav tabs, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
+        # P06 put Data requests in the avatar menu, not the tabs: seven tabs did
+        # not fit a dentist's bar at 1440px. it is behind manage_data_requests,
+        # which only a dentist holds, and an assistant must not gain it (20a).
+        assert shell.data.count(b'class="nav-link') == 6, \
+            f'20: a dentist should see 6 nav tabs, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
         menu = re.findall(rb'class="dropdown-item[^"]*"[^>]*>\s*<i[^>]*></i>\s*([^<]+?)\s*<', shell.data)
+        assert b"Data requests" in menu, f"20: the avatar menu offers a dentist Data requests: {menu}"
         assert b"Change password" in menu and b"Logout" in menu, \
             f"20: the avatar menu must carry Change password and Logout, got {menu}"
         assert b"Reports" in shell.data, "20: a dentist holds read_clinical and is offered Reports"
