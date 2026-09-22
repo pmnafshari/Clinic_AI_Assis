@@ -18,6 +18,7 @@ from werkzeug.security import generate_password_hash
 import app.db as app_db
 import auth
 import clinic_time
+import inventory
 import ledger
 import patient_id
 import pending_actions
@@ -77,6 +78,8 @@ def _seed(db_path, root):
     ledger.issue(conn, invoice_id, "rb_dentist", "dentist")
     payment_id, _ = ledger.record_payment(conn, invoice_id, "20,00", "cash", "rb-seed",
                                           "rb_dentist", "dentist")
+    item_id = inventory.create_item(conn, "Guanti rb", "conf", 5, "rb_dentist", "dentist")
+    alert_id = inventory.open_alerts(conn)[0]["id"]
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -84,6 +87,7 @@ def _seed(db_path, root):
     (notes / "rb1.json").write_text("{}")
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
+            "item_id": item_id, "alert_id": alert_id,
             "username": "rb_target", "filename": "app.css"}
 
 

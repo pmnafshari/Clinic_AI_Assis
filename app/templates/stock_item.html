@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('stock.index') }}">Stock</a></li>
+    <li aria-current="page">{{ item.name }}</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Stock</p>
+    <h1 class="ds-page-title">{{ item.name }}</h1>
+    <p class="ds-page-meta">{{ item.balance }} {{ item.unit }} in stock · alert at or below {{ item.threshold }}{% if item.low %} · <strong>low</strong>{% endif %}</p>
+  </div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="move-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="move-title">Record a movement</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('stock.move', item_id=item.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="key" value="{{ key() }}">
+      <div><label class="form-label small" for="kind">What happened</label>
+      <select class="form-select form-select-sm" id="kind" name="kind">
+        <option value="receipt">Received</option>
+        <option value="consumption">Used</option>
+        <option value="count">Counted on the shelf</option>
+        {% if can_manage %}<option value="correction">Correction (+ or -)</option>{% endif %}
+      </select></div>
+      <div><label class="form-label small" for="qty">Quantity ({{ item.unit }})</label><input class="form-control form-control-sm" id="qty" name="quantity" type="number" required></div>
+      <div><label class="form-label small" for="why">Reason (needed for a count or correction)</label><input class="form-control form-control-sm" id="why" name="reason" maxlength="300"></div>
+      <button class="btn btn-primary btn-sm" type="submit">Record</button>
+    </form>
+    <p class="small mt-2 mb-0">Stock cannot go below zero. A count records the difference from the balance, so the history still explains every number.</p>
+  </div>
+</section>
+
+{% if can_manage %}
+<section class="card dash-card mb-3" aria-labelledby="thr-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="thr-title">Alert threshold</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('stock.threshold', item_id=item.id) }}" class="d-flex gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label class="form-label small" for="thr">Alert at or below</label><input class="form-control form-control-sm" id="thr" name="threshold" type="number" min="0" value="{{ item.threshold }}"></div>
+      <button class="btn btn-outline-primary btn-sm" type="submit">Change</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<section class="card dash-card" aria-labelledby="hist-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">History</h2></div>
+  <div class="dash-card-body">
+    {% if history %}
+    <ul class="ds-rows">
+      {% for m in history %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ {'receipt': 'Received', 'consumption': 'Used', 'count': 'Counted', 'correction': 'Correction'}[m.kind] }} {{ '%+d' % m.delta }} {{ item.unit }}{% if m.kind == 'count' %} (counted {{ m.counted }}){% endif %}</span>
+          <span class="ds-row-sub">{{ m.ts | appt_date }} {{ m.ts | appt_time }} · {{ m.actor }}{% if m.reason %} · {{ m.reason }}{% endif %}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No movements yet.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

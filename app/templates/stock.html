@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Stock</p>
+    <h1 class="ds-page-title">Consumables</h1>
+    <p class="ds-page-meta">Daily check: last run {{ last_run.started_at | appt_date ~ ' ' ~ (last_run.started_at | appt_time) if last_run else 'never' }}{% if last_run and last_run.status != 'ok' %} ({{ last_run.status }}){% endif %} · daily schedule: {{ schedule }}</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div><strong class="ds-alert-title">Demo clinic - synthetic stock</strong>
+  Low-stock alerts appear here only - nothing is sent to anyone and nothing is ordered. The daily
+  check runs when <code>inventory_job.py</code> is run; no automatic schedule is set up.</div>
+</div>
+
+{% if alerts %}
+<section class="card dash-card mb-3" aria-labelledby="alerts-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="alerts-title">Low stock ({{ alerts | length }})</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for a in alerts %}
+    <li class="ds-row">
+      <span class="ds-row-main">
+        <a class="ds-row-title" href="{{ url_for('stock.item', item_id=a.item_id) }}">{{ a.name }}</a>
+        <span class="ds-row-sub">{{ a.balance_at_open }} {{ a.unit }} at or below {{ a.threshold_at_open }} since {{ a.opened_at | appt_date }}{% if a.acknowledged_at %} · seen by {{ a.acknowledged_by }}{% endif %}</span>
+      </span>
+      {% if not a.acknowledged_at %}
+      <form method="post" action="{{ url_for('stock.acknowledge', alert_id=a.id) }}" class="ms-auto">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Mark as seen</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul></div>
+</section>
+{% endif %}
+
+<section class="card dash-card mb-3" aria-labelledby="items-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="items-title">Items</h2>
+    <nav aria-label="Filter"><a href="{{ url_for('stock.index') }}" {% if not low_only %}aria-current="page"{% endif %}>All</a> · <a href="{{ url_for('stock.index', show='low') }}" {% if low_only %}aria-current="page"{% endif %}>Low only</a></nav>
+  </div>
+  <div class="dash-card-body">
+    {% if items %}
+    <ul class="ds-rows">
+      {% for i in items %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <a class="ds-row-title" href="{{ url_for('stock.item', item_id=i.id) }}">{{ i.name }}</a>
+          <span class="ds-row-sub">threshold {{ i.threshold }} {{ i.unit }}{% if i.low %} · <strong>low</strong>{% endif %}</span>
+        </span>
+        <span class="ds-numeral ms-auto">{{ i.balance }} {{ i.unit }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ 'Nothing is low.' if low_only else 'No items yet.' }}</p>
+    {% endif %}
+  </div>
+</section>
+
+{% if can_manage %}
+<section class="card dash-card" aria-labelledby="new-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="new-title">Add an item</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('stock.create') }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label class="form-label small" for="new-name">Name</label><input class="form-control form-control-sm" id="new-name" name="name" maxlength="120" required></div>
+      <div><label class="form-label small" for="new-unit">Unit</label><select class="form-select form-select-sm" id="new-unit" name="unit">{% for u in units %}<option>{{ u }}</option>{% endfor %}</select></div>
+      <div><label class="form-label small" for="new-threshold">Alert at or below</label><input class="form-control form-control-sm" id="new-threshold" name="threshold" type="number" min="0" required></div>
+      <button class="btn btn-primary btn-sm" type="submit">Add</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

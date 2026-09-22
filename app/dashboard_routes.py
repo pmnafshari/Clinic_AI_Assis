@@ -7,6 +7,7 @@ from flask import Blueprint, g, redirect, render_template, url_for
 import agent
 import appointments
 import clinic_time
+import inventory
 from auth import authorize
 from shared.names import initials, tint
 
@@ -246,9 +247,14 @@ def index():
 
     # chart series are shaped here, not in jinja: the template renders what
     # it is given and computes nothing (D-01, as phase 23 did for the badge)
+    # real open alerts only, for roles that can act on them; nothing when none
+    stock_low = 0
+    if authorize(g.user["role"], "use_inventory"):
+        stock_low = len(inventory.open_alerts(get_db()))
     return render_template(
         "dashboard.html",
         user=g.user,
+        stock_low=stock_low,
         history=history,
         show_intake=show_intake,
         intake_counts=intake_counts,

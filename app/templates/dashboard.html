@@ -240,7 +240,7 @@
   <div>
     <p class="ds-page-eyebrow">{{ greeting }}, {{ user.username }}</p>
     <h1 class="ds-page-title">Clinic overview</h1>
-    <p class="ds-page-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ today_label }}</p>
+    <p class="ds-page-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ today_label }}{% if stock_low %} · <a href="{{ url_for('stock.index', show='low') }}">{{ stock_low }} item{{ 's' if stock_low != 1 }} low on stock</a>{% endif %}</p>
   </div>
   {% if agenda_dentists %}
   <ul class="dash-chips" aria-label="Dentists booked today">

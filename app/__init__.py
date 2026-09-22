@@ -95,6 +95,7 @@ def create_app():
     from .patients_routes import patients_bp
     from .qa_routes import qa_bp
     from .reports_routes import reports_bp
+    from .stock_routes import stock_bp
     from .upload_routes import upload_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(agent_bp)
@@ -107,6 +108,7 @@ def create_app():
     app.register_blueprint(patients_bp)
     app.register_blueprint(qa_bp)
     app.register_blueprint(reports_bp)
+    app.register_blueprint(stock_bp)
     app.register_blueprint(upload_bp)
 
     @app.route("/shared/<path:filename>")

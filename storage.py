@@ -151,6 +151,10 @@ def init_db(db_path):
     _ensure_invoice_cents(conn)
     conn.executescript(ledger.SCHEMA)
     conn.executescript(ledger.APPEND_ONLY)
+
+    # clinic stock (P08). no patient data
+    from inventory import SCHEMA as INVENTORY_SCHEMA
+    conn.executescript(INVENTORY_SCHEMA)
     conn.commit()
     return conn
 
