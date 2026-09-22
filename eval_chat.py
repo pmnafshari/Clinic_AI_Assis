@@ -89,6 +89,26 @@ def build_db(patients):
     """)
     import ledger
     conn.executescript(ledger.SCHEMA)
+    # P10: the pipeline now reaches the agent and handoff tables before it
+    # routes, so the eval's fixture database needs them too
+    import handoff
+    import patient_agent
+    conn.executescript(patient_agent.SCHEMA)
+    conn.executescript(handoff.SCHEMA)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS appointments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+            dentist TEXT NOT NULL,
+            starts_at TEXT NOT NULL,
+            minutes INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'booked',
+            note TEXT,
+            period TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+    """)
     for i, p in enumerate(patients):
         _epid = _pidmod.seed_patient(conn, p["cf"], p["name"], p["phone"])
         for j, visit in enumerate(patient_visits(p)):

@@ -104,6 +104,76 @@ def render_invoices(rows, lang):
     return lines
 
 
+def agent_text(result, lang, conn=None, now=None):
+    """The agent's and the handoff's reply, composed in python (P10).
+
+    The action path never calls a model, so this is where its wording comes
+    from. Every branch is a string from STRINGS with parsed values formatted
+    in - nothing here is generated.
+    """
+    import clinic_time
+
+    state = result["state"]
+    payload = result.get("payload") or {}
+
+    def period_word(value):
+        return t(f"agent_period_{value}", lang)
+
+    def when(row):
+        instant = clinic_time.read_instant(row["starts_at"])
+        local = clinic_time.to_local(instant)
+        return local.strftime("%d/%m/%Y"), local.strftime("%H:%M")
+
+    if state == "handoff":
+        parts = [t("handoff_body", lang)]
+        if conn is not None:
+            import handoff as handoff_mod
+            open_now, nxt = handoff_mod.next_opening(conn, now)
+            if open_now:
+                parts.append(t("handoff_open", lang))
+            elif nxt is not None:
+                parts.append(t("handoff_closed", lang).format(
+                    when=nxt.strftime("%d/%m/%Y %H:%M")))
+            else:
+                parts.append(t("handoff_closed_unknown", lang))
+        parts.append(t("handoff_urgent", lang))
+        return " ".join(parts)
+
+    if state == "agent_need":
+        if result.get("target") == "book:past_day":
+            return t("agent_past_day", lang)
+        need = result["need"]
+        text = t(f"agent_need_{need}", lang)
+        if need == "which":
+            listed = []
+            for index, row in enumerate(result.get("appointments") or [], start=1):
+                day, time = when(row)
+                listed.append(f"{index}. {day} {time} - {row['dentist']}")
+            return text + " " + " ".join(listed)
+        return text
+
+    if state == "agent_propose":
+        if result["kind"] == "book":
+            return t("agent_propose_book", lang).format(
+                day=format_date(payload["day"], lang), period=period_word(payload["period"]))
+        day, time = when(result["appointment"])
+        return t("agent_propose_cancel", lang).format(
+            day=day, time=time, dentist=result["appointment"]["dentist"])
+
+    if state == "agent_done":
+        if result["kind"] == "book":
+            return t("agent_done_book", lang).format(
+                day=format_date(payload["day"], lang), period=period_word(payload["period"]))
+        day, time = when(result["appointment"])
+        return t("agent_done_cancel", lang).format(day=day, time=time)
+
+    if state == "agent_failed":
+        return t(f"agent_failed_{result['kind']}", lang)
+    if state in ("agent_cancelled", "agent_nothing", "agent_stale"):
+        return t(state, lang)
+    return None
+
+
 def selftest():
     # 1. split_procedure on the shapes the notes model actually stores,
     # including the deferred-gap "devitalization tooth 21" shape

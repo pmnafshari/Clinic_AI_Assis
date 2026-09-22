@@ -21,7 +21,10 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import handoff
 import patient_accessor
+import patient_agent
+import patient_faq
 from auth import log_audit
 
 from .render import (
@@ -216,6 +219,19 @@ ANSWER_PROMPT = (
 )
 
 
+_CLINIC = None
+
+
+def _clinic():
+    """clinic.yaml, through site_app's loader - one source of truth for the
+    clinic's own facts, shared with the public site so the two cannot drift."""
+    global _CLINIC
+    if _CLINIC is None:
+        from site_app.content import load
+        _CLINIC = load()
+    return _CLINIC
+
+
 def visit_context_lines(rows, lang):
     # render_visits packs a whole visit onto one line, "04/03/2026:
     # otturazione al dente 47", and the model reliably drops the tooth number
@@ -332,9 +348,33 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     # call, no retrieval, no model call. the deflection body is a fixed
     # string the template renders; §4.5 forbids invoking the model to phrase
     # it, so no prompt is ever built for a deflected question.
+    #
+    # P10.04: a deflection now also queues a person. deflecting alone left a
+    # patient with a symptom holding a dead end - the safe message is right,
+    # and on its own it is not a path to help.
     category = advice_category(question)
     if category is not None:
-        return {"state": "deflection", "body": None, "target": category}
+        hid, created = handoff.raise_request(conn, cf, category, "clinical")
+        return {"state": "deflection", "body": None, "target": category,
+                "handoff": hid, "handoff_created": created}
+
+    # 2b. P10.01/P10.02/P10.06 - the action layer. deterministic, no model,
+    # propose-then-confirm. it returns None when this is not an action, and
+    # the question carries on to the routes below unchanged.
+    action = patient_agent.handle(conn, cf, question, lang)
+    if action is not None:
+        return action
+
+    # 2c. P10.04 - approved content. administrative entries answer from
+    # clinic.yaml; a clinical draft is never served and becomes a handoff.
+    faq_state, faq_body, faq_meta = patient_faq.answer(question, _clinic(), lang)
+    if faq_state == "answer":
+        return {"state": "answer", "body": faq_body, "target": f"faq:{faq_meta['key']}",
+                "source": faq_meta["source"], "content_version": faq_meta["version"]}
+    if faq_state == "unapproved":
+        hid, created = handoff.raise_request(conn, cf, "no_content", faq_meta["topic"])
+        return {"state": "deflection", "body": None, "target": f"unapproved:{faq_meta['key']}",
+                "handoff": hid, "handoff_created": created}
 
     # 3. D-04: an unroutable question refuses with a capability hint (the
     # hint copy lives in the template, not here) and never reaches an
@@ -367,7 +407,18 @@ def _answer(question, cf, conn, lang, ip, urlopen):
 
     # money is answered in python, never by the model - see invoice_answer
     if route == "invoices":
-        return {"state": "answer", "body": invoice_answer(data, lang), "target": route}
+        body = invoice_answer(data, lang)
+        # P10.03: nothing reconciled at all means the answer cannot say what is
+        # still to pay. that refusal is correct and, on its own, a dead end -
+        # so a person is queued. the unique index keeps it to one open request
+        # per patient and topic however often they ask.
+        live = [inv for inv in data["invoices"] if inv["state"] != "void"]
+        known = [inv for inv in live if inv["state"] not in ("unknown", "draft")]
+        if live and not known:
+            hid, created = handoff.raise_request(conn, cf, "payment_unknown", "billing")
+            return {"state": "answer", "body": body, "target": f"{route}:unknown",
+                    "handoff": hid, "handoff_created": created}
+        return {"state": "answer", "body": body, "target": route}
 
     # 6. render the already-scoped rows through patient_app/render.py, in
     # the patient's own language (D-06)
@@ -433,12 +484,20 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.ur
     every return path there is.
     """
     result = _answer(question, cf, conn, lang, ip, urlopen)
-    if result["state"] == "deflection":
-        action = "patient_deflect"
-        allowed = 0
+    state = result["state"]
+    if state == "deflection":
+        action, allowed = "patient_deflect", 0
+    elif state == "handoff":
+        # a person was asked for and queued: served, not denied
+        action, allowed = "patient_handoff", 1
+    elif state.startswith("agent_"):
+        # P10: one row per agent turn. the target says which step it was -
+        # book:need_day, cancel:proposed, book:requested - and never what the
+        # patient typed, the same rule the route labels already follow.
+        action = "patient_agent"
+        allowed = 0 if state in ("agent_failed", "agent_stale", "agent_nothing") else 1
     else:
-        action = "patient_query"
-        allowed = 1 if result["state"] == "answer" else 0
+        action, allowed = "patient_query", 1 if state == "answer" else 0
     log_audit(conn, cf, "patient", action, result["target"], allowed=allowed, ip=ip)
     return result
 
@@ -508,6 +567,24 @@ def selftest():
         """)
         import ledger
         conn.executescript(ledger.SCHEMA)
+        # P10: the agent and handoff tables the pipeline now reaches. appointments
+        # too - the action layer reads the patient's own booked list from it.
+        conn.executescript(patient_agent.SCHEMA)
+        conn.executescript(handoff.SCHEMA)
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS appointments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id TEXT NOT NULL REFERENCES patients(patient_id),
+                dentist TEXT NOT NULL,
+                starts_at TEXT NOT NULL,
+                minutes INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'booked',
+                note TEXT,
+                period TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        """)
         conn.commit()
 
         # 0. fixture: two patients, each with a visit, a next appointment
@@ -1015,11 +1092,18 @@ def selftest():
             ("en", "How much do I owe?", r"you owe|you must pay|amount due|outstanding"),
         ):
             r9 = answer_question(question, cf_a, conn, lang, urlopen=raising_urlopen)
-            assert r9["state"] == "answer" and r9["target"] == "invoices", f"9: {r9}"
+            # P10.03: nothing is reconciled here, so the answer cannot say what
+            # is still to pay AND a person is queued - the refusal on its own
+            # is a dead end. the target names the reason; one open request per
+            # patient and topic however many times they ask.
+            assert r9["state"] == "answer" and r9["target"] == "invoices:unknown", f"9: {r9}"
+            assert r9["handoff"] and handoff.open_for_patient(conn, cf_a), "9: a person is queued"
             assert not re.search(owe, r9["body"].lower()), f"9: the answer states a debt: {r9['body']}"
             assert t("inv_not_recorded", lang) in r9["body"], "9: it must say payments are not recorded"
             assert format_amount(80.0, lang) in r9["body"], "9: patient A's own line is listed"
             assert format_amount(40.0, lang) not in r9["body"], "9: patient B's line must never appear"
+        assert len([h for h in handoff.open_for_patient(conn, cf_a)
+                    if h["topic"] == "billing"]) == 1, "9: asking twice queues one person"
         conn.execute(
             "INSERT INTO invoices (patient_id, visit_id, line_index, amount, description)"
             " VALUES (?, ?, ?, ?, ?)", (cf_a, visit_id_a, 1, 20.5, "xray"))

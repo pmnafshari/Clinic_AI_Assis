@@ -160,6 +160,13 @@ def init_db(db_path):
     # fiscale, and no message text is stored - it is built at send time
     from reminders import SCHEMA as REMINDERS_SCHEMA
     conn.executescript(REMINDERS_SCHEMA)
+
+    # the patient agent (P10). neither table stores what a patient typed:
+    # the action payload holds parsed fields, the handoff row a closed topic
+    from patient_agent import SCHEMA as AGENT_SCHEMA
+    conn.executescript(AGENT_SCHEMA)
+    from handoff import SCHEMA as HANDOFF_SCHEMA
+    conn.executescript(HANDOFF_SCHEMA)
     conn.commit()
     return conn
 

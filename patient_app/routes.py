@@ -20,7 +20,9 @@ import patient_auth
 import storage
 from auth import log_audit
 
-from . import chat, net
+import handoff
+
+from . import chat, net, render
 from .strings import current_language, t
 
 patient_bp = Blueprint("patient", __name__)
@@ -288,7 +290,9 @@ def chat_page():
         return render_template("patient_chat.html", consent_needed=True)
 
     if request.method == "GET":
-        return render_template("patient_chat.html")
+        return render_template("patient_chat.html",
+                               waiting=handoff.open_for_patient(get_db(),
+                                                                g.patient["patient_id"]))
 
     # exactly one field is named "question" - the text input. the example
     # chips fill it from javascript rather than submitting their own value,
@@ -307,19 +311,28 @@ def chat_page():
     cf = g.patient["codice_fiscale"]
 
     conn = get_db()
+    lang = current_language()
     result = chat.answer_question(question, g.patient["patient_id"], conn,
-                                  current_language(), ip=net.from_request(request))
+                                  lang, ip=net.from_request(request))
 
     # no audit call here on purpose. CHAT-07's per-interaction row is written
     # inside chat.answer_question's wrapper, on this same code path, and the
     # scope-mismatch row inside patient_accessor - a call here would just
     # double-count what those already record.
+    # P10: the action and handoff states are worded in python, not by a model
+    # - render.agent_text owns that copy. the records states keep the body the
+    # pipeline produced.
+    body = result.get("body")
+    if body is None:
+        body = render.agent_text(result, lang, conn) or None
+
     # the question is passed back so the page can render the exchange as an
     # exchange rather than a lone answer. presentational only - it is the
     # value already read above, jinja-escaped on the way out, and capped at
     # 500 characters by the truncation a few lines up.
     return render_template(
-        "patient_chat.html", state=result["state"], body=result["body"], question=question
+        "patient_chat.html", state=result["state"], body=body, question=question,
+        waiting=handoff.open_for_patient(conn, g.patient["patient_id"])
     )
 
 

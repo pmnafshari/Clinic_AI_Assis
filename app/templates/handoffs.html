@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">Patients</p>
+    <h1 class="ds-page-title">Call-backs</h1>
+    <p class="ds-page-meta">
+      {%- if open_now %}Clinic open now{% elif next_opening %}Clinic closed · opens {{ next_opening.strftime('%Y-%m-%d %H:%M') }}{% else %}Clinic closed{% endif -%}
+    </p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-4" role="note">
+  <div><strong class="ds-alert-title">Nothing was sent to the patient</strong>
+  A call-back is raised when the assistant stops and asks for a person. The patient sees it
+  waiting in the portal; no message goes out, because there is no messaging provider. The queue
+  records <strong>why</strong> and <strong>what about</strong> — never what the patient typed.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="counts-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="counts-title">By state</h2>
+    {% if status %}<a href="{{ url_for('handoff.index') }}">Show all</a>{% endif %}
+  </div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for state, n in counts.items() %}
+    <li class="ds-row">
+      <span class="ds-row-main">
+        <a class="ds-row-title" href="{{ url_for('handoff.index', status=state) }}">{{ state | capitalize }}</a>
+      </span>
+      <span class="ds-numeral ms-auto">{{ n }}</span>
+    </li>
+    {% endfor %}
+  </ul></div>
+</section>
+
+<section class="card dash-card" aria-labelledby="queue-title">
+  <div class="dash-card-head">
+    <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' call-backs') if status else 'The queue' }}</h2>
+  </div>
+  <div class="dash-card-body">
+    {% if rows %}
+    <ul class="ds-rows">
+      {% for r in rows %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ r.patient_name or 'Erased patient' }} · {{ r.topic }}</span>
+          <span class="ds-row-sub">
+            {{ r.status }} · {{ r.reason.replace('_', ' ') }} · raised {{ r.created_at | appt_date }} {{ r.created_at | appt_time }}
+            {%- if r.claimed_by %} · with {{ r.claimed_by }}{% endif %}
+            {%- if r.resolved_by %} · closed by {{ r.resolved_by }}{% endif %}
+          </span>
+        </span>
+        {% if r.status == 'open' %}
+        <form method="post" action="{{ url_for('handoff.claim', handoff_id=r.id) }}" class="ms-auto">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="status" value="{{ status or '' }}">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Take it</button>
+        </form>
+        {% elif r.status == 'claimed' %}
+        <form method="post" action="{{ url_for('handoff.resolve', handoff_id=r.id) }}" class="ms-auto">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="status" value="{{ status or '' }}">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Mark done</button>
+        </form>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ 'Nothing in that state.' if status else 'Nobody is waiting.' }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

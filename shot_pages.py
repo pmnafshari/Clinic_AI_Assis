@@ -92,6 +92,7 @@ ROLE_PAGES = {
         ("patient-billing", f"/patients/{CF}/billing"),
         ("stock", "/stock"),
         ("reminders", "/reminders"),
+        ("handoffs", "/handoffs"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -107,6 +108,7 @@ ROLE_PAGES = {
         ("patient-billing", f"/patients/{CF}/billing"),
         ("stock", "/stock"),
         ("reminders", "/reminders"),
+        ("handoffs", "/handoffs"),
     ],
     "admin": [
         ("admin-users", "/admin/users"),

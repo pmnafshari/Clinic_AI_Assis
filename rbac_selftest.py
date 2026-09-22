@@ -80,6 +80,11 @@ def _seed(db_path, root):
                                           "rb_dentist", "dentist")
     item_id = inventory.create_item(conn, "Guanti rb", "conf", 5, "rb_dentist", "dentist")
     alert_id = inventory.open_alerts(conn)[0]["id"]
+    # an open call-back, the state the claim route acts on (P10)
+    handoff_id = conn.execute(
+        "INSERT INTO handoff_requests (patient_id, reason, topic, status, created_at)"
+        " VALUES (?, 'patient_asked', 'other', 'open', ?)",
+        (pid, "2026-09-23T06:00:00+00:00")).lastrowid
     # a failed reminder, the one state the retry route acts on (P09)
     job_id = conn.execute(
         "INSERT INTO reminder_jobs (kind, patient_id, subject_id, version, idempotency_key,"
@@ -94,6 +99,7 @@ def _seed(db_path, root):
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
+            "handoff_id": handoff_id,
             "username": "rb_target", "filename": "app.css"}
 
 

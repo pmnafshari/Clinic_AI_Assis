@@ -11,8 +11,8 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
     # patient record at all, so granting any of them would widen admin's reach
@@ -33,6 +33,9 @@ PERMISSIONS = {
     # reception's. the queue names patients, so admin holds neither - the same
     # line drawn for appointments above. nothing here sends anything: there is
     # no provider (D01, P11), so a retry only puts a job back in the queue.
+    # handoff (P10): handle_handoff is the dentist's and reception's - taking
+    # a call-back is reception's daily work. admin none, same reason again.
+    # a claimed handoff is released only by its holder or a dentist.
     # system: the automated sync actor (watcher/backfill), no user row
     # reapply_erasure: a restore erasing again everyone a tombstone names
     "system": {"append_note", "reapply_erasure"},
@@ -97,6 +100,9 @@ ROUTE_POLICY = {
     "stock.threshold": "manage_inventory",
     "reminders.index": "view_reminders",
     "reminders.retry": "retry_reminder",
+    "handoff.index": "handle_handoff",
+    "handoff.claim": "handle_handoff",
+    "handoff.resolve": "handle_handoff",
     "billing.payment_action": "manage_billing",
     # duplicate review is admin's, by the P04 decision - the one place admin
     # sees patient names and codici fiscali. recorded in P06 as an exception.

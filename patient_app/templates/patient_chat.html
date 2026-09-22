@@ -30,6 +30,14 @@
 </div>
 {% endif %}
 
+{% if waiting %}
+{# P10.05: what the patient can see about a call-back. a status, never an ETA -
+   nothing was sent to them, because there is no messaging provider. #}
+<p class="ds-note" role="status">
+  <i class="bi bi-telephone" aria-hidden="true"></i> {{ t('handoff_status', lang) }}
+</p>
+{% endif %}
+
 {# exactly one response region, rendered only when a POST produced a state -
    a reload with no state returns to the empty state above, per D-03.
 
@@ -49,6 +57,10 @@
     <i class="bi bi-info-circle chat-response-icon" aria-hidden="true"></i> {{ t('refusal_heading', lang) }}
     {% elif state == 'deflection' %}
     <i class="bi bi-telephone chat-response-icon" aria-hidden="true"></i> {{ t('deflect_heading', lang) }}
+    {% elif state == 'handoff' %}
+    <i class="bi bi-telephone chat-response-icon" aria-hidden="true"></i> {{ t('handoff_heading', lang) }}
+    {% elif state.startswith('agent_') %}
+    <i class="bi bi-calendar-check chat-response-icon" aria-hidden="true"></i> {{ t('agent_heading', lang) }}
     {% elif state == 'error' %}
     <i class="bi bi-exclamation-octagon chat-response-icon" aria-hidden="true"></i> {{ t('chat_error_heading', lang) }}
     {% endif %}
@@ -60,6 +72,8 @@
     {{ t('refusal_body', lang) }}
     {% elif state == 'deflection' %}
     {{ t('deflect_body', lang) }}
+    {% elif state == 'handoff' or state.startswith('agent_') %}
+    {{ body }}
     {% elif state == 'error' %}
     {{ t('chat_error_body', lang) }}
     {% endif %}

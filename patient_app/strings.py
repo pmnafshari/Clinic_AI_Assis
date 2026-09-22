@@ -313,6 +313,95 @@ STRINGS = {
         "it": "Che numero di telefono avete per me?",
         "en": "What phone number do you have on file for me?",
     },
+    # --- the agent (P10). every one of these is shown INSTEAD of a model
+    # answer, never alongside one: the action path never calls a model.
+    "agent_heading": {"it": "Appuntamenti", "en": "Appointments"},
+    "agent_need_day": {
+        "it": "Per quale giorno? Scrivilo come 24/10/2026.",
+        "en": "Which day? Write it as 24/10/2026.",
+    },
+    "agent_need_period": {
+        "it": "Mattina o pomeriggio?",
+        "en": "Morning or afternoon?",
+    },
+    "agent_need_which": {
+        "it": "Quale appuntamento? Rispondi con il numero.",
+        "en": "Which appointment? Reply with the number.",
+    },
+    "agent_past_day": {
+        "it": "Quel giorno è già passato. Per quale giorno vuoi l'appuntamento?",
+        "en": "That day has already passed. Which day would you like?",
+    },
+    "agent_propose_book": {
+        "it": "Richiedo un appuntamento per {day}, {period}. Confermi? Scrivi «confermo».",
+        "en": "I'll request an appointment for {day}, {period}. Confirm? Reply “confirm”.",
+    },
+    "agent_propose_cancel": {
+        "it": "Annullo l'appuntamento del {day} alle {time} con {dentist}. "
+              "Confermi? Scrivi «confermo».",
+        "en": "I'll cancel your appointment on {day} at {time} with {dentist}. "
+              "Confirm? Reply “confirm”.",
+    },
+    "agent_done_book": {
+        "it": "Richiesta inviata per {day}, {period}. Non è ancora un appuntamento fissato: "
+              "lo studio conferma il giorno e l'ora e lo vedrai in «I tuoi appuntamenti».",
+        "en": "Request sent for {day}, {period}. It is not a booking yet: the clinic confirms "
+              "the day and time, and you'll see it under “Your appointments”.",
+    },
+    "agent_done_cancel": {
+        "it": "Appuntamento del {day} alle {time} annullato.",
+        "en": "Your appointment on {day} at {time} is cancelled.",
+    },
+    "agent_cancelled": {
+        "it": "Va bene, non ho fatto nulla.",
+        "en": "All right, I haven't done anything.",
+    },
+    "agent_nothing": {
+        "it": "Non risulta nessun appuntamento da annullare.",
+        "en": "There is no appointment to cancel.",
+    },
+    "agent_stale": {
+        "it": "L'ho già fatto. Controlla «I tuoi appuntamenti».",
+        "en": "I've already done that. Check “Your appointments”.",
+    },
+    "agent_failed_book": {
+        "it": "Non sono riuscito a inviare la richiesta. Riprova o chiama lo studio.",
+        "en": "I couldn't send that request. Try again, or call the clinic.",
+    },
+    "agent_failed_cancel": {
+        "it": "Quell'appuntamento non è più annullabile. Controlla «I tuoi appuntamenti».",
+        "en": "That appointment can no longer be cancelled. Check “Your appointments”.",
+    },
+    "agent_period_morning": {"it": "mattina", "en": "morning"},
+    "agent_period_afternoon": {"it": "pomeriggio", "en": "afternoon"},
+    # --- handoff (P10.05). NO ETA, ever. either the clinic is open, or the
+    # next opening time is stated as a fact about the hours - never a promise
+    # about when someone will reply.
+    "handoff_heading": {"it": "Ti richiamiamo", "en": "We'll get back to you"},
+    "handoff_body": {
+        "it": "Ho segnalato la tua richiesta allo studio.",
+        "en": "I've passed your request to the clinic.",
+    },
+    "handoff_open": {
+        "it": "Lo studio è aperto adesso.",
+        "en": "The clinic is open now.",
+    },
+    "handoff_closed": {
+        "it": "Lo studio adesso è chiuso; riapre {when}.",
+        "en": "The clinic is closed now; it opens again {when}.",
+    },
+    "handoff_closed_unknown": {
+        "it": "Lo studio adesso è chiuso.",
+        "en": "The clinic is closed now.",
+    },
+    "handoff_urgent": {
+        "it": "Se è urgente chiama lo studio.",
+        "en": "If it's urgent, please call the clinic.",
+    },
+    "handoff_status": {
+        "it": "Richiesta di contatto in attesa",
+        "en": "Call-back request waiting",
+    },
     "question_label": {"it": "La tua domanda", "en": "Your question"},
     "question_placeholder": {
         "it": "Es. Quando è il mio prossimo appuntamento?",
