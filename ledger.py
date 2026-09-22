@@ -33,9 +33,12 @@ from auth import authorize, log_audit
 CURRENCY = "EUR"
 METHODS = ("cash", "card", "bank_transfer", "other")
 DUE_DAYS = 30
-# payments cover a plan's installments in due-date order. this is the default
-# the code applies; the owner has not yet approved it (P07.04).
-ALLOCATION_ORDER = "oldest installment first"
+# the allocation rule, approved by the owner 2026-09-22 (P07.04): money on an
+# invoice covers its oldest unpaid installment first - due date, then sequence
+# for a tie. nothing stores which installment a payment "went to": coverage is
+# derived from the append-only allocations every time, so the rule cannot drift
+# from the history, and a refund reopens the most recently covered one first.
+ALLOCATION_ORDER = "oldest unpaid installment first"
 
 SCHEMA = """
     CREATE TABLE IF NOT EXISTS billing_invoices (
@@ -274,10 +277,10 @@ def lines_locked(conn, visit_id):
 # --- changing -------------------------------------------------------------
 
 
-def _gate(conn, actor, role, action, target):
-    if not authorize(role, "manage_billing"):
+def _gate(conn, actor, role, action, target, capability="manage_billing"):
+    if not authorize(role, capability):
         log_audit(conn, actor, role, action, target, allowed=0)
-        raise PermissionError(f"{role} may not change billing")
+        raise PermissionError(f"{role} may not {action.replace('_', ' ')}")
 
 
 def _invoice(conn, invoice_id):
@@ -340,7 +343,10 @@ def record_payment(conn, invoice_id, amount, method, key, actor, role, received_
                    reference=None, note=None, source="manual"):
     """Record money received against one invoice. Returns (payment_id, created).
     The same idempotency key twice returns the first payment and records nothing."""
-    _gate(conn, actor, role, "record_payment", str(invoice_id))
+    # the one change reception may make (owner decision 2026-09-22): recording
+    # money received. refunds, reversals, reconciliation, issue, void and plans
+    # stay behind manage_billing
+    _gate(conn, actor, role, "record_payment", str(invoice_id), "record_payment")
     if not key:
         raise LedgerError("a payment needs an idempotency key")
     found = _existing(conn, key)
@@ -688,19 +694,56 @@ def selftest():
                 raise AssertionError(f"11: {sql} should be refused")
             except sqlite3.IntegrityError:
                 conn.rollback()
-        for role in ("assistant", "admin"):
-            try:
-                record_payment(conn, d, "1", "cash", next(k), "x", role)
-                raise AssertionError(f"11: {role} must not record a payment")
-            except PermissionError:
-                pass
+        # reception may record a payment since 2026-09-22 (section 15); admin never
+        try:
+            record_payment(conn, d, "1", "cash", next(k), "x", "admin")
+            raise AssertionError("11: admin must not record a payment")
+        except PermissionError:
+            pass
         assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'record_payment'"
-                            " AND allowed = 0").fetchone()[0] == 2, "11: refusals are audited"
+                            " AND allowed = 0").fetchone()[0] == 1, "11: the refusal is audited"
 
         # 12. P07.T4 - one patient's summary never includes another's
         mine = {i["id"] for i in patient_summary(conn, pid)["invoices"]}
         theirs = {i["id"] for i in patient_summary(conn, other)["invoices"]}
         assert mine and theirs and not mine & theirs, "12: invoices leak between patients"
+
+        # 14. the allocation rule, approved 2026-09-22: money covers the oldest
+        # unpaid installment first. deterministic - ties on a due date go by
+        # sequence - and derived from append-only rows, so a refund reopens the
+        # most recently covered installment and nothing is rewritten
+        f = visit(pid, "2026-09-03", [9000])
+        issue(conn, f, *D)
+        plan_installments(conn, f, 3, "2026-11-01", *D, every_days=0)
+        assert [i["due_date"] for i in summary(conn, f)["installments"]] == ["2026-11-01"] * 3
+        p14, _ = record_payment(conn, f, "45,00", "cash", next(k), *D)
+        assert [i["open_cents"] for i in summary(conn, f)["installments"]] == [0, 1500, 3000], \
+            "14: same due date, so sequence decides"
+        refund(conn, p14, "20,00", next(k), *D, "partial refund")
+        assert [i["open_cents"] for i in summary(conn, f)["installments"]] == [500, 3000, 3000], \
+            "14: a refund reopens the latest covered installment first"
+        assert "oldest unpaid installment first" in ALLOCATION_ORDER
+
+        # 15. reception may record a payment and nothing else that changes money
+        g2 = visit(pid, "2026-09-04", [4000])
+        issue(conn, g2, *D)
+        pay_id, made = record_payment(conn, g2, "10,00", "cash", "rec-1", "aassist", "assistant")
+        assert made and record_payment(conn, g2, "10,00", "cash", "rec-1", "aassist",
+                                       "assistant") == (pay_id, False), "15: idempotent for reception"
+        for call in (lambda: refund(conn, pay_id, "1", next(k), "aassist", "assistant", "r"),
+                     lambda: reverse(conn, pay_id, next(k), "aassist", "assistant", "r"),
+                     lambda: void(conn, g2, "aassist", "assistant", "r"),
+                     lambda: issue(conn, visit(pid, "2026-09-05", [100]), "aassist", "assistant"),
+                     lambda: plan_installments(conn, g2, 2, "2026-12-01", "aassist", "assistant"),
+                     lambda: reconcile(conn, visit(other, "2025-01-01", [100], legacy=True),
+                                       "paid", "aassist", "assistant", next(k))):
+            try:
+                call()
+                raise AssertionError("15: reception must not make this change")
+            except PermissionError:
+                pass
+        assert conn.execute("SELECT recorded_role FROM payments WHERE id = ?",
+                            (pay_id,)).fetchone()[0] == "assistant", "15: who recorded it"
 
         # 13. P07.00 - a re-synced note keeps its line ids; a draft follows the
         # note, an issued invoice's lines do not change under it

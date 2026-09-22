@@ -105,7 +105,7 @@ def selftest():
         # 2. the same form submitted twice is one payment
         key = _key(page)
         for _ in range(2):
-            dentist.post(f"/billing/invoices/{draft}/pay", data={
+            dentist.post(f"/billing/invoices/{draft}/payment", data={
                 "amount": "100,00", "method": "card", "key": key, "reference": "R-0001",
                 "csrf_token": _csrf(page)})
         conn = sqlite3.connect(db_path)
@@ -120,14 +120,37 @@ def selftest():
         preview = dentist.get(f"/billing/invoices/{draft}/preview").text
         assert "not a fiscal document" in preview and "€285.00" in preview, "3: preview"
 
-        # 4. an assistant sees billing but has no forms and cannot change it
+        # 4. reception records a payment received and nothing else (owner
+        # decision 2026-09-22): the payment form only, idempotent, audited
         seen = assistant.get(f"/patients/{CF}/billing").text
-        assert "Bianca Billing" in seen and "Record payment" not in seen, "4: view only"
-        assistant.post(f"/billing/invoices/{draft}/pay", data={
-            "amount": "10", "method": "cash", "key": "asst-1", "csrf_token": _csrf(seen)})
+        assert "Record payment" in seen, "4: reception is offered the payment form"
+        for dentist_only in ("Refund", "Reverse", "Reconcile", "Split", ">Void<", ">Issue<"):
+            assert dentist_only not in seen, f"4: reception must not be offered {dentist_only}"
+        for _ in range(2):
+            assistant.post(f"/billing/invoices/{draft}/payment", data={
+                "amount": "5,00", "method": "cash", "key": "asst-1", "csrf_token": _csrf(seen)})
         conn = sqlite3.connect(db_path)
         assert conn.execute("SELECT COUNT(*) FROM payments WHERE idempotency_key = 'asst-1'"
-                            ).fetchone()[0] == 0, "4: an assistant must not record money"
+                            " AND recorded_role = 'assistant'").fetchone()[0] == 1, \
+            "4: reception's payment is recorded once, under its own role"
+        asst_pay = conn.execute("SELECT id FROM payments WHERE idempotency_key = 'asst-1'").fetchone()[0]
+        conn.close()
+        before = sqlite3.connect(db_path).execute("SELECT COUNT(*) FROM payments").fetchone()[0]
+        for url in (f"/billing/payments/{asst_pay}/refund", f"/billing/payments/{asst_pay}/reverse",
+                    f"/billing/invoices/{draft}/void", f"/billing/invoices/{draft}/plan",
+                    f"/billing/invoices/{legacy}/reconcile"):
+            assistant.post(url, data={"amount": "1", "reason": "x", "outcome": "paid", "count": "2",
+                                      "first_due": "2026-12-01", "key": f"asst-{url}",
+                                      "csrf_token": _csrf(seen)})
+        conn = sqlite3.connect(db_path)
+        assert conn.execute("SELECT COUNT(*) FROM payments").fetchone()[0] == before, \
+            "4: reception's refund, reversal or reconciliation must not land"
+        refused = conn.execute("SELECT COUNT(*) FROM audit_log WHERE username = 'bl_assist'"
+                               " AND allowed = 0").fetchone()[0]
+        assert refused == 5, f"4: each refused attempt is audited, got {refused}"
+        # the 5,00 goes back out, by a dentist, so the figures below are unchanged
+        dentist.post(f"/billing/payments/{asst_pay}/reverse", data={
+            "reason": "test fixture", "key": "undo-asst-1", "csrf_token": _csrf(page)})
         conn.close()
 
         # 5. P07.T2 - one amount, the same on every surface

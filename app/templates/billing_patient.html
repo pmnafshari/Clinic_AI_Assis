@@ -16,7 +16,7 @@
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
   <div>Payments are recorded by hand after money changed hands elsewhere. No money moves through
-  this system and no fiscal invoice is issued.{% if not can_change %} You can see billing but not change it.{% endif %}</div>
+  this system and no fiscal invoice is issued.{% if can_pay and not can_change %} You can record a payment received; refunds, corrections and reconciliation are for a dentist.{% elif not can_pay %} You can see billing but not change it.{% endif %}</div>
 </div>
 
 {% for inv in summary.invoices %}
@@ -35,7 +35,7 @@
       {% endfor %}
     </ul>
     {% if inv.installments %}
-    <p class="small mb-1 mt-3"><strong>Installments</strong> - covered {{ order }} (default, awaiting owner approval)</p>
+    <p class="small mb-1 mt-3"><strong>Installments</strong> - payments cover the {{ order }}</p>
     <ul class="ds-rows">
       {% for i in inv.installments %}
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ i.seq }}. due {{ i.due_date }}</span><span class="ds-row-sub">{{ fmt(i.amount_cents, 'en') }}</span></span><span class="ms-auto small">{% if i.open_cents %}{{ fmt(i.open_cents, 'en') }} open{% else %}covered{% endif %}</span></li>
@@ -43,9 +43,9 @@
     </ul>
     {% endif %}
 
-    {% if can_change and inv.id %}
+    {% if (can_change or can_pay) and inv.id %}
     <div class="d-flex flex-wrap gap-3 mt-3">
-      {% if inv.state == 'draft' %}
+      {% if can_change and inv.state == 'draft' %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='issue') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label class="form-label small" for="due-{{ inv.id }}">Due date</label>
@@ -53,7 +53,7 @@
         <button class="btn btn-primary btn-sm" type="submit">Issue</button>
       </form>
       {% endif %}
-      {% if inv.state == 'unknown' %}
+      {% if can_change and inv.state == 'unknown' %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='reconcile') }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="key" value="{{ key() }}">
@@ -68,8 +68,8 @@
         <button class="btn btn-primary btn-sm" type="submit">Reconcile</button>
       </form>
       {% endif %}
-      {% if inv.state in ('issued', 'partially_paid') %}
-      <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='pay') }}" class="d-flex flex-wrap gap-2 align-items-end">
+      {% if can_pay and inv.state in ('issued', 'partially_paid') %}
+      <form method="post" action="{{ url_for('billing.record_payment', invoice_id=inv.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="key" value="{{ key() }}">
         <div><label class="form-label small" for="amt-{{ inv.id }}">Amount received</label>
@@ -80,7 +80,8 @@
         <input class="form-control form-control-sm" id="ref-{{ inv.id }}" name="reference" maxlength="60"></div>
         <button class="btn btn-primary btn-sm" type="submit">Record payment</button>
       </form>
-      {% if not inv.installments %}
+      {% endif %}
+      {% if can_change and inv.state in ('issued', 'partially_paid') and not inv.installments %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='plan') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label class="form-label small" for="cnt-{{ inv.id }}">Installments</label>
@@ -90,8 +91,7 @@
         <button class="btn btn-outline-primary btn-sm" type="submit">Split</button>
       </form>
       {% endif %}
-      {% endif %}
-      {% if inv.state in ('draft', 'issued') and inv.paid_cents == 0 %}
+      {% if can_change and inv.state in ('draft', 'issued') and inv.paid_cents == 0 %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='void') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label class="form-label small" for="vr-{{ inv.id }}">Reason to void</label>

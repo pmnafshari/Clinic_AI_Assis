@@ -11,8 +11,8 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
     # patient record at all, so granting any of them would widen admin's reach
@@ -22,9 +22,10 @@ PERMISSIONS = {
     # manage_data_requests (P06) is the dentist's alone: approving an export
     # hands over a whole record and approving an erasure destroys one, so it
     # sits with the role that already holds read_clinical.
-    # billing (P07): an assistant sees invoices and payments but cannot change
-    # them; manage_billing is the dentist's until the owner decides reception
-    # should hold it. admin holds neither.
+    # billing (P07): reception records payments received (record_payment,
+    # owner decision 2026-09-22); refunds, reversals, reconciliation, issuing,
+    # voiding and installment plans are manage_billing, the dentist's alone.
+    # admin holds none of them.
     # system: the automated sync actor (watcher/backfill), no user row
     # reapply_erasure: a restore erasing again everyone a tombstone names
     "system": {"append_note", "reapply_erasure"},
@@ -80,6 +81,7 @@ ROUTE_POLICY = {
     "billing.patient": "view_billing",
     "billing.preview": "view_billing",
     "billing.invoice_action": "manage_billing",
+    "billing.record_payment": "record_payment",
     "billing.payment_action": "manage_billing",
     # duplicate review is admin's, by the P04 decision - the one place admin
     # sees patient names and codici fiscali. recorded in P06 as an exception.

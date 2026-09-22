@@ -12,7 +12,7 @@ from .db import get_db
 
 billing_bp = Blueprint("billing", __name__)
 
-INVOICE_ACTIONS = ("issue", "void", "pay", "reconcile", "plan")
+INVOICE_ACTIONS = ("issue", "void", "reconcile", "plan")
 PAYMENT_ACTIONS = ("refund", "reverse")
 
 
@@ -72,7 +72,8 @@ def patient(cf):
         "billing_patient.html", cf=cf, patient=person, summary=ledger.patient_summary(conn, pid),
         payments=ledger.payments_for(conn, pid), fmt=ledger.fmt, methods=ledger.METHODS,
         order=ledger.ALLOCATION_ORDER, key=lambda: secrets.token_urlsafe(16),
-        can_change=authorize(g.user["role"], "manage_billing"))
+        can_change=authorize(g.user["role"], "manage_billing"),
+        can_pay=authorize(g.user["role"], "record_payment"))
 
 
 @billing_bp.route("/billing/invoices/<int:invoice_id>/<action>", methods=["POST"])
@@ -94,12 +95,6 @@ def invoice_action(invoice_id, action):
         elif action == "void":
             ledger.void(conn, invoice_id, who, role, form.get("reason"))
             message = "Invoice voided."
-        elif action == "pay":
-            _, created = ledger.record_payment(
-                conn, invoice_id, form.get("amount"), form.get("method"), form.get("key"),
-                who, role, form.get("received_on") or None, form.get("reference") or None,
-                form.get("note") or None)
-            message = "Payment recorded." if created else "That payment was already recorded."
         elif action == "reconcile":
             ledger.reconcile(conn, invoice_id, form.get("outcome"), who, role, form.get("key"),
                              amount=form.get("amount") or None, method=form.get("method") or "other",
@@ -110,6 +105,29 @@ def invoice_action(invoice_id, action):
                                      form.get("first_due", ""), who, role)
             message = "Installment plan created."
         flash(message, "success")
+    except (ledger.LedgerError, ValueError) as e:
+        flash(f"Not done: {e}.", "danger")
+    return redirect(_patient_url(inv["patient_id"]))
+
+
+@billing_bp.route("/billing/invoices/<int:invoice_id>/payment", methods=["POST"])
+def record_payment(invoice_id):
+    # reception may record money received (owner decision 2026-09-22); every
+    # other change to money stays behind manage_billing in invoice_action
+    if not authorize(g.user["role"], "record_payment"):
+        return _refuse("record_payment", str(invoice_id))
+    conn = get_db()
+    inv = conn.execute("SELECT patient_id FROM billing_invoices WHERE id = ?",
+                       (invoice_id,)).fetchone()
+    if inv is None:
+        abort(404)
+    form = request.form
+    try:
+        _, created = ledger.record_payment(
+            conn, invoice_id, form.get("amount"), form.get("method"), form.get("key"),
+            g.user["username"], g.user["role"], form.get("received_on") or None,
+            form.get("reference") or None, form.get("note") or None)
+        flash("Payment recorded." if created else "That payment was already recorded.", "success")
     except (ledger.LedgerError, ValueError) as e:
         flash(f"Not done: {e}.", "danger")
     return redirect(_patient_url(inv["patient_id"]))
