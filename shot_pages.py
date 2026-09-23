@@ -37,6 +37,7 @@ cleans up nothing - so those shots may live in the repo.
 """
 
 import sqlite3
+from datetime import datetime, timezone
 import sys
 import auth
 import patient_id
@@ -133,6 +134,7 @@ MEASURE = """() => ({
 })"""
 
 RESULTS = []
+RUN_STARTED = datetime.now(timezone.utc).isoformat()
 CONTRAST_FAILS = []
 
 
@@ -199,6 +201,10 @@ def cleanup():
             conn.execute(f"DELETE FROM {table} WHERE patient_id = ?", (pid,))
     conn.execute("DELETE FROM patients WHERE codice_fiscale = ?", (CF,))
     for name, _ in USERS:
+        # only this run's sessions; older ones were left by earlier runs and
+        # are recorded, not deleted (P13 follow-up, 2026-09-23)
+        conn.execute("DELETE FROM sessions WHERE username = ? AND created_at >= ?",
+                     (name, RUN_STARTED))
         conn.execute("DELETE FROM users WHERE username = ?", (name,))
     conn.commit()
     # append-only trail: fixture rows leave through purge_audit, matched on the

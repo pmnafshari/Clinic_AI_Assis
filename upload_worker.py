@@ -3,14 +3,13 @@ import sqlite3
 import sys
 import threading
 import time
-import urllib.request
 from pathlib import Path
 
 import sort_files
 import storage
 from auth import log_audit
 from action_log import log_action
-from extract_note import call_model, parse_reply, OllamaUnreachable
+from extract_note import call_model, local_urlopen, parse_reply, OllamaUnreachable
 
 # module-level, selftest-patchable
 SORTED_ROOT = Path("sorted")
@@ -22,7 +21,7 @@ CHROMA_PATH = "db/chroma"
 # own Ollama seam (mirrors app/notes_routes.py) - this is the injection point
 # that keeps the selftest offline and deterministic, since route_file's .txt
 # branch has no extractor override
-_urlopen = urllib.request.urlopen
+_urlopen = local_urlopen
 
 
 def _extract(raw_text):

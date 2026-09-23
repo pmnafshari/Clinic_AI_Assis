@@ -1,4 +1,3 @@
-import urllib.request
 from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
@@ -7,7 +6,7 @@ import patient_id
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from dental_notes_schema import DentalNote
-from extract_note import OllamaUnreachable, call_model, parse_reply
+from extract_note import OllamaUnreachable, call_model, local_urlopen, parse_reply
 from storage import lookup_patient, save_new_note
 
 from .db import get_chroma, get_db
@@ -15,7 +14,7 @@ from .db import get_chroma, get_db
 notes_bp = Blueprint("notes", __name__)
 
 SORTED_ROOT = Path("sorted")
-_urlopen = urllib.request.urlopen
+_urlopen = local_urlopen
 
 
 def extract_note(raw_note, fallback_cf=None):

@@ -10,6 +10,11 @@ from dental_notes_schema import KNOWN_PROCEDURES, DentalNote
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "dental-notes"
 
+# the model is on this machine and nowhere else - see local_model.py. there
+# is no remote fallback: a refused connection is OllamaUnreachable and the note
+# goes to review.
+from local_model import local_urlopen, is_local  # noqa: E402
+
 
 class OllamaUnreachable(Exception):
     pass
@@ -51,7 +56,10 @@ def parse_reply(reply, fallback_cf=None):
     return note
 
 
-def call_model(note, urlopen=urllib.request.urlopen):
+def call_model(note, urlopen=local_urlopen):
+    if not is_local(OLLAMA_URL):
+        # checked before anything is opened, whoever supplied the opener
+        raise OllamaUnreachable("refusing a model endpoint that is not on this machine")
     payload = {
         "model": MODEL,
         "prompt": note,

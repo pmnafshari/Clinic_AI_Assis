@@ -1,4 +1,3 @@
-import urllib.request
 
 from flask import Blueprint, g, render_template, request
 
@@ -6,12 +5,13 @@ import ask
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
 from extract_note import OllamaUnreachable
+from local_model import local_urlopen
 
 from .db import get_chroma, get_db
 
 qa_bp = Blueprint("qa", __name__)
 
-_urlopen = urllib.request.urlopen
+_urlopen = local_urlopen
 
 
 def answer_question(question, conn, collection, chosen_cf=None):

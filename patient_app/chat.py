@@ -22,6 +22,7 @@ import urllib.request
 from pathlib import Path
 
 import handoff
+from local_model import local_urlopen
 import patient_accessor
 import patient_agent
 import patient_faq
@@ -480,7 +481,7 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     return {"state": "answer", "body": text, "target": route}
 
 
-def answer_question(question, cf, conn, lang, ip=None, urlopen=urllib.request.urlopen):
+def answer_question(question, cf, conn, lang, ip=None, urlopen=local_urlopen):
     """-> {"state": "answer"|"refusal"|"deflection"|"error",
            "body": str|None,        # generated prose, only when state == "answer"
            "target": str}           # audit/debug label: route name, ':empty',

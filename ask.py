@@ -6,6 +6,7 @@ import urllib.request
 
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from extract_note import OllamaUnreachable
+from local_model import local_urlopen
 from storage import get_collection, init_db, lookup_patient
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -178,7 +179,7 @@ def answer_exact(cf, field, conn):
     return answer + f" [source: {last_visit['source_path']}, visit date: {last_visit['visit_date']}]"
 
 
-def call_model(prompt, model, urlopen=urllib.request.urlopen):
+def call_model(prompt, model, urlopen=local_urlopen):
     payload = {"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0}}
     data = json.dumps(payload).encode()
     req = urllib.request.Request(OLLAMA_URL, data=data, headers={"Content-Type": "application/json"})
@@ -190,7 +191,7 @@ def call_model(prompt, model, urlopen=urllib.request.urlopen):
     return body.get("response", "")
 
 
-def answer_meaning(question, collection, urlopen=urllib.request.urlopen, k=4):
+def answer_meaning(question, collection, urlopen=local_urlopen, k=4):
     result = collection.query(query_texts=[question], n_results=k)
     documents = result.get("documents", [[]])[0]
     metadatas = result.get("metadatas", [[]])[0]

@@ -29,6 +29,7 @@ import os
 import shutil
 import re
 import sqlite3
+from datetime import datetime, timezone
 import sys
 import time
 import urllib.error
@@ -81,6 +82,8 @@ NOTES = [
 ]
 
 RESULTS = []
+# sessions from before the 2026-09-23 fix are not this run's to delete
+RUN_STARTED = datetime.now(timezone.utc).isoformat()
 
 
 def check(step, ok, note):
@@ -141,6 +144,10 @@ def cleanup():
     conn.execute(f"DELETE FROM note_reviews WHERE codice_fiscale IN ({marks}) OR created_by = ?",
                  ALL_CFS + (STAFF_USER,))
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS)
+    # the walk's own login session goes with its user - it was left behind
+    # every run until 2026-09-23 (22 rows by then, recorded, not deleted)
+    conn.execute("DELETE FROM sessions WHERE username = ? AND created_at >= ?",
+                 (STAFF_USER, RUN_STARTED))
     conn.execute("DELETE FROM users WHERE username = ?", (STAFF_USER,))
     conn.commit()
     # the staff user is not the only key these rows carry: sort_files and the
@@ -156,6 +163,8 @@ def cleanup():
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS
     ).fetchone()[0]
+    left += conn.execute("SELECT COUNT(*) FROM sessions WHERE username = ? AND created_at >= ?",
+                         (STAFF_USER, RUN_STARTED)).fetchone()[0]
     left += conn.execute(
         f"SELECT COUNT(*) FROM note_reviews WHERE codice_fiscale IN ({marks}) OR created_by = ?",
         ALL_CFS + (STAFF_USER,)).fetchone()[0]

@@ -18,6 +18,7 @@ from cli_session import read_session
 from codice_fiscale import is_valid as is_valid_cf
 from dental_notes_schema import DentalNote
 from extract_note import OllamaUnreachable, extract_json
+from local_model import local_urlopen
 from storage import get_collection, init_db, lookup_patient, upsert_note_chroma, upsert_note_sql
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -116,7 +117,7 @@ def parse_tool_call(reply):
     return call
 
 
-def call_model(command, urlopen=urllib.request.urlopen):
+def call_model(command, urlopen=local_urlopen):
     payload = {
         "model": MODEL_ID,
         "prompt": INTERPRETER_PROMPT + command,
@@ -1137,7 +1138,7 @@ def main():
     conn = init_db(DB_PATH)
     collection = get_collection("db/chroma")
     try:
-        run_command(positional[0], conn, dry_run, urllib.request.urlopen,
+        run_command(positional[0], conn, dry_run, local_urlopen,
                      session["role"], session["username"],
                      collection=collection, sorted_root=Path("sorted"))
     except OllamaUnreachable as e:

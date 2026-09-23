@@ -181,6 +181,7 @@ def create(data_root=ROOT, dest=None, key_path=None, keep=None, stamp=None):
         raise BackupError(f"no database at {live_db}")
     key_path, key = read_key(key_path)
     dest.mkdir(parents=True, exist_ok=True)
+    os.chmod(dest, 0o700)
 
     stores = [data_root / s for s in FILE_STORES] + [live_db]
     # gzip shrinks this, but the staging copy of the db is full size and a
@@ -249,6 +250,9 @@ def create(data_root=ROOT, dest=None, key_path=None, keep=None, stamp=None):
             os.fsync(f.fileno())
         # the rename is the commit point - until it happens there is no file
         # anyone could mistake for a finished backup
+        # an archive is readable only by its owner, like the key (P13 follow-up):
+        # encrypted is not a reason to let every account on the machine copy it
+        os.chmod(partial, 0o600)
         os.replace(partial, final)
     finally:
         shutil.rmtree(stage, ignore_errors=True)
@@ -559,6 +563,9 @@ def selftest():
         # 1. T1 - backup, restore into a separate dir, everything equal
         made = create(data, dest, key, stamp="20260101T000000Z")
         archive = Path(made["archive"])
+        # an archive and its folder are the owner's alone, like the key
+        assert archive.stat().st_mode & 0o777 == 0o600, f"1: archive mode {oct(archive.stat().st_mode)}"
+        assert dest.stat().st_mode & 0o777 == 0o700, f"1: backup dir mode {oct(dest.stat().st_mode)}"
         assert archive.exists() and not list(dest.glob("*.partial")), "1: a finished archive and no partial"
         assert not list(dest.glob(".stage-*")), "1: the plaintext staging dir must be gone"
         assert b"ZZBK800101010101" not in archive.read_bytes(), "1: a codice fiscale must not be readable in the archive"

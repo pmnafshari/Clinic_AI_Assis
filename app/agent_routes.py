@@ -1,4 +1,3 @@
-import urllib.request
 from pathlib import Path
 
 from flask import Blueprint, flash, g, make_response, redirect, render_template, request, url_for
@@ -7,6 +6,7 @@ import agent
 import pending_actions
 from auth import authorize, log_audit
 from extract_note import OllamaUnreachable
+from local_model import local_urlopen
 
 from .db import get_chroma, get_db
 
@@ -14,7 +14,7 @@ agent_bp = Blueprint("agent", __name__)
 
 UNDO_LOG = agent.UNDO_LOG
 SORTED_ROOT = Path("sorted")
-_urlopen = urllib.request.urlopen
+_urlopen = local_urlopen
 
 
 def _deny_page(message):
