@@ -7,7 +7,7 @@
 |---|---|
 | Controller | **BLOCKED** - the clinic, its legal name, address and contact |
 | Data protection contact | **BLOCKED** |
-| Purposes | patient care records; appointment scheduling; billing; patient portal self-service; answering patients' questions about their own records (portal assistant) |
+| Purposes | patient care records; comparing a visit with other patients' reviewed past visits (similar cases, dentist only, minimised - teaching use awaits POL-18); appointment scheduling; billing; patient portal self-service; answering patients' questions about their own records (portal assistant) |
 | Categories of data subject | patients; clinic staff (accounts and audit trail) |
 | Categories of data | identity (name, codice fiscale, phone); health data (visits, procedures, notes, x-rays, uploaded documents and their reviewed text); billing; appointments; consent records; access logs. Dictation audio is transcribed locally and never kept |
 | Special categories | health data (GDPR art. 9) |

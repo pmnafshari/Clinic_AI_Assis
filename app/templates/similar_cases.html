@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
+    <li aria-current="page">Similar cases</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
+    <h1 class="ds-page-title">Similar cases{% if found.view == 'teaching' %} · Teaching view{% endif %}</h1>
+    <p class="ds-page-meta">This visit: {{ found.source.procedures | join(', ') or 'no procedure recorded' }} · dentist only</p>
+  </div>
+  <div class="ds-page-actions">
+    {% if found.view == 'teaching' %}
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=vid) }}">Standard view</a>
+    {% else %}
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=vid, view='teaching') }}">Teaching view</a>
+    {% endif %}
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-3" role="note">
+  <div><strong class="ds-alert-title">Past records, not advice</strong>
+  {{ found.criteria_note }} Criteria version {{ found.criteria.version }}: a case must share {{ found.criteria.require }};
+  the same tooth, quadrant and note words rank it higher. Other patients are shown as case numbers, with names,
+  codici fiscali, phone numbers and e-mail addresses removed{% if found.view == 'teaching' %} and no note text{% endif %}.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="cases-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="cases-title">Cases from other patients</h2>
+    {% if found.results %}<p class="ds-card-sub">{{ found.message }}</p>{% endif %}</div>
+  <div class="dash-card-body">
+    {% if found.results %}
+    <ul class="ds-rows">
+      {% for c in found.results %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ c.label }} · {{ c.month }} · {{ c.procedures | join(', ') }}
+            <span class="ds-badge ds-badge-{{ 'info' if c.strength == 'strong' else 'neutral' }}">{{ c.strength }} match</span></span>
+          <span class="ds-row-sub">Why: {{ c.reasons | join('; ') }}</span>
+          <span class="ds-row-sub">Outcome: {{ c.outcome }}</span>
+          {% if c.note %}<span class="ds-row-sub">Note (redacted): {{ c.note }}</span>{% endif %}
+          {% if c.your_verdict %}<span class="ds-row-sub">Your verdict: {{ c.your_verdict.replace('_', ' ') }}</span>{% endif %}
+        </span>
+        <span class="d-flex flex-wrap gap-2">
+          <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="verdict" value="similar">
+            <button class="btn btn-outline-secondary btn-sm" type="submit">Similar</button>
+          </form>
+          <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="verdict" value="not_similar">
+            <button class="btn btn-outline-secondary btn-sm" type="submit">Not similar</button>
+          </form>
+          <form method="post" action="{{ url_for('similar.exclude', cf=cf, vid=vid, case=c.visit_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-secondary btn-sm" type="submit">Remove from similar-case search</button>
+          </form>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ found.message }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

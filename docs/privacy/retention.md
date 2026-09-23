@@ -13,6 +13,7 @@
 | Call recordings | 90 days | erased | report only - nothing records calls yet (P12) |
 | Staff sessions | 30 minutes idle | ended with the account | deleted, and each sweep (or dry run) is audited |
 | Patient documents (originals and reviewed text) | follows clinical records | erased with their index entries | report only |
+| Similar-case verdicts and removals | follows clinical records | erased with either visit they name | report only |
 
 `python retention.py` reports what is past its period. `python retention.py --apply` deletes only
 the types marked `sweep: delete`. Nothing clinical or fiscal is deleted by a timer - those are

@@ -32,6 +32,7 @@ public site :5002 ──(VOICE_DEMO=1 only)──► Deepgram, ElevenLabs   [dem
 | Data requests and exports | `data_requests`, `exports/` (24 h) | staff app, patient app | only when handed to the patient |
 | Audit trail | `audit_log` (surrogate ids only) | all apps | no |
 | Patient documents (PDF, images, text) | `documents/<patient id>/<sha256>` (0600), `patient_documents`, `db/doc_chroma` after a dentist confirms | staff app (dentist only), sandboxed local reader (pypdf, Tesseract), local embedder | no - the reader runs with the network denied by the OS |
+| Similar-case verdicts and removals | `similar_case_feedback`, `similar_case_exclusions` (append-only) | staff app (dentist only) | no |
 | Dictation audio | never stored | local speech model (faster-whisper, off by default) | no |
 | Portal traffic | - | Cloudflare tunnel (TLS termination) | **yes - Cloudflare is a processor** |
 | Voice demo audio | - | Deepgram, ElevenLabs | **yes - demo only, off by default, refused behind the tunnel; public-site visitors, never a patient session** |

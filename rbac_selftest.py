@@ -112,6 +112,19 @@ def _seed(db_path, root):
         "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size,"
         " status, uploaded_by, uploaded_at) VALUES (?, 'text', 'rb.txt', 'rb/none', 'rbsha', 1,"
         " 'pending_review', 'rb_dentist', '2026-09-23T06:00:00+00:00')", (pid,)).lastrowid
+    # a reviewed visit of a second patient: a similar case the P16 routes act on
+    other = conn.execute("SELECT patient_id FROM patients WHERE patient_id != ? LIMIT 1",
+                         (pid,)).fetchone()
+    other_pid = other[0] if other else None
+    if other_pid is None:
+        other_pid = "pid_rb_case"
+        conn.execute("INSERT INTO patients (patient_id, codice_fiscale, patient_name) VALUES"
+                     " (?, 'ZZRB00000000000C', 'Case Other')", (other_pid,))
+    case_id = conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
+                           " source_path) VALUES (?, '2026-01-01', '[\"rb 11\"]', 'rb case',"
+                           " 'rb-case.json')", (other_pid,)).lastrowid
+    conn.execute("INSERT INTO visit_reviews (visit_id, method, reviewed_by, reviewed_at)"
+                 " VALUES (?, 'typed', 'rb_dentist', '2026-09-23T06:00:00+00:00')", (case_id,))
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -121,6 +134,7 @@ def _seed(db_path, root):
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
+            "vid": visit_id, "case": case_id,
             "username": "rb_target", "filename": "app.css"}
 
 

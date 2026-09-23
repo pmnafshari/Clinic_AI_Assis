@@ -177,6 +177,11 @@ def seed():
         (pid, legacy_visit)).lastrowid
     conn.commit()
     ROLE_PAGES["dentist"].append(("review-detail", f"/reviews/{review_id}"))
+    # P16: similar cases for the rct visit, standard and teaching views
+    rct = conn.execute("SELECT id FROM visits WHERE patient_id = ? AND procedures LIKE '%rct%'",
+                       (pid,)).fetchone()[0]
+    ROLE_PAGES["dentist"].append(("similar", f"/patients/{CF}/visits/{rct}/similar"))
+    ROLE_PAGES["dentist"].append(("similar-teaching", f"/patients/{CF}/visits/{rct}/similar?view=teaching"))
     visit_summary.generate(conn, pid, "zzs_dentist", "dentist")
     conn.close()
 

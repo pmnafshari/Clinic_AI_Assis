@@ -257,6 +257,7 @@
                 data-bs-toggle="modal" data-bs-target="#editModal"
                 hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
                 hx-target="#modal-body-target" hx-swap="innerHTML">Edit</button>
+              <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}">Similar cases</a>
             </div>
             <p class="timeline-note">{{ visit.clinical_notes }}</p>
             {% if visit.procedures %}

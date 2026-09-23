@@ -104,6 +104,14 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
                          f" ({','.join('?' * len(keys))})", [pid] + keys)
             conn.execute("DELETE FROM visit_reviews WHERE visit_id IN"
                          " (SELECT id FROM visits WHERE patient_id = ?)", (pid,))
+        if _has(conn, "similar_case_feedback"):
+            # P16: verdicts and removals that name this patient's visits, as the
+            # source or as the case. their triggers yield to audit_unlock
+            conn.execute("DELETE FROM similar_case_feedback WHERE source_visit_id IN"
+                         " (SELECT id FROM visits WHERE patient_id = ?) OR case_visit_id IN"
+                         " (SELECT id FROM visits WHERE patient_id = ?)", (pid, pid))
+            conn.execute("DELETE FROM similar_case_exclusions WHERE visit_id IN"
+                         " (SELECT id FROM visits WHERE patient_id = ?)", (pid,))
         if _has(conn, "patient_documents"):
             # P15: clinical documents go with the patient; their files and index
             # entries are removed after the transaction (_remove_documents)

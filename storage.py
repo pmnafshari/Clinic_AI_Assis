@@ -197,6 +197,10 @@ def init_db(db_path):
     # patient documents (P15). originals under documents/, never under sorted/
     from documents import SCHEMA as DOCUMENTS_SCHEMA
     conn.executescript(DOCUMENTS_SCHEMA)
+
+    # similar cases (P16). a dentist's verdicts and removals, append-only
+    from similar_cases import SCHEMA as SIMILAR_SCHEMA
+    conn.executescript(SIMILAR_SCHEMA)
     conn.commit()
     return conn
 
