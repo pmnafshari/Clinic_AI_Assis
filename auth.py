@@ -135,6 +135,7 @@ ROUTE_POLICY = {
     "documents.upload": "read_clinical",
     "documents.detail": "read_clinical",
     "documents.confirm": "read_clinical",
+    "documents.retry": "read_clinical",
     "documents.reject": "read_clinical",
     "documents.replace": "read_clinical",
     "documents.original": "read_clinical",

@@ -8,9 +8,13 @@ count and pixel count are checked before anything is decoded - an image's
 size comes from its header, so a decompression bomb is refused unopened.
 
 HOW IT IS READ. In a separate process (document_worker.py) started with the
-network denied by the operating system, a CPU limit, a file-size limit and a
-stripped environment. OCR is Tesseract with pinned language data. Nothing in a
-document is executed or followed; its text is data.
+network denied by the operating system, a CPU limit, a file-size limit, a
+stripped environment and its own empty temporary folder. OCR is Tesseract with
+pinned language data. Nothing in a document is executed or followed; its text
+is data. macOS does not enforce memory rlimits, so worker_guard measures the
+worker's whole process tree from outside and kills it past MEMORY_LIMIT. At
+most WORKER_SLOTS workers run at once, across processes, so all of them
+together stay under WORKER_SLOTS * (MEMORY_LIMIT + worker_guard.TOLERANCE).
 
 WHEN IT COUNTS. Extracted text is not part of the record until a dentist
 confirms it. Only then is it indexed. Unconfirmed, rejected, quarantined,
@@ -25,12 +29,16 @@ import hashlib
 import json
 import os
 import re
+import fcntl
 import resource
-import subprocess
+import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 import clinic_time
+import worker_guard
 from auth import authorize, log_audit
 
 ROOT = Path(__file__).resolve().parent
@@ -46,6 +54,11 @@ MAX_PIXELS = 25_000_000
 MAX_SIDE = 10_000
 MAX_TEXT_BYTES = 1024 * 1024
 WORKER_TIMEOUT = 60
+# a 25-megapixel image (MAX_PIXELS) peaks at ~510 MB under OCR, measured 2026-09-23
+MEMORY_LIMIT = 768 * 1024 * 1024
+WORKER_SLOTS = 2
+SLOT_WAIT = 30
+SLOT_DIR = Path("db") / "document-worker-slots"
 UNCERTAIN_BELOW = 60
 CHUNK = 1000
 TOP_K = 10
@@ -195,23 +208,48 @@ def _limits():
     resource.setrlimit(resource.RLIMIT_FSIZE, (16 * 1024 * 1024, 16 * 1024 * 1024))
 
 
+def _slot():
+    """An open, locked slot file, or None when every slot stays busy for SLOT_WAIT."""
+    Path(SLOT_DIR).mkdir(parents=True, exist_ok=True)
+    os.chmod(SLOT_DIR, 0o700)
+    deadline = time.monotonic() + SLOT_WAIT
+    while True:
+        for i in range(WORKER_SLOTS):
+            f = open(Path(SLOT_DIR) / f"slot-{i}", "a")
+            try:
+                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return f
+            except OSError:
+                f.close()
+        if time.monotonic() > deadline:
+            return None
+        time.sleep(0.05)
+
+
 def _extract(path, kind):
-    env = {"PATH": "/usr/bin:/bin:/opt/homebrew/bin", "TESSDATA_PREFIX": str(TESSDATA),
-           "HOME": str(Path(path).parent), "LANG": "C.UTF-8", "OMP_THREAD_LIMIT": "1"}
-    if not Path("/usr/bin/sandbox-exec").exists():
-        # no sandbox, no extraction: fail closed rather than read unsandboxed
+    if not Path("/usr/bin/sandbox-exec").exists() or not worker_guard.available():
+        # no sandbox or no memory guard, no extraction: fail closed
         return {"error": "sandbox_unavailable"}
+    slot = _slot()
+    if slot is None:
+        return {"error": "busy"}
+    work = tempfile.mkdtemp(prefix="docwork-")
     try:
-        run = subprocess.run(sandbox_command([sys.executable, str(ROOT / "document_worker.py"),
-                                              kind, str(path)]),
-                             capture_output=True, text=True, timeout=WORKER_TIMEOUT, env=env,
-                             preexec_fn=_limits, cwd=str(Path(path).parent))
-    except subprocess.TimeoutExpired:
-        return {"error": "timeout"}
+        env = {"PATH": "/usr/bin:/bin:/opt/homebrew/bin", "TESSDATA_PREFIX": str(TESSDATA),
+               "HOME": work, "TMPDIR": work, "LANG": "C.UTF-8", "OMP_THREAD_LIMIT": "1",
+               "PYTHONDONTWRITEBYTECODE": "1"}
+        run = worker_guard.run(sandbox_command([sys.executable, str(ROOT / "document_worker.py"),
+                                                kind, str(Path(path).resolve())]),
+                               MEMORY_LIMIT, WORKER_TIMEOUT, env=env, cwd=work, preexec=_limits)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+        slot.close()
+    if run.outcome != "ok":
+        return {"error": run.outcome, "peak": run.peak}
     try:
         return json.loads(run.stdout)
     except ValueError:
-        return {"error": "worker_failed"}
+        return {"error": "crashed"}
 
 
 # --- ingest and review ---------------------------------------------------------
@@ -225,59 +263,114 @@ def row(conn, doc_id):
 
 
 def _store(pid, sha, data):
-    rel = f"{pid}/{sha}"
-    dest = Path(DOC_ROOT) / rel
+    """Write the original once, atomically. -> True if this call created it.
+
+    Originals are kept per patient (DOC_ROOT/<patient>/<sha256>): the same bytes
+    uploaded for two patients are two files, never one shared blob, so nothing
+    about one patient's copy depends on the other's."""
+    dest = Path(DOC_ROOT) / pid / sha
     dest.parent.mkdir(parents=True, exist_ok=True)
     os.chmod(dest.parent, 0o700)
-    if not dest.exists():
-        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    if dest.exists():
+        return False
+    fd, tmp = tempfile.mkstemp(dir=dest.parent, prefix=".upload-")
+    try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
-    return rel
+        os.link(tmp, dest)
+    except FileExistsError:
+        return False
+    finally:
+        os.unlink(tmp)
+    return True
 
 
 def ingest(conn, pid, data, name, actor, role, now=None, supersedes=None):
     """-> document id. Stored, read in the sandbox, held for review or quarantined."""
     _require(conn, actor, role, "document_upload", f"patient:{pid}")
     sha = hashlib.sha256(data).hexdigest()
-    existing = conn.execute("SELECT id FROM patient_documents WHERE patient_id = ? AND sha256 = ?"
-                            " AND status NOT IN ('rejected', 'superseded')", (pid, sha)).fetchone()
-    if existing:
-        return existing[0]
     kind = detect(data, name)
     refusal = _refusal(data, name, kind)
-    rel = _store(pid, sha, data)
-    cur = conn.execute(
-        "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size,"
-        " status, reason, uploaded_by, uploaded_at, supersedes_id)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (pid, kind, display_name(name), rel, sha, len(data),
-         "quarantined" if refusal else "extraction_failed", refusal, actor, _now(now), supersedes))
+    rel = f"{pid}/{sha}"
+    # one writer at a time: the duplicate check, the file and the row succeed or
+    # fail together, and a file this call wrote never outlives a failed insert
     conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    created = False
+    try:
+        existing = conn.execute("SELECT id FROM patient_documents WHERE patient_id = ?"
+                                " AND sha256 = ? AND status NOT IN ('rejected', 'superseded')",
+                                (pid, sha)).fetchone()
+        if existing:
+            conn.rollback()
+            return existing[0]
+        created = _store(pid, sha, data)
+        cur = conn.execute(
+            "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256,"
+            " size, status, reason, uploaded_by, uploaded_at, supersedes_id)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (pid, kind, display_name(name), rel, sha, len(data),
+             "quarantined" if refusal else "extraction_failed", refusal, actor, _now(now),
+             supersedes))
+        conn.commit()
+    except BaseException:
+        if created and not conn.execute("SELECT 1 FROM patient_documents WHERE patient_id = ?"
+                                        " AND stored_path = ?", (pid, rel)).fetchone():
+            (Path(DOC_ROOT) / rel).unlink(missing_ok=True)
+        conn.rollback()
+        raise
     doc_id = cur.lastrowid
     log_audit(conn, actor, role, "document_upload", f"document:{doc_id}", allowed=1,
               reason="quarantined" if refusal else "stored")
     if refusal:
         return doc_id
 
+    _read(conn, doc_id, kind, rel, actor, role)
+    return doc_id
+
+
+# what staff see when reading fails; the code alone goes to the audit log
+QUARANTINE = {"protected": "password protected", "too_many_pages": "too many pages",
+              "active_content": "active content", "too_complex": "too complex to read safely"}
+FAILURE = {"memory_limit": "too large to read safely", "timeout": "took too long to read",
+           "busy": "the reader was busy - try again"}
+
+
+def _read(conn, doc_id, kind, rel, actor, role):
+    """Run the worker once. Only a complete result is written; a failure writes no text."""
     result = _extract(Path(DOC_ROOT) / rel, kind)
-    if "error" in result:
-        code = result["error"]
-        quarantine = code in ("protected", "too_many_pages", "active_content")
-        reason = {"protected": "password protected", "too_many_pages": "too many pages",
-                  "active_content": "active content"}.get(code, f"could not be read ({code})")
-        conn.execute("UPDATE patient_documents SET status = ?, reason = ? WHERE id = ?",
-                     ("quarantined" if quarantine else "extraction_failed", reason, doc_id))
+    code = result.get("error")
+    log_audit(conn, actor, role, "document_extract", f"document:{doc_id}", allowed=1,
+              reason=code or "ok")
+    if code:
+        quarantine = code in QUARANTINE
+        conn.execute("UPDATE patient_documents SET status = ?, reason = ? WHERE id = ?"
+                     " AND status = 'extraction_failed'",
+                     ("quarantined" if quarantine else "extraction_failed",
+                      QUARANTINE.get(code) or FAILURE.get(code, "could not be read"), doc_id))
         conn.commit()
-        return doc_id
+        return
     pages = result["pages"]
     empty = not any(p["text"].strip() for p in pages)
+    # only the first complete reading counts; a second one racing it changes nothing
     conn.execute("UPDATE patient_documents SET status = 'pending_review', extraction = ?,"
-                 " extractor = ?, reason = ? WHERE id = ?",
+                 " extractor = ?, reason = ? WHERE id = ? AND status = 'extraction_failed'"
+                 " AND extraction IS NULL",
                  (json.dumps({"pages": pages}), EXTRACTOR, "no text found" if empty else None,
                   doc_id))
     conn.commit()
-    return doc_id
+
+
+def retry(conn, doc_id, pid, actor, role):
+    """Read a document again after a failure (memory, time, busy, crash). Never a quarantine."""
+    r = _own(conn, doc_id, pid, actor, role, "document_retry")
+    claimed = conn.execute("UPDATE patient_documents SET reason = 'reading again' WHERE id = ?"
+                           " AND status = 'extraction_failed'", (doc_id,)).rowcount
+    conn.commit()
+    if not claimed:
+        raise DocumentError("not_failed", "only a document that could not be read can be retried")
+    log_audit(conn, actor, role, "document_retry", f"document:{doc_id}", allowed=1)
+    _read(conn, doc_id, r["kind"], r["stored_path"], actor, role)
 
 
 def _own(conn, doc_id, pid, actor, role, action):

@@ -336,6 +336,14 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
     if target is None:
         return False, f"no patient with codice fiscale {target_cf}"
     source_pid, target_pid = source["patient_id"], target["patient_id"]
+    if conn.execute(
+            "SELECT 1 FROM patient_documents s JOIN patient_documents t ON t.sha256 = s.sha256"
+            " WHERE s.patient_id = ? AND t.patient_id = ?"
+            " AND s.status NOT IN ('rejected', 'superseded')"
+            " AND t.status NOT IN ('rejected', 'superseded')", (source_pid, target_pid)).fetchone():
+        # which copy's review stands is a dentist's decision, not the merge's
+        return False, ("both records hold the same document; a dentist must reject or replace"
+                       " one copy before they can be merged")
     moved = {}
     try:
         # one transaction over every relation. sqlite3 opens one implicitly on

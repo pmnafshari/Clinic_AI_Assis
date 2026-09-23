@@ -104,6 +104,13 @@ def confirm(cf, did):
     return _step(cf, did, docs.confirm, "Confirmed. It is now part of the record and can be searched.")
 
 
+@documents_bp.route("/patients/<cf>/documents/<int:did>/retry", methods=["POST"])
+def retry(cf, did):
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_retry", f"document:{did}")
+    return _step(cf, did, docs.retry, "Read again. Check the result below.")
+
+
 @documents_bp.route("/patients/<cf>/documents/<int:did>/reject", methods=["POST"])
 def reject(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):

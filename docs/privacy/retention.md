@@ -11,6 +11,8 @@
 | Exports | 24 hours | deleted | deleted |
 | Closed data requests | 1095 days | kept, with the patient's own words removed | deleted |
 | Call recordings | 90 days | erased | report only - nothing records calls yet (P12) |
+| Staff sessions | 30 minutes idle | ended with the account | deleted, and each sweep (or dry run) is audited |
+| Patient documents (originals and reviewed text) | follows clinical records | erased with their index entries | report only |
 
 `python retention.py` reports what is past its period. `python retention.py --apply` deletes only
 the types marked `sweep: delete`. Nothing clinical or fiscal is deleted by a timer - those are

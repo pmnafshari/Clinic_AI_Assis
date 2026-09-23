@@ -5,6 +5,7 @@ Synthetic PDFs are written by hand, images are rendered from them by macOS
 Where `sips`, `tesseract` or `sandbox-exec` is missing, the checks that need
 them are reported SKIPPED, never passed.
 """
+import hashlib
 import io
 import json
 import re
@@ -16,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import zlib
 from pathlib import Path
 
@@ -102,6 +104,7 @@ def setup(tmp):
     docs.DOC_ROOT = tmp / "documents"
     docs.DOC_CHROMA_PATH = str(tmp / "doc_chroma")
     docs._collection_cache.clear()
+    docs.SLOT_DIR = tmp / "slots"
     conn = init_db(str(tmp / "d.sqlite"))
     return conn
 
@@ -350,7 +353,7 @@ def sandbox_proof():
 
     # 16b. and ingestion really runs the worker through it
     seen = []
-    real = docs.subprocess.run
+    real = docs.worker_guard.run
 
     def spy(argv, *a, **k):
         seen.append(list(argv))
@@ -359,14 +362,212 @@ def sandbox_proof():
     with tempfile.TemporaryDirectory() as tmp:
         conn = setup(tmp)
         pid = patient_id.seed_patient(conn, "ZZPX000000000009", "Xena Sandbox")
-        docs.subprocess.run = spy
+        docs.worker_guard.run = spy
         try:
             docs.ingest(conn, pid, b"testo di prova", "t.txt", *D)
         finally:
-            docs.subprocess.run = real
+            docs.worker_guard.run = real
         conn.close()
     assert seen and seen[0][:2] == ["/usr/bin/sandbox-exec", "-p"] and "deny network" in seen[0][2], \
         f"16b: THE WORKER RAN OUTSIDE THE SANDBOX: {seen[:1]}"
+
+
+def same_file(tmp):
+    """The same exact bytes uploaded independently for two patients (P15 follow-up).
+
+    Originals are stored per patient, so this is two files, two rows, two
+    reviews. Nothing of one patient's copy may reach, change or reveal the other."""
+    import data_rights
+    import erasure
+    import patient_identity
+    import zipfile
+    conn = setup(tmp)
+    t1 = clinic_time.read_instant("2026-09-23T08:00:00+00:00")
+    t2 = clinic_time.read_instant("2026-09-23T09:30:00+00:00")
+    cf_a, cf_b = "ZZPD000000000011", "ZZPE000000000012"
+    a = patient_id.seed_patient(conn, cf_a, "Dora Doppia")
+    b = patient_id.seed_patient(conn, cf_b, "Elio Doppio")
+    same = pdf(["referto condiviso otturazione dente 26"])
+    fresh = pdf(["referto unico di controllo"])
+
+    # S1. two associations, two files, independent metadata
+    da = docs.ingest(conn, a, same, "dora-referto.pdf", "drossi", "dentist", now=t1)
+    db = docs.ingest(conn, b, same, "elio-scan.pdf", "dbianchi", "dentist", now=t2)
+    ra, rb = docs.row(conn, da), docs.row(conn, db)
+    assert da != db and ra["sha256"] == rb["sha256"]
+    pa, pb = docs.original_path(ra), docs.original_path(rb)
+    assert pa != pb and pa.exists() and pb.exists() and pa.parent != pb.parent, "S1: one shared file"
+    assert (pa.stat().st_mode & 0o777) == 0o600 and (pb.stat().st_mode & 0o777) == 0o600
+    assert (ra["display_name"], ra["uploaded_by"], ra["patient_id"]) == ("dora-referto.pdf", "drossi", a)
+    assert (rb["display_name"], rb["uploaded_by"], rb["patient_id"]) == ("elio-scan.pdf", "dbianchi", b)
+    assert ra["uploaded_at"] != rb["uploaded_at"]
+    assert ra["status"] == rb["status"] == "pending_review"
+
+    # S2. the upload outcome for Dora is the same as for a file no one else has:
+    # no duplicate warning, no other id, nothing that says "seen before"
+    c = patient_id.seed_patient(conn, "ZZPF000000000013", "Fede Controllo")
+    dc = docs.ingest(conn, c, fresh, "f.pdf", *D)
+    assert docs.row(conn, dc)["status"] == ra["status"] and docs.row(conn, dc)["reason"] == ra["reason"]
+    again = docs.ingest(conn, a, same, "dora-bis.pdf", *D)
+    assert again == da, "S2: a patient's own re-upload is the same document"
+
+    # S3. confirming Dora's copy leaves Elio's untouched; Elio's search finds nothing
+    docs.confirm(conn, da, a, *D)
+    rb2 = docs.row(conn, db)
+    assert rb2["status"] == "pending_review" and rb2["decided_by"] is None, dict(rb2)
+    assert [h["doc_id"] for h in docs.search(conn, a, "otturazione", *D)] == [da]
+    assert docs.search(conn, b, "otturazione", *D) == [], "S3: Elio sees Dora's confirmation"
+    hit = docs.search(conn, a, "otturazione", *D)[0]
+    assert "elio" not in json.dumps(hit, default=str).lower() and "dbianchi" not in json.dumps(hit, default=str)
+
+    # S4. every direct-object path is patient-scoped, both ways
+    for doc_id, wrong in ((da, b), (db, a)):
+        for fn, kw in ((docs.load, {}), (docs.confirm, {}), (docs.reject, {"reason": "x"}),
+                       (docs.retry, {}), (docs.replace, {"data": fresh, "name": "x.pdf"})):
+            try:
+                fn(conn, doc_id, wrong, actor=D[0], role=D[1], **kw)
+                raise AssertionError(f"S4: {fn.__name__} crossed patients")
+            except LookupError:
+                pass
+
+    # S5. a forged index entry claiming Elio's patient id for Dora's document
+    docs.collection().upsert(ids=["forged-s5"], documents=["referto condiviso otturazione dente 26"],
+                             metadatas=[{"patient_id": b, "doc_id": da, "page": 1}])
+    assert docs.search(conn, b, "otturazione", *D) == [], "S5: a forged entry crossed patients"
+    docs.collection().delete(ids=["forged-s5"])
+
+    # S10. while both hold a live copy, a merge of the two records is refused
+    # cleanly (which review stands is a dentist's call), nothing moves
+    before = conn.execute("SELECT id, patient_id, status FROM patient_documents ORDER BY id").fetchall()
+    ok, msg = patient_identity.merge(conn, cf_a, cf_b, *ADM)
+    assert not ok and "same document" in msg, msg
+    assert conn.execute("SELECT id, patient_id, status FROM patient_documents ORDER BY id").fetchall() \
+        == before
+
+    # S6. a second shared file: rejecting Elio's copy leaves Dora's waiting
+    shared2 = pdf(["secondo documento condiviso radiografia"])
+    xa = docs.ingest(conn, a, shared2, "x-a.pdf", *D)
+    xb = docs.ingest(conn, b, shared2, "x-b.pdf", *D)
+    docs.reject(conn, xb, b, "copia sbagliata", *D)
+    assert docs.row(conn, xa)["status"] == "pending_review" and docs.row(conn, xa)["reason"] is None
+
+    # S7. replacing Dora's confirmed copy does not touch Elio's
+    new_a = docs.replace(conn, da, a, fresh + b"%v2", "dora-v2.pdf", *D)
+    assert docs.row(conn, da)["status"] == "superseded"
+    assert docs.row(conn, db)["status"] == "pending_review" and pb.exists()
+    assert docs.row(conn, new_a)["supersedes_id"] == da
+
+    # S8. Elio's own review; each patient's search sees only their own copy
+    docs.confirm(conn, db, b, "dbianchi", "dentist")
+    assert [h["doc_id"] for h in docs.search(conn, b, "otturazione", *D)] == [db]
+    assert all(h["doc_id"] != db for h in docs.search(conn, a, "otturazione", *D))
+
+    # S8b. a third shared file confirmed for both: each index entry belongs to
+    # its own document, so each patient still finds their own copy
+    shared3 = pdf(["terzo referto condiviso parodontale"])
+    ta = docs.ingest(conn, a, shared3, "t-a.pdf", *D)
+    tb = docs.ingest(conn, b, shared3, "t-b.pdf", *D)
+    docs.confirm(conn, ta, a, *D)
+    docs.confirm(conn, tb, b, *D)
+    assert [h["doc_id"] for h in docs.search(conn, a, "parodontale", *D)] == [ta], "S8b: A lost its entry"
+    assert [h["doc_id"] for h in docs.search(conn, b, "parodontale", *D)] == [tb], "S8b: B lost its entry"
+
+    # S9. exports carry only the patient's own copy and names
+    def export(pid):
+        name = data_rights.build_export(conn, pid, sorted_root=Path(tmp) / "sorted",
+                                        exports_dir=Path(tmp) / "exports")
+        with zipfile.ZipFile(Path(tmp) / "exports" / name) as z:
+            return z.namelist(), b"".join(z.read(n) for n in z.namelist())
+    names_b, blob_b = export(b)
+    assert f"documents/{db}-elio-scan.pdf" in names_b
+    assert b"dora" not in blob_b.lower() and b"drossi" not in blob_b, "S9: Dora leaked into Elio's export"
+    names_a, blob_a = export(a)
+    assert not any("elio" in n for n in names_a) and b"dbianchi" not in blob_a
+
+    # S11. erasing Dora removes her rows, files and index entries; Elio keeps
+    # his copy, his review and his search
+    targets = erasure._document_files(conn, a)
+    erasure._sqlite(conn, a, cf_a, [], False)
+    erasure._remove_documents(targets, a)
+    assert not conn.execute("SELECT 1 FROM patient_documents WHERE patient_id = ?", (a,)).fetchone()
+    assert not pa.exists() and not docs.collection().get(where={"patient_id": a})["ids"]
+    assert pb.exists() and pb.read_bytes() == same, "S11: Elio's original went with Dora's"
+    assert docs.row(conn, db)["status"] == "confirmed"
+    assert [h["doc_id"] for h in docs.search(conn, b, "otturazione", *D)] == [db]
+    with zipfile.ZipFile(Path(tmp) / "exports" / data_rights.build_export(
+            conn, b, sorted_root=Path(tmp) / "sorted", exports_dir=Path(tmp) / "exports")) as z:
+        assert f"documents/{db}-elio-scan.pdf" in z.namelist()
+
+    # S12. identical uploads at the same moment: for one patient, one row and
+    # one file; for two patients, one each. no temporary file is left
+    from storage import init_db
+    g = patient_id.seed_patient(conn, "ZZPG000000000014", "Gino Gara")
+    h = patient_id.seed_patient(conn, "ZZPH000000000015", "Ugo Gara")
+    race = pdf(["caricato insieme"])
+    got, errors = [], []
+    db_path = conn.execute("PRAGMA database_list").fetchone()[2]
+
+    def up(pid):
+        c2 = init_db(db_path)
+        try:
+            got.append((pid, docs.ingest(c2, pid, race, "gara.pdf", *D)))
+        except Exception as e:
+            errors.append(repr(e))
+        finally:
+            c2.close()
+    # widen the window between the duplicate check and the insert, so the
+    # uploads really overlap
+    real_store = docs._store
+
+    def slow_store(*a):
+        time.sleep(0.05)
+        return real_store(*a)
+    docs._store = slow_store
+    try:
+        ts = [threading.Thread(target=up, args=(p,)) for p in (g, g, g, h, h, g)]
+        [t.start() for t in ts]
+        [t.join() for t in ts]
+    finally:
+        docs._store = real_store
+    assert not errors, errors
+    assert len({d for p, d in got if p == g}) == 1 and len({d for p, d in got if p == h}) == 1
+    assert {d for p, d in got if p == g}.isdisjoint({d for p, d in got if p == h})
+    for pid in (g, h):
+        assert conn.execute("SELECT COUNT(*) FROM patient_documents WHERE patient_id = ?",
+                            (pid,)).fetchone()[0] == 1
+        folder = Path(docs.DOC_ROOT) / pid
+        assert [f.name for f in folder.iterdir()] == [hashlib.sha256(race).hexdigest()], \
+            f"S12: {sorted(f.name for f in folder.iterdir())}"
+
+    # S13. a failed insert leaves neither a file nor a row; a file another row
+    # of the same patient still uses is kept
+    k = patient_id.seed_patient(conn, "ZZPK000000000016", "Kim Guasto")
+    broken = pdf(["inserimento fallito"])
+    saved = docs.display_name
+
+    def boom(name):
+        raise RuntimeError("disk full")
+    docs.display_name = boom
+    try:
+        docs.ingest(conn, k, broken, "k.pdf", *D)
+        raise AssertionError("S13: the failure was swallowed")
+    except RuntimeError:
+        pass
+    finally:
+        docs.display_name = saved
+    assert not conn.execute("SELECT 1 FROM patient_documents WHERE patient_id = ?", (k,)).fetchone()
+    assert not any((Path(docs.DOC_ROOT) / k).glob("*")), "S13: a file without a row"
+    kept = docs.ingest(conn, k, broken, "k.pdf", *D)
+    docs.reject(conn, kept, k, "prova", *D)
+    docs.display_name = boom
+    try:
+        docs.ingest(conn, k, broken, "k2.pdf", *D)
+    except RuntimeError:
+        pass
+    finally:
+        docs.display_name = saved
+    assert docs.original_path(docs.row(conn, kept)).exists(), "S13: a referenced file was removed"
+    conn.close()
 
 
 def routes(tmp):
@@ -406,6 +607,35 @@ def routes(tmp):
     assert f.status_code == 200 and f.headers["Content-Disposition"].startswith("attachment")
     assert f.headers.get("X-Content-Type-Options") == "nosniff"
     assert "sandbox" in f.headers.get("Content-Security-Policy", ""), "18: no CSP sandbox"
+
+    # 19. the same file through the pages for two patients: the second upload
+    # reads exactly like a first one, and neither page shows the other's copy
+    app.config["WTF_CSRF_ENABLED"] = False
+    shared = pdf(["referto gemello otturazione"])
+    up_a = dentist.post(f"/patients/{cf_a}/documents", data={"file": (io.BytesIO(shared), "rita-gemello.pdf")},
+                        content_type="multipart/form-data", follow_redirects=True).text
+    up_b = dentist.post(f"/patients/{cf_b}/documents", data={"file": (io.BytesIO(shared), "sara-gemello.pdf")},
+                        content_type="multipart/form-data", follow_redirects=True).text
+    flash = re.compile(r'class="alert[^"]*"[^>]*>(.*?)<', re.S)
+    assert flash.findall(up_a) and flash.findall(up_a) == flash.findall(up_b), "19: the second upload reads differently"
+    list_b = dentist.get(f"/patients/{cf_b}/documents").text
+    assert "sara-gemello.pdf" in list_b and "rita-gemello.pdf" not in list_b and "r.pdf" not in list_b
+    ids = [r["id"] for r in conn.execute("SELECT id FROM patient_documents WHERE sha256 = ?"
+                                         " ORDER BY id", (hashlib.sha256(shared).hexdigest(),))]
+    assert len(ids) == 2
+    for did_x, cf_wrong in ((ids[0], cf_b), (ids[1], cf_a)):
+        for path in ("", "/file"):
+            r = dentist.get(f"/patients/{cf_wrong}/documents/{did_x}{path}")
+            assert r.status_code == 404 and b"gemello" not in r.data, (did_x, cf_wrong, path)
+        r = dentist.post(f"/patients/{cf_wrong}/documents/{did_x}/confirm")
+        assert r.status_code == 404
+    assert all(docs.row(conn, i)["status"] == "pending_review" for i in ids)
+
+    # 20. retry: dentist only, own patient only, and only after a failure
+    assert reception.post(f"/patients/{cf_a}/documents/{ids[0]}/retry").status_code == 302
+    assert dentist.post(f"/patients/{cf_b}/documents/{ids[0]}/retry").status_code == 404
+    r = dentist.post(f"/patients/{cf_a}/documents/{ids[0]}/retry", follow_redirects=True).text
+    assert "only a document that could not be read" in r
     conn.close()
 
 
@@ -415,6 +645,8 @@ def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         ocr(tmp)
     sandbox_proof()
+    with tempfile.TemporaryDirectory() as tmp:
+        same_file(tmp)
     with tempfile.TemporaryDirectory() as tmp:
         routes(tmp)
     print("selftest ok")

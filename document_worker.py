@@ -12,11 +12,44 @@ import subprocess
 import sys
 
 MAX_PAGES = 50
+MB = 1024 * 1024
+# pypdf's own limits, set here rather than trusted as defaults. Any one of them
+# reached means the file is built to be expensive: it is quarantined, not read.
+PDF_LIMITS = {
+    "maximum_declared_stream_length": 20 * MB,
+    "array_based_stream_maximum_output_length": 20 * MB,
+    "lzw_maximum_output_length": 20 * MB,
+    "run_length_maximum_output_length": 20 * MB,
+    "zlib_maximum_output_length": 20 * MB,
+    "zlib_maximum_recovery_input_length": 1 * MB,
+    "flate_maximum_columns": 20_000,
+    "flate_maximum_row_length": 1 * MB,
+    "image_maximum_buffer_size": 20 * MB,
+    "xmp_maximum_input_length": 1 * MB,
+    "xmp_maximum_element_count": 10_000,
+    "outline_maximum_entries": 1_000,
+    "outline_maximum_depth": 20,
+    "page_tree_maximum_entries": 1_000,
+    "page_tree_maximum_depth": 20,
+    "xform_maximum_invocations_per_extraction": 500,
+    "jbig2dec_binary": None,
+}
 ACTIVE_KEYS = ("/JavaScript", "/JS", "/Launch", "/EmbeddedFiles", "/RichMedia", "/XFA", "/AA")
 
 
 def _pdf(path):
-    from pypdf import PdfReader
+    from pypdf import PdfReader, apply_configuration
+    from pypdf.errors import LimitReachedError
+    try:
+        with apply_configuration(**PDF_LIMITS):
+            return _read_pdf(PdfReader, path)
+    except LimitReachedError:
+        return {"error": "too_complex"}
+    except RecursionError:
+        return {"error": "too_complex"}
+
+
+def _read_pdf(PdfReader, path):
     reader = PdfReader(path)
     if reader.is_encrypted:
         return {"error": "protected"}

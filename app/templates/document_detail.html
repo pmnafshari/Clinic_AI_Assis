@@ -61,6 +61,12 @@
       <button class="btn btn-primary btn-sm" type="submit">Confirm</button>
     </form>
     {% endif %}
+    {% if doc.status == 'extraction_failed' %}
+    <form method="post" action="{{ url_for('documents.retry', cf=cf, did=doc.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-outline-primary btn-sm" type="submit">Try reading again</button>
+    </form>
+    {% endif %}
     {% if doc.status != 'confirmed' %}
     <form method="post" action="{{ url_for('documents.reject', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
