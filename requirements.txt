@@ -15,3 +15,6 @@ faster-whisper==1.2.1
 ctranslate2==4.8.2
 onnxruntime==1.27.0
 av==18.1.0
+# document text (P15). BSD-3-Clause, pure Python; only ever run inside the
+# sandboxed document_worker.py
+pypdf==6.19.0

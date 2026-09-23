@@ -21,6 +21,9 @@
     {% if authorize(g.user.role, 'review_summary') %}
     <a href="{{ url_for('summary.page', cf=cf) }}" class="btn btn-outline-secondary"><i class="bi bi-card-checklist"></i> Next-visit summary</a>
     {% endif %}
+    {% if authorize(g.user.role, 'read_clinical') %}
+    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn btn-outline-secondary"><i class="bi bi-folder2-open"></i> Documents</a>
+    {% endif %}
     {% if authorize(g.user.role, 'append_note') %}
     <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-primary"><i class="bi bi-journal-plus"></i> Add note</a>
     {% endif %}

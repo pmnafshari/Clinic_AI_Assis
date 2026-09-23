@@ -104,6 +104,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
                          f" ({','.join('?' * len(keys))})", [pid] + keys)
             conn.execute("DELETE FROM visit_reviews WHERE visit_id IN"
                          " (SELECT id FROM visits WHERE patient_id = ?)", (pid,))
+        if _has(conn, "patient_documents"):
+            # P15: clinical documents go with the patient; their files and index
+            # entries are removed after the transaction (_remove_documents)
+            conn.execute("DELETE FROM patient_documents WHERE patient_id = ?", (pid,))
         if not hold_invoices and _has(conn, "billing_invoices"):
             # the ledger is fiscal: it goes only when invoices are not held
             conn.execute("DELETE FROM payment_allocations WHERE payment_id IN"
@@ -213,6 +217,29 @@ def _index(collection, pid, keys):
     return 0
 
 
+def _document_files(conn, pid):
+    """This patient's document originals. Read before _sqlite deletes the rows."""
+    if not _has(conn, "patient_documents"):
+        return []
+    import documents
+    return [documents.original_path(r) for r in conn.execute(
+        "SELECT * FROM patient_documents WHERE patient_id = ?", (pid,))]
+
+
+def _remove_documents(paths, pid):
+    import documents
+    root = Path(documents.DOC_ROOT).resolve()
+    for path in paths:
+        path = Path(path)
+        # only ever a file under the document store - a row is data
+        if path.is_file() and root in path.resolve().parents:
+            path.unlink()
+    try:
+        documents.unindex_patient(pid)
+    except documents.DocumentError:
+        pass
+
+
 def _staging_dirs(conn, pid, keys):
     """The staged folders and unreadable originals behind this patient's
     review rows. Read BEFORE _sqlite deletes the rows that name them."""
@@ -247,6 +274,9 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
         " OR procedures != '[]' OR source_path NOT LIKE 'erased:%')", (pid,)).fetchone()[0]
     if _has(conn, "visit_summaries"):
         left["summaries"] = conn.execute("SELECT COUNT(*) FROM visit_summaries WHERE"
+                                         " patient_id = ?", (pid,)).fetchone()[0]
+    if _has(conn, "patient_documents"):
+        left["documents"] = conn.execute("SELECT COUNT(*) FROM patient_documents WHERE"
                                          " patient_id = ?", (pid,)).fetchone()[0]
     if _has(conn, "note_reviews"):
         left["note_reviews"] = conn.execute(
@@ -297,8 +327,10 @@ def erase(conn, pid, actor, role, req_id, sorted_root=Path("sorted"), drop_dir=P
 
     held_types = holds(policy_path)
     staged = _staging_dirs(conn, pid, keys)
+    doc_files = _document_files(conn, pid)
     held = _sqlite(conn, pid, cf, sources, "invoices" in held_types)
     _remove_staging(staged)
+    _remove_documents(doc_files, pid)
     _files(pid, keys, sorted_root, drop_dir, keep_records=held)
     _undo_log(undo_log, keys)
     _index(collection, pid, keys)

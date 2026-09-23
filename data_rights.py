@@ -181,6 +181,11 @@ def build_export(conn, pid, sorted_root=Path("sorted"), exports_dir=None):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("data.json", json.dumps(patient_data(conn, pid), indent=2, ensure_ascii=False))
+        # P15: confirmed document originals only - never extracted text, never
+        # an unreviewed, refused or superseded file
+        import documents
+        for arc_name, blob in documents.exportable(conn, pid):
+            zf.writestr(arc_name, blob)
         patient_dir = Path(sorted_root) / pid
         if patient_dir.is_dir():
             for f in sorted(patient_dir.rglob("*")):

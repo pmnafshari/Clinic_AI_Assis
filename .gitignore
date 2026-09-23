@@ -33,6 +33,8 @@ log.txt
 sorted/
 # uploads awaiting a dentist's review (POL-9): originals and extractions
 staging/
+# patient document originals (P15)
+documents/
 # encrypted backups (backup.py) - never committed, even encrypted
 backups/
 *.cbk

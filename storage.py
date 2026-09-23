@@ -193,6 +193,10 @@ def init_db(db_path):
     import note_review
     conn.executescript(note_review.SCHEMA)
     note_review.classify_legacy(conn)
+
+    # patient documents (P15). originals under documents/, never under sorted/
+    from documents import SCHEMA as DOCUMENTS_SCHEMA
+    conn.executescript(DOCUMENTS_SCHEMA)
     conn.commit()
     return conn
 

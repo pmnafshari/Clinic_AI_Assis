@@ -19,3 +19,15 @@ https://github.com/openai/whisper/blob/main/LICENSE,
 https://github.com/OpenNMT/CTranslate2/blob/master/LICENSE.
 
 Text-to-speech: none installed. See the P14 evidence for why it is still blocked.
+
+# Third-party notices - documents and OCR (P15)
+
+| Component | Version / revision | Licence | Notes |
+|---|---|---|---|
+| pypdf | 6.19.0 | BSD-3-Clause | PDF text only; runs in the sandboxed worker; never renders or executes anything |
+| Tesseract OCR | 5.5.3 (Homebrew) | Apache-2.0 | system binary, called by the sandboxed worker; not bundled |
+| tessdata_fast `ita`, `eng` | `tesseract-ocr/tessdata_fast` @ `87416418657359cb625c412a48b6e1d6d41c29bd`; sha256 `b8f89e1e785118da…` (ita), `7d4322bd2a774972…` (eng) | Apache-2.0 | stored in `models/ocr/tessdata/` (git-ignored) |
+| all-MiniLM-L6-v2 (via chromadb) | already cached by the project | Apache-2.0 | local text embedder; refused, never downloaded, if missing |
+
+Not used: poppler/`pdftotext` (GPL, installed on the machine but not called) - kept out for the same
+reason text-to-speech is blocked: the project's licence and distribution plan are undecided.

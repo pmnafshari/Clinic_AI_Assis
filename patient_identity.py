@@ -233,7 +233,7 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 # reads as outdated, because the survivor's notes are not what it was made from
 # note_reviews (POL-9) move too: a note waiting for review belongs to the survivor
 MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries",
-                   "note_reviews")
+                   "note_reviews", "patient_documents")
 
 # Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
 # on `patient_merges.source_cf` because resolving an OLD one is that table's
@@ -411,6 +411,15 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
         conn.execute("UPDATE patient_merges SET moved = ? WHERE source_cf = ?",
                      (json.dumps(moved), source_cf))
         conn.commit()
+
+    # P15: the moved documents are re-indexed under the survivor. search also
+    # re-checks every hit against the database, so a stale entry can never
+    # show a document to the wrong record - this only keeps it findable
+    import documents
+    try:
+        documents.reindex_patient(conn, target_pid)
+    except documents.DocumentError:
+        moved["documents_index_pending"] = True
 
     log_audit(conn, actor, actor_role, "merge_patient",
               f"{source_cf}->{target_cf}", allowed=1)

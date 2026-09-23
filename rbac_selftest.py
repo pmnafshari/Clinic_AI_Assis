@@ -106,6 +106,12 @@ def _seed(db_path, root):
         " created_at) VALUES ('legacy', 'pending', ?, ?, 'system', '2026-09-23T06:00:00+00:00')",
         (pid, visit_id)).lastrowid or conn.execute(
         "SELECT id FROM note_reviews WHERE visit_id = ?", (visit_id,)).fetchone()[0]
+    # a pending document, the state the document routes act on (P15). the row
+    # alone: no file, no index - the walk only needs an id the routes accept
+    did = conn.execute(
+        "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size,"
+        " status, uploaded_by, uploaded_at) VALUES (?, 'text', 'rb.txt', 'rb/none', 'rbsha', 1,"
+        " 'pending_review', 'rb_dentist', '2026-09-23T06:00:00+00:00')", (pid,)).lastrowid
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -114,7 +120,7 @@ def _seed(db_path, root):
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
-            "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id,
+            "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
             "username": "rb_target", "filename": "app.css"}
 
 
@@ -245,6 +251,12 @@ def selftest():
         db_path = str(root / "clinic.sqlite")
         app_db.DB_PATH = db_path
         app_db.CHROMA_PATH = str(root / "chroma")
+        # document originals and their index go to this walk's temp dir, never
+        # the repo (a stray empty upload landed in ./documents on 2026-09-23)
+        import documents
+        documents.DOC_ROOT = root / "documents"
+        documents.DOC_CHROMA_PATH = str(root / "doc_chroma")
+        documents._collection_cache.clear()
         sorted_root = root / "sorted"
         for mod in (agent_routes, notes_routes, patients_routes, upload_routes):
             mod.SORTED_ROOT = sorted_root

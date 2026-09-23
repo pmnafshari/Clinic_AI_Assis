@@ -99,6 +99,8 @@ ROLE_PAGES = {
         ("providers", "/providers"),
         # P13: a draft next-visit summary, dentist only
         ("summary", f"/patients/{CF}/summary"),
+        # P15: the patient's documents and search, dentist only
+        ("documents", f"/patients/{CF}/documents?q=otturazione"),
         # POL-9: the review queue. seed() appends the one review it makes
         ("reviews", "/reviews"),
         ("notes-new", "/notes/new"),

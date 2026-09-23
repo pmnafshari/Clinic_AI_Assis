@@ -74,7 +74,7 @@ SUFFIX = ".cbk"
 # stores, relative to the data root. the sqlite db is handled separately.
 # staging/ holds uploads awaiting a dentist's review (POL-9): originals and
 # extractions that exist nowhere else
-FILE_STORES = ("sorted", "drop", "staging", "db/undo_log.jsonl")
+FILE_STORES = ("sorted", "drop", "staging", "documents", "db/undo_log.jsonl")
 DB_REL = "db/clinic.sqlite"
 CHROMA_REL = "db/chroma"
 

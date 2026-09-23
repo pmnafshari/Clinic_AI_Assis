@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
+    <li><a href="{{ url_for('documents.index', cf=cf) }}">Documents</a></li>
+    <li aria-current="page">{{ doc.display_name }}</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
+    <h1 class="ds-page-title text-break">{{ doc.display_name }}</h1>
+    <p class="ds-page-meta">{{ doc.status.replace('_', ' ') }}{% if doc.reason %} · {{ doc.reason }}{% endif %}</p>
+  </div>
+</div>
+
+{% if doc.status == 'pending_review' %}
+<div class="ds-alert ds-alert-warning mb-3" role="note">
+  <div><strong class="ds-alert-title">Not part of the record yet</strong>
+  This is what was read from the file on this machine. Check it against the original before you
+  confirm it; until then it cannot be searched. Text inside a document is only text - nothing in it
+  is followed.</div>
+</div>
+{% endif %}
+
+<section class="card dash-card mb-3" aria-labelledby="prov-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="prov-title">Source</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Uploaded</span><span class="ds-row-title">{{ doc.uploaded_by }} · {{ doc.uploaded_at | appt_date }} {{ doc.uploaded_at | appt_time }}</span></span></li>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">File</span><span class="ds-row-title text-break">{{ doc.kind or 'unknown type' }} · {{ doc.size }} bytes · sha256 {{ doc.sha256[:16] }}…</span></span></li>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Read by</span><span class="ds-row-title">{{ doc.extractor or 'not read' }}</span></span></li>
+    {% if doc.decided_by %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Decision</span><span class="ds-row-title">{{ doc.status.replace('_', ' ') }} by {{ doc.decided_by }} · {{ doc.decided_at | appt_date }}</span></span></li>{% endif %}
+    {% if doc.supersedes_id %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Replaces</span><a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=doc.supersedes_id) }}">document {{ doc.supersedes_id }}</a></span></li>{% endif %}
+  </ul>
+  <a href="{{ url_for('documents.original', cf=cf, did=doc.id) }}">Download the original</a>
+  </div>
+</section>
+
+{% if pages %}
+<section class="card dash-card mb-3" aria-labelledby="text-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="text-title">Text as read</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for p in pages %}
+    <li class="ds-row"><span class="ds-row-main">
+      <span class="ds-row-sub">Page {{ p.page }}{% if p.confidence < uncertain_below %} · <strong>uncertain reading ({{ p.confidence }}%)</strong>{% endif %}</span>
+      <span class="ds-row-title text-break" style="white-space: pre-wrap">{{ p.text or '(no text found)' }}</span>
+    </span></li>
+    {% endfor %}
+  </ul></div>
+</section>
+{% endif %}
+
+{% if doc.status in ('pending_review', 'quarantined', 'extraction_failed', 'confirmed') %}
+<section class="card dash-card mb-3" aria-labelledby="act-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="act-title">Review</h2></div>
+  <div class="dash-card-body d-flex flex-wrap gap-2 align-items-end">
+    {% if doc.status == 'pending_review' %}
+    <form method="post" action="{{ url_for('documents.confirm', cf=cf, did=doc.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary btn-sm" type="submit">Confirm</button>
+    </form>
+    {% endif %}
+    {% if doc.status != 'confirmed' %}
+    <form method="post" action="{{ url_for('documents.reject', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="reason" class="form-label">Reason</label>
+      <input id="reason" name="reason" class="form-control form-control-sm" maxlength="300"></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
+    </form>
+    {% endif %}
+    {% if doc.status in ('pending_review', 'confirmed') %}
+    <form method="post" action="{{ url_for('documents.replace', cf=cf, did=doc.id) }}" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="file" class="form-label">Replace with a corrected file</label>
+      <input id="file" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt" class="form-control form-control-sm"></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Replace</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

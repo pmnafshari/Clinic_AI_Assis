@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
+    <li aria-current="page">Documents</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
+    <h1 class="ds-page-title">Documents</h1>
+    <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span> · dentist only</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-3" role="note">
+  <div><strong class="ds-alert-title">Sources, not answers</strong>
+  Search finds this patient's confirmed documents and shows where each result came from. It does not
+  interpret, diagnose or summarise, and an image result is not a clinical finding. A document's text
+  is searchable only after you confirm it.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="search-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="search-title">Search</h2></div>
+  <div class="dash-card-body">
+    <form method="get" action="{{ url_for('documents.index', cf=cf) }}" class="d-flex gap-2 mb-2" role="search">
+      <label for="q" class="visually-hidden">Search this patient's documents</label>
+      <input id="q" name="q" class="form-control" value="{{ query }}" maxlength="200">
+      <button class="btn btn-primary btn-sm" type="submit">Search</button>
+    </form>
+    {% if error %}<p class="dash-empty-line">{{ error }}</p>{% endif %}
+    {% if query and not results and not error %}<p class="dash-empty-line">No confirmed document of this patient matches.</p>{% endif %}
+    {% if results %}
+    <ul class="ds-rows">
+      {% for r in results %}
+      <li class="ds-row"><span class="ds-row-main">
+        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=r.doc_id) }}">{{ r.display_name }} · page {{ r.page }}</a>
+        <span class="ds-row-sub text-break">"{{ r.snippet }}"</span>
+        <span class="ds-row-sub">confirmed by {{ r.confirmed_by }} · read by {{ r.extractor }}{% if r.uncertain %} · <strong>uncertain reading ({{ r.confidence }}%)</strong>{% endif %}</span>
+      </span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="upload-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="upload-title">Add a document</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('documents.upload', cf=cf) }}" enctype="multipart/form-data">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="file" class="form-label">PDF, PNG, JPEG or plain text, up to 10 MB. Read on this machine only.</label>
+      <input id="file" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt" class="form-control mb-2">
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Upload</button>
+    </form>
+  </div>
+</section>
+
+<section class="card dash-card" aria-labelledby="list-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="list-title">All documents</h2></div>
+  <div class="dash-card-body">
+    {% if rows %}
+    <ul class="ds-rows">
+      {% for d in rows %}
+      <li class="ds-row"><span class="ds-row-main">
+        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=d.id) }}">{{ d.display_name }}</a>
+        <span class="ds-row-sub">{{ d.status.replace('_', ' ') }}{% if d.reason %} · {{ d.reason }}{% endif %} · {{ d.uploaded_at | appt_date }}</span>
+      </span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No documents yet.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -67,6 +67,12 @@ def plan(conn, types, now=None):
                     " ('pending', 'rejected', 'extraction_failed') AND created_at < ?",
                     (cut,)).fetchone()[0],
                 "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
+    # P15: patient documents are clinical records - counted, never swept
+    out.append({"type": "patient_documents", "sweep": types["clinical_records"]["sweep"],
+                "past_period": conn.execute(
+                    "SELECT COUNT(*) FROM patient_documents WHERE uploaded_at < ?",
+                    (cut,)).fetchone()[0],
+                "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
     if "staff_sessions" in types:
         # the app's own idle rule, counted with the same scan the sweep uses
         import web_session
@@ -147,7 +153,7 @@ def selftest():
         counts = {r["type"]: r["past_period"] for r in plan(conn, types, now)}
         assert counts == {"audit_log": 1, "closed_data_requests": 1, "exports": 0,
                           "clinical_records": 1, "clinical_summaries": 1, "staged_notes": 0,
-                          "staff_sessions": 1, "invoices": 1}, \
+                          "patient_documents": 0, "staff_sessions": 1, "invoices": 1}, \
             f"1: {counts}"
 
         # 2. apply deletes only sweep=delete types, and the audit purge says so
