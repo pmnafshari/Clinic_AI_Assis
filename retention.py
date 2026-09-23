@@ -59,6 +59,14 @@ def plan(conn, types, now=None):
                     "SELECT COUNT(*) FROM visit_summaries WHERE created_at < ?",
                     (cut,)).fetchone()[0],
                 "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
+    # POL-9: uploads awaiting review, rejected, or unreadable are clinical
+    # material too - counted, never swept
+    out.append({"type": "staged_notes", "sweep": types["clinical_records"]["sweep"],
+                "past_period": conn.execute(
+                    "SELECT COUNT(*) FROM note_reviews WHERE origin = 'upload' AND status IN"
+                    " ('pending', 'rejected', 'extraction_failed') AND created_at < ?",
+                    (cut,)).fetchone()[0],
+                "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
     day = (now - timedelta(days=types["invoices"]["keep_days"])).date().isoformat()
     add("invoices", conn.execute(
         "SELECT COUNT(*) FROM invoices i JOIN visits v ON v.id = i.visit_id"
@@ -124,7 +132,8 @@ def selftest():
         # 1. the plan counts each type against its own period
         counts = {r["type"]: r["past_period"] for r in plan(conn, types, now)}
         assert counts == {"audit_log": 1, "closed_data_requests": 1, "exports": 0,
-                          "clinical_records": 1, "clinical_summaries": 1, "invoices": 1}, \
+                          "clinical_records": 1, "clinical_summaries": 1, "staged_notes": 0,
+                          "invoices": 1}, \
             f"1: {counts}"
 
         # 2. apply deletes only sweep=delete types, and the audit purge says so

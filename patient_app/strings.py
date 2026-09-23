@@ -520,6 +520,13 @@ STRINGS = {
     "proc_fu": {"it": "controllo di follow-up", "en": "follow-up check"},
     # a code the glossary does not cover must never reach a patient as a raw
     # internal string - this is the fallback every unmapped code renders to
+    # POL-11: a code whose glossary entry has no clinical approval. the tooth
+    # number is written in the note as it stands, so it is kept; what the
+    # code means is not said
+    "proc_pending_tooth": {
+        "it": "un intervento odontoiatrico al dente {n} (chiedi alla clinica per i dettagli)",
+        "en": "a dental procedure on tooth {n} (ask the clinic for details)",
+    },
     "proc_unmapped": {
         "it": "un intervento odontoiatrico (chiedi alla clinica per i dettagli)",
         "en": "a dental procedure (ask the clinic for details)",

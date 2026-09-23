@@ -121,6 +121,12 @@ def _process_one(path, username, role):
             dest, reason = sort_files.route_file_reasoned(src, SORTED_ROOT, LOG_PATH, extract=_extract)
             log_audit(conn, username, role, "upload_file", str(dest), allowed=1, reason=reason)
 
+            if not dest.with_suffix(".json").exists() and "needs_review" in dest.parts \
+                    and dest.suffix.lower() == ".txt" and dest.exists():
+                # POL-9: an unreadable note is recorded so a dentist can retry it
+                import note_review
+                note_review.record_failed(conn, dest, reason or "needs_review", username, role)
+
             json_path = dest.with_suffix(".json")
             # the sibling json is what decides syncability - route_note only
             # writes one on the matched-CF path. keying off dest.suffix
@@ -174,9 +180,13 @@ def selftest():
     )
     orig_get_shared_collection = storage.get_shared_collection
     orig_process_one = _process_one
+    import note_review
+    orig_staging = note_review.STAGING_ROOT
     try:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
+            # POL-9 stages uploads; never into the repo's own staging/
+            note_review.STAGING_ROOT = root / "staging"
             db_path = str(root / "clinic.sqlite")
             init_db(db_path)
 
@@ -242,8 +252,9 @@ def selftest():
             assert len(sync_rows_drossi) == 0, "3b: needs_review upload produced a sync_note row"
             conn.close()
 
-            # 3. matched CF, sync succeeds -> sync_note row landed, attributed to the
-            # uploader, sharing its target with the upload_file row, and a visits row lands
+            # 3. matched CF -> POL-9: the note is STAGED for a dentist's review,
+            # attributed to the uploader, sharing its target with the upload_file
+            # row. no visits row lands and nothing is synced.
             _extract = _fake_ok
             txt3 = root / "note3.txt"
             txt3.write_text("patient note three")
@@ -256,14 +267,17 @@ def selftest():
             while time.time() < deadline:
                 rows = conn.execute(
                     "SELECT * FROM audit_log WHERE username=? AND action=?",
-                    ("bbianchi", "sync_note"),
+                    ("bbianchi", "note_staged"),
                 ).fetchall()
                 if rows:
                     sync_row = rows[0]
                     break
                 time.sleep(0.1)
-            assert sync_row is not None, "3: no sync_note row for bbianchi within deadline"
+            assert sync_row is not None, "3: no note_staged row for bbianchi within deadline"
             assert sync_row["allowed"] == 1, f"3: expected allowed=1, got {sync_row['allowed']}"
+            assert not conn.execute("SELECT 1 FROM audit_log WHERE username = 'bbianchi'"
+                                    " AND action = 'sync_note'").fetchall(), \
+                "3: an unreviewed upload was synced"
 
             upload_row = conn.execute(
                 "SELECT * FROM audit_log WHERE username=? AND action=?",
@@ -279,11 +293,16 @@ def selftest():
             visit_row = conn.execute(
                 "SELECT 1 FROM visits WHERE source_path = ?", (source_path,)
             ).fetchone()
-            assert visit_row is not None, "3: no visits row landed for the synced note"
+            assert visit_row is None, "3: AN UPLOAD WAS FILED INTO VISITS WITHOUT REVIEW"
+            review = conn.execute("SELECT status, original_name FROM note_reviews"
+                                  " WHERE created_by = 'bbianchi'").fetchone()
+            assert review and review["status"] == "pending" and review["original_name"] == "note3.txt"
             conn.close()
 
-            # 4. sync failure (Chroma upsert raises) -> sync_note allowed=0, log.txt line,
-            # file stays where route_note filed it
+            # 4. POL-9: staging does not touch the search index, so an index that
+            # fails its upsert cannot stop an upload being held for review. the
+            # sync failure this case used to cover now happens at confirm time
+            # (note_review_selftest 7b), where the index is first written
             class _FailingCollection:
                 def upsert(self, **kwargs):
                     raise RuntimeError("upsert boom")
@@ -305,21 +324,17 @@ def selftest():
             while time.time() < deadline:
                 rows = conn.execute(
                     "SELECT * FROM audit_log WHERE username=? AND action=?",
-                    ("cverdi", "sync_note"),
+                    ("cverdi", "note_staged"),
                 ).fetchall()
                 if rows:
                     fail_row = rows[0]
                     break
                 time.sleep(0.1)
-            assert fail_row is not None, "4: no sync_note row for cverdi within deadline"
-            assert fail_row["allowed"] == 0, f"4: expected allowed=0, got {fail_row['allowed']}"
+            assert fail_row is not None, "4: the upload was not staged for review"
+            assert not conn.execute("SELECT 1 FROM audit_log WHERE username = 'cverdi'"
+                                    " AND action = 'sync_note'").fetchall(), \
+                "4: staging must not report a sync"
             conn.close()
-
-            with open(log_path4) as f:
-                log_text = f.read()
-            assert "sync failed" in log_text, "4: log.txt has no 'sync failed' line"
-            assert (SORTED_ROOT / VALID_CF / "notes" / "note4.txt").exists(), \
-                "4: a sync failure must not move the filed note"
 
             # 5. an arbitrary exception in _process_one is recorded, not swallowed,
             # and the thread keeps serving the next item
@@ -556,6 +571,7 @@ def selftest():
             assert row9c["reason"] == sort_files.REASON_UNSUPPORTED_TYPE, \
                 f"9c: expected REASON_UNSUPPORTED_TYPE, got {row9c['reason']!r}"
     finally:
+        note_review.STAGING_ROOT = orig_staging
         storage.get_shared_collection = orig_get_shared_collection
         _process_one = orig_process_one
         SORTED_ROOT, DROP_DIR, LOG_PATH, DB_PATH, CHROMA_PATH, _extract = (

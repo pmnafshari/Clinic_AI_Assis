@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
+import glossary_review
+
 from .strings import STRINGS, t
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -33,6 +35,13 @@ def split_procedure(raw):
 
 def render_procedure(raw, lang):
     code, tooth = split_procedure(raw)
+    # POL-11: a phrase is a clinical reading of the code. until a clinical
+    # owner has approved that code's entry, the patient gets the neutral
+    # fallback - never a guess at what the shorthand meant
+    if not glossary_review.approved(code):
+        if tooth is not None:
+            return t("proc_pending_tooth", lang, n=tooth)
+        return t("proc_unmapped", lang)
     key = "proc_" + code.replace("-", "_")
     if key not in STRINGS:
         return t("proc_unmapped", lang)
@@ -184,6 +193,33 @@ def selftest():
     assert split_procedure("seal 16") == ("seal", "16")
     assert split_procedure("devitalization tooth 21") == ("devitalization", "21")
 
+    # 1b. POL-11: with the register as it is - no clinical owner, nothing
+    # approved - no code is turned into a phrase for a patient. the tooth
+    # number, written verbatim in the note, is kept; the code's meaning is not
+    codes = json.load(open(GLOSSARY_PATH))
+    for code in codes:
+        for lang in ("it", "en"):
+            assert render_procedure(f"{code} 11", lang) == t("proc_pending_tooth", lang, n="11"), \
+                f"1b: pending code {code} was interpreted for a patient"
+            assert render_procedure(code, lang) == t("proc_unmapped", lang), f"1b: {code}"
+    for phrase in ("root canal", "extraction", "antibiotic", "cura canalare", "estrazione"):
+        assert phrase not in render_procedure("rct 11", "en") + render_procedure("ext 11", "it") \
+            + render_procedure("abx", "en"), f"1b: {phrase!r} reached a patient"
+
+    # the checks below are about the phrases themselves, so they run against a
+    # throwaway register that approves every entry. the real one is untouched
+    import hashlib
+    import tempfile
+    saved = glossary_review.REGISTER_PATH
+    tmp_dir = tempfile.mkdtemp()
+    fake = Path(tmp_dir) / "approved.json"
+    fake.write_text(json.dumps({
+        "glossary_sha256": hashlib.sha256(Path(GLOSSARY_PATH).read_bytes()).hexdigest(),
+        "clinical_owner": "test fixture",
+        "entries": {c: {"status": "approved", "approved_by": "fixture", "approved_at": "2026-09-23"}
+                    for c in codes}}))
+    glossary_review.REGISTER_PATH = fake
+
     # 2. render_procedure carries the tooth number and the phrase, not the
     # raw code, in either language
     it_filling = render_procedure("filling 47", "it")
@@ -192,8 +228,12 @@ def selftest():
     assert "47" in en_filling and "filling" in en_filling, en_filling
 
     # 3. an uncoded procedure never reaches the patient as the raw string
+    # (POL-11: an unknown code is never approved, so it keeps its verbatim
+    # tooth number the same way a pending code does - and still no raw code)
     for lang in ("it", "en"):
-        assert render_procedure("devitalization tooth 21", lang) == t("proc_unmapped", lang)
+        rendered = render_procedure("devitalization tooth 21", lang)
+        assert rendered == t("proc_pending_tooth", lang, n="21"), rendered
+        assert "devitalization" not in rendered, "3: a raw code reached the patient"
 
     # 4. no-tooth template renders fine; a {n} template with no tooth found
     # falls back rather than printing the literal "None"
@@ -207,11 +247,12 @@ def selftest():
     # renders to something other than the unmapped fallback, in both
     # languages - a future glossary addition without a phrase template
     # fails this, rather than silently degrading to the fallback
-    codes = json.load(open(GLOSSARY_PATH))
     for code in codes:
         for lang in ("it", "en"):
             rendered = render_procedure(f"{code} 11", lang)
             assert rendered != t("proc_unmapped", lang), f"{code}/{lang} has no phrase template"
+
+    glossary_review.REGISTER_PATH = saved
 
     # 6. dates
     assert format_date("2026-08-12", "it") == "12/08/2026"

@@ -72,7 +72,9 @@ MAC_LEN = 32
 NAME_PREFIX = "clinic-"
 SUFFIX = ".cbk"
 # stores, relative to the data root. the sqlite db is handled separately.
-FILE_STORES = ("sorted", "drop", "db/undo_log.jsonl")
+# staging/ holds uploads awaiting a dentist's review (POL-9): originals and
+# extractions that exist nowhere else
+FILE_STORES = ("sorted", "drop", "staging", "db/undo_log.jsonl")
 DB_REL = "db/clinic.sqlite"
 CHROMA_REL = "db/chroma"
 

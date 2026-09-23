@@ -187,6 +187,12 @@ def init_db(db_path):
     # next-visit summaries (P13). drafts for a dentist; versions append-only
     from visit_summary import SCHEMA as SUMMARY_SCHEMA
     conn.executescript(SUMMARY_SCHEMA)
+
+    # uploaded-note review (POL-9). existing visits are classified once and
+    # never rewritten; see note_review.classify_legacy
+    import note_review
+    conn.executescript(note_review.SCHEMA)
+    note_review.classify_legacy(conn)
     conn.commit()
     return conn
 
@@ -637,7 +643,15 @@ def note_is_synced(note, source_path, conn, collection):
     return len(chunk["ids"]) > 0
 
 
-def sync_note_file(json_path, sorted_root, conn, collection, role, username, target=None):
+def sync_note_file(json_path, sorted_root, conn, collection, role, username, target=None,
+                   review_method=None, review_id=None):
+    """The one road from a sorted note JSON into visits and the search index.
+
+    POL-9: a JSON that is not already a visit and was not written by a person's
+    confirm step (review_method) is not filed. It is staged for a dentist's
+    review and "staged" is returned. An existing visit keeps syncing as before,
+    so a repair of a half-written legacy note still works.
+    """
     json_path = Path(json_path)
     if target is None:
         target = str(json_path)
@@ -646,6 +660,16 @@ def sync_note_file(json_path, sorted_root, conn, collection, role, username, tar
     try:
         note = DentalNote.model_validate_json(json_path.read_text())
         source_path = str(json_path.relative_to(sorted_root))
+        is_visit = conn.execute("SELECT 1 FROM visits WHERE source_path = ?",
+                                (source_path,)).fetchone() is not None
+        if not is_visit and review_method is None:
+            if not authorize(role, "append_note"):
+                log_audit(conn, username, role, "append_note", target=note.codice_fiscale,
+                          allowed=0)
+                return "failed"
+            import note_review
+            note_review.stage(conn, json_path, username, role, target=target)
+            return "staged"
         before = note_is_synced(note, source_path, conn, collection)
         load_note(note, source_path, conn, collection, role, username)
         # check again after the write instead of trusting "no exception" -
@@ -663,10 +687,16 @@ def sync_note_file(json_path, sorted_root, conn, collection, role, username, tar
         return "failed"
 
     log_audit(conn, username, role, "sync_note", target, allowed=1)
+    if review_method is not None:
+        import note_review
+        visit_id = conn.execute("SELECT id FROM visits WHERE source_path = ?",
+                                (source_path,)).fetchone()[0]
+        note_review.mark_reviewed(conn, visit_id, review_method, username, review_id=review_id)
     return "already" if before else "landed"
 
 
-def save_new_note(note, conn, collection, role, username, sorted_root=Path("sorted")):
+def save_new_note(note, conn, collection, role, username, sorted_root=Path("sorted"),
+                  filename=None, review_method="typed", review_id=None):
     # web-entered note, gated the same way a watcher-loaded note is. load_note
     # checks the role too, but a denied role must not get a file written for
     # it first, so the check is repeated here.
@@ -678,21 +708,24 @@ def save_new_note(note, conn, collection, role, username, sorted_root=Path("sort
     # write the json file first - load_note/load_from_sorted assume it already
     # exists on disk, and this keeps a web-entered note indistinguishable from
     # a watcher-sorted one (same sorted/{cf}/notes tree, same file shape)
-    filename = "web-" + datetime.now().isoformat().replace(":", "") + ".json"
+    # web-*.json is the typed confirm path's own name, and nothing else writes
+    # it: note_review.classify_legacy relies on that. a confirmed upload is
+    # rev-<review id>.json
+    filename = filename or "web-" + datetime.now().isoformat().replace(":", "") + ".json"
     json_path = Path(sorted_root) / note.codice_fiscale / "notes" / filename
     json_path.parent.mkdir(parents=True, exist_ok=True)
     json_path.write_text(note.model_dump_json())
 
     # go through the shared path so this write gets the same verify-after-write
     # and the same sync_note outcome row as every other one (D-05)
-    return sync_note_file(json_path, sorted_root, conn, collection, role, username)
+    return sync_note_file(json_path, sorted_root, conn, collection, role, username,
+                          review_method=review_method, review_id=review_id)
 
 
 def load_from_sorted(sorted_root, conn, collection, role, username):
+    # through the same gate as everything else: an unreviewed note is staged
     for json_path in sorted(Path(sorted_root).glob("*/notes/*.json")):
-        note = DentalNote.model_validate_json(json_path.read_text())
-        source_path = str(json_path.relative_to(sorted_root))
-        load_note(note, source_path, conn, collection, role, username)
+        sync_note_file(json_path, sorted_root, conn, collection, role, username)
 
 
 def _clear_failed_sync(conn, json_path):
@@ -725,6 +758,10 @@ def backfill_sorted(sorted_root, conn, collection, dry_run=False):
             try:
                 note = DentalNote.model_validate_json(json_path.read_text())
                 source_path = str(json_path.relative_to(sorted_root))
+                if conn.execute("SELECT 1 FROM visits WHERE source_path = ?",
+                                (source_path,)).fetchone() is None:
+                    # POL-9: not a visit, so a real run would stage it for review
+                    continue
                 if note_is_synced(note, source_path, conn, collection):
                     already += 1
                 else:
@@ -735,6 +772,9 @@ def backfill_sorted(sorted_root, conn, collection, dry_run=False):
             outcome = sync_note_file(json_path, sorted_root, conn, collection, SYSTEM_ROLE, SYSTEM_USERNAME)
             if outcome == "failed":
                 failed.append(str(json_path))
+                continue
+            if outcome == "staged":
+                # POL-9: held for review, neither landed nor already there
                 continue
             if outcome == "landed":
                 landed += 1
@@ -750,7 +790,11 @@ def selftest():
     import tempfile
     from dental_notes_schema import Invoice
 
+    import note_review
+    saved_staging = note_review.STAGING_ROOT
     with tempfile.TemporaryDirectory() as tmp:
+        # POL-9 stages unreviewed notes; never into the repo's own staging/
+        note_review.STAGING_ROOT = Path(tmp) / "staging"
         conn = init_db(str(Path(tmp) / "clinic.sqlite"))
 
         tables = {row["name"] for row in conn.execute(
@@ -1002,23 +1046,16 @@ def selftest():
         load_from_sorted(sorted_root, conn2, collection2, role="dentist", username="test-dentist")
         load_from_sorted(sorted_root, conn2, collection2, role="dentist", username="test-dentist")
 
-        p_count = conn2.execute("SELECT COUNT(*) c FROM patients").fetchone()["c"]
+        # POL-9: none of these notes was confirmed by a person, so none is
+        # filed. each is staged once for review; the second walk finds nothing
         v_count = conn2.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"]
-        i_count = conn2.execute("SELECT COUNT(*) c FROM invoices").fetchone()["c"]
-        assert p_count == 2, f"6: expected 2 patients after 2 runs, got {p_count}"
-        assert v_count == 2, f"6: expected 2 visits after 2 runs, got {v_count}"
-        assert i_count == 1, f"6: expected 1 invoice after 2 runs, got {i_count}"
-        assert collection2.count() == 2, f"6: expected 2 chunks after 2 runs, got {collection2.count()}"
-
-        for cf_ in [cf, cf2]:
-            row = conn2.execute(
-                "SELECT codice_fiscale FROM patients WHERE codice_fiscale = ?", (cf_,)
-            ).fetchone()
-            hits = collection2.get(where={"codice_fiscale": cf_})
-            assert row is not None, f"6: sqlite missing patient {cf_}"
-            assert len(hits["ids"]) == 1, f"6: chroma missing chunk for {cf_}"
-            assert hits["metadatas"][0]["codice_fiscale"] == cf_, \
-                f"6: chroma metadata CF mismatch for {cf_}"
+        staged6 = conn2.execute("SELECT COUNT(*) c FROM note_reviews WHERE origin = 'upload'"
+                                " AND status = 'pending'").fetchone()["c"]
+        assert v_count == 0, f"6: AN UNREVIEWED NOTE WAS FILED ({v_count} visits)"
+        assert staged6 == 2, f"6: expected 2 notes staged once each, got {staged6}"
+        assert collection2.count() == 0, f"6: an unreviewed note became searchable"
+        for cf_, n in [(cf, note_a), (cf2, note_b)]:
+            (sorted_root / cf_ / "notes" / "n1.json").write_text(n.model_dump_json())
 
         # 6b. a role without append_note (admin, D-01) writes nothing when
         # loading the same tree, and every attempted note is denied + audited
@@ -1038,6 +1075,8 @@ def selftest():
             "SELECT * FROM audit_log WHERE action = 'append_note' AND allowed = 0"
         ).fetchall()
         assert len(denied_rows) == 2, f"6b: expected 2 denied append_note rows, got {len(denied_rows)}"
+        assert conn3.execute("SELECT COUNT(*) FROM note_reviews").fetchone()[0] == 0, \
+            "6b: a role without append_note staged a note"
 
         # 7. re-importing a note whose invoice list shrank drops the stale rows,
         # so lookup never returns invoice amounts that no longer exist
@@ -1151,7 +1190,10 @@ def selftest():
         json_path9.write_text(note9.model_dump_json())
         source_path9 = str(json_path9.relative_to(sorted_root))
 
-        result9 = sync_note_file(json_path9, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME)
+        # 9-9e test the sync mechanics of the path a person has confirmed (the
+        # typed note, a reviewed upload) - POL-9 stages anything else
+        result9 = sync_note_file(json_path9, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME,
+                                 review_method="typed")
         assert result9 == "landed", f"9: expected landed, got {result9}"
         assert lookup_patient(cf9, conn) is not None, "9: lookup_patient should find the synced patient"
         chunk_id9 = note_chunk_id(cf9, source_path9)
@@ -1170,7 +1212,8 @@ def selftest():
             f"9: expected 1 allowed append_note row from load_note, got {len(append_rows9)}"
 
         # 9b. same call repeated is idempotent - no duplicate visit row or chunk
-        result9b = sync_note_file(json_path9, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME)
+        result9b = sync_note_file(json_path9, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME,
+                                  review_method="typed")
         assert result9b == "already", f"9b: expected already, got {result9b}"
         assert collection9.count() == 1, f"9b: expected chroma count unchanged at 1, got {collection9.count()}"
         visits9b = conn.execute(
@@ -1191,7 +1234,8 @@ def selftest():
         json_path9c.write_text(note9c.model_dump_json())
         source_path9c = str(json_path9c.relative_to(sorted_root))
 
-        result9c = sync_note_file(json_path9c, sorted_root, conn, collection9, "admin", "test-admin-sync")
+        result9c = sync_note_file(json_path9c, sorted_root, conn, collection9, "admin", "test-admin-sync",
+                                  review_method="typed")
         assert result9c == "failed", f"9c: expected failed, got {result9c}"
         visits9c = conn.execute(
             "SELECT COUNT(*) c FROM visits WHERE source_path = ?", (source_path9c,)
@@ -1224,7 +1268,8 @@ def selftest():
         json_path9d.write_text(note9d.model_dump_json())
         source_path9d = str(json_path9d.relative_to(sorted_root))
 
-        result9d = sync_note_file(json_path9d, sorted_root, conn, _ChromaDownStub(), SYSTEM_ROLE, SYSTEM_USERNAME)
+        result9d = sync_note_file(json_path9d, sorted_root, conn, _ChromaDownStub(), SYSTEM_ROLE,
+                                  SYSTEM_USERNAME, review_method="typed")
         assert result9d == "failed", f"9d: expected failed, got {result9d}"
         sync_rows9d = conn.execute(
             "SELECT * FROM audit_log WHERE action = 'sync_note' AND allowed = 0 AND target = ?",
@@ -1252,7 +1297,8 @@ def selftest():
 
         target9e = f"sorted/{cf9e}/notes/whatever.txt"
         result9e = sync_note_file(
-            json_path9e, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME, target=target9e
+            json_path9e, sorted_root, conn, collection9, SYSTEM_ROLE, SYSTEM_USERNAME, target=target9e,
+            review_method="typed"
         )
         assert result9e == "landed", f"9e: expected landed, got {result9e}"
         sync_rows9e = conn.execute(
@@ -1276,12 +1322,18 @@ def selftest():
             notes_dir.mkdir(parents=True, exist_ok=True)
             (notes_dir / "n1.json").write_text(n.model_dump_json())
 
+        # POL-9: backfill is a repair of notes already in the record. a note
+        # that never became a visit is staged for review, not filed
         result10 = backfill_sorted(sorted_root10, conn10, collection10)
-        assert result10 == (2, 0, []), f"10: expected (2, 0, []), got {result10}"
+        assert result10 == (0, 0, []), f"10: expected (0, 0, []), got {result10}"
+        assert conn10.execute("SELECT COUNT(*) FROM visits").fetchone()[0] == 0, \
+            "10: BACKFILL FILED AN UNREVIEWED NOTE"
+        assert conn10.execute("SELECT COUNT(*) FROM note_reviews WHERE status = 'pending'"
+                              ).fetchone()[0] == 2, "10: expected both notes staged"
 
         result10_again = backfill_sorted(sorted_root10, conn10, collection10)
-        assert result10_again == (0, 2, []), f"10: expected (0, 2, []) on second run, got {result10_again}"
-        assert collection10.count() == 2, f"10: expected chroma count unchanged at 2, got {collection10.count()}"
+        assert result10_again == (0, 0, []), f"10: second run found work: {result10_again}"
+        assert collection10.count() == 0, f"10: an unreviewed note became searchable"
 
         # 10b. dry_run=True classifies would-land notes but writes nothing -
         # safe to run against the live clinic database
@@ -1296,7 +1348,9 @@ def selftest():
         (notes_dir10b / "n1.json").write_text(note10c_.model_dump_json())
 
         result10b = backfill_sorted(sorted_root10b, conn10b, collection10b, dry_run=True)
-        assert result10b == (1, 0, []), f"10b: expected (1, 0, []), got {result10b}"
+        # an unreviewed note would be staged, not landed, so it is not counted
+        assert result10b == (0, 0, []), f"10b: expected (0, 0, []), got {result10b}"
+        assert (notes_dir10b / "n1.json").exists(), "10b: a dry run moved a file"
 
         visits10b = conn10b.execute("SELECT COUNT(*) c FROM visits").fetchone()["c"]
         audit10b = conn10b.execute("SELECT COUNT(*) c FROM audit_log").fetchone()["c"]
@@ -1322,9 +1376,10 @@ def selftest():
         broken_path.write_text("not json at all")
 
         landed10c, already10c, failed10c = backfill_sorted(sorted_root10c, conn10c, collection10c)
-        assert landed10c == 1, f"10c: expected 1 landed note, got {landed10c}"
         assert str(broken_path) in failed10c, f"10c: expected broken path in failed list, got {failed10c}"
-        assert lookup_patient(cf10d, conn10c) is not None, "10c: the valid note in the same tree should still land"
+        assert conn10c.execute("SELECT COUNT(*) FROM note_reviews WHERE codice_fiscale = ?",
+                               (cf10d,)).fetchone()[0] == 1, \
+            "10c: the valid note in the same tree should still be handled (staged)"
 
         # 10d. a repair has to clear the uploader's "Not searchable" state. its
         # own outcome row is written as system, and the per-user intake list
@@ -1343,6 +1398,10 @@ def selftest():
 
         # the worker audits the routed .txt, which is what the badge reads
         txt_target10e = str(notes_dir10e / "n1.txt")
+        # a confirmed note that reached visits while the index was down: the
+        # repair case backfill exists for (POL-9 leaves it working)
+        sync_note_file(notes_dir10e / "n1.json", sorted_root10d, conn10d, _ChromaDownStub(),
+                       "dentist", "drossi", review_method="typed")
         log_audit(conn10d, "drossi", "dentist", "sync_note", txt_target10e, allowed=0)
 
         backfill_sorted(sorted_root10d, conn10d, collection10d)
@@ -1439,6 +1498,7 @@ def selftest():
         assert get_shared_collection(str(path11)) is rewritten, \
             "11d: an in-process write forced a rebuild of the shared handle"
 
+    note_review.STAGING_ROOT = saved_staging
     print("selftest ok")
 
 

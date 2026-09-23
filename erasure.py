@@ -97,6 +97,13 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             conn.execute("DELETE FROM visit_summary_versions WHERE summary_id IN"
                          " (SELECT id FROM visit_summaries WHERE patient_id = ?)", (pid,))
             conn.execute("DELETE FROM visit_summaries WHERE patient_id = ?", (pid,))
+        if _has(conn, "note_reviews"):
+            # POL-9: staged uploads and legacy review rows are clinical. a row
+            # may carry only the codice fiscale the model read, so both keys
+            conn.execute(f"DELETE FROM note_reviews WHERE patient_id = ? OR codice_fiscale IN"
+                         f" ({','.join('?' * len(keys))})", [pid] + keys)
+            conn.execute("DELETE FROM visit_reviews WHERE visit_id IN"
+                         " (SELECT id FROM visits WHERE patient_id = ?)", (pid,))
         if not hold_invoices and _has(conn, "billing_invoices"):
             # the ledger is fiscal: it goes only when invoices are not held
             conn.execute("DELETE FROM payment_allocations WHERE payment_id IN"
@@ -206,6 +213,28 @@ def _index(collection, pid, keys):
     return 0
 
 
+def _staging_dirs(conn, pid, keys):
+    """The staged folders and unreadable originals behind this patient's
+    review rows. Read BEFORE _sqlite deletes the rows that name them."""
+    if not _has(conn, "note_reviews"):
+        return []
+    rows = conn.execute(
+        f"SELECT staged_dir, original_path FROM note_reviews WHERE patient_id = ? OR"
+        f" codice_fiscale IN ({','.join('?' * len(keys))})", [pid] + list(keys)).fetchall()
+    return [r[0] or r[1] for r in rows if r[0] or r[1]]
+
+
+def _remove_staging(paths):
+    # only ever a staging folder or a needs_review file - a path from a row is
+    # data, and data does not get to name what rmtree removes
+    for raw in paths:
+        path = Path(raw)
+        if path.is_dir() and "staging" in path.parts:
+            shutil.rmtree(path)
+        elif path.is_file() and "needs_review" in path.parts:
+            path.unlink()
+
+
 def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     left = {}
     for table in ("consent_records", "appointments", "patient_credentials", "patient_sessions"):
@@ -219,6 +248,10 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     if _has(conn, "visit_summaries"):
         left["summaries"] = conn.execute("SELECT COUNT(*) FROM visit_summaries WHERE"
                                          " patient_id = ?", (pid,)).fetchone()[0]
+    if _has(conn, "note_reviews"):
+        left["note_reviews"] = conn.execute(
+            f"SELECT COUNT(*) FROM note_reviews WHERE patient_id = ? OR codice_fiscale IN"
+            f" ({','.join('?' * len(keys))})", [pid] + list(keys)).fetchone()[0]
     left["phone"] = conn.execute("SELECT COUNT(*) FROM patients WHERE patient_id = ?"
                                  " AND phone IS NOT NULL", (pid,)).fetchone()[0]
     left["audit_cf"] = sum(conn.execute("SELECT COUNT(*) FROM audit_log WHERE lower(target)"
@@ -263,7 +296,9 @@ def erase(conn, pid, actor, role, req_id, sorted_root=Path("sorted"), drop_dir=P
             (Path(exports_dir or data_rights.EXPORTS_DIR) / r[0]).unlink(missing_ok=True)
 
     held_types = holds(policy_path)
+    staged = _staging_dirs(conn, pid, keys)
     held = _sqlite(conn, pid, cf, sources, "invoices" in held_types)
+    _remove_staging(staged)
     _files(pid, keys, sorted_root, drop_dir, keep_records=held)
     _undo_log(undo_log, keys)
     _index(collection, pid, keys)

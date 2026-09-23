@@ -144,6 +144,12 @@
             <i class="bi bi-plug"></i> Outside connections
           </a>
           {% endif %}
+          {% if authorize(g.user.role, 'review_upload') %}
+          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('review.') else '' }}"
+             href="{{ url_for('review.queue') }}">
+            <i class="bi bi-clipboard-check"></i> Notes to review
+          </a>
+          {% endif %}
           {% if authorize(g.user.role, 'handle_handoff') %}
           <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('handoff.') else '' }}"
              href="{{ url_for('handoff.index') }}">

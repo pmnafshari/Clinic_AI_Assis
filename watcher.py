@@ -27,6 +27,15 @@ def sync_dropped(dest, sorted_root, log_path):
         return
     json_path = dest.with_suffix(".json")
     if not json_path.exists():
+        if "needs_review" in dest.parts and dest.exists():
+            # POL-9: recorded so a dentist can retry reading it
+            conn = storage.connect(DB_PATH)
+            try:
+                import note_review
+                note_review.record_failed(conn, dest, "needs_review", storage.SYSTEM_USERNAME,
+                                          storage.SYSTEM_ROLE)
+            finally:
+                conn.close()
         return
 
     conn = None
@@ -125,6 +134,10 @@ def selftest():
         log_path = str(root / "watch.log")
         db_path = str(root / "clinic.sqlite")
         storage.init_db(db_path).close()
+        # POL-9 stages notes for review; never into the repo's own staging/
+        import note_review
+        orig_staging = note_review.STAGING_ROOT
+        note_review.STAGING_ROOT = root / "staging"
 
         observer = None
         try:
@@ -177,7 +190,8 @@ def selftest():
                 time.sleep(0.1)
             assert routed_nested.exists(), "3: nested subfolder file not routed within 2 seconds"
 
-            # 4. a .txt present before start is routed and synced by the catch-up loop
+            # 4. a .txt present before start is routed by the catch-up loop and,
+            # POL-9, STAGED for a dentist's review - never filed by the watcher
             pre_note = stage / "note_pre.txt"
             pre_note.write_text("patient note")
             dest4 = route_file(pre_note, sorted_, log_path, extract=_extract)
@@ -190,17 +204,17 @@ def selftest():
             visit_row = conn.execute(
                 "SELECT 1 FROM visits WHERE source_path = ?", (source_path4,)
             ).fetchone()
-            assert visit_row is not None, "4: catch-up did not sync the pre-existing note"
+            assert visit_row is None, "4: THE WATCHER FILED AN UNREVIEWED NOTE"
             sync_row = conn.execute(
-                "SELECT * FROM audit_log WHERE action='sync_note' AND target=?", (str(json_path4),)
+                "SELECT * FROM audit_log WHERE action='note_staged' AND target=?", (str(json_path4),)
             ).fetchone()
-            assert sync_row is not None, "4: no sync_note row for the catch-up note"
+            assert sync_row is not None, "4: no note_staged row for the catch-up note"
             assert sync_row["username"] == "system", f"4: expected username=system, got {sync_row['username']}"
             assert sync_row["role"] == "system", f"4: expected role=system, got {sync_row['role']}"
             assert sync_row["allowed"] == 1, f"4: expected allowed=1, got {sync_row['allowed']}"
             conn.close()
 
-            # 4b. a .txt dropped while the observer is live is synced within the deadline poll
+            # 4b. a .txt dropped while the observer is live is staged within the deadline poll
             live_note = drop / "note_live.txt"
             live_note.write_text("patient note live")
 
@@ -210,27 +224,29 @@ def selftest():
                 conn = sqlite3.connect(db_path)
                 conn.row_factory = sqlite3.Row
                 sync_row_live = conn.execute(
-                    "SELECT * FROM audit_log WHERE action='sync_note' AND target LIKE ?",
+                    "SELECT * FROM audit_log WHERE action='note_staged' AND target LIKE ?",
                     (f"%{live_note.stem}%",),
                 ).fetchone()
                 conn.close()
                 if sync_row_live:
                     break
                 time.sleep(0.1)
-            assert sync_row_live is not None, "4b: live-dropped note not synced within deadline"
+            assert sync_row_live is not None, "4b: live-dropped note not staged within deadline"
             assert sync_row_live["username"] == "system", "4b: live sync not attributed to system"
 
             # 4c. the .jpg from block 2 produced no sync_note row (D-09)
             conn = sqlite3.connect(db_path)
             conn.row_factory = sqlite3.Row
             jpg_sync = conn.execute(
-                "SELECT 1 FROM audit_log WHERE action='sync_note' AND target LIKE ?",
-                (f"%{new_file.name}%",),
+                "SELECT 1 FROM audit_log WHERE action IN ('sync_note', 'note_staged')"
+                " AND target LIKE ?", (f"%{new_file.name}%",),
             ).fetchone()
             assert jpg_sync is None, "4c: .jpg produced a sync_note row"
             conn.close()
 
-            # 5. sync failure -> a log.txt line, sync_dropped does not raise
+            # 5. POL-9: staging never touches the search index, so an index that
+            # fails its upsert does not stop a note being held for review, and
+            # sync_dropped does not raise
             class _FailingCollection:
                 def upsert(self, **kwargs):
                     raise RuntimeError("upsert boom")
@@ -248,9 +264,11 @@ def selftest():
             finally:
                 storage.get_shared_collection = orig_get_shared_collection
 
-            with open(log_path) as f:
-                log_text = f.read()
-            assert "sync failed" in log_text, "5: log.txt has no 'sync failed' line"
+            conn = sqlite3.connect(db_path)
+            staged5 = conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'note_staged'"
+                                   " AND target LIKE '%note_fail%'").fetchone()[0]
+            conn.close()
+            assert staged5 == 1, "5: the note was not staged while the index was down"
 
             # 6. a route failure the sorter does not catch must be logged and
             # swallowed, not raised into watchdog's dispatcher thread
@@ -288,6 +306,7 @@ def selftest():
                 observer.stop()
                 observer.join()
             DB_PATH, CHROMA_PATH, _extract = orig_db_path, orig_chroma_path, orig_extract
+            note_review.STAGING_ROOT = orig_staging
 
     print("selftest ok")
 

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+{% set r = view.review %}
+{% set x = view.extraction %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('review.queue') }}">Notes to review</a></li>
+    <li aria-current="page">Note {{ r.id }}</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{{ view.patient.patient_name if view.patient else 'Patient not identified' }}</p>
+    <h1 class="ds-page-title">{{ 'Earlier note' if r.origin == 'legacy' else 'Uploaded note' }}</h1>
+    <p class="ds-page-meta">{% if view.patient %}<span class="font-monospace">{{ view.patient.codice_fiscale }}</span> · {% endif %}{{ r.status.replace('_', ' ') }}</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-warning mb-3" role="note">
+  <div><strong class="ds-alert-title">Not part of the record yet</strong>
+  {% if r.origin == 'legacy' %}This note was filed before uploads were reviewed. It stays in the record either way; confirming it lets summaries use it.
+  {% else %}This is the model's reading of an upload. Check it against the original, correct it, then confirm or reject.{% endif %}
+  Shorthand codes are shown exactly as written and are <strong>not interpreted</strong>: {{ pending }} of {{ codes }} glossary codes await clinical approval.</div>
+</div>
+
+{% if view.original is not none %}
+<section class="card dash-card mb-3" aria-labelledby="orig-title">
+  <div class="dash-card-head"><div>
+    <h2 class="ds-card-title" id="orig-title">Original, as uploaded</h2>
+    <p class="ds-card-sub">{{ r.original_name }}{% if r.original_sha256 %} · sha256 {{ r.original_sha256[:12] }}{% endif %}</p>
+  </div></div>
+  <div class="dash-card-body"><pre class="text-break mb-0" style="white-space: pre-wrap">{{ view.original }}</pre></div>
+</section>
+{% endif %}
+
+{% if r.origin == 'legacy' and view.visit %}
+<section class="card dash-card mb-3" aria-labelledby="visit-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="visit-title">As filed</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Date</span><span class="ds-row-title">{{ view.visit.visit_date or 'no date' }}</span></span></li>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Procedures, as written</span><span class="ds-row-title">{{ view.visit.procedures }}</span></span></li>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Note</span><span class="ds-row-title text-break">{{ view.visit.clinical_notes or 'no note text' }}</span></span></li>
+  </ul></div>
+</section>
+{% endif %}
+
+{% if r.status == 'pending' %}
+<section class="card dash-card mb-3" aria-labelledby="review-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="review-title">Review</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('review.confirm', review_id=r.id) }}" class="mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      {% if r.origin == 'upload' and x %}
+      <div class="row g-3">
+        <div class="col-12 col-md-4">
+          <label for="visit_date" class="form-label">Visit date</label>
+          <input id="visit_date" name="visit_date" class="form-control" value="{{ x.visit_date or '' }}">
+        </div>
+        <div class="col-12 col-md-8">
+          <label for="procedures" class="form-label">Procedures, as extracted (not interpreted)</label>
+          <input id="procedures" name="procedures" class="form-control" value="{{ (x.procedures or []) | join(', ') }}">
+        </div>
+        <div class="col-12">
+          <label for="clinical_notes" class="form-label">Note</label>
+          <textarea id="clinical_notes" name="clinical_notes" rows="4" class="ds-textarea">{{ x.clinical_notes or '' }}</textarea>
+        </div>
+        <div class="col-12 col-md-6">
+          <label for="next_appointment" class="form-label">Next appointment, as written</label>
+          <input id="next_appointment" name="next_appointment" class="form-control" value="{{ x.next_appointment or '' }}">
+        </div>
+      </div>
+      <p class="dash-empty-line mt-2">Filed under {{ view.patient.patient_name if view.patient else x.patient_name }} (<span class="font-monospace">{{ x.codice_fiscale }}</span>). The patient cannot be changed here: if it is wrong, reject it and upload it again under the right record.</p>
+      {% endif %}
+      <button class="btn btn-primary btn-sm mt-2" type="submit">Confirm</button>
+    </form>
+    <form method="post" action="{{ url_for('review.reject', review_id=r.id) }}" class="d-flex gap-2 align-items-end flex-wrap">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div>
+        <label for="reason" class="form-label">Reason</label>
+        <input id="reason" name="reason" class="form-control form-control-sm" maxlength="500">
+      </div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
+    </form>
+  </div>
+</section>
+{% elif r.status == 'extraction_failed' %}
+<section class="card dash-card mb-3" aria-labelledby="retry-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="retry-title">Could not be read</h2></div>
+  <div class="dash-card-body">
+    <p class="dash-empty-line">{{ r.extraction_error or 'no reason recorded' }} · {{ r.attempts }} retr{{ 'y' if r.attempts == 1 else 'ies' }} so far. A retry reads the original again on this machine; a success waits here for review, it is never filed.</p>
+    <div class="d-flex gap-2 flex-wrap align-items-end">
+      <form method="post" action="{{ url_for('review.retry', review_id=r.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-primary btn-sm" type="submit">Read it again</button>
+      </form>
+      <form method="post" action="{{ url_for('review.reject', review_id=r.id) }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div>
+          <label for="reason_f" class="form-label">Reason</label>
+          <input id="reason_f" name="reason" class="form-control form-control-sm" maxlength="500">
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% else %}
+<p class="dash-empty-line">{{ r.status | capitalize }}{% if r.decided_by %} by {{ r.decided_by }}{% endif %}{% if r.decision_reason %} · {{ r.decision_reason }}{% endif %}.</p>
+{% endif %}
+{% endblock %}

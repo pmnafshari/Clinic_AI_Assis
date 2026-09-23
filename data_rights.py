@@ -19,6 +19,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import clinic_time
+import visit_summary
 from auth import authorize, log_audit
 
 EXPORTS_DIR = Path(__file__).resolve().with_name("exports")
@@ -167,6 +168,9 @@ def patient_data(conn, pid):
         "requests": _rows(conn, "SELECT kind, status, requested_at, reviewed_at, reason,"
                                 " hold_reason FROM data_requests WHERE patient_id = ?"
                                 " ORDER BY id", pid),
+        # POL-10, a demo decision: only the current clinician-approved summary,
+        # unchanged since approval; None otherwise. see visit_summary.exportable
+        "next_visit_summary": visit_summary.exportable(conn, pid),
     }
 
 

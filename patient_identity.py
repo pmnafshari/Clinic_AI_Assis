@@ -231,7 +231,9 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 # must not keep an independent way to sign in. it is revoked instead.
 # visit_summaries (P13) move with the visits they cite. a moved summary then
 # reads as outdated, because the survivor's notes are not what it was made from
-MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries")
+# note_reviews (POL-9) move too: a note waiting for review belongs to the survivor
+MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries",
+                   "note_reviews")
 
 # Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
 # on `patient_merges.source_cf` because resolving an OLD one is that table's

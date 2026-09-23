@@ -11,7 +11,7 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers", "review_summary"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers", "review_summary", "review_upload"},
     "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
@@ -40,6 +40,8 @@ PERMISSIONS = {
     # SWITCH - stopping the outside world is reception's to do without asking.
     # manage_providers, the dentist's alone, is what RE-ARMS it. admin holds
     # neither: the operator screen names patients in its error list.
+    # uploaded-note review (POL-9): review_upload is the dentist's alone -
+    # confirming a note is what makes it part of the clinical record.
     # summaries (P13): review_summary is the dentist's alone. a next-visit
     # summary is clinical content, read and approved by the role that already
     # holds read_clinical. reception and admin hold nothing here.
@@ -120,6 +122,11 @@ ROUTE_POLICY = {
     "providers.index": "view_providers",
     "providers.kill": "view_providers",
     "providers.rearm": "manage_providers",
+    "review.queue": "review_upload",
+    "review.detail": "review_upload",
+    "review.confirm": "review_upload",
+    "review.reject": "review_upload",
+    "review.retry": "review_upload",
     "summary.page": "review_summary",
     "summary.generate": "review_summary",
     "summary.regenerate": "review_summary",

@@ -139,6 +139,9 @@ def _intake_state(row):
     target = row["target"] or ""
     if row["action"] == "queue_upload":
         return "queued"
+    if row["action"] == "note_staged":
+        # POL-9: read by the model, not yet confirmed by a dentist
+        return "awaiting_review"
     if target.startswith("routed by watcher:"):
         return "external"
     if "needs_review" in Path(target).parts[:-1]:
@@ -172,7 +175,8 @@ def _user_recent_intake(conn, username, limit=10):
     # of what any real account happens to be named.
     rows = conn.execute(
         "SELECT ts, target, action, allowed, reason FROM audit_log"
-        " WHERE username = ? AND action IN ('queue_upload', 'upload_file', 'sync_note')"
+        " WHERE username = ? AND action IN ('queue_upload', 'upload_file', 'sync_note',"
+        " 'note_staged')"
         " AND role != 'system' AND target IS NOT NULL"
         " ORDER BY id DESC LIMIT ?",
         (username, limit * 3),

@@ -40,6 +40,7 @@ import sqlite3
 import sys
 import auth
 import patient_id
+import note_review
 import visit_summary
 import tempfile
 from pathlib import Path
@@ -97,6 +98,8 @@ ROLE_PAGES = {
         ("providers", "/providers"),
         # P13: a draft next-visit summary, dentist only
         ("summary", f"/patients/{CF}/summary"),
+        # POL-9: the review queue. seed() appends the one review it makes
+        ("reviews", "/reviews"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -156,6 +159,20 @@ def seed():
                      (pid, day, procs, note, f"{CF}/notes/zzs_shot{n}.json"))
     conn.commit()
     conn.row_factory = sqlite3.Row
+    # POL-9: the first two stand for confirmed notes; a third is an earlier,
+    # unreviewed note, so the review pages render with something in them
+    for vid, in conn.execute("SELECT id FROM visits WHERE patient_id = ?", (pid,)).fetchall():
+        note_review.mark_reviewed(conn, vid, "typed", "zzs_dentist")
+    legacy_visit = conn.execute(
+        "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+        " VALUES (?, '2025-11-11', '[\"prophy\"]', 'pulizia', ?)",
+        (pid, f"{CF}/notes/zzs_shot_legacy.json")).lastrowid
+    review_id = conn.execute(
+        "INSERT INTO note_reviews (origin, status, patient_id, visit_id, created_by, created_at)"
+        " VALUES ('legacy', 'pending', ?, ?, 'system', '2026-09-23T08:00:00+00:00')",
+        (pid, legacy_visit)).lastrowid
+    conn.commit()
+    ROLE_PAGES["dentist"].append(("review-detail", f"/reviews/{review_id}"))
     visit_summary.generate(conn, pid, "zzs_dentist", "dentist")
     conn.close()
 
@@ -174,6 +191,9 @@ def cleanup():
                      " (SELECT id FROM visit_summaries WHERE patient_id = ?)", (pid,))
         conn.execute("DELETE FROM visit_summaries WHERE patient_id = ?", (pid,))
         conn.execute("DELETE FROM audit_unlock")
+        conn.execute("DELETE FROM note_reviews WHERE patient_id = ?", (pid,))
+        conn.execute("DELETE FROM visit_reviews WHERE visit_id IN"
+                     " (SELECT id FROM visits WHERE patient_id = ?)", (pid,))
         conn.execute("COMMIT")
         for table in ("invoices", "visits"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id = ?", (pid,))

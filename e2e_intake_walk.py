@@ -2,7 +2,11 @@
 
 closes FLOW-2: eval_notes.py scores the model against a jsonl file and the fast
 suite stubs it entirely. neither has ever put a note through
-upload -> drop -> worker -> sort_files -> dental-notes -> sqlite. this does.
+upload -> drop -> worker -> sort_files -> dental-notes -> review -> sqlite. this does.
+
+POL-9 (2026-09-23): an upload is staged for a dentist's review and never filed
+on its own. the extraction checks read the staged extraction; a dentist then
+confirms one note in the browser, and only that one reaches visits.
 
 also the first live check of phase 23's needs_review badge, which until now was
 only exercised through the flask test client.
@@ -107,7 +111,16 @@ def seed(tmpdir):
 
 def cleanup():
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     marks = ",".join("?" * len(ALL_CFS))
+    # POL-9: this walk's staged uploads - their folders first, then the rows.
+    # the unreadable note has no codice fiscale, so it is found by uploader
+    staged = conn.execute(
+        f"SELECT staged_dir FROM note_reviews WHERE codice_fiscale IN ({marks})"
+        f" OR created_by = ?", ALL_CFS + (STAFF_USER,)).fetchall()
+    for row in staged:
+        if row["staged_dir"] and "staging" in Path(row["staged_dir"]).parts:
+            shutil.rmtree(row["staged_dir"], ignore_errors=True)
     # child-first. no try/except: a delete that cannot run is a cleanup that
     # did not happen and it should be loud.
     # child tables are keyed on the surrogate since Phase 51; `patients` is
@@ -116,8 +129,17 @@ def cleanup():
         f"SELECT patient_id FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS)]
     if pids:
         pmarks = ",".join("?" * len(pids))
+        # billing_* since P07: a filed note with an invoice line makes a ledger
+        # invoice. this cleanup predated it and left one orphan row per run
+        # (found 2026-09-23, 7 rows). child-first, like everything here.
+        conn.execute(f"DELETE FROM billing_events WHERE patient_id IN ({pmarks})", pids)
+        conn.execute(f"DELETE FROM billing_invoices WHERE patient_id IN ({pmarks})", pids)
+        conn.execute(f"DELETE FROM visit_reviews WHERE visit_id IN"
+                     f" (SELECT id FROM visits WHERE patient_id IN ({pmarks}))", pids)
         for table in ("invoices", "visits"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
+    conn.execute(f"DELETE FROM note_reviews WHERE codice_fiscale IN ({marks}) OR created_by = ?",
+                 ALL_CFS + (STAFF_USER,))
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS)
     conn.execute("DELETE FROM users WHERE username = ?", (STAFF_USER,))
     conn.commit()
@@ -134,6 +156,12 @@ def cleanup():
     left = conn.execute(
         f"SELECT COUNT(*) FROM patients WHERE codice_fiscale IN ({marks})", ALL_CFS
     ).fetchone()[0]
+    left += conn.execute(
+        f"SELECT COUNT(*) FROM note_reviews WHERE codice_fiscale IN ({marks}) OR created_by = ?",
+        ALL_CFS + (STAFF_USER,)).fetchone()[0]
+    if pids:
+        left += conn.execute(f"SELECT COUNT(*) FROM billing_invoices WHERE patient_id IN"
+                             f" ({','.join('?' * len(pids))})", pids).fetchone()[0]
     audit_left = conn.execute(f"SELECT COUNT(*) FROM audit_log WHERE {where}", params).fetchone()[0]
     conn.close()
 
@@ -166,19 +194,29 @@ def cleanup():
 
 
 def procedures_for(cf, deadline):
+    """The model's extraction for this note, as staged for review (POL-9)."""
     while time.time() < deadline:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         row = conn.execute(
-            "SELECT v.procedures FROM visits v JOIN patients p ON p.patient_id = v.patient_id"
-            " WHERE p.codice_fiscale = ? ORDER BY v.id DESC LIMIT 1",
+            "SELECT extraction FROM note_reviews WHERE codice_fiscale = ? AND origin = 'upload'"
+            " AND extraction IS NOT NULL ORDER BY id DESC LIMIT 1",
             (cf,),
         ).fetchone()
         conn.close()
         if row:
-            return json.loads(row["procedures"])
+            return json.loads(row["extraction"])["procedures"]
         time.sleep(0.25)
     return None
+
+
+def walk_visits():
+    conn = sqlite3.connect(DB_PATH)
+    marks = ",".join("?" * len(ALL_CFS))
+    n = conn.execute(f"SELECT COUNT(*) FROM visits v JOIN patients p ON p.patient_id ="
+                     f" v.patient_id WHERE p.codice_fiscale IN ({marks})", ALL_CFS).fetchone()[0]
+    conn.close()
+    return n
 
 
 def upload_audit_count(deadline, want):
@@ -350,6 +388,10 @@ def walk(browser, note_paths):
           not any(p.startswith("igiene") for p in igm_l),
           f"got {igm} - a raw italian term here is the pre-2026-09-06 defect returning")
 
+    # POL-9: six notes read, none filed. nothing reaches visits before review
+    check("5d nothing is filed before a dentist reviews it",
+          walk_visits() == 0, f"{walk_visits()} visit row(s) for the walk's patients")
+
     # case 6: unreadable note -> needs_review -> phase 23's badge
     row = needs_review_row(deadline)
     check("5 unreadable note routed to needs_review",
@@ -389,6 +431,35 @@ def walk(browser, note_paths):
           bad_row and "Needs Review" in bad_row and ">Sorted<" not in bad_row,
           f"row found={bool(bad_row)}, badge={found_badge.group(1).strip() if found_badge else None!r},"
           f" url={page.url}")
+    rct_row = ""
+    for chunk in body.split("list-group-item"):
+        if "zzi_rct.txt" in chunk:
+            rct_row = chunk
+            break
+    check("8b a readable note shows Awaiting review, not Sorted",
+          "Awaiting review" in rct_row and ">Sorted<" not in rct_row,
+          f"row found={bool(rct_row)}")
+
+    # POL-9 end to end: the dentist opens the queue, confirms one note, and only
+    # that note becomes a visit. the rest stay waiting.
+    conn = sqlite3.connect(DB_PATH)
+    rid = conn.execute("SELECT id FROM note_reviews WHERE codice_fiscale = ? AND status ="
+                       " 'pending'", (CF_RCT,)).fetchone()
+    failed_row = conn.execute("SELECT status FROM note_reviews WHERE created_by = ? AND"
+                              " original_name = ?", (STAFF_USER, BAD_NOTE_NAME)).fetchone()
+    conn.close()
+    check("8c the unreadable note waits as could-not-be-read",
+          failed_row is not None and failed_row[0] == "extraction_failed", f"{failed_row}")
+    page.goto(f"{STAFF_URL}/reviews")
+    check("10 the review queue lists the uploads", "Notes to review" in page.content(), page.url)
+    if rid:
+        page.goto(f"{STAFF_URL}/reviews/{rid[0]}")
+        check("10b the original text is shown beside the extraction",
+              "devitalizzazione dente 46" in page.content(), page.url)
+        page.locator('form[action$="/confirm"] button[type="submit"]').click()
+        page.wait_for_load_state("networkidle")
+    check("11 one confirmed note becomes one visit", walk_visits() == 1,
+          f"{walk_visits()} visit row(s) after confirming one note")
     page.close()
 
 

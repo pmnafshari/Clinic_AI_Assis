@@ -31,6 +31,8 @@ notes_raw.jsonl
 # runtime output
 log.txt
 sorted/
+# uploads awaiting a dentist's review (POL-9): originals and extractions
+staging/
 # encrypted backups (backup.py) - never committed, even encrypted
 backups/
 *.cbk

@@ -100,6 +100,12 @@ def _seed(db_path, root):
     conn.execute("INSERT INTO visit_summary_versions (summary_id, version, kind, body, created_by,"
                  " created_at) VALUES (?, 1, 'generated', '{\"lines\": []}', 'rb_dentist',"
                  " '2026-09-23T06:00:00+00:00')", (sid,))
+    # a legacy note awaiting review, the state the review routes act on (POL-9)
+    review_id = conn.execute(
+        "INSERT OR IGNORE INTO note_reviews (origin, status, patient_id, visit_id, created_by,"
+        " created_at) VALUES ('legacy', 'pending', ?, ?, 'system', '2026-09-23T06:00:00+00:00')",
+        (pid, visit_id)).lastrowid or conn.execute(
+        "SELECT id FROM note_reviews WHERE visit_id = ?", (visit_id,)).fetchone()[0]
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -108,7 +114,7 @@ def _seed(db_path, root):
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
-            "handoff_id": handoff_id, "kind": "messaging", "sid": sid,
+            "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id,
             "username": "rb_target", "filename": "app.css"}
 
 

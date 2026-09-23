@@ -21,13 +21,32 @@ ROOT = Path(__file__).resolve().parent
 D, A, ADM = ("drossi", "dentist"), ("aassist", "assistant"), ("anadmin", "admin")
 
 
-def add_visit(conn, pid, source, visit_date=None, procedures=(), notes="", next_appt=None):
+def add_visit(conn, pid, source, visit_date=None, procedures=(), notes="", next_appt=None,
+              reviewed=True):
+    """A visit a person has confirmed, unless reviewed=False (POL-9)."""
     cur = conn.execute(
         "INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
         " next_appointment, source_path) VALUES (?, ?, ?, ?, ?, ?)",
         (pid, visit_date, json.dumps(list(procedures)), notes, next_appt, source))
     conn.commit()
+    if reviewed:
+        import note_review
+        note_review.mark_reviewed(conn, cur.lastrowid, "typed", "drossi")
     return cur.lastrowid
+
+
+def approved_register(tmp, codes):
+    """A throwaway glossary register approving `codes`, for the checks that
+    need an approved entry. The real register is never touched."""
+    import glossary_review
+    path = Path(tmp) / f"register-{'-'.join(sorted(codes)) or 'none'}.json"
+    raw = (ROOT / "dental_shorthand_glossary.json").read_bytes()
+    path.write_text(json.dumps({
+        "glossary_sha256": hashlib.sha256(raw).hexdigest(), "clinical_owner": "fixture",
+        "entries": {c: {"status": "approved", "approved_by": "fixture",
+                        "approved_at": "2026-09-23"} for c in codes}}))
+    glossary_review.REGISTER_PATH = path
+    return path
 
 
 def visits_hash(conn):
@@ -105,9 +124,30 @@ def domain(tmp):
     assert any(a3 in l["sources"] and "no procedures" in l["text"] for l in gaps), gaps
     assert any(a3 in l["sources"] and "no note text" in l["text"] for l in gaps), gaps
 
-    # 5. contradictory notes are shown: tooth 21 extracted, then filled
+    # 5. POL-11: 'ext' is a pending glossary code, so nothing may read it as
+    # "extracted". no contradiction is inferred from it, and the summary says
+    # the codes are shown as written, uninterpreted
     conflicts = [l for l in lines if l["kind"] == "conflict"]
-    assert any({a1, a2} <= set(l["sources"]) and "21" in l["text"] for l in conflicts), conflicts
+    assert not conflicts, f"5: A PENDING CODE WAS INTERPRETED: {conflicts}"
+    assert any(l["kind"] == "gap" and "not interpreted" in l["text"] for l in lines), lines
+    assert "ext 21" in text, "5: the shorthand is not shown verbatim"
+    # once a clinical owner has approved 'ext', the same notes do show it
+    import glossary_review
+    saved_register = glossary_review.REGISTER_PATH
+    try:
+        approved_register(tmp, ["ext"])
+        conflicts = [l for l in vs.extractive(vs.sources(conn, anna)) if l["kind"] == "conflict"]
+        assert any({a1, a2} <= set(l["sources"]) and "21" in l["text"] for l in conflicts), conflicts
+        # a register naming nobody, or made against another glossary, approves nothing
+        reg = json.loads(glossary_review.REGISTER_PATH.read_text())
+        for broken in ({**reg, "clinical_owner": ""}, {**reg, "glossary_sha256": "0" * 64},
+                       {**reg, "entries": {"ext": {"status": "approved"}}}):
+            glossary_review.REGISTER_PATH.write_text(json.dumps(broken))
+            assert not glossary_review.approved("ext"), f"5: approved by {broken}"
+            assert not [l for l in vs.extractive(vs.sources(conn, anna)) if l["kind"] == "conflict"]
+    finally:
+        glossary_review.REGISTER_PATH = saved_register
+    assert not glossary_review.approved("ext"), "5: the real register approves nothing"
 
     # 6. traceability: sources carry id, date, file and who filed it, and an
     # unknown filer is said to be unknown rather than guessed
@@ -325,15 +365,109 @@ def domain(tmp):
     conn.close()
 
 
+def export_policy(tmp):
+    """POL-10: what a patient's data export may carry."""
+    import data_rights
+    import erasure
+    import patient_identity
+    from storage import init_db
+    conn = init_db(str(Path(tmp) / "export.sqlite"))
+    t0 = clinic_time.read_instant("2026-09-23T08:00:00+00:00")
+    anna = patient_id.seed_patient(conn, "ZZEA000000000001", "Anna Export")
+    bruno = patient_id.seed_patient(conn, "ZZEB000000000002", "Bruno Export")
+    a1 = add_visit(conn, anna, "ZZEA000000000001/notes/e1.json", "2026-02-02", ["prophy"],
+                   "pulizia")
+    add_visit(conn, bruno, "ZZEB000000000002/notes/e2.json", "2026-02-03", ["rct 26"], "rct 26")
+    summary = lambda pid: data_rights.patient_data(conn, pid)["next_visit_summary"]
+
+    # 28. nothing unreviewed leaves: a draft, then a rejected draft
+    sid = vs.generate(conn, anna, *D, now=t0)
+    assert summary(anna) is None, "28: a DRAFT reached the patient's export"
+    vs.reject(conn, sid, anna, *D, reason="r", now=t0)
+    assert summary(anna) is None, "28: a REJECTED summary reached the export"
+
+    # 29. the approved one leaves, with its provenance and nothing internal
+    sid = vs.generate(conn, anna, *D, now=t0)
+    vs.approve(conn, sid, anna, *D, now=t0)
+    out = summary(anna)
+    assert out and out["approved_by"] == "drossi" and out["approved_at"] and out["version"] == 1
+    assert out["source_visits"] == [{"id": a1, "visit_date": "2026-02-02"}], out["source_visits"]
+    assert out["lines"] and all(isinstance(l, str) for l in out["lines"])
+    blob = json.dumps(out)
+    for internal in ("flags", "fingerprint", "audit", "decision_reason", "created_by", "[#"):
+        assert internal not in blob or internal == "[#", f"29: export carries {internal!r}"
+    assert "diagnosis" in out["notice"], "29: the export does not say what it is not"
+
+    # 30. superseded: a newer approval replaces it, and only the newer one leaves
+    sid2 = vs.generate(conn, anna, *D, now=t0)
+    vs.edit(conn, sid2, anna, f"2026-02-02: procedures prophy [#{a1}]", *D, now=t0)
+    vs.approve(conn, sid2, anna, *D, now=t0)
+    assert conn.execute("SELECT status FROM visit_summaries WHERE id = ?",
+                        (sid,)).fetchone()[0] == "superseded"
+    assert summary(anna)["version"] == 2, "30: a superseded summary was exported"
+
+    # 31. approved with a line the notes do not support: not exported
+    sid3 = vs.generate(conn, anna, *D, now=t0)
+    vs.edit(conn, sid3, anna, "a line of my own with no source", *D, now=t0)
+    vs.approve(conn, sid3, anna, *D, now=t0)
+    assert summary(anna) is None, "31: an UNSUPPORTED approved summary was exported"
+
+    # 32. outdated: the notes change after approval and it stops leaving
+    sid4 = vs.generate(conn, anna, *D, now=t0)
+    vs.approve(conn, sid4, anna, *D, now=t0)
+    assert summary(anna) is not None
+    conn.execute("UPDATE visits SET clinical_notes = 'pulizia e lucidatura' WHERE id = ?", (a1,))
+    conn.commit()
+    assert summary(anna) is None, "32: a STALE summary was exported"
+
+    # 33. cross-patient: bruno's export never carries anna's, and bruno has none
+    assert summary(bruno) is None, "33: bruno's export carries a summary he does not have"
+    bsid = vs.generate(conn, bruno, *D, now=t0)
+    vs.approve(conn, bsid, bruno, *D, now=t0)
+    assert "e1" not in json.dumps(summary(bruno)) and summary(bruno)["source_visits"][0]["id"] != a1
+
+    # 34. unauthorized: only a dentist may approve an export request at all,
+    # and only a dentist may approve the summary it would carry
+    conn.execute("INSERT INTO data_requests (patient_id, kind, requested_by, requested_role,"
+                 " requested_at) VALUES (?, 'export', ?, 'patient', ?)",
+                 (bruno, bruno, "2026-09-23T08:00:00+00:00"))
+    conn.commit()
+    rid = conn.execute("SELECT MAX(id) FROM data_requests").fetchone()[0]
+    ok, _msg = data_rights.review(conn, rid, True, "aassist", "assistant", "", 
+                                  sorted_root=Path(tmp) / "s", exports_dir=Path(tmp) / "x")
+    assert not ok, "34: reception approved an export"
+    try:
+        vs.approve(conn, bsid, bruno, *A, now=t0)
+        raise AssertionError("34: reception approved a summary")
+    except PermissionError:
+        pass
+
+    # 35. merged: anna's summary moves to bruno and is outdated there, so it
+    # does not leave in either export
+    ok, _ = patient_identity.merge(conn, "ZZEA000000000001", "ZZEB000000000002", *ADM)
+    assert ok, _
+    assert summary(bruno) is None, "35: a merged, outdated summary was exported"
+
+    # 36. erased: nothing left to export
+    erasure._sqlite(conn, bruno, "ZZEB000000000002", ["ZZEA000000000001"], False)
+    assert summary(bruno) is None
+    assert conn.execute("SELECT COUNT(*) FROM visit_summaries").fetchone()[0] == 0, "36"
+    conn.close()
+
+
 def exposure():
     # 19. drafts reach nowhere but the dentist's page: no patient, public,
     # phone, reminder, chat, search or export code refers to them
     for path in [*ROOT.glob("patient_app/*.py"), *ROOT.glob("site_app/*.py"),
                  ROOT / "calls.py", ROOT / "reminders.py", ROOT / "reminder_job.py",
-                 ROOT / "patient_accessor.py", ROOT / "data_rights.py", ROOT / "ask.py",
+                 ROOT / "patient_accessor.py", ROOT / "ask.py",
                  ROOT / "agent.py", ROOT / "patient_agent.py"]:
         text = path.read_text()
         assert "visit_summar" not in text, f"19: {path.name} refers to summaries"
+    # the export is the one exception (POL-10), and it may reach summaries only
+    # through exportable(), which holds the approved-and-current rule
+    refs = re.findall(r"visit_summary\.(\w+)", (ROOT / "data_rights.py").read_text())
+    assert set(refs) == {"exportable"}, f"19: data_rights reaches summaries through {refs}"
 
     # 20. the agent's tools are the reviewed four; no shell, no sql, no summary
     import agent
@@ -448,6 +582,7 @@ def r1_id(conn, pid):
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         domain(tmp)
+        export_policy(tmp)
         exposure()
         routes(tmp)
     print("selftest ok")

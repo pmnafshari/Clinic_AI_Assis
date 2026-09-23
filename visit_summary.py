@@ -110,14 +110,18 @@ class SummaryFailed(SummaryError):
 # --- sources ---------------------------------------------------------------
 
 def _visit_rows(conn, pid):
+    """The visits a person has confirmed (POL-9). An upload awaiting review, a
+    rejected one, and a legacy note nobody has confirmed are not sources."""
     return conn.execute(
-        "SELECT id, visit_date, procedures, clinical_notes, next_appointment, source_path"
-        " FROM visits WHERE patient_id = ? ORDER BY id", (pid,)).fetchall()
+        "SELECT v.id, v.visit_date, v.procedures, v.clinical_notes, v.next_appointment,"
+        " v.source_path, r.method FROM visits v JOIN visit_reviews r ON r.visit_id = v.id"
+        " WHERE v.patient_id = ? ORDER BY v.id", (pid,)).fetchall()
 
 
 def fingerprint(conn, pid):
-    """Every visit the patient has, as it is now. A summary whose fingerprint
-    differs was made from notes that have since changed, or been added to."""
+    """Every confirmed visit the patient has, as it is now. A summary whose
+    fingerprint differs was made from notes that have since changed, been
+    added to, or been confirmed."""
     rows = [tuple(r) for r in _visit_rows(conn, pid)]
     return hashlib.sha256(json.dumps(rows).encode()).hexdigest()
 
@@ -137,7 +141,10 @@ def _filed_by(conn, source_path):
 
 
 def sources(conn, pid):
-    """The patient's most recent visits, newest first, undated last."""
+    """-> (sources, confirmed visit count, notes awaiting review).
+
+    The patient's most recent confirmed visits, newest first, undated last."""
+    import note_review
     rows = _visit_rows(conn, pid)
     dated = sorted((r for r in rows if r["visit_date"]),
                    key=lambda r: (r["visit_date"], r["id"]), reverse=True)
@@ -153,14 +160,32 @@ def sources(conn, pid):
                     "clinical_notes": r["clinical_notes"] or "",
                     "next_appointment": r["next_appointment"] or "",
                     "source_path": r["source_path"], "filed_by": filed_by,
-                    "filed_at": filed_at})
-    return out, len(rows)
+                    "filed_at": filed_at, "review": r["method"]})
+    return out, len(rows), note_review.awaiting(conn, pid)
 
 
 # --- the generator ---------------------------------------------------------
 
 TOOTH = re.compile(r"\b([1-4][1-8])\b")
-EXTRACTION = re.compile(r"\b(ext|extraction|estrazione)\b", re.I)
+
+
+def _extraction_terms():
+    """The words that mean "extracted" - only from glossary entries a clinical
+    owner has approved (POL-11). While none is, no contradiction is inferred
+    from what a procedure code means."""
+    import glossary_review
+    from dental_notes_schema import KNOWN_PROCEDURES
+    terms = set()
+    for code, entry in KNOWN_PROCEDURES.items():
+        if entry.get("gloss") == "extraction" and glossary_review.approved(code):
+            terms.add(code.lower())
+            terms.update(s.lower() for s in entry.get("synonyms", []))
+    return terms
+
+
+def _is_extraction(procedure, terms):
+    words = str(procedure).strip().lower().split()
+    return bool(words) and words[0] in terms
 
 
 def _unknown_codes(procedures):
@@ -175,7 +200,7 @@ def _unknown_codes(procedures):
 
 def extractive(srcs):
     """Lines restated from fields and quoted from notes. Nothing else."""
-    srcs, total = srcs
+    srcs, total, waiting = srcs
     lines = []
 
     def add(kind, text, cited):
@@ -210,21 +235,30 @@ def extractive(srcs):
     lines.extend(_conflicts(srcs))
     if total > len(srcs):
         add("gap", f"{total - len(srcs)} older visits are not included", [])
+    if waiting:
+        add("gap", f"{waiting} notes awaiting review are not included", [])
+    if any(s["procedures"] for s in srcs):
+        import glossary_review
+        pending, codes = glossary_review.pending_count()
+        if pending:
+            add("gap", f"Procedure codes are shown as written and not interpreted: {pending} of"
+                       f" {codes} glossary codes await clinical approval", [])
     return lines
 
 
 def _conflicts(srcs):
     """Things two notes say that cannot both be the whole story."""
     out = []
+    terms = _extraction_terms()
     dated = sorted((s for s in srcs if s["visit_date"]), key=lambda s: (s["visit_date"], s["id"]))
     for i, first in enumerate(dated):
         for proc in first["procedures"]:
-            if not EXTRACTION.search(str(proc)):
+            if not _is_extraction(proc, terms):
                 continue
             for tooth in TOOTH.findall(str(proc)):
                 for later in dated[i + 1:]:
                     for other in later["procedures"]:
-                        if tooth in TOOTH.findall(str(other)) and not EXTRACTION.search(str(other)):
+                        if tooth in TOOTH.findall(str(other)) and not _is_extraction(other, terms):
                             out.append({"kind": "conflict", "sources": [first["id"], later["id"]],
                                         "text": f"Possible contradiction: tooth {tooth} extracted"
                                                 f" on {first['visit_date']} [#{first['id']}] but"
@@ -260,6 +294,7 @@ TEMPLATE_WORDS = {
     "procedures", "procedure", "visit", "visits", "undated", "has", "date", "recorded", "note",
     "text", "code", "the", "glossary", "not", "next", "appointment", "written", "possible",
     "contradiction", "tooth", "extracted", "but", "two", "records", "are", "dated", "check",
+    "awaiting", "review", "shown", "interpreted", "await", "clinical", "approval", "codes",
     "they", "same", "older", "included", "and", "with", "for", "was", "were", "per", "del",
     "della", "dei", "con", "alla", "gap",
 }
@@ -345,7 +380,9 @@ def parse_edit(text):
             kind = "quote"
         elif raw.startswith("Possible contradiction") or raw.startswith("Two records"):
             kind = "conflict"
-        elif (raw.startswith("Visit [#") or "older visits are not included" in raw):
+        elif (raw.startswith("Visit [#") or "older visits are not included" in raw
+              or "notes awaiting review are not included" in raw
+              or raw.startswith("Procedure codes are shown as written")):
             kind = "gap"
         else:
             kind = "fact"
@@ -509,6 +546,43 @@ def load(conn, sid, pid, actor, role):
     return {"summary": dict(row), "versions": versions, "sources": srcs,
             "missing_sources": sorted(wanted - {s["id"] for s in srcs}),
             "stale": fingerprint(conn, pid) != row["source_fingerprint"]}
+
+
+def exportable(conn, pid):
+    """POL-10 (a demo product decision, not legal advice): the one summary a
+    patient's data export may carry, or None.
+
+    Only the current approved summary, only while its notes are unchanged, and
+    only if it was approved with no line the notes do not support. Drafts,
+    rejected, superseded and outdated summaries never leave. What leaves is the
+    text and its provenance - no flags, no audit, no internal metadata.
+    """
+    row = conn.execute("SELECT * FROM visit_summaries WHERE patient_id = ? AND status = 'approved'"
+                       " ORDER BY decided_at DESC, id DESC LIMIT 1", (pid,)).fetchone()
+    if row is None or row["flags_at_approval"]:
+        return None
+    if fingerprint(conn, pid) != row["source_fingerprint"]:
+        return None
+    latest = _latest(conn, row["id"])
+    lines = json.loads(latest["body"])["lines"]
+    if any(line["flags"] for line in lines):
+        return None
+    wanted = json.loads(row["source_ids"])
+    dated = {r[0]: r[1] for r in conn.execute(
+        f"SELECT id, visit_date FROM visits WHERE id IN ({','.join('?' * len(wanted))})",
+        wanted)} if wanted else {}
+    return {
+        "status": "approved by a clinician",
+        "notice": "A summary of your notes for your next visit. It is not a diagnosis or a"
+                  " treatment plan; your notes are the record.",
+        "approved_by": row["decided_by"],
+        "approved_at": row["decided_at"],
+        "version": latest["version"],
+        "made_at": row["created_at"],
+        "made_by": f"{row['generator']} {row['generator_version']} (local, no model)",
+        "source_visits": [{"id": i, "visit_date": dated.get(i)} for i in wanted],
+        "lines": [line["text"] for line in lines],
+    }
 
 
 def for_patient(conn, pid, limit=20):
