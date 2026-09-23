@@ -113,6 +113,11 @@ def no_cf_urlopen(req, timeout=120):
     return FakeResponse()
 
 
+def _token_from(html):
+    # P14.T2: the preview's one-time save token, as a browser would send it back
+    return re.search(r'name="confirm_token" value="([^"]+)"', html).group(1)
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         db_path = str(Path(tmp) / "clinic.sqlite")
@@ -173,6 +178,7 @@ def selftest():
                 "invoice_description": "rct 26",
                 "next_appointment": "6m",
                 "csrf_token": csrf_preview,
+                "confirm_token": _token_from(paste_resp.text),
             },
         )
         assert save_resp.status_code == 302, "corrected-fields POST should redirect on success"
@@ -308,6 +314,7 @@ def selftest():
                 "procedures": "",
                 "next_appointment": "",
                 "csrf_token": csrf_mismatch_confirm,
+                "confirm_token": _token_from(mismatch_resp.text),
             },
         )
         assert tamper_resp.status_code == 302, "6: confirm POST should redirect on success"
@@ -356,7 +363,9 @@ def selftest():
 
         # 7. not-searchable save still lands on the patient screen (D-04)
         new_get_for_fail = client.get(f"/notes/new?cf={FAKE_CF}")
-        csrf_fail = _csrf_from(new_get_for_fail.text)
+        fail_preview = client.post("/notes/new", data={
+            "raw_note": "checkup", "cf": FAKE_CF, "csrf_token": _csrf_from(new_get_for_fail.text)})
+        csrf_fail = _csrf_from(fail_preview.text)
 
         real_save_new_note = notes_routes.save_new_note
         notes_routes.save_new_note = lambda *a, **kw: "failed"
@@ -372,6 +381,7 @@ def selftest():
                 "procedures": "",
                 "next_appointment": "",
                 "csrf_token": csrf_fail,
+                "confirm_token": _token_from(fail_preview.text),
             },
         )
         notes_routes.save_new_note = real_save_new_note

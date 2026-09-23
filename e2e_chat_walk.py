@@ -125,7 +125,12 @@ def cleanup():
         f"SELECT patient_id FROM patients WHERE codice_fiscale IN ({marks})", cfs)]
     if pids:
         pmarks = ",".join("?" * len(pids))
-        for table in ("invoices", "visits", "patient_sessions", "patient_credentials"):
+        # handoff_requests and patient_agent_actions since P10: a deflected or
+        # unreconciled question queues a call-back for the fixture patient, and
+        # this list predated them (32 orphan call-backs by 2026-09-23 - recorded,
+        # not deleted; only this walk's own patients are cleaned here)
+        for table in ("invoices", "visits", "patient_sessions", "patient_credentials",
+                      "handoff_requests", "patient_agent_actions"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
         consent.erase(conn, pids)
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", cfs)

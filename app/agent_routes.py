@@ -3,6 +3,7 @@ from pathlib import Path
 from flask import Blueprint, flash, g, make_response, redirect, render_template, request, url_for
 
 import agent
+import dictation
 import pending_actions
 from auth import authorize, log_audit
 from extract_note import OllamaUnreachable
@@ -56,7 +57,7 @@ def command_page():
         return _deny_page("You don't have permission to edit records.")
 
     if request.method == "GET":
-        return render_template("agent_command.html")
+        return render_template("agent_command.html", **_dictation())
 
     command = request.form.get("command", "")
     try:
@@ -73,6 +74,32 @@ def command_page():
         )
 
     return _build_and_render(call, "agent_command.html", command=command)
+
+
+@agent_bp.route("/agent/dictate", methods=["POST"])
+def dictate_command():
+    """P14.04: a spoken command only fills the command box. It is not run - the
+    allowlist, the clarification and the confirm step all still apply."""
+    if not authorize(g.user["role"], "update_field"):
+        return _deny_page("You don't have permission to edit records.")
+    blob = request.files.get("audio")
+    audio = blob.read(dictation.MAX_AUDIO_BYTES + 1) if blob else b""
+    try:
+        text = dictation.transcribe(audio, request.form.get("lang", "it"))
+    except (dictation.Unavailable, dictation.Unclear) as e:
+        log_audit(get_db(), g.user["username"], g.user["role"], "dictate_command", None,
+                  allowed=1, reason=type(e).__name__.lower())
+        return render_template("agent_command.html", error=str(e), **_dictation())
+    finally:
+        audio = None
+    log_audit(get_db(), g.user["username"], g.user["role"], "dictate_command", None, allowed=1,
+              reason="transcribed")
+    return render_template("agent_command.html", command=text, dictated=True, **_dictation())
+
+
+def _dictation():
+    ok, why = dictation.stt_status()
+    return {"dictation_ok": ok, "dictation_why": why}
 
 
 @agent_bp.route("/agent/edit", methods=["GET", "POST"])

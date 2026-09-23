@@ -86,6 +86,10 @@ ROUTE_POLICY = {
     "appointments.decline": "manage_appointments",
     "appointments.reschedule": "manage_appointments",
     "notes.new_note": "append_note",
+    # P14: speech becomes text in the same forms; the forms' own checks decide
+    "notes.dictate": "append_note",
+    "agent.dictate_command": "update_field",
+    "summary.read_aloud": "review_summary",
     "patients.list_view": "read_notes",
     "patients.search_fragment": "read_notes",
     "patients.detail_view": "read_notes",

@@ -60,6 +60,29 @@
     </ul></div>
   </section>
 
+  {% if s.status == 'approved' and not view.stale %}
+  <section class="card dash-card mb-3" aria-labelledby="read-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="read-title">Read aloud</h2></div>
+    <div class="dash-card-body">
+      {% if read_audio %}
+      <audio controls preload="none" src="data:audio/mpeg;base64,{{ read_audio }}">Your browser cannot play this.</audio>
+      <p class="dash-empty-line">Press play when ready; nothing plays by itself.</p>
+      {% elif tts_ok %}
+      <form method="post" action="{{ url_for('summary.read_aloud', cf=cf) }}" class="d-flex flex-wrap gap-2 align-items-center">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" name="private" value="yes" id="private">
+          <label class="form-check-label" for="private">I am somewhere private</label>
+        </div>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Prepare to read aloud</button>
+      </form>
+      {% else %}
+      <p class="dash-empty-line">{{ tts_why }}</p>
+      {% endif %}
+    </div>
+  </section>
+  {% endif %}
+
   <section class="card dash-card mb-3" aria-labelledby="sources-title">
     <div class="dash-card-head">
       <div>

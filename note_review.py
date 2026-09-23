@@ -77,6 +77,15 @@ SCHEMA = """
         BEFORE UPDATE OF original_sha256 ON note_reviews
         WHEN OLD.original_sha256 IS NOT NULL AND NEW.original_sha256 IS NOT OLD.original_sha256
         BEGIN SELECT RAISE(ABORT, 'an original is never rewritten'); END;
+    -- one save per preview (P14.T2). the typed-note preview issues a token and
+    -- the confirm claims it in one statement, so Back-and-resubmit, a retried
+    -- request or a double click saves one note, not two
+    CREATE TABLE IF NOT EXISTS note_confirm_tokens (
+        token TEXT PRIMARY KEY,
+        username TEXT NOT NULL,
+        issued_at TEXT NOT NULL,
+        used_at TEXT
+    );
     -- which visits a person has confirmed, and how. summaries read only these
     CREATE TABLE IF NOT EXISTS visit_reviews (
         visit_id INTEGER PRIMARY KEY,
@@ -140,6 +149,27 @@ def awaiting(conn, pid):
     """Notes of this patient that no person has confirmed yet."""
     return conn.execute("SELECT COUNT(*) FROM note_reviews WHERE patient_id = ? AND status IN"
                         " ('pending', 'extraction_failed', 'confirming')", (pid,)).fetchone()[0]
+
+
+def issue_confirm_token(conn, username, now=None):
+    token = secrets.token_hex(16)
+    conn.execute("INSERT INTO note_confirm_tokens (token, username, issued_at) VALUES (?, ?, ?)",
+                 (token, username, _now(now)))
+    conn.commit()
+    return token
+
+
+def claim_confirm_token(conn, token, username, now=None):
+    """-> "ok", "used" (already saved once) or "unknown" (missing or not theirs)."""
+    claimed = conn.execute(
+        "UPDATE note_confirm_tokens SET used_at = ? WHERE token = ? AND username = ?"
+        " AND used_at IS NULL", (_now(now), token or "", username)).rowcount
+    conn.commit()
+    if claimed:
+        return "ok"
+    used = conn.execute("SELECT 1 FROM note_confirm_tokens WHERE token = ? AND username = ?",
+                        (token or "", username)).fetchone()
+    return "used" if used else "unknown"
 
 
 # --- intake ----------------------------------------------------------------

@@ -1,5 +1,8 @@
+import base64
+
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import dictation
 import patient_id
 import visit_summary as vs
 from auth import authorize, log_audit
@@ -50,18 +53,47 @@ def _act(cf, sid, fn, done_message, **kwargs):
     return _back(cf)
 
 
-@summary_bp.route("/patients/<cf>/summary")
-def page(cf):
-    if not authorize(g.user["role"], vs.CAPABILITY):
-        return _refuse("summary_read", cf)
+def _render(cf, read_audio=None):
     conn, pid, patient = _patient(cf)
     rows = vs.for_patient(conn, pid)
     current = next((r for r in rows if r["status"] in ("draft", "approved")), None)
     view = vs.load(conn, current["id"], pid, g.user["username"], g.user["role"]) \
         if current else None
+    tts_ok, tts_why = dictation.tts_status()
     return render_template("summary.html", cf=cf, patient=patient, view=view, history=rows,
                            label=vs.DRAFT_LABEL,
-                           edit_text=vs.render_text(view["versions"][-1]["lines"]) if view else "")
+                           edit_text=vs.render_text(view["versions"][-1]["lines"]) if view else "",
+                           tts_ok=tts_ok, tts_why=tts_why, read_audio=read_audio)
+
+
+@summary_bp.route("/patients/<cf>/summary")
+def page(cf):
+    if not authorize(g.user["role"], vs.CAPABILITY):
+        return _refuse("summary_read", cf)
+    return _render(cf)
+
+
+@summary_bp.route("/patients/<cf>/summary/read", methods=["POST"])
+def read_aloud(cf):
+    """P14.05: only the approved, current summary; only after the clinician
+    says the room is private; never played by itself - the page shows a player."""
+    if not authorize(g.user["role"], vs.CAPABILITY):
+        return _refuse("summary_read_aloud", cf)
+    conn, pid, _patient_row = _patient(cf)
+    text = dictation.readable_summary(conn, pid, g.user["username"], g.user["role"])
+    if text is None:
+        flash("Only a current, approved summary can be read aloud.", "danger")
+        return _back(cf)
+    try:
+        audio = dictation.speak(text, request.form.get("private") == "yes")
+    except (dictation.NotPrivate, dictation.Unavailable) as e:
+        log_audit(conn, g.user["username"], g.user["role"], "summary_read_aloud", f"patient:{pid}",
+                  allowed=1, reason=type(e).__name__.lower())
+        flash(str(e), "danger")
+        return _back(cf)
+    log_audit(conn, g.user["username"], g.user["role"], "summary_read_aloud", f"patient:{pid}",
+              allowed=1, reason="spoken")
+    return _render(cf, read_audio=base64.b64encode(audio).decode())
 
 
 @summary_bp.route("/patients/<cf>/summary/generate", methods=["POST"])

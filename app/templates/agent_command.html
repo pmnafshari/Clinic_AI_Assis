@@ -19,11 +19,22 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="ds-field">
         <label for="command" class="ds-label">Command</label>
+        {% if dictated %}<p class="ds-help"><strong>Dictated - check it.</strong> This is what the speech model heard; it has not been run.</p>{% endif %}
         <textarea id="command" name="command" rows="4" class="ds-textarea" autofocus>{{ command or '' }}</textarea>
         <p class="ds-help">Nothing is written until you confirm the change on the next screen.</p>
       </div>
       <button type="submit" class="ds-btn ds-btn-primary">Run command</button>
     </form>
+    {% if dictation_ok %}
+    <form method="post" action="{{ url_for('agent.dictate_command') }}" enctype="multipart/form-data" class="mt-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label for="audio" class="ds-label">Or say it (the recording is not kept)</label>
+      <input id="audio" name="audio" type="file" accept="audio/*" class="form-control mb-2">
+      <button type="submit" class="ds-btn ds-btn-secondary">Turn into text</button>
+    </form>
+    {% elif dictation_why %}
+    <p class="ds-help mt-3">{{ dictation_why | replace('type the note', 'type the command') }}</p>
+    {% endif %}
   </div>
 </div>
 </div>

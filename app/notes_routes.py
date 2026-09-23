@@ -2,6 +2,8 @@ from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import dictation
+import note_review
 import patient_id
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
@@ -50,6 +52,37 @@ def _locked_patient(cf):
     }
 
 
+def _dictation():
+    ok, why = dictation.stt_status()
+    return {"dictation_ok": ok, "dictation_why": why}
+
+
+@notes_bp.route("/notes/dictate", methods=["POST"])
+def dictate():
+    """P14: speech becomes TEXT in the note form for the locked patient. It is
+    not extracted and not saved here - the existing confirm step saves it."""
+    cf = request.form.get("cf", "")
+    if not authorize(g.user["role"], "append_note"):
+        log_audit(get_db(), g.user["username"], g.user["role"], "dictate", cf or None, allowed=0)
+        flash("You don't have permission to add notes.", "danger")
+        return redirect(url_for("dashboard.index"))
+    locked = _locked_patient(cf)
+    blob = request.files.get("audio")
+    audio = blob.read(dictation.MAX_AUDIO_BYTES + 1) if blob else b""
+    try:
+        text = dictation.transcribe(audio, request.form.get("lang", "it"))
+    except (dictation.Unavailable, dictation.Unclear) as e:
+        log_audit(get_db(), g.user["username"], g.user["role"], "dictate", cf or None, allowed=1,
+                  reason=type(e).__name__.lower())
+        return render_template("notes_new.html", locked=locked, error=str(e), **_dictation())
+    finally:
+        # the audio goes out of scope here; nothing above wrote it anywhere
+        audio = None
+    log_audit(get_db(), g.user["username"], g.user["role"], "dictate", cf or None, allowed=1,
+              reason="transcribed")
+    return render_template("notes_new.html", locked=locked, dictated=text, **_dictation())
+
+
 @notes_bp.route("/notes/new", methods=["GET", "POST"])
 def new_note():
     # one gate for every step. the extract step used to run ungated, and with
@@ -69,7 +102,7 @@ def new_note():
             # disclosure of a patient's name to whoever opened the form.
             log_audit(get_db(), g.user["username"], g.user["role"],
                       "prefill_note", cf, allowed=1)
-        return render_template("notes_new.html", locked=locked)
+        return render_template("notes_new.html", locked=locked, **_dictation())
 
     if "raw_note" in request.form:
         # step 1: extract once, render editable preview (D-02)
@@ -83,7 +116,7 @@ def new_note():
                 request.form["raw_note"], fallback_cf=locked["cf"] if locked else None
             )
         except OllamaUnreachable as e:
-            return render_template("notes_new.html", error=str(e), locked=locked)
+            return render_template("notes_new.html", error=str(e), locked=locked, **_dictation())
         except ValueError as e:
             return render_template("notes_new.html", error=f"extraction rejected: {e}", locked=locked)
 
@@ -105,7 +138,9 @@ def new_note():
                     f"this note names {named} - "
                     f"it will be filed under {locked['patient_name']} ({locked['cf']})"
                 )
-        return render_template("notes_new.html", preview=note, locked=locked, mismatch=mismatch)
+        token = note_review.issue_confirm_token(get_db(), g.user["username"])
+        return render_template("notes_new.html", preview=note, locked=locked, mismatch=mismatch,
+                               confirm_token=token)
 
     # step 2: confirm POST - re-validate the (possibly staff-corrected) fields,
     # never re-call extract_note (D-04's "no re-derivation" applies here too)
@@ -139,6 +174,19 @@ def new_note():
         )
     except Exception as e:
         return render_template("notes_new.html", error=f"invalid fields: {e}", locked=locked)
+
+    # P14.T2: one save per preview. the token is claimed before anything is
+    # written, so a second submit of the same preview finds it used
+    claim = note_review.claim_confirm_token(get_db(), request.form.get("confirm_token"),
+                                            g.user["username"])
+    if claim == "used":
+        flash("This note was already saved.")
+        if locked is not None:
+            return redirect(url_for("patients.detail_view", cf=locked["cf"]))
+        return redirect(url_for("dashboard.index"))
+    if claim != "ok":
+        return render_template("notes_new.html", locked=locked, **_dictation(),
+                               error="This form has expired. Extract the note again.")
 
     status = save_new_note(
         note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT
