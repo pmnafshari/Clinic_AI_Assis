@@ -45,7 +45,11 @@ def selftest():
         page = reception.get("/providers").text
         assert "Nothing can reach the outside world" in page
         assert "blocked: no adapter configured" in page, "1: both kinds blocked"
-        assert page.count("connector: disabled") == 2, "1: messaging and payments both disabled"
+        # P12 added telephony as a third kind behind the same gate
+        assert page.count("connector: disabled") == 3, "1: messaging, payments, phone all disabled"
+        assert "Phone line" in page and "Not answering" in page, "1: the line says it is off"
+        assert "there is no phone number" in page, "1: and that no call can arrive"
+        assert "no sweep is scheduled" in page, "1: it does not promise a sweep that is not there"
         assert "Nothing has been attempted." in page
 
         # 2. it must not claim anything is live, and must leak no secret.

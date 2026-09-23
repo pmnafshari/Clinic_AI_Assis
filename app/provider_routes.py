@@ -1,5 +1,6 @@
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
+import calls
 import delivery
 import providers
 from auth import authorize, log_audit
@@ -24,6 +25,7 @@ def index():
                            events=providers.recent_events(conn, 25),
                            receipts=delivery.counts(conn),
                            unresolved=delivery.unresolved(conn),
+                           line=calls.health(conn),
                            can_rearm=authorize(g.user["role"], "manage_providers"))
 
 

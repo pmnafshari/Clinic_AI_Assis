@@ -4,15 +4,15 @@
   <div>
     <p class="ds-page-eyebrow">System</p>
     <h1 class="ds-page-title">Outside connections</h1>
-    <p class="ds-page-meta">Messaging and payments — both off</p>
+    <p class="ds-page-meta">Messaging, payments and phone — all off</p>
   </div>
 </div>
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
   <div><strong class="ds-alert-title">Nothing can reach the outside world</strong>
-  No messaging or payment provider has been chosen, and no live connector exists in this build —
-  it is not switched off, it is absent. Real sending and real payments stay <strong>blocked</strong>
-  until a provider, its cost and a data agreement are approved.</div>
+  No messaging, payment or phone provider has been chosen, and no live connector exists in this
+  build — it is not switched off, it is absent. Real sending, real payments and real calls stay
+  <strong>blocked</strong> until a provider, its cost and a data agreement are approved.</div>
 </div>
 
 <section class="card dash-card mb-3" aria-labelledby="switches-title">
@@ -44,6 +44,34 @@
     </li>
     {% endfor %}
   </ul></div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="line-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="line-title">Phone line</h2></div>
+  <div class="dash-card-body">
+    <ul class="ds-rows">
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ 'Can answer' if line.can_answer else 'Not answering' }}</span>
+          <span class="ds-row-sub">
+            {%- if not line.can_answer %}blocked: {{ line.reason.replace('_', ' ') }} · {% endif -%}
+            there is no phone number; no call can reach this build
+          </span>
+        </span>
+      </li>
+      <li class="ds-row">
+        <span class="ds-row-main"><span class="ds-row-title">Calls in progress</span></span>
+        <span class="ds-numeral ms-auto">{{ line.live_calls }}</span>
+      </li>
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">Gone quiet</span>
+          <span class="ds-row-sub">no word from the line in two minutes; no sweep is scheduled, it runs by hand</span>
+        </span>
+        <span class="ds-numeral ms-auto">{{ line.stale_calls }}</span>
+      </li>
+    </ul>
+  </div>
 </section>
 
 <section class="card dash-card mb-3" aria-labelledby="receipts-title">

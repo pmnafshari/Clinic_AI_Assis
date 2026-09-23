@@ -34,7 +34,7 @@ import clinic_time
 from auth import authorize, log_audit
 
 DISABLED, SANDBOX = "disabled", "sandbox"
-KINDS = ("messaging", "payments")
+KINDS = ("messaging", "payments", "telephony")
 
 # why something did not go out. closed vocabulary: an operator screen and an
 # audit row must not disagree, and neither may carry provider text.
@@ -45,8 +45,10 @@ BLOCKED_SPEND_CAP = "spend_cap_reached"
 REASONS = (BLOCKED_NO_ADAPTER, BLOCKED_FEATURE_OFF, BLOCKED_KILL_SWITCH, BLOCKED_SPEND_CAP)
 
 # the default for both is off. a deployment that sets nothing sends nothing.
-ENV_ADAPTER = {"messaging": "CLINIC_MESSAGING_PROVIDER", "payments": "CLINIC_PAYMENT_PROVIDER"}
-ENV_ENABLED = {"messaging": "CLINIC_MESSAGING_ENABLED", "payments": "CLINIC_PAYMENTS_ENABLED"}
+ENV_ADAPTER = {"messaging": "CLINIC_MESSAGING_PROVIDER", "payments": "CLINIC_PAYMENT_PROVIDER",
+               "telephony": "CLINIC_TELEPHONY_PROVIDER"}
+ENV_ENABLED = {"messaging": "CLINIC_MESSAGING_ENABLED", "payments": "CLINIC_PAYMENTS_ENABLED",
+               "telephony": "CLINIC_TELEPHONY_ENABLED"}
 
 # a demo ceiling in cents, deliberately small. it is not a budget - D01 is open
 # and there is no budget. it is the fourth brake.
@@ -54,7 +56,7 @@ DEFAULT_SPEND_CAP_CENTS = 0
 
 SCHEMA = """
     CREATE TABLE IF NOT EXISTS provider_switches (
-        kind TEXT PRIMARY KEY CHECK (kind IN ('messaging', 'payments')),
+        kind TEXT PRIMARY KEY CHECK (kind IN ('messaging', 'payments', 'telephony')),
         killed INTEGER NOT NULL DEFAULT 0,
         spend_cap_cents INTEGER NOT NULL DEFAULT 0,
         spent_cents INTEGER NOT NULL DEFAULT 0,

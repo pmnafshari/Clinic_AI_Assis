@@ -174,12 +174,57 @@ def init_db(db_path):
     # here holds a secret, a URL or any card data
     from providers import SCHEMA as PROVIDERS_SCHEMA
     conn.executescript(PROVIDERS_SCHEMA)
+    _ensure_provider_kind_telephony(conn)
     from payments import SCHEMA as PAYMENTS_SCHEMA
     conn.executescript(PAYMENTS_SCHEMA)
     from delivery import SCHEMA as DELIVERY_SCHEMA
     conn.executescript(DELIVERY_SCHEMA)
+
+    # the phone line (P12). no audio, no transcript, no caller number
+    from calls import SCHEMA as CALLS_SCHEMA
+    conn.executescript(CALLS_SCHEMA)
     conn.commit()
     return conn
+
+
+def _ensure_provider_kind_telephony(conn):
+    """P12: allow `kind = 'telephony'` on provider_switches.
+
+    Same rebuild as the payments one below, for the same reason: SQLite cannot
+    widen a CHECK in place. A no-op once the constraint already names
+    telephony, which includes every fresh database. The rows are the operator's
+    kill switches and spend counters, so a rebuild that loses one fails loudly.
+    """
+    row = conn.execute("SELECT sql FROM sqlite_master WHERE type = 'table'"
+                       " AND name = 'provider_switches'").fetchone()
+    if row is None or "'telephony'" in row[0]:
+        return
+    before = conn.execute("SELECT COUNT(*) FROM provider_switches").fetchone()[0]
+    names = ", ".join(r[1] for r in conn.execute("PRAGMA table_info(provider_switches)"))
+    new_sql, count = re.subn(
+        r'CREATE\s+TABLE\s+(?:"provider_switches"|provider_switches|\[provider_switches\]'
+        r'|`provider_switches`)', "CREATE TABLE provider_switches_rebuilt", row[0], count=1)
+    if count != 1:
+        raise RuntimeError("could not rename provider_switches in its own DDL")
+    new_sql, count = re.subn(r"'messaging',\s*'payments'", "'messaging', 'payments', 'telephony'",
+                             new_sql, count=1)
+    if count != 1:
+        raise RuntimeError("could not widen the provider_switches kind constraint")
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute(new_sql)
+        conn.execute(f"INSERT INTO provider_switches_rebuilt ({names})"
+                     f" SELECT {names} FROM provider_switches")
+        conn.execute("DROP TABLE provider_switches")
+        conn.execute("ALTER TABLE provider_switches_rebuilt RENAME TO provider_switches")
+        after = conn.execute("SELECT COUNT(*) FROM provider_switches").fetchone()[0]
+        if after != before:
+            raise RuntimeError(f"provider_switches rebuild lost rows: {before} -> {after}")
+        conn.execute("COMMIT")
+    except Exception:
+        conn.execute("ROLLBACK")
+        raise
 
 
 def _ensure_payment_source_provider(conn):
