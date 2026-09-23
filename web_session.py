@@ -83,6 +83,81 @@ def destroy_user_sessions(conn, username):
     return cur.rowcount
 
 
+# --- the expired-session sweep (run by retention.py) --------------------------
+#
+# load_session already treats a session idle for more than SESSION_IDLE_MINUTES
+# as dead, but only deletes it when someone presents its token - so a session
+# nobody comes back to stays in the table for ever. this removes those rows by
+# the same rule. staff sessions only: patient portal sessions have their own
+# table and their own lifetime, and are not touched here.
+
+SWEEP_BATCH = 500
+
+
+def _scan(conn, now):
+    """-> (expired [(id, last_seen_at text)], future count, unreadable count).
+
+    The last-seen text is kept exactly as read, so the delete can require it to
+    be unchanged: a session that became active in between is not touched."""
+    picked, future, unreadable = [], 0, 0
+    for row in conn.execute("SELECT id, last_seen_at FROM sessions ORDER BY id"):
+        try:
+            last_seen = clinic_time.read_instant(row["last_seen_at"])
+        except (ValueError, TypeError):
+            unreadable += 1
+            continue
+        if last_seen > now:
+            # a clock that jumped, or a row written by a machine ahead of this
+            # one. not evidence of idleness - left alone and counted
+            future += 1
+            continue
+        if now - last_seen > timedelta(minutes=SESSION_IDLE_MINUTES):
+            picked.append((row["id"], row["last_seen_at"]))
+    return picked, future, unreadable
+
+
+def select_expired(conn, now):
+    return _scan(conn, now)[0]
+
+
+def delete_selected(conn, picked):
+    """-> (deleted, skipped). One transaction per batch; a row is deleted only if
+    its last-seen is still the value that made it expired."""
+    deleted = skipped = 0
+    for start in range(0, len(picked), SWEEP_BATCH):
+        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            for session_id, last_seen in picked[start:start + SWEEP_BATCH]:
+                n = conn.execute("DELETE FROM sessions WHERE id = ? AND last_seen_at = ?",
+                                 (session_id, last_seen)).rowcount
+                deleted += n
+                skipped += 1 - n
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    return deleted, skipped
+
+
+def expire_idle(conn, now=None, dry_run=False, actor="retention"):
+    """Remove staff sessions past the idle limit. Audited as numbers only."""
+    import json
+    from auth import log_audit
+    now = now or clinic_time.now_utc()
+    picked, future, unreadable = _scan(conn, now)
+    deleted = skipped = 0
+    if not dry_run:
+        deleted, skipped = delete_selected(conn, picked)
+    out = {"cutoff": (now - timedelta(minutes=SESSION_IDLE_MINUTES)).isoformat(),
+           "run_at": now.isoformat(), "selected": len(picked), "deleted": deleted,
+           "skipped_active": skipped, "future": future, "unreadable": unreadable,
+           "dry_run": bool(dry_run), "outcome": "dry_run" if dry_run else "applied"}
+    log_audit(conn, actor, "system", "session_sweep", None, allowed=1,
+              reason=json.dumps(out, sort_keys=True))
+    return out
+
+
 def selftest():
     import tempfile
 

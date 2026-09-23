@@ -38,6 +38,12 @@
       "hold_on_erasure": false,
       "basis": "demo placeholder; nothing records calls yet (voice scheduling is P12) - named here because the recording consent text refers to this policy",
       "sweep": "report"
+    },
+    "staff_sessions": {
+      "keep_days": 0,
+      "hold_on_erasure": false,
+      "basis": "a staff login session idle for more than 30 minutes (web_session.SESSION_IDLE_MINUTES) is already refused by the app; the sweep removes the dead row. Not audit history - logins are recorded in audit_log, which is untouched. Patient portal sessions are not included.",
+      "sweep": "delete"
     }
   }
 }
