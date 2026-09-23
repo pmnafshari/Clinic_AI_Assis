@@ -91,6 +91,12 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # clinical nor fiscal; they go with the patient whatever is held
             if _has(conn, table):
                 conn.execute(f"DELETE FROM {table} WHERE patient_id = ?", (pid,))
+        if _has(conn, "visit_summaries"):
+            # P13: a summary is clinical content drawn from the notes erased
+            # below. versions first; their trigger yields to audit_unlock
+            conn.execute("DELETE FROM visit_summary_versions WHERE summary_id IN"
+                         " (SELECT id FROM visit_summaries WHERE patient_id = ?)", (pid,))
+            conn.execute("DELETE FROM visit_summaries WHERE patient_id = ?", (pid,))
         if not hold_invoices and _has(conn, "billing_invoices"):
             # the ledger is fiscal: it goes only when invoices are not held
             conn.execute("DELETE FROM payment_allocations WHERE payment_id IN"
@@ -210,6 +216,9 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     left["visit_content"] = conn.execute(
         "SELECT COUNT(*) FROM visits WHERE patient_id = ? AND (clinical_notes != ''"
         " OR procedures != '[]' OR source_path NOT LIKE 'erased:%')", (pid,)).fetchone()[0]
+    if _has(conn, "visit_summaries"):
+        left["summaries"] = conn.execute("SELECT COUNT(*) FROM visit_summaries WHERE"
+                                         " patient_id = ?", (pid,)).fetchone()[0]
     left["phone"] = conn.execute("SELECT COUNT(*) FROM patients WHERE patient_id = ?"
                                  " AND phone IS NOT NULL", (pid,)).fetchone()[0]
     left["audit_cf"] = sum(conn.execute("SELECT COUNT(*) FROM audit_log WHERE lower(target)"

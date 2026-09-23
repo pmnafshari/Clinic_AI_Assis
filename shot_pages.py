@@ -40,6 +40,7 @@ import sqlite3
 import sys
 import auth
 import patient_id
+import visit_summary
 import tempfile
 from pathlib import Path
 
@@ -94,6 +95,8 @@ ROLE_PAGES = {
         ("reminders", "/reminders"),
         ("handoffs", "/handoffs"),
         ("providers", "/providers"),
+        # P13: a draft next-visit summary, dentist only
+        ("summary", f"/patients/{CF}/summary"),
         ("notes-new", "/notes/new"),
         ("change-password", "/change-password"),
     ],
@@ -142,8 +145,18 @@ def seed():
         )
     # the patients list needs at least one row or the table cannot overflow and
     # the measurement would be vacuous on the worst-affected page
-    patient_id.seed_patient(conn, CF, "Zzs Shotpatient", "3330000000")
+    pid = patient_id.seed_patient(conn, CF, "Zzs Shotpatient", "3330000000")
+    # two visits and a draft summary of them, so the summary page renders its
+    # longest form: lines, a contradiction, sources and the review forms
+    for n, (day, procs, note) in enumerate((
+            ("2026-01-10", '["ext 21"]', "estrazione 21, nessun dolore riferito"),
+            ("2026-03-01", '["filling 21", "rct 26"]', "otturazione 21; rct 26 prima seduta"))):
+        conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
+                     " source_path) VALUES (?, ?, ?, ?, ?)",
+                     (pid, day, procs, note, f"{CF}/notes/zzs_shot{n}.json"))
     conn.commit()
+    conn.row_factory = sqlite3.Row
+    visit_summary.generate(conn, pid, "zzs_dentist", "dentist")
     conn.close()
 
 
@@ -153,6 +166,15 @@ def cleanup():
     # not happen and it should be loud.
     pid = patient_id.resolve(conn, CF)
     if pid:
+        # summary versions are append-only; like erasure, the fixture's own
+        # rows leave under audit_unlock, inside one transaction
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("INSERT INTO audit_unlock (reason) VALUES ('shot_pages cleanup')")
+        conn.execute("DELETE FROM visit_summary_versions WHERE summary_id IN"
+                     " (SELECT id FROM visit_summaries WHERE patient_id = ?)", (pid,))
+        conn.execute("DELETE FROM visit_summaries WHERE patient_id = ?", (pid,))
+        conn.execute("DELETE FROM audit_unlock")
+        conn.execute("COMMIT")
         for table in ("invoices", "visits"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id = ?", (pid,))
     conn.execute("DELETE FROM patients WHERE codice_fiscale = ?", (CF,))

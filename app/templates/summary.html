@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% set kind_names = {'fact': 'From the record', 'quote': 'Quoted from a note', 'gap': 'Missing', 'conflict': 'Possible contradiction'} %}
+{% set flag_names = {'unsupported': 'not found in the cited notes', 'misquote': 'quote does not match the note', 'unknown_source': 'cites a note that is not this patient\'s', 'no_source': 'cites no note', 'recommendation': 'reads as advice or a prescription', 'negation': 'a negation differs from the note'} %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
+    <li aria-current="page">Next-visit summary</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
+    <h1 class="ds-page-title">Next-visit summary</h1>
+    <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span> · dentist only</p>
+  </div>
+</div>
+
+{% if view %}
+  {% set s = view.summary %}
+  {% set latest = view.versions[-1] %}
+  {% if s.status == 'draft' %}
+  <div class="ds-alert ds-alert-warning mb-3" role="note">
+    <div><strong class="ds-alert-title">Draft</strong> {{ label }}</div>
+  </div>
+  {% else %}
+  <div class="ds-alert ds-alert-info mb-3" role="note">
+    <div><strong class="ds-alert-title">Reviewed by {{ s.decided_by }}</strong>
+    on {{ s.decided_at | appt_date }}. It is still a summary: the source notes are the record.
+    {%- if s.flags_at_approval %} Approved with {{ s.flags_at_approval }} line(s) not found in the notes.{% endif %}</div>
+  </div>
+  {% endif %}
+  {% if view.stale %}
+  <div class="ds-alert ds-alert-warning mb-3" role="alert">
+    <div><strong class="ds-alert-title">The notes have changed since this was made</strong>
+    A visit was added, edited or moved after this summary was built.
+    {% if s.status == 'draft' %}Regenerate it before approving.{% else %}Make a new one before relying on it.{% endif %}</div>
+  </div>
+  {% endif %}
+
+  <section class="card dash-card mb-3" aria-labelledby="lines-title">
+    <div class="dash-card-head">
+      <div>
+        <h2 class="ds-card-title" id="lines-title">Summary</h2>
+        <p class="ds-card-sub">Version {{ latest.version }} · {{ 'generated' if latest.kind == 'generated' else 'edited by ' ~ latest.created_by }} · every line names its notes as [#visit]</p>
+      </div>
+    </div>
+    <div class="dash-card-body"><ul class="ds-rows">
+      {% for line in latest.lines %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-sub">{{ kind_names.get(line.kind, line.kind) }}</span>
+          <span class="ds-row-title text-break">{{ line.text }}</span>
+          {% if line.flags %}
+          <span class="ds-row-sub"><strong>Check:</strong> {% for f in line.flags %}{{ flag_names.get(f, f) }}{% if not loop.last %}; {% endif %}{% endfor %}</span>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul></div>
+  </section>
+
+  <section class="card dash-card mb-3" aria-labelledby="sources-title">
+    <div class="dash-card-head">
+      <div>
+        <h2 class="ds-card-title" id="sources-title">Source notes</h2>
+        <p class="ds-card-sub">Clinical author not recorded: the record keeps who filed a note, not who wrote it</p>
+      </div>
+    </div>
+    <div class="dash-card-body"><ul class="ds-rows">
+      {% for src in view.sources %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">[#{{ src.id }}] {{ src.visit_date or 'no date' }}</span>
+          <span class="ds-row-sub text-break">{{ src.source_path }} · filed by {{ src.filed_by or 'not recorded' }}{% if src.filed_at %} on {{ src.filed_at | appt_date }}{% endif %}</span>
+        </span>
+      </li>
+      {% endfor %}
+      {% for missing in view.missing_sources %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">[#{{ missing }}] no longer in this record</span></span></li>
+      {% endfor %}
+    </ul>
+    <p class="dash-empty-line">Made {{ s.created_at | appt_date }} {{ s.created_at | appt_time }} by {{ s.created_by }} · {{ s.generator }} {{ s.generator_version }}, local, no model</p>
+    </div>
+  </section>
+
+  {% if s.status == 'draft' %}
+  <section class="card dash-card mb-3" aria-labelledby="review-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="review-title">Review</h2></div>
+    <div class="dash-card-body">
+      <form method="post" action="{{ url_for('summary.edit', cf=cf, sid=s.id) }}" class="mb-3">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="body" class="form-label">Edit the lines. Keep a [#visit] on each line you want checked against the notes.</label>
+        <textarea id="body" name="body" rows="10" class="ds-textarea">{{ edit_text }}</textarea>
+        <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">Save as a new version</button>
+      </form>
+      <div class="d-flex flex-wrap gap-2 align-items-end">
+        <form method="post" action="{{ url_for('summary.approve', cf=cf, sid=s.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-primary btn-sm" type="submit">Approve</button>
+        </form>
+        <form method="post" action="{{ url_for('summary.regenerate', cf=cf, sid=s.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Regenerate</button>
+        </form>
+        <form method="post" action="{{ url_for('summary.reject', cf=cf, sid=s.id) }}" class="d-flex gap-2 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div>
+            <label for="reason" class="form-label">Reason</label>
+            <input id="reason" name="reason" class="form-control form-control-sm" maxlength="500">
+          </div>
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
+        </form>
+      </div>
+    </div>
+  </section>
+  {% endif %}
+
+  <section class="card dash-card mb-3" aria-labelledby="versions-title">
+    <div class="dash-card-head"><h2 class="ds-card-title" id="versions-title">Versions</h2></div>
+    <div class="dash-card-body"><ul class="ds-rows">
+      {% for v in view.versions %}
+      <li class="ds-row"><span class="ds-row-main">
+        <span class="ds-row-title">Version {{ v.version }} · {{ v.kind }}</span>
+        <span class="ds-row-sub">{{ v.created_by }} · {{ v.created_at | appt_date }} {{ v.created_at | appt_time }} · {{ v.lines | length }} lines</span>
+      </span></li>
+      {% endfor %}
+    </ul></div>
+  </section>
+{% endif %}
+
+{% if not view or view.summary.status == 'approved' %}
+<section class="card dash-card mb-3" aria-labelledby="make-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="make-title">{{ 'Make a new draft' if view else 'No summary yet' }}</h2></div>
+  <div class="dash-card-body">
+    <p class="dash-empty-line">Builds a draft from this patient's own notes, on this machine. Nothing is sent anywhere and the notes are not changed.</p>
+    <form method="post" action="{{ url_for('summary.generate', cf=cf) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn btn-primary btn-sm" type="submit">Make a draft</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{% if history %}
+<section class="card dash-card" aria-labelledby="history-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="history-title">History</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for h in history %}
+    <li class="ds-row"><span class="ds-row-main">
+      <span class="ds-row-title">Summary {{ h.id }} · {{ h.status }}</span>
+      <span class="ds-row-sub">made {{ h.created_at | appt_date }} by {{ h.created_by }}{% if h.decided_by %} · {{ h.status }} by {{ h.decided_by }}{% endif %}{% if h.decision_reason %} · {{ h.decision_reason }}{% endif %}</span>
+    </span></li>
+    {% endfor %}
+  </ul></div>
+</section>
+{% endif %}
+{% endblock %}

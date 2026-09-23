@@ -183,6 +183,10 @@ def init_db(db_path):
     # the phone line (P12). no audio, no transcript, no caller number
     from calls import SCHEMA as CALLS_SCHEMA
     conn.executescript(CALLS_SCHEMA)
+
+    # next-visit summaries (P13). drafts for a dentist; versions append-only
+    from visit_summary import SCHEMA as SUMMARY_SCHEMA
+    conn.executescript(SUMMARY_SCHEMA)
     conn.commit()
     return conn
 

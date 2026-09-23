@@ -1,0 +1,243 @@
+{
+  "_note": "P13.01 review register for dental_shorthand_glossary.json. The glossary itself is what extraction and dataset generation read; this file records what a clinical owner has approved. Nothing is approved yet: no clinical owner has been named (P13-D3).",
+  "version": "2026-09-23.1",
+  "glossary_sha256": "f0ab3de6888c178fe833172d6a3b695f0d16e87e0d41ba6ddccf0773d070707e",
+  "clinical_owner": null,
+  "entries": {
+    "rct": {
+      "meaning": "root canal treatment",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "rct",
+          "language": "shorthand"
+        },
+        {
+          "text": "devitalizzazione",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "ext": {
+      "meaning": "extraction",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "ext",
+          "language": "shorthand"
+        },
+        {
+          "text": "estrazione",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "comp": {
+      "meaning": "composite filling",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "comp",
+          "language": "shorthand"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "filling": {
+      "meaning": "filling",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "filling",
+          "language": "shorthand"
+        },
+        {
+          "text": "otturazione",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "perio": {
+      "meaning": "periodontal",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "perio",
+          "language": "shorthand"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "opg": {
+      "meaning": "panoramic x-ray",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "opg",
+          "language": "shorthand"
+        },
+        {
+          "text": "panoramica",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "x-ray": {
+      "meaning": "x-ray",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "x-ray",
+          "language": "shorthand"
+        },
+        {
+          "text": "radiografia",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "caries": {
+      "meaning": "tooth decay",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "caries",
+          "language": "shorthand"
+        },
+        {
+          "text": "carie",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "crown": {
+      "meaning": "crown",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "crown",
+          "language": "shorthand"
+        },
+        {
+          "text": "corona",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "prophy": {
+      "meaning": "professional cleaning",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "prophy",
+          "language": "shorthand"
+        },
+        {
+          "text": "pulizia",
+          "language": "it"
+        },
+        {
+          "text": "igiene",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "scaling": {
+      "meaning": "scaling",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "scaling",
+          "language": "shorthand"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "restoration": {
+      "meaning": "restoration",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "restoration",
+          "language": "shorthand"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "seal": {
+      "meaning": "fissure sealant",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "seal",
+          "language": "shorthand"
+        },
+        {
+          "text": "sigillatura",
+          "language": "it"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "abx": {
+      "meaning": "antibiotics",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "abx",
+          "language": "shorthand"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    },
+    "fu": {
+      "meaning": "follow up",
+      "meaning_language": "en",
+      "phrases": [
+        {
+          "text": "fu",
+          "language": "shorthand"
+        }
+      ],
+      "status": "pending",
+      "approved_by": null,
+      "approved_at": null
+    }
+  }
+}

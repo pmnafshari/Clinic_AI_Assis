@@ -99,6 +99,7 @@ def create_app():
     from .reminders_routes import reminders_bp
     from .reports_routes import reports_bp
     from .stock_routes import stock_bp
+    from .summary_routes import summary_bp
     from .upload_routes import upload_bp
     app.register_blueprint(admin_bp)
     app.register_blueprint(agent_bp)
@@ -112,6 +113,7 @@ def create_app():
     app.register_blueprint(patients_bp)
     app.register_blueprint(providers_bp)
     app.register_blueprint(qa_bp)
+    app.register_blueprint(summary_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(stock_bp)

@@ -91,6 +91,15 @@ def _seed(db_path, root):
         " send_at, status, attempts, last_error, created_at) VALUES ('appointment', ?, ?,"
         " 'rb', 'appointment:rb:rb', ?, 'failed', 3, 'transport_unavailable', ?)",
         (pid, appt_id, "2026-09-23T06:00:00+00:00", "2026-09-23T06:00:00+00:00")).lastrowid
+    # a draft next-visit summary, the state the review routes act on (P13)
+    sid = conn.execute(
+        "INSERT INTO visit_summaries (patient_id, status, generator, generator_version,"
+        " source_ids, source_fingerprint, created_by, created_at) VALUES (?, 'draft',"
+        " 'extractive', 'rb', '[]', 'rb', 'rb_dentist', '2026-09-23T06:00:00+00:00')",
+        (pid,)).lastrowid
+    conn.execute("INSERT INTO visit_summary_versions (summary_id, version, kind, body, created_by,"
+                 " created_at) VALUES (?, 1, 'generated', '{\"lines\": []}', 'rb_dentist',"
+                 " '2026-09-23T06:00:00+00:00')", (sid,))
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -99,7 +108,7 @@ def _seed(db_path, root):
     return {"cf": CANARY_CF, "visit_id": visit_id, "appointment_id": appt_id, "req_id": req_id,
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
-            "handoff_id": handoff_id, "kind": "messaging",
+            "handoff_id": handoff_id, "kind": "messaging", "sid": sid,
             "username": "rb_target", "filename": "app.css"}
 
 

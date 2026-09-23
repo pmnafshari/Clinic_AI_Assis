@@ -51,6 +51,14 @@ def plan(conn, types, now=None):
     day = (now - timedelta(days=types["clinical_records"]["keep_days"])).date().isoformat()
     add("clinical_records", conn.execute(
         "SELECT COUNT(*) FROM visits WHERE visit_date < ?", (day,)).fetchone()[0], day)
+    # P13: next-visit summaries are clinical records and follow that policy -
+    # counted for a person, never deleted by the sweep
+    cut = _cutoff(now, types["clinical_records"]["keep_days"])
+    out.append({"type": "clinical_summaries", "sweep": types["clinical_records"]["sweep"],
+                "past_period": conn.execute(
+                    "SELECT COUNT(*) FROM visit_summaries WHERE created_at < ?",
+                    (cut,)).fetchone()[0],
+                "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
     day = (now - timedelta(days=types["invoices"]["keep_days"])).date().isoformat()
     add("invoices", conn.execute(
         "SELECT COUNT(*) FROM invoices i JOIN visits v ON v.id = i.visit_id"
@@ -104,6 +112,11 @@ def selftest():
         conn.execute("INSERT INTO data_requests (patient_id, kind, status, requested_by,"
                      " requested_role, requested_at, done_at) VALUES (?, 'access', 'done', ?,"
                      " 'patient', ?, ?)", (pid, pid, old, old))
+        # P13: an old next-visit summary, counted with clinical records
+        conn.execute("INSERT INTO visit_summaries (patient_id, status, generator,"
+                     " generator_version, source_ids, source_fingerprint, created_by,"
+                     " created_at) VALUES (?, 'approved', 'extractive', 't', '[]', 't',"
+                     " 'drossi', '2001-01-02T08:00:00+00:00')", (pid,))
         conn.commit()
         from auth import log_audit
         log_audit(conn, "drossi", "dentist", "login", None, 1)
@@ -111,13 +124,16 @@ def selftest():
         # 1. the plan counts each type against its own period
         counts = {r["type"]: r["past_period"] for r in plan(conn, types, now)}
         assert counts == {"audit_log": 1, "closed_data_requests": 1, "exports": 0,
-                          "clinical_records": 1, "invoices": 1}, f"1: {counts}"
+                          "clinical_records": 1, "clinical_summaries": 1, "invoices": 1}, \
+            f"1: {counts}"
 
         # 2. apply deletes only sweep=delete types, and the audit purge says so
         done = apply(conn, types, now, exports_dir=Path(tmp) / "exports")
         assert done == {"audit_log": 1, "closed_data_requests": 1}, f"2: {done}"
         assert conn.execute("SELECT COUNT(*) FROM visits").fetchone()[0] == 1, \
             "2: clinical records are never swept"
+        assert conn.execute("SELECT COUNT(*) FROM visit_summaries").fetchone()[0] == 1, \
+            "2: summaries are clinical records and are never swept"
         assert conn.execute("SELECT COUNT(*) FROM invoices").fetchone()[0] == 1, \
             "2: invoices are never swept"
         assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'audit_purge'"
