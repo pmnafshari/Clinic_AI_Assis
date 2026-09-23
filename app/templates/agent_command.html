@@ -29,7 +29,7 @@
     <form method="post" action="{{ url_for('agent.dictate_command') }}" enctype="multipart/form-data" class="mt-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <label for="audio" class="ds-label">Or say it (the recording is not kept)</label>
-      <input id="audio" name="audio" type="file" accept="audio/*" class="form-control mb-2">
+      <input id="audio" name="audio" type="file" accept="audio/wav,.wav" class="form-control mb-2">
       <button type="submit" class="ds-btn ds-btn-secondary">Turn into text</button>
     </form>
     {% elif dictation_why %}

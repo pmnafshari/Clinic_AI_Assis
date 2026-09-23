@@ -44,7 +44,7 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
     <label for="audio" class="form-label">Or dictate it (the recording is not kept)</label>
-    <input id="audio" name="audio" type="file" accept="audio/*" class="form-control mb-2">
+    <input id="audio" name="audio" type="file" accept="audio/wav,.wav" class="form-control mb-2">
     <button type="submit" class="btn btn-outline-secondary btn-sm">Turn into text</button>
   </form>
   {% else %}

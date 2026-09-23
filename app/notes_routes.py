@@ -70,6 +70,7 @@ def dictate():
     blob = request.files.get("audio")
     audio = blob.read(dictation.MAX_AUDIO_BYTES + 1) if blob else b""
     try:
+        dictation.check_rate(g.user["username"])
         text = dictation.transcribe(audio, request.form.get("lang", "it"))
     except (dictation.Unavailable, dictation.Unclear) as e:
         log_audit(get_db(), g.user["username"], g.user["role"], "dictate", cf or None, allowed=1,

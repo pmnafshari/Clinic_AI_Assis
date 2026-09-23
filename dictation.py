@@ -18,15 +18,29 @@ WHAT MAY BE READ ALOUD. Only the current approved, unchanged next-visit summary
 of the patient on screen - decided here, not in the page - and only after the
 clinician confirms they are somewhere private. Nothing plays by itself.
 """
+import io
 import os
 import re
+import struct
+import threading
+import time
+import wave
+from pathlib import Path
 
 from auth import authorize, log_audit
 
 ENV_STT = "CLINIC_STT_ADAPTER"
 ENV_TTS = "CLINIC_TTS_ADAPTER"
 MAX_AUDIO_BYTES = 2 * 1024 * 1024
+MAX_AUDIO_SECONDS = 60
 MAX_SPEAK_CHARS = 4000
+RATE_LIMIT = 20            # dictations per user
+RATE_WINDOW = 600          # seconds
+
+# the one local model, pinned by revision (models/stt/MANIFEST.json holds its
+# sha256). loaded only from this folder; nothing is ever downloaded at runtime
+STT_MODEL_DIR = (Path(__file__).resolve().parent / "models" / "stt"
+                 / "faster-whisper-small@536b0662742c")
 
 STT_UNAVAILABLE = ("Dictation is not available: there is no approved local speech model on this"
                    " machine. Please type the note.")
@@ -61,6 +75,85 @@ class SandboxSTT:
         return audio.decode("utf-8", errors="replace")
 
 
+def decode_wav(audio):
+    """Bytes -> 16 kHz mono float samples. WAV (RIFF/WAVE, 16-bit PCM) only,
+    judged by the bytes themselves - a filename or a declared type is ignored."""
+    import numpy as np
+    if len(audio) < 44 or audio[:4] != b"RIFF" or audio[8:12] != b"WAVE":
+        raise Unavailable("Only WAV recordings are accepted.")
+    try:
+        with wave.open(io.BytesIO(audio)) as w:
+            channels, width, rate, frames = (w.getnchannels(), w.getsampwidth(),
+                                             w.getframerate(), w.getnframes())
+            if width != 2 or channels not in (1, 2) or not 8000 <= rate <= 48000:
+                raise Unavailable("The recording must be 16-bit PCM, mono or stereo.")
+            if frames / rate > MAX_AUDIO_SECONDS:
+                raise Unavailable("The recording is too long. Record a shorter part, or type it.")
+            raw = w.readframes(frames)
+    except (wave.Error, EOFError, struct.error):
+        raise Unavailable("The recording could not be read.") from None
+    pcm = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768
+    if channels == 2:
+        pcm = pcm.reshape(-1, 2).mean(axis=1)
+    if rate != 16000:
+        target = int(len(pcm) * 16000 / rate)
+        pcm = np.interp(np.linspace(0, len(pcm) - 1, target), np.arange(len(pcm)), pcm)
+    return pcm.astype(np.float32)
+
+
+_RATE = {}
+_RATE_LOCK = threading.Lock()
+
+
+def check_rate(username):
+    """At most RATE_LIMIT dictations per user per RATE_WINDOW seconds."""
+    now = time.monotonic()
+    with _RATE_LOCK:
+        recent = [t for t in _RATE.get(username, []) if now - t < RATE_WINDOW]
+        if len(recent) >= RATE_LIMIT:
+            raise Unavailable("Too many recordings in a short time. Wait a few minutes, or type it.")
+        recent.append(now)
+        _RATE[username] = recent
+
+
+_LOCAL_MODEL = {}
+_LOAD_LOCK = threading.Lock()
+_RUN_LOCK = threading.Lock()
+
+
+class LocalWhisperSTT:
+    """faster-whisper small, CPU, int8, from the pinned local folder only.
+
+    Offline by construction: the Hugging Face client is told it is offline
+    before the library is imported, the model is loaded from a path with
+    local_files_only, and a missing folder is an error - never a download.
+    Audio is decoded in memory from WAV; nothing is written to disk."""
+    name = "local"
+
+    def _model(self):
+        with _LOAD_LOCK:
+            if "m" not in _LOCAL_MODEL:
+                if not (STT_MODEL_DIR / "model.bin").exists():
+                    raise Unavailable("Dictation is not available: the local speech model is not"
+                                      " installed on this machine. Please type the note.")
+                os.environ["HF_HUB_OFFLINE"] = "1"
+                os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+                from faster_whisper import WhisperModel
+                _LOCAL_MODEL["m"] = WhisperModel(str(STT_MODEL_DIR), device="cpu",
+                                                 compute_type="int8", cpu_threads=4,
+                                                 local_files_only=True)
+            return _LOCAL_MODEL["m"]
+
+    def transcribe(self, audio, lang):
+        pcm = decode_wav(audio)
+        model = self._model()
+        # one transcription at a time: a 16 GB machine, and a model loaded once
+        with _RUN_LOCK:
+            segments, _info = model.transcribe(pcm, language=lang, beam_size=1,
+                                               vad_filter=False, condition_on_previous_text=False)
+            return " ".join(seg.text for seg in segments).strip()
+
+
 class DisabledTTS:
     name = "disabled"
 
@@ -75,7 +168,7 @@ class SandboxTTS:
         return b"SANDBOX-AUDIO:" + str(len(text)).encode()
 
 
-STT = {"disabled": DisabledSTT, "sandbox": SandboxSTT}
+STT = {"disabled": DisabledSTT, "sandbox": SandboxSTT, "local": LocalWhisperSTT}
 TTS = {"disabled": DisabledTTS, "sandbox": SandboxTTS}
 
 
