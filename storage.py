@@ -207,6 +207,9 @@ def init_db(db_path):
     # the pilot machinery around the demo (P20): kill switch, job queue, incidents, validations
     from xray_pilot_demo import SCHEMA as XRAY_PILOT_SCHEMA
     conn.executescript(XRAY_PILOT_SCHEMA)
+    # support tickets and health samples (P21); about the system, never a patient
+    from support import SCHEMA as SUPPORT_SCHEMA
+    conn.executescript(SUPPORT_SCHEMA)
     conn.commit()
     return conn
 

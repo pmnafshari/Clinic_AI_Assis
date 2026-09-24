@@ -162,6 +162,7 @@ this file is stale.
 | `invoices` | id, patient_id, visit_id, line_index, amount, description, amount_cents |
 | `note_confirm_tokens` | token, username, issued_at, used_at |
 | `note_reviews` | id, origin, status, patient_id, codice_fiscale, staged_dir, original_path, original_name, original_sha256, extraction, extraction_error, attempts, visit_id, confirmed_fields, edited, created_by, created_at, decided_by, decided_at, decision_reason |
+| `ops_health_samples` | id, at, all_up, alerts, checks |
 | `patient_agent_actions` | id, patient_id, kind, payload, status, created_at, expires_at, resolved_at, result_id |
 | `patient_credentials` | id, patient_id, pin_hash, must_change_pin, issued_at, expires_at, failed_attempts, locked_until, active |
 | `patient_documents` | id, patient_id, kind, display_name, stored_path, sha256, size, status, reason, extraction, extractor, uploaded_by, uploaded_at, decided_by, decided_at, supersedes_id |
@@ -182,6 +183,8 @@ this file is stale.
 | `sessions` | id, token_hash, username, role, created_at, last_seen_at |
 | `similar_case_exclusions` | visit_id, reason, criteria_version, decided_by, decided_at |
 | `similar_case_feedback` | id, source_visit_id, case_visit_id, verdict, reason, criteria_version, decided_by, decided_at |
+| `support_ticket_events` | id, ticket_id, event, detail, actor, at |
+| `support_tickets` | id, source, summary, severity, status, owner, due_on, resolution, alert_key, created_by, created_at, closed_at |
 | `users` | id, username, password_hash, role, active, must_change_password, failed_attempts, locked_until |
 | `visit_reviews` | visit_id, method, reviewed_by, reviewed_at, review_id |
 | `visit_summaries` | id, patient_id, status, generator, generator_version, source_ids, source_fingerprint, created_by, created_at, decided_by, decided_at, decision_reason, flags_at_approval |

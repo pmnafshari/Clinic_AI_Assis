@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- TEMPLATE, NOT INSTALLED. replace __REPO__ with the repository path; installing it is the owner's decision. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>clinic.health</string>
+  <key>ProgramArguments</key>
+  <array><string>/bin/sh</string><string>-c</string><string>cd "__REPO__" &amp;&amp; .venv/bin/python health.py; .venv/bin/python support.py from-alerts</string></array>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>StandardOutPath</key><string>/tmp/clinic.health.log</string>
+  <key>StandardErrorPath</key><string>/tmp/clinic.health.log</string>
+</dict>
+</plist>
