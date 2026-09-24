@@ -83,11 +83,16 @@ def selftest():
         assert (s["state"], s["paid_cents"], s["outstanding_cents"]) == ("partially_paid", 9000, 9000), s
 
         # 5. no payment provider: a pay link is refused, not faked
+        refused = None
         try:
             payments.create_link(conn, invoice, "assistant", "assistant", env={})
-            raise AssertionError("5: a payment link was created with no provider")
-        except providers.ProviderError:
-            pass
+        except Exception as e:
+            refused = e
+        # refused BY THE GATE: any other error means the gate let it through and something later broke
+        assert isinstance(refused, providers.ProviderError), f"5: not refused by the provider gate: {refused!r}"
+        assert conn.execute("SELECT COUNT(*) FROM payment_links").fetchone()[0] == 0, "5: a link row exists"
+        assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'payment_link' AND allowed = 0"
+                            ).fetchone()[0] == 1, "5: the refusal was not audited"
 
         # 6. follow-up booked; reminders planned for it and for the money
         follow = appointments.book(conn, pid, "dentist", f"{FOLLOW_UP}T10:30", 30)
@@ -99,7 +104,17 @@ def selftest():
 
         # 7. no messaging provider: due reminders are held, nothing sent, nothing claimed
         later = clinic_time.read_instant(f"{FOLLOW_UP}T06:00:00+00:00")
-        report = reminders.run_once(conn, reminders.DisabledTransport(), now=later)
+        class WatchedDisabled(reminders.DisabledTransport):
+            # still the disabled transport; it only notes whether anyone tried to send through it
+            def __init__(self):
+                self.asked = []
+
+            def send(self, phone, body, key):
+                self.asked.append(key)
+
+        transport = WatchedDisabled()
+        report = reminders.run_once(conn, transport, now=later)
+        assert transport.asked == [], f"7: the disabled transport was asked to send {len(transport.asked)} time(s)"
         assert report["transport"] == "disabled" and "provider" in report["reason"], report
         assert conn.execute("SELECT COUNT(*) FROM reminder_jobs WHERE status != 'scheduled'"
                             " AND patient_id = ?", (pid,)).fetchone()[0] == 0, "7: a reminder moved"
