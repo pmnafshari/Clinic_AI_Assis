@@ -443,6 +443,23 @@ def for_patient(conn, patient):
     ).fetchall()
 
 
+def next_booked(conn, patient):
+    """THE next appointment, for every surface that shows one (P22): the first
+    booked row from the start of the clinic's today - the rule open_for_patient
+    applies. never a request, a cancelled row, a past day, or the free-text recall
+    in a visit note."""
+    booked, _requested = open_for_patient(conn, patient)
+    return booked[0] if booked else None
+
+
+def next_booked_local(conn, patient):
+    """-> "YYYY-MM-DD HH:MM" in clinic time, or None."""
+    row = next_booked(conn, patient)
+    if row is None:
+        return None
+    return f"{clinic_time.local_date(row['starts_at'])} {clinic_time.local_hhmm(row['starts_at'])}"
+
+
 def open_for_patient(conn, patient):
     """-> (booked, requested) for the patient's own surface.
 

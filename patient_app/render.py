@@ -101,7 +101,8 @@ def render_visits(rows, lang):
 def render_next_appointment(value, lang):
     if not value:
         return None
-    return format_date(value, lang)
+    day, _, hhmm = value.partition(" ")
+    return f"{format_date(day, lang)} {hhmm}".strip()
 
 
 def render_invoices(rows, lang):
@@ -286,6 +287,7 @@ def selftest():
 
     assert render_next_appointment(None, "it") is None
     assert render_next_appointment("2026-09-01", "it") == "01/09/2026"
+    assert render_next_appointment("2026-09-23 10:30", "en") == "23/09/2026 10:30"
 
     invoices = render_invoices(
         [{"amount": 80.0, "description": "filling 14"}, {"amount": 40.0, "description": None}],

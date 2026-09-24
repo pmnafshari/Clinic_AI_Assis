@@ -584,6 +584,7 @@ def selftest():
         conn.executescript(patient_agent.SCHEMA)
         conn.executescript(handoff.SCHEMA)
         conn.executescript("""
+            CREATE TABLE IF NOT EXISTS patient_merges (source_cf TEXT, target_patient_id TEXT);
             CREATE TABLE IF NOT EXISTS appointments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 patient_id TEXT NOT NULL REFERENCES patients(patient_id),

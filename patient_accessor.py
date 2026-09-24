@@ -49,16 +49,19 @@ def get_visits(pid, conn, ip=None):
 
 
 def get_next_appointment(pid, conn, ip=None):
-    row = conn.execute(
-        "SELECT patient_id, next_appointment FROM visits"
-        " WHERE patient_id = ? ORDER BY id DESC LIMIT 1", (pid,)
-    ).fetchone()
-    if row is None:
+    # P22: a booking, by the one rule every surface uses - not the recall text in
+    # a visit note, which was never scheduled. clinic time, "YYYY-MM-DD HH:MM".
+    import appointments
+    booked = appointments.next_booked(conn, pid)
+    if booked is None:
         return None
-    rows = _scope_rows([row], pid, conn, "get_next_appointment", ip=ip)
+    # defence in depth: re-read that row scoped to this patient before it is used
+    row = conn.execute("SELECT patient_id, starts_at FROM appointments WHERE patient_id = ? AND id = ?",
+                       (pid, booked["id"])).fetchone()
+    rows = _scope_rows([row or {"patient_id": booked["patient_id"]}], pid, conn, "get_next_appointment", ip=ip)
     if not rows:
         return None
-    return rows[0]["next_appointment"]
+    return appointments.next_booked_local(conn, pid)
 
 
 def get_invoices(pid, conn, ip=None):
@@ -197,16 +200,32 @@ def selftest():
         # name, phone, visit date, procedure and invoice description appear
         # nowhere in the four results. this is CHAT-04's unit-level proof;
         # SC2's live proof is plan 18-06.
+        # P22: the next appointment is a booking (clinic time), not visits.next_appointment
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS appointments (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                patient_id TEXT NOT NULL, dentist TEXT NOT NULL, starts_at TEXT NOT NULL,
+                minutes INTEGER NOT NULL, status TEXT NOT NULL DEFAULT 'booked', note TEXT,
+                period TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS patient_merges (source_cf TEXT, target_patient_id TEXT);
+        """)
+        conn.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, created_at,"
+                     " updated_at) VALUES (?, 'dentist', '2026-10-01T08:00:00+00:00', 30, 'booked', 'x', 'x')",
+                     (pid_a,))
+        import clinic_time as _ct
+        from datetime import datetime as _dt
+        _real_now = _ct.now
+        _ct.now = lambda env=None: _dt(2026, 9, 17, 9, 0)
         demo_a = get_demographics(pid_a, conn)
         visits_a = get_visits(pid_a, conn)
         next_a = get_next_appointment(pid_a, conn)
+        _ct.now = _real_now
         invoices_a = get_invoices(pid_a, conn)
 
         assert demo_a == {"patient_name": "anna alfa", "phone": "111000111"}, \
             f"2: get_demographics returned {demo_a}"
         assert len(visits_a) == 1 and visits_a[0]["visit_date"] == "2026-06-01", \
             f"2: get_visits returned {visits_a}"
-        assert next_a == "2026-09-01", f"2: get_next_appointment returned {next_a}"
+        assert next_a == "2026-10-01 10:00", f"2: get_next_appointment returned {next_a}"
         assert len(invoices_a) == 1 and invoices_a[0]["amount"] == 80.0, \
             f"2: get_invoices returned {invoices_a}"
 

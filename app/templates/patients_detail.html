@@ -13,7 +13,7 @@
     <div class="min-w-0">
       <p class="ds-page-eyebrow">Patient record</p>
       <h1 class="ds-page-title text-break">{{ patient.patient_name }}</h1>
-      <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %} · {{ patient.phone }}{% endif %}</p>
+      <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %} · {{ patient.phone|phone }}{% endif %}</p>
     </div>
   </div>
   {% if authorize(g.user.role, 'append_note') or authorize(g.user.role, 'review_summary') %}
@@ -44,7 +44,7 @@
       <div class="dash-card-body">
         <dl class="detail-list">
           <div><dt>Codice Fiscale</dt><dd class="font-monospace">{{ cf }}</dd></div>
-          <div><dt>Phone</dt><dd>{{ patient.phone or "-" }}</dd></div>
+          <div><dt>Phone</dt><dd>{{ patient.phone|phone or "-" }}</dd></div>
         </dl>
       </div>
     </section>
@@ -263,7 +263,7 @@
             {% if visit.procedures %}
             <p class="timeline-procs"><span class="visually-hidden">Procedures: </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>
             {% endif %}
-            <p class="timeline-next">Next appointment: {{ visit.next_appointment or "not set" }}</p>
+            <p class="timeline-next">Recall written in the note: {{ visit.next_appointment or "none" }}</p>
           </li>
           {% endfor %}
         </ol>

@@ -94,7 +94,7 @@ SCHEMA = """
 
 # closed vocabularies: nothing from a provider or a patient reaches these columns
 CANCEL_REASONS = ("rescheduled", "appointment_cancelled", "paid", "invoice_void",
-                  "consent_withdrawn", "no_phone", "too_late", "patient_gone")
+                  "consent_withdrawn", "no_phone", "too_late", "patient_gone", "demo_identity")
 ERRORS = ("transport_unavailable", "transport_timeout", "transport_rejected")
 
 
@@ -230,6 +230,9 @@ def plan(conn, now=None):
 
 def _still_valid(conn, job, now):
     """None if the message may go, else the closed reason it may not."""
+    # P22: a seeded demo identity is never messaged - checked first, whatever transport is wired (fail closed)
+    if conn.execute("SELECT 1 FROM demo_identities WHERE patient_id = ?", (job["patient_id"],)).fetchone():
+        return "demo_identity"
     if conn.execute("SELECT 1 FROM patients WHERE patient_id = ?",
                     (job["patient_id"],)).fetchone() is None:
         return "patient_gone"
@@ -263,8 +266,9 @@ def _still_valid(conn, job, now):
         return "consent_withdrawn"
     phone = conn.execute("SELECT phone FROM patients WHERE patient_id = ?",
                          (job["patient_id"],)).fetchone()[0]
-    if not phone:
-        return "no_phone"
+    import phones
+    if not phones.canonical(phone):
+        return "no_phone"                 # none, or a stored value that is not a number: never dialled
     return None
 
 

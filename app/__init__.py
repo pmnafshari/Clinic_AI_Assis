@@ -60,6 +60,8 @@ def create_app():
     # signs with its own SECRET_KEY, so leaving both unnamed lets whichever
     # opens second overwrite the other's csrf session cookie (CR-05)
     app.config["SESSION_COOKIE_NAME"] = "staff_csrf"
+    import phones
+    app.jinja_env.filters["phone"] = phones.display      # P22: E.164, or says it is not a number
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024

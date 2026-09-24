@@ -1056,6 +1056,13 @@ def selftest():
         seed_visit(cf24, "2031-01-10", ["seal 11"], "2031-06-01", "24/n1.json")
         visit24b = seed_visit(cf24, "2031-02-15", ["crown 22"], "2031-06-01", "24/n2.json")
         seed_invoice(cf24, visit24b, 120.0, "porcelain crown consult")
+        # P22: "next appointment" is a booking, not the recall in a note - so the fixture books it
+        c24 = raw_db()
+        c24.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, created_at,"
+                    " updated_at) VALUES (?, 'dentist', '2031-06-01T08:00:00+00:00', 30, 'booked', ?, ?)",
+                    (pid_of(cf24), "2031-01-10T00:00:00+00:00", "2031-01-10T00:00:00+00:00"))
+        c24.commit()
+        c24.close()
 
         client24, _ = sign_in(cf24, pin24)
         activate(client24, pin24, "84610237")
@@ -1196,6 +1203,13 @@ def selftest():
             c.close()
             visit_id = seed_visit(cf, visit_date, [procedure], next_appointment, f"{source_tag}/n1.json")
             seed_invoice(cf, visit_id, invoice_amount, invoice_description)
+            # P22: the chat's next appointment is a booking - book the recall so the route has data
+            c = raw_db()
+            c.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, created_at,"
+                      " updated_at) VALUES (?, 'dentist', ?, 30, 'booked', 'x', 'x')",
+                      (pid_of(cf), f"{next_appointment}T08:00:00+00:00"))
+            c.commit()
+            c.close()
             return pin
 
         def login_and_activate(cf, pin, new_pin):

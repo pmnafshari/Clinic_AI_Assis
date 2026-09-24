@@ -150,6 +150,7 @@ this file is stale.
 | `consent_records` | id, patient_id, purpose, text_version, granted, actor, actor_role, ts, note |
 | `data_requests` | id, patient_id, kind, status, detail, requested_by, requested_role, requested_at, reviewed_by, reviewed_at, reason, hold_reason, done_at, export_file, export_expires_at |
 | `delivery_receipts` | id, job_id, provider_ref, outcome, reason, at |
+| `demo_identities` | patient_id, seed, created_at |
 | `dentist_absences` | id, dentist, from_date, to_date, reason |
 | `dentist_schedule` | id, dentist, weekday, starts, ends |
 | `handoff_requests` | id, patient_id, reason, topic, status, created_at, claimed_by, claimed_at, resolved_by, resolved_at |

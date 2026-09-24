@@ -49,7 +49,7 @@
             </span>
           </td>
           <td data-label="Codice Fiscale"><span class="font-monospace small">{{ p.codice_fiscale }}</span></td>
-          <td data-label="Phone">{{ p.phone or "-" }}</td>
+          <td data-label="Phone">{{ p.phone|phone or "-" }}</td>
           <td data-label="Next appointment">{% if p.next_appointment %}<span class="ds-badge ds-badge-primary">{{ p.next_appointment }}</span>{% else %}<span class="text-secondary">-</span>{% endif %}</td>
           <td data-label="Last visit">{{ p.last_visit or "-" }}</td>
           <td data-label="" class="text-end">

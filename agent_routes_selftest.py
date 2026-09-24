@@ -58,7 +58,7 @@ def fake_urlopen(req, timeout=120):
         def read(self):
             tool_call = {
                 "tool": "update_field",
-                "args": {"patient": "rossi", "field": "phone", "value": "333-1234"},
+                "args": {"patient": "rossi", "field": "phone", "value": "333 1234567"},
             }
             return json.dumps({"response": json.dumps(tool_call)}).encode()
 
@@ -102,11 +102,11 @@ def selftest():
         csrf_edit = _csrf_from(edit_get.text)
         build_resp = client.post(
             "/agent/edit",
-            data={"patient": "rossi", "field": "phone", "value": "333-1234", "csrf_token": csrf_edit},
+            data={"patient": "rossi", "field": "phone", "value": "333 1234567", "csrf_token": csrf_edit},
         )
         assert build_resp.status_code == 200, "build via /agent/edit should return 200"
         assert "333 9999999" in build_resp.text, "GUI-04: diff should show the current value"
-        assert "333-1234" in build_resp.text, "GUI-04: diff should show the new value"
+        assert "+393331234567" in build_resp.text, "GUI-04: diff should show the new value"
         assert 'name="token"' in build_resp.text, "confirm page should carry a hidden token"
         assert _phone(db_path, cf) == "333 9999999", "GUI-04: building the diff must not write to the db"
 
@@ -116,7 +116,7 @@ def selftest():
         # 2. D-04 - confirm applies exactly the frozen payload
         confirm_resp = client.post("/agent/confirm", data={"token": token, "csrf_token": csrf_confirm})
         assert confirm_resp.status_code == 302, "confirm should redirect on success"
-        assert _phone(db_path, cf) == "333-1234", "confirm should apply the frozen new value"
+        assert _phone(db_path, cf) == "+393331234567", "confirm should apply the frozen new value"
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -131,7 +131,7 @@ def selftest():
         replay_resp = client.post("/agent/confirm", data={"token": token, "csrf_token": csrf_confirm})
         assert replay_resp.status_code == 200, "replayed confirm should re-render, not redirect"
         assert "expired" in replay_resp.text.lower(), "replayed confirm should show the expiry/invalid message"
-        assert _phone(db_path, cf) == "333-1234", "replayed confirm must not double-apply"
+        assert _phone(db_path, cf) == "+393331234567", "replayed confirm must not double-apply"
 
         # 4. RBAC-01/SC4 - a valid token confirmed by a role lacking permission
         # is denied inside apply_pending_action, not just hidden by the UI.
@@ -141,7 +141,7 @@ def selftest():
         csrf_edit2 = _csrf_from(edit_get2.text)
         build_resp2 = client.post(
             "/agent/edit",
-            data={"patient": "rossi", "field": "phone", "value": "555-0000", "csrf_token": csrf_edit2},
+            data={"patient": "rossi", "field": "phone", "value": "0612345678", "csrf_token": csrf_edit2},
         )
         token2 = _token_from(build_resp2.text)
         csrf_confirm2 = _csrf_from(build_resp2.text)
@@ -154,7 +154,7 @@ def selftest():
         denied_resp = client.post("/agent/confirm", data={"token": token2, "csrf_token": csrf_confirm2})
         assert denied_resp.status_code == 200, "denied confirm should re-render, not redirect"
         assert "permission" in denied_resp.text.lower(), "denied confirm should show a permission message"
-        assert _phone(db_path, cf) == "333-1234", "RBAC-01/SC4: denied confirm must not change the phone"
+        assert _phone(db_path, cf) == "+393331234567", "RBAC-01/SC4: denied confirm must not change the phone"
 
         conn = sqlite3.connect(db_path)
         conn.row_factory = sqlite3.Row
@@ -177,7 +177,7 @@ def selftest():
         assert replay_denied.status_code == 200, "replay of a denied token should re-render"
         assert "expired" in replay_denied.text.lower(), \
             "a denied confirm must consume the token - replay should show expired"
-        assert _phone(db_path, cf) == "333-1234", \
+        assert _phone(db_path, cf) == "+393331234567", \
             "a consumed denied token must not apply after a role restore"
 
         # 5. D-05 - an expired pending action re-renders with the expiry
@@ -186,7 +186,7 @@ def selftest():
         csrf_edit3 = _csrf_from(edit_get3.text)
         build_resp3 = client.post(
             "/agent/edit",
-            data={"patient": "rossi", "field": "phone", "value": "666-6666", "csrf_token": csrf_edit3},
+            data={"patient": "rossi", "field": "phone", "value": "0612340001", "csrf_token": csrf_edit3},
         )
         token3 = _token_from(build_resp3.text)
         csrf_confirm3 = _csrf_from(build_resp3.text)
@@ -200,7 +200,7 @@ def selftest():
 
         assert expired_resp.status_code == 200, "expired confirm should re-render, not redirect"
         assert "expired" in expired_resp.text.lower(), "D-05: expired confirm should show the expiry message"
-        assert _phone(db_path, cf) == "333-1234", "D-05: an expired token must apply nothing"
+        assert _phone(db_path, cf) == "+393331234567", "D-05: an expired token must apply nothing"
 
         # 6. GUI-05 - /agent/undo reverts only the acting user's own last change
         agent.write_undo_entry(
@@ -250,7 +250,7 @@ def selftest():
         csrf_edit4 = _csrf_from(edit_get4.text)
         ambiguous_resp = client.post(
             "/agent/edit",
-            data={"patient": "rossi", "field": "phone", "value": "777-7777", "csrf_token": csrf_edit4},
+            data={"patient": "rossi", "field": "phone", "value": "0612340002", "csrf_token": csrf_edit4},
         )
         assert ambiguous_resp.status_code == 200, "ambiguous name should re-render, not hang or 500"
         assert "multiple patients named rossi found" in ambiguous_resp.text, \

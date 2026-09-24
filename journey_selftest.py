@@ -121,7 +121,8 @@ def selftest():
         assert conn.execute("SELECT COUNT(*) FROM delivery_receipts").fetchone()[0] == 0, "7: nothing went out"
 
         # 8. her portal: the follow-up and what she owes; the other patient sees none of it
-        assert patient_accessor.get_next_appointment(pid, conn) == FOLLOW_UP, "8: the note's follow-up"
+        # P22: the next appointment is the first booking, not the note's follow-up text
+        assert patient_accessor.get_next_appointment(pid, conn) == f"{VISIT_DAY} 10:30", "8: not the first booking"
         booked, _ = appointments.open_for_patient(conn, pid)
         assert [b["id"] for b in booked] == [req, follow], f"8: her appointments {booked}"
         billing = patient_accessor.get_billing(pid, conn)

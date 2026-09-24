@@ -217,12 +217,12 @@ def selftest():
         assert f"/patients/{cf}/files" not in assistant_detail_resp.text, \
             "assistant must not even be told the files fragment endpoint exists"
 
-        # 2c. CR-04 - the list picks next appointment / last visit by
-        # visit_date, not by insert order
+        # 2c. CR-04 - the list picks the last visit by visit_date, not by insert order.
+        # P22: its "next appointment" is a booking, never the recall text in a note
         dentist_list_resp = dentist_client.get("/patients")
         assert dentist_list_resp.status_code == 200
-        assert "2026-08-01" in dentist_list_resp.text, \
-            "next appointment must come from the newest visit by date, not the highest id"
+        assert "2026-08-01" not in dentist_list_resp.text.split("<tbody", 1)[-1].split("</tbody>")[0], \
+            "a note's recall must not be shown as the next appointment"
         assert "2026-06-01" in dentist_list_resp.text, \
             "last visit must be the newest visit by date"
         assert "2026-03-15" not in dentist_list_resp.text, \
@@ -269,7 +269,7 @@ def selftest():
 
         # 6. CSRF is enforced on the edit POST, same as every other write
         no_csrf_resp = dentist_client.post(
-            f"/patients/{cf}/edit", data={"field": "phone", "value": "333-1234"}
+            f"/patients/{cf}/edit", data={"field": "phone", "value": "333 1234567"}
         )
         assert no_csrf_resp.status_code == 400, \
             "edit POST without a csrf token should be rejected"
@@ -281,12 +281,12 @@ def selftest():
         edit_csrf = _csrf_from(edit_form_resp.text)
         build_resp = dentist_client.post(
             f"/patients/{cf}/edit",
-            data={"field": "phone", "value": "333-1234", "csrf_token": edit_csrf},
+            data={"field": "phone", "value": "333 1234567", "csrf_token": edit_csrf},
         )
         assert build_resp.status_code == 200
         assert 'name="token"' in build_resp.text, \
             "confirm-diff fragment should carry a hidden token"
-        assert "333123456" in build_resp.text and "333-1234" in build_resp.text, \
+        assert "333123456" in build_resp.text and "+393331234567" in build_resp.text, \
             "confirm-diff fragment should show the old -> new diff"
         assert _phone(db_path, cf) == "333123456", \
             "building the diff must not write to the db until confirm"
@@ -300,7 +300,7 @@ def selftest():
             "/agent/confirm", data={"token": token, "csrf_token": confirm_csrf}
         )
         assert confirm_resp.status_code == 302, "confirm should redirect on success"
-        assert _phone(db_path, cf) == "333-1234", \
+        assert _phone(db_path, cf) == "+393331234567", \
             "confirming should apply the frozen new value"
 
         # 9. RBAC re-check (SC4) - build as dentist (authorized), then
@@ -310,7 +310,7 @@ def selftest():
         edit_csrf2 = _csrf_from(edit_form_resp2.text)
         build_resp2 = dentist_client.post(
             f"/patients/{cf}/edit",
-            data={"field": "phone", "value": "555-0000", "csrf_token": edit_csrf2},
+            data={"field": "phone", "value": "0612345678", "csrf_token": edit_csrf2},
         )
         token2 = _token_from(build_resp2.text)
         confirm_csrf2 = _csrf_from(build_resp2.text)
@@ -326,7 +326,7 @@ def selftest():
         assert denied_resp.status_code == 200, "a denied confirm should re-render, not redirect"
         assert "permission" in denied_resp.text.lower(), \
             "a denied confirm should show a permission message"
-        assert _phone(db_path, cf) == "333-1234", \
+        assert _phone(db_path, cf) == "+393331234567", \
             "RBAC re-check: a denied confirm must not change the phone"
 
         conn = sqlite3.connect(db_path)
@@ -352,7 +352,7 @@ def selftest():
             f"/patients/{cf}/edit",
             data={
                 "field": "phone",
-                "value": "333-5678",
+                "value": "0612340001",
                 "csrf_token": _csrf_from(edit_form_resp3.text),
             },
         )
@@ -368,7 +368,7 @@ def selftest():
             "an htmx confirm must not swap a full page into the modal body"
         assert cf in htmx_confirm_resp.headers.get("HX-Redirect", ""), \
             "an htmx confirm should send the browser back to the patient page"
-        assert _phone(db_path, cf) == "333-5678", \
+        assert _phone(db_path, cf) == "+390612340001", \
             "the htmx confirm should still apply the frozen value"
 
         # the error branches are fragments too, not agent_confirm.html

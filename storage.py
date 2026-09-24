@@ -210,6 +210,9 @@ def init_db(db_path):
     # support tickets and health samples (P21); about the system, never a patient
     from support import SCHEMA as SUPPORT_SCHEMA
     conn.executescript(SUPPORT_SCHEMA)
+    # the seeded demo cohort (P22): reminders never send to anyone listed here
+    from demo_seed import SCHEMA as DEMO_SEED_SCHEMA
+    conn.executescript(DEMO_SEED_SCHEMA)
     conn.commit()
     return conn
 
@@ -422,13 +425,18 @@ def upsert_note_sql(note, source_path, conn):
     # patient_id once, here, and nothing downstream stores it again.
     import patient_id as _pid
 
+    # P22: one stored phone form (E.164); a number the note got wrong does not
+    # overwrite a good one (the note file keeps what was written). a name that
+    # arrived all lower / upper case is title-cased for a new identity.
+    import phones
+    from shared.names import person
     conn.execute("""
         INSERT INTO patients (patient_id, codice_fiscale, patient_name, phone)
         VALUES (?, ?, ?, ?)
         ON CONFLICT(codice_fiscale) DO UPDATE SET
             patient_name = COALESCE(NULLIF(patients.patient_name, ''), excluded.patient_name),
-            phone = excluded.phone
-    """, (_pid.new_id(), note.codice_fiscale, note.patient_name, note.phone))
+            phone = COALESCE(excluded.phone, patients.phone)
+    """, (_pid.new_id(), note.codice_fiscale, person(note.patient_name), phones.canonical(note.phone)))
     pid = _pid.resolve(conn, note.codice_fiscale)
 
     conn.execute("""
@@ -966,8 +974,8 @@ def selftest():
 
         # 3. lookup_patient returns name, phone, visit dates, and invoice rows
         result = lookup_patient(cf, conn)
-        assert result["patient_name"] == "mario rossi", "3: wrong patient_name"
-        assert result["phone"] == "333123456", "3: wrong phone"
+        assert result["patient_name"] == "Mario Rossi", "3: wrong patient_name (P22: title-cased on insert)"
+        assert result["phone"] == "+39333123456", "3: wrong phone (P22: canonical)"
         assert result["visit_dates"] == ["2026-06-01"], "3: wrong visit dates"
         assert result["invoices"] == [{"amount": 50.0, "description": "rct"}], "3: wrong invoices"
 
@@ -989,7 +997,7 @@ def selftest():
         assert visits_count == 2, f"4: expected 2 visits after second note, got {visits_count}"
 
         result2 = lookup_patient(cf, conn)
-        assert result2["phone"] == "333999999", "4: patient phone not updated in place"
+        assert result2["phone"] == "+39333999999", "4: patient phone not updated in place (canonical)"
 
         # 4b. a re-imported note must not rename an existing patient. notes get
         # filed under maiden/old names and the patients row is the one staff
@@ -1003,15 +1011,15 @@ def selftest():
             clinical_notes="cleaning done",
         )
         upsert_note_sql(stale, "MRRS800010150100/notes/n2.json", conn)
-        assert lookup_patient(cf, conn)["patient_name"] == "mario rossi", \
+        assert lookup_patient(cf, conn)["patient_name"] == "Mario Rossi", \
             "4b: a re-imported note renamed an existing patient"
 
         # 4c. but a blank name is a gap, not a curated value - let intake fill it
         conn.execute("UPDATE patients SET patient_name = '' WHERE codice_fiscale = ?", (cf,))
         conn.commit()
         upsert_note_sql(stale, "MRRS800010150100/notes/n2.json", conn)
-        assert lookup_patient(cf, conn)["patient_name"] == "giulia rossi", \
-            "4c: a blank patient_name should be filled from the note"
+        assert lookup_patient(cf, conn)["patient_name"] == "Giulia Rossi", \
+            "4c: a blank patient_name should be filled from the note (title-cased)"
         conn.execute(
             "UPDATE patients SET patient_name = 'mario rossi' WHERE codice_fiscale = ?", (cf,)
         )

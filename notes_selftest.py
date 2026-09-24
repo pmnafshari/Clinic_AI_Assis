@@ -199,7 +199,7 @@ def selftest():
         ).fetchone()
         conn.close()
         assert patient_row is not None, "corrected-fields submit should write a queryable sqlite row"
-        assert patient_row["phone"] == "333999999", "sqlite row should carry the corrected phone"
+        assert patient_row["phone"] == "+39333999999", "sqlite row should carry the corrected phone, canonical (P22)"
 
         # 3. denied role - a role lacking append_note is refused server-side,
         # audited allowed=0, and writes no file
@@ -262,7 +262,7 @@ def selftest():
         locked_get = client.get(f"/notes/new?cf={FAKE_CF}")
         assert locked_get.status_code == 200, "5: GET with a valid cf should return 200"
         assert FAKE_CF in locked_get.text, "5: locked form should show the cf"
-        assert "paolo lilli" in locked_get.text, "5: locked form should show the seeded patient name"
+        assert "Paolo Lilli" in locked_get.text, "5: locked form should show the seeded patient name (P22: title-cased)"
         assert 'name="cf"' in locked_get.text, "5: locked form should carry a hidden cf"
 
         bad_cf_resp = client.get("/notes/new?cf=NOTACF")
@@ -298,7 +298,7 @@ def selftest():
         )
         assert mismatch_resp.status_code == 200, "6: mismatch preview should render, not redirect"
         assert "giulia bianchi" in mismatch_resp.text, "6: notice should name the extracted patient"
-        assert "paolo lilli" in mismatch_resp.text, "6: notice should name the locked patient"
+        assert "Paolo Lilli" in mismatch_resp.text, "6: notice should name the locked patient"
         assert "Save note" in mismatch_resp.text, "6: save must stay available on a mismatch (D-03)"
 
         csrf_mismatch_confirm = _csrf_from(mismatch_resp.text)

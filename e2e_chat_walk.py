@@ -26,6 +26,7 @@ import sqlite3
 import sys
 import urllib.parse
 import urllib.request
+from datetime import date, timedelta
 
 import auth
 import consent
@@ -62,6 +63,17 @@ def check(step, ok, note):
 
 # --- fixtures -------------------------------------------------------------
 
+# P22: the chat's next appointment is a BOOKING, and the walk runs against live
+# servers on the real clock - so the fixture books Anna and Bruno on days that are
+# always ahead of today (the recall text in their notes says the same day)
+ANNA_DAY = (date.today() + timedelta(days=10)).isoformat()
+BRUNO_DAY = (date.today() + timedelta(days=20)).isoformat()
+
+
+def _dmy(day):
+    y, m, d = day.split("-")
+    return f"{d}/{m}/{y}"
+
 
 def seed():
     conn = sqlite3.connect(DB_PATH)
@@ -76,9 +88,9 @@ def seed():
     # surrogate; the codice fiscale stays the lookup value a patient types
     pids = {cf: patient_id.seed_patient(conn, cf, name, phone) for cf, name, phone in rows}
     visits = [
-        (ANNA, "2026-03-04", ["filling 47"], "2026-09-15", "e2e/anna.json",
+        (ANNA, "2026-03-04", ["filling 47"], ANNA_DAY, "e2e/anna.json",
          [(120.50, "otturazione")]),
-        (BRUNO, "2026-05-19", ["rct 46"], "2026-11-02", "e2e/bruno.json",
+        (BRUNO, "2026-05-19", ["rct 46"], BRUNO_DAY, "e2e/bruno.json",
          [(340.00, "cura canalare")]),
         # carla gets none on purpose - she is step 12's empty-records case
         (DARIO, "2025-11-12", ["filling 36"], "2026-01-20", "e2e/dario-1.json",
@@ -102,6 +114,13 @@ def seed():
                 " description) VALUES (?, ?, ?, ?, ?)",
                 (pids[cf], visit_id, idx, amount, desc),
             )
+    import clinic_time
+    from datetime import datetime
+    for cf, day in ((ANNA, ANNA_DAY), (BRUNO, BRUNO_DAY)):
+        starts = clinic_time.to_utc_text(datetime.strptime(f"{day} 10:30", "%Y-%m-%d %H:%M"))
+        conn.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, created_at,"
+                     " updated_at) VALUES (?, 'dentist', ?, 30, 'booked', ?, ?)",
+                     (pids[cf], starts, clinic_time.stamp(), clinic_time.stamp()))
     conn.commit()
     pins = {cf: patient_auth.issue_pin(cf, conn, "dentist", "dentist") for cf, _, _ in rows}
     # the assistant waits for consent since P06; these patients have given it
@@ -130,7 +149,7 @@ def cleanup():
         # this list predated them (32 orphan call-backs by 2026-09-23 - recorded,
         # not deleted; only this walk's own patients are cleaned here)
         for table in ("invoices", "visits", "patient_sessions", "patient_credentials",
-                      "handoff_requests", "patient_agent_actions"):
+                      "handoff_requests", "patient_agent_actions", "reminder_jobs", "appointments"):
             conn.execute(f"DELETE FROM {table} WHERE patient_id IN ({pmarks})", pids)
         consent.erase(conn, pids)
     conn.execute(f"DELETE FROM patients WHERE codice_fiscale IN ({marks})", cfs)
@@ -341,7 +360,7 @@ def walk(browser, pins):
     # 5. Anna's own appointment, faithfully restated
     page.goto(f"{PATIENT_URL}/chat")
     answer = ask(page, t("chat_example_1", "it"))
-    accepted = date_variants("2026-09-15", "it")
+    accepted = date_variants(ANNA_DAY, "it")
     hit = [v for v in accepted if v.lower() in answer.lower()]
     check("05 Anna's appointment restated (DEF-1)",
           bool(hit),
@@ -358,7 +377,7 @@ def walk(browser, pins):
     bruno_inv = ask(page_b, t("chat_example_3", "it"))
     bruno_answers = [bruno_appt, bruno_inv]
 
-    accepted_b = date_variants("2026-11-02", "it")
+    accepted_b = date_variants(BRUNO_DAY, "it")
     check("06 Bruno's own appointment restated",
           any(v.lower() in bruno_appt.lower() for v in accepted_b),
           bruno_appt.splitlines()[-1][:70] if bruno_appt else "<empty>")
@@ -366,8 +385,8 @@ def walk(browser, pins):
           "340" in bruno_inv,
           bruno_inv.splitlines()[-1][:70] if bruno_inv else "<empty>")
 
-    anna_values = ["Verdi", "3331110001", "04/03/2026", "15/09/2026", "otturazione", "120,50"]
-    bruno_values = ["Neri", "3472220002", "19/05/2026", "02/11/2026", "canalare", "340,00"]
+    anna_values = ["Verdi", "3331110001", "04/03/2026", _dmy(ANNA_DAY), "otturazione", "120,50"]
+    bruno_values = ["Neri", "3472220002", "19/05/2026", _dmy(BRUNO_DAY), "canalare", "340,00"]
     leaked_into_bruno = [v for v in anna_values if any(v in a for a in bruno_answers)]
     leaked_into_anna = [v for v in bruno_values if any(v in a for a in anna_answers)]
     check("06c cross-patient isolation, both directions",

@@ -388,10 +388,17 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
         data = lookup_patient(cf, conn)
         current = data[EDITABLE_FIELDS[args.field]]
         name = data["patient_name"]
-        diff_line = build_diff_line(args.field, current, args.value, name, cf)
+        value = args.value
+        if args.field == "phone" and value:
+            # P22: one stored form (E.164); a value that is not an Italian number is refused, not stored
+            import phones
+            value = phones.canonical(value)
+            if value is None:
+                return None, "that is not a valid Italian phone number"
+        diff_line = build_diff_line(args.field, current, value, name, cf)
         return {
             "tool": call.tool,
-            "args": {"field": args.field, "value": args.value},
+            "args": {"field": args.field, "value": value},
             "cf": cf,
             "diff_line": diff_line,
             "before": current,
@@ -652,31 +659,31 @@ def selftest():
                 def read(self):
                     tool_call = {
                         "tool": "update_field",
-                        "args": {"patient": "rossi", "field": "phone", "value": "333-1234"},
+                        "args": {"patient": "rossi", "field": "phone", "value": "333 1234567"},
                     }
                     return json.dumps({"response": json.dumps(tool_call)}).encode()
 
             return FakeResponse()
 
         # a. --dry-run leaves the phone unchanged and writes no log line
-        run_command("update rossi's phone to 333-1234", conn, True, fake_urlopen,
+        run_command("update rossi's phone to 333 1234567", conn, True, fake_urlopen,
                     role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "dry-run must not write"
         assert not Path(log_path).exists(), "dry-run must not touch the undo log"
 
         # b. a declined confirm writes nothing
-        run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+        run_command("update rossi's phone to 333 1234567", conn, False, fake_urlopen,
                      role="dentist", username="test-dentist",
                      input_fn=lambda p: "n", log_path=log_path)
         assert lookup_patient(cf, conn)["phone"] == "333 9999999", "declined confirm must not write"
         assert not Path(log_path).exists(), "declined confirm must not write the undo log"
 
         # c. a confirmed run writes the new phone and exactly one undo-log line
-        run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+        run_command("update rossi's phone to 333 1234567", conn, False, fake_urlopen,
                     role="dentist", username="test-dentist",
                     input_fn=lambda p: "y", log_path=log_path)
-        assert lookup_patient(cf, conn)["phone"] == "333-1234", "confirmed run must write the new value"
+        assert lookup_patient(cf, conn)["phone"] == "+393331234567", "confirmed run must write the new value, canonical"
         lines = Path(log_path).read_text().strip().splitlines()
         assert len(lines) == 1, f"expected 1 undo-log line, got {len(lines)}"
 
@@ -692,10 +699,10 @@ def selftest():
         # c2. an unauthorized role is denied: phone stays unchanged, no new undo
         # line, and exactly one denied audit_log row is recorded (RBAC-05, AUDIT-01)
         lines_before_denial = len(Path(log_path).read_text().strip().splitlines())
-        run_command("update rossi's phone to 333-1234", conn, False, fake_urlopen,
+        run_command("update rossi's phone to 333 1234567", conn, False, fake_urlopen,
                     role="assistant", username="test-assistant",
                     input_fn=lambda p: "y", log_path=log_path)
-        assert lookup_patient(cf, conn)["phone"] == "333-1234", "denied role must not change the phone"
+        assert lookup_patient(cf, conn)["phone"] == "+393331234567", "denied role must not change the phone"
         assert len(Path(log_path).read_text().strip().splitlines()) == lines_before_denial, \
             "denied role must not add an undo-log line"
         denied_rows = conn.execute(

@@ -43,13 +43,17 @@ def list_view():
 
     patients = get_db().execute(f"""
         SELECT p.patient_id, p.codice_fiscale, p.patient_name, p.phone,
-            (SELECT next_appointment FROM visits v WHERE v.patient_id = p.patient_id
-             {LATEST_VISIT}) AS next_appointment,
             (SELECT visit_date FROM visits v WHERE v.patient_id = p.patient_id
              {LATEST_VISIT}) AS last_visit
         FROM patients p
         ORDER BY p.patient_name
     """).fetchall()
+    # the next appointment is a booking (appointments.next_booked), never the
+    # free-text recall a visit note carries - that one is shown on the record (P22)
+    import appointments
+    conn = get_db()
+    patients = [{**dict(p), "next_appointment": appointments.next_booked_local(conn, p["patient_id"])}
+                for p in patients]
     return render_template("patients_list.html", patients=patients)
 
 

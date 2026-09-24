@@ -41,7 +41,7 @@
         <div class="dup-side">
           <p class="ds-row-title mb-1">{{ side.patient_name }}</p>
           <p class="ds-row-sub mb-1"><code>{{ side.codice_fiscale }}</code></p>
-          <p class="ds-row-sub mb-2">{{ side.phone or 'no phone on record' }}</p>
+          <p class="ds-row-sub mb-2">{{ side.phone|phone or 'no phone on record' }}</p>
           <a class="btn btn-sm btn-outline-secondary"
              href="{{ url_for('patients.detail_view', cf=side.codice_fiscale) }}">Open record</a>
         </div>

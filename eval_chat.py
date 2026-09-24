@@ -1,6 +1,8 @@
 import json
+import re
 import sqlite3
 import sys
+from datetime import datetime
 
 import patient_accessor
 
@@ -44,6 +46,21 @@ def patient_visits(p):
         "next_appointment": p["next_appointment"],
         "invoices": invoices,
     }]
+
+
+EVAL_TODAY = datetime(2026, 9, 1, 9, 0)   # the clinic clock the eval runs under (P22, the p52 lesson)
+
+
+def _book_recall(conn, pid, visits):
+    """P22: the chat's next appointment is a booking. the eval's patients have their
+    last recall booked at 10:00 clinic time, so the expected dates stay what they were."""
+    import clinic_time
+    last = visits[-1]["next_appointment"] if visits else None
+    if not last or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", last):
+        return
+    starts = clinic_time.to_utc_text(datetime.strptime(f"{last} 10:00", "%Y-%m-%d %H:%M"))
+    conn.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, created_at,"
+                 " updated_at) VALUES (?, 'dentist', ?, 30, 'booked', 'eval', 'eval')", (pid, starts))
 
 
 def build_db(patients):
@@ -108,6 +125,7 @@ def build_db(patients):
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS patient_merges (source_cf TEXT, target_patient_id TEXT);
     """)
     for i, p in enumerate(patients):
         _epid = _pidmod.seed_patient(conn, p["cf"], p["name"], p["phone"])
@@ -128,6 +146,7 @@ def build_db(patients):
                     " description) VALUES (?, ?, ?, ?, ?)",
                     (_epid, visit_id, k, invoice["amount"], invoice["description"]),
                 )
+        _book_recall(conn, _epid, patient_visits(p))
     conn.commit()
     return conn
 
@@ -319,13 +338,15 @@ def selftest():
     visits = patient_accessor.get_visits(_pidmod.resolve(conn, multi["cf"]), conn)
     assert [v["visit_date"] for v in visits] == dates, "7: accessor lost or reordered a visit"
     assert patient_accessor.get_next_appointment(
-            _pidmod.resolve(conn, multi["cf"]), conn) == "2026-10-05", \
-        "7: next appointment must come from the last visit, not the first"
+            _pidmod.resolve(conn, multi["cf"]), conn) == "2026-10-05 10:00", \
+        "7: next appointment must be the booking made from the last visit's recall"
 
     print("selftest ok")
 
 
 def main():
+    import clinic_time
+    clinic_time.now = lambda env=None: EVAL_TODAY
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
         selftest()
         return

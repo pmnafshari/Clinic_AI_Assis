@@ -317,12 +317,12 @@ def selftest():
                 assert isinstance(item, tuple) and len(item) == 2, \
                     "every candidate must be a (cf, name) tuple"
 
-        assert (cf, "mario rossi") in ros_hits, "partial query 'ros' must surface mario rossi"
-        assert (cf, "mario rossi") in rosi_hits, "misspelled 'rosi' must still surface mario rossi"
+        assert (cf, "Mario Rossi") in ros_hits, "partial query 'ros' must surface mario rossi"
+        assert (cf, "Mario Rossi") in rosi_hits, "misspelled 'rosi' must still surface mario rossi"
         assert fuzzy_lookup("zzzzzz", conn) == [], "no-match query must return [], never crash"
-        assert (cf, "mario rossi") in reordered_hits, \
+        assert (cf, "Mario Rossi") in reordered_hits, \
             "reordered tokens ('rossi mario') must still find mario rossi"
-        assert (cf, "mario rossi") in partial_multi_hits, \
+        assert (cf, "Mario Rossi") in partial_multi_hits, \
             "multi-token partial query ('mario ro') must still find mario rossi"
 
         bianchi_cfs = {c for c, n in bianchi_hits}

@@ -25,7 +25,15 @@ def check(name, ok, note=""):
 
 def main():
     conn = storage.connect(DB)
-    day = (date.today() + timedelta(days=1)).isoformat()   # tomorrow, so it is 'upcoming'
+    # the next day the clinic is open, from tomorrow on: "tomorrow" was a Saturday on Fridays,
+    # and the clinic is closed at weekends, so the confirm below was refused (found 2026-09-25)
+    open_days = {r[0] for r in conn.execute("SELECT weekday FROM clinic_hours WHERE closed = 0")}
+    closed = {r[0] for r in conn.execute("SELECT closure_date FROM clinic_closures")} if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE name = 'clinic_closures'").fetchone() else set()
+    d = date.today() + timedelta(days=1)
+    while d.weekday() not in open_days or d.isoformat() in closed:
+        d += timedelta(days=1)
+    day = d.isoformat()   # upcoming, and bookable
     try:
         pid = patient_id.seed_patient(conn, CF, NAME, None)
         conn.execute("INSERT INTO users (username, password_hash, role, active) VALUES (?,?,?,1)",
