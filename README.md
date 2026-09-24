@@ -209,6 +209,8 @@ exactly the defects these catch:
 `./ci.sh` runs the fast suite with pins, migrations, the secret scan and the dependency audit;
 `./ci.sh --full` adds every gate above. Operations (health check, restore drill, rollback, runbooks)
 and the trial's release scope are in [`docs/release/`](docs/release/RELEASE.md).
+There is no X-ray analysis; the go/no-go record for it and the checks that keep it closed are in
+[`docs/xray/GATE.md`](docs/xray/GATE.md) (`python xray_gate.py check`).
 
 Install the browser tooling with `.venv/bin/pip install -r requirements-dev.txt` then
 `.venv/bin/python -m playwright install chromium`. It is development-only and never goes on

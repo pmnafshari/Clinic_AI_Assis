@@ -1,0 +1,25 @@
+{
+  "decision": "BLOCKED",
+  "decided_by": null,
+  "decided_on": null,
+  "reason": "D04 is open: no intended use, no clinical owner, no responsible consultant. Nobody has decided GO or NO_GO.",
+  "intended_use": {
+    "country": "TBC",
+    "modality": "TBC",
+    "users": "TBC",
+    "output": "TBC",
+    "claims": "TBC",
+    "clinical_owner": "TBC",
+    "responsible_consultant": "TBC"
+  },
+  "items": [
+    {"id": "P18.01", "what": "D04 recorded: intended use, country, modality, users, output, claims; clinical owner and consultant named", "status": "BLOCKED", "needs": "D04", "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.02", "what": "applicability of medical-device and AI regulation to the intended use, reviewed by a specialist", "status": "BLOCKED", "needs": "P18.01 and a regulatory specialist", "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.03", "what": "exact model, weights, dataset and library, each with its licence checked for this use", "status": "BLOCKED", "needs": "P18.01; no model chosen", "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.04", "what": "data permission, de-identification, ground truth, patient-level split, quality, annotation plan", "status": "BLOCKED", "needs": "D02, D08; no data, no permission", "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.05", "what": "criteria per finding: thresholds, false negative/positive, calibration, out-of-distribution", "status": "BLOCKED", "needs": "P18.01 and a clinical owner", "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.06", "what": "risk register, DPIA, provenance, budget and hardware, human oversight plan", "status": "BLOCKED", "needs": "P18.01-P18.05", "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.T2", "what": "data audit: patient leakage between splits, quality, annotation, access", "status": "BLOCKED", "needs": "P18.04", "requires": ["P18.04"], "owner": null, "version": null, "date": null, "evidence": null},
+    {"id": "P18.T3", "what": "evaluation criterion recorded before any model result and approved by a specialist", "status": "BLOCKED", "needs": "P18.05", "requires": ["P18.05"], "owner": null, "version": null, "date": null, "evidence": null}
+  ]
+}
