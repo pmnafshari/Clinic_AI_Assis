@@ -8,6 +8,7 @@ treatment, no invented outcome). P16.T1 (a specialist's ranking) is BLOCKED:
 the ordering check in 4 is an engineering check on made-up cases, not that.
 """
 import json
+import os
 import re
 import sqlite3
 import sys
@@ -266,11 +267,85 @@ def routes(tmp):
     conn.close()
 
 
+def switched_off(tmp):
+    """18. off unless CLINIC_SIMILAR_CASES=1 (follow-up 2026-09-23): the criteria are an
+    unapproved draft, so a default install shows no case, writes nothing and says why."""
+    from werkzeug.security import generate_password_hash
+    import app.db as app_db
+    import web_session
+    from app import create_app
+    conn = setup(tmp)
+    a = patient_id.seed_patient(conn, "ZZSU000000000007", "Ugo Uno")
+    others = [patient_id.seed_patient(conn, f"ZZSV00000000000{i}", f"Vera Altra{i}") for i in range(3)]
+    src = visit(conn, a, "2026-03-10", ["ext 38"], "estrazione 38")
+    cases = [visit(conn, p, "2025-02-10", ["ext 38"], "estrazione 38 caso") for p in others]
+    for value in (None, "", "0", "true", "yes", "on"):
+        if value is None:
+            os.environ.pop(sc.ENV_FLAG, None)
+        else:
+            os.environ[sc.ENV_FLAG] = value
+        assert not sc.enabled(), f"18: {value!r} switched it on"
+    os.environ.pop(sc.ENV_FLAG, None)
+    before = snapshot(conn)
+    for call in (lambda: sc.find(conn, src, a, *D),
+                 lambda: sc.feedback(conn, src, a, cases[0], "similar", "", *D),
+                 lambda: sc.exclude(conn, cases[0], "", *D, pid=a)):
+        try:
+            call()
+            raise AssertionError("18: ran while switched off")
+        except sc.Disabled:
+            pass
+    try:
+        sc.find(conn, src, a, *A)
+        raise AssertionError("18: reception got past the role check")
+    except PermissionError:
+        pass
+    assert snapshot(conn) == before, "18: something was written while switched off"
+    assert not conn.execute("SELECT COUNT(*) FROM similar_case_feedback").fetchone()[0]
+    assert not conn.execute("SELECT COUNT(*) FROM similar_case_exclusions").fetchone()[0]
+    refused = conn.execute("SELECT reason FROM audit_log WHERE action = 'similar_cases'"
+                           " AND allowed = 0 AND username = ?", (D[0],)).fetchall()
+    assert [r[0] for r in refused] == ["switched off"], [tuple(r) for r in refused]
+
+    app_db.DB_PATH = conn.execute("PRAGMA database_list").fetchone()[2]
+    app_db.CHROMA_PATH = str(Path(tmp) / "chroma")
+    app = create_app()
+    app.config["TESTING"] = True
+    app.config["WTF_CSRF_ENABLED"] = False
+    conn.execute("INSERT INTO users (username, password_hash, role, active) VALUES (?, ?, ?, 1)",
+                 ("dr_off", generate_password_hash("x"), "dentist"))
+    conn.commit()
+    dentist = app.test_client()
+    dentist.set_cookie(web_session.COOKIE_NAME, web_session.create_session(conn, "dr_off", "dentist"))
+    r = dentist.get(f"/patients/ZZSU000000000007/visits/{src}/similar")
+    assert r.status_code == 200 and "switched off" in r.text, r.text[:300]
+    assert f"case {cases[0]}" not in r.text and "caso" not in r.text and "Altra" not in r.text
+    assert "Similar cases</a>" not in dentist.get("/patients/ZZSU000000000007").text, \
+        "18: the record still links to a switched-off page"
+    for path in (f"similar/{cases[0]}/feedback", f"similar/{cases[1]}/exclude"):
+        r = dentist.post(f"/patients/ZZSU000000000007/visits/{src}/{path}",
+                         data={"verdict": "similar"}, follow_redirects=True)
+        assert r.status_code == 200 and "switched off" in r.text, r.text[:300]
+    assert not conn.execute("SELECT COUNT(*) FROM similar_case_feedback").fetchone()[0]
+    assert not conn.execute("SELECT COUNT(*) FROM similar_case_exclusions").fetchone()[0]
+    conn.close()
+
+
 def selftest():
-    with tempfile.TemporaryDirectory() as tmp:
-        domain(tmp)
-    with tempfile.TemporaryDirectory() as tmp:
-        routes(tmp)
+    saved = os.environ.pop("CLINIC_SIMILAR_CASES", None)
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            switched_off(tmp)
+        # 1-17 are the feature itself, switched on
+        os.environ["CLINIC_SIMILAR_CASES"] = "1"
+        with tempfile.TemporaryDirectory() as tmp:
+            domain(tmp)
+        with tempfile.TemporaryDirectory() as tmp:
+            routes(tmp)
+    finally:
+        os.environ.pop("CLINIC_SIMILAR_CASES", None)
+        if saved is not None:
+            os.environ["CLINIC_SIMILAR_CASES"] = saved
     print("selftest ok")
 
 

@@ -153,6 +153,12 @@ and filed under `sorted/`. A note that extracts cleanly is filed; one that fails
 An unrecognised procedure code is **flagged for review, never rejected** — refusing the
 note would lose a real clinical record over a vocabulary gap.
 
+Patient documents (PDF, PNG, JPEG, text) live under `documents/<patient>/`. A crash between a
+file and its database row can leave one without the other; the staff app says so at start-up,
+and `python documents.py --reconcile` reports it. `--apply` removes only files no row names and
+unfinished uploads; a missing or changed original is reported for a restore from backup, never
+"fixed" by touching its row.
+
 ## Access control
 
 Roles map to capability sets in `auth.py` — a plain dict, no policy engine.
@@ -176,6 +182,8 @@ asserts that per role. Every mutating action writes an audit row naming the acto
   all when the app is internet-facing. The intended production path is faster-whisper and
   Piper, offline.
 - No vendor API key ever reaches the browser, and no recording is written to disk.
+- **Similar cases is off by default.** Its matching criteria are a draft no clinical owner has
+  approved; it runs only when the staff app is started with `CLINIC_SIMILAR_CASES=1`.
 
 ## Tests
 

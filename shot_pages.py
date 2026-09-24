@@ -7,6 +7,10 @@ the fix can be proven with one command instead of a third rewrite.
 the check is document.documentElement.scrollWidth <= window.innerWidth + 1,
 evaluated in a real browser. the +1 absorbs sub-pixel rounding.
 
+then the pages this data leaves empty (documents, search hits, similar cases)
+are measured again with rows in them, on a disposable instance of their own -
+populated_pages.py, which also checks focus rings and control names there.
+
 exits 1 if any page-width overflows, if any text fails AA contrast (the
 a11y_audit.py measurement, run on the signed-in pages that audit cannot
 reach), or if the fixture cleanup leaves rows behind. this is the only automated check on the no-horizontal-scroll rule -
@@ -42,6 +46,7 @@ import sys
 import auth
 import patient_id
 import note_review
+import populated_pages
 import visit_summary
 import tempfile
 from pathlib import Path
@@ -136,6 +141,7 @@ MEASURE = """() => ({
 })"""
 
 RESULTS = []
+POPULATED = []
 RUN_STARTED = datetime.now(timezone.utc).isoformat()
 CONTRAST_FAILS = []
 
@@ -390,6 +396,9 @@ def main():
                 for width in widths:
                     print(f"\n--- {width}px")
                     walk(browser, width, out_dir)
+                print("\n--- populated states, disposable instance")
+                problems, measured = populated_pages.check(browser, widths, out_dir)
+                POPULATED.extend(problems)
             finally:
                 browser.close()
     finally:
@@ -417,10 +426,17 @@ def main():
     else:
         print("no text contrast failures on any page-width")
 
+    if POPULATED:
+        print(f"\n{len(POPULATED)} problem(s) on the populated pages:")
+        for width, name, problem in POPULATED:
+            print(f"  {width}px  {name:<20} {problem}")
+    else:
+        print(f"no problems on {measured} populated page-widths")
+
     if users_left or pats_left or audit_left:
         print("CLEANUP FAILED - ZZS rows survived")
         return 1
-    if over or CONTRAST_FAILS:
+    if over or CONTRAST_FAILS or POPULATED:
         return 1
     return 0
 

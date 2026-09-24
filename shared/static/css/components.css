@@ -944,3 +944,7 @@ a.ds-row:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
   color: var(--ds-text-on-dark);
   box-shadow: var(--ds-shadow-sm);
 }
+
+/* after .active, which is as specific: the current page's link keeps its ring */
+.ds-pill-nav a.active:focus-visible,
+.ds-pill-nav .nav-link.active:focus-visible { box-shadow: var(--ds-focus-ring); }

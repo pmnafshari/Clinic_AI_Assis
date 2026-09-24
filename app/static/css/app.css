@@ -155,6 +155,8 @@ h1, h2, h3, h4, h5, h6 {
   text-decoration: none;
 }
 
+.app-topbar-toggle:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+
 .app-brand {
   display: flex;
   align-items: center;

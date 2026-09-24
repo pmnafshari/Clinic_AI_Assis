@@ -379,7 +379,6 @@ def same_file(tmp):
     reviews. Nothing of one patient's copy may reach, change or reveal the other."""
     import data_rights
     import erasure
-    import patient_identity
     import zipfile
     conn = setup(tmp)
     t1 = clinic_time.read_instant("2026-09-23T08:00:00+00:00")
@@ -436,13 +435,7 @@ def same_file(tmp):
     assert docs.search(conn, b, "otturazione", *D) == [], "S5: a forged entry crossed patients"
     docs.collection().delete(ids=["forged-s5"])
 
-    # S10. while both hold a live copy, a merge of the two records is refused
-    # cleanly (which review stands is a dentist's call), nothing moves
-    before = conn.execute("SELECT id, patient_id, status FROM patient_documents ORDER BY id").fetchall()
-    ok, msg = patient_identity.merge(conn, cf_a, cf_b, *ADM)
-    assert not ok and "same document" in msg, msg
-    assert conn.execute("SELECT id, patient_id, status FROM patient_documents ORDER BY id").fetchall() \
-        == before
+    # S10 (merging two records that both hold the file) is duplicate_merge()
 
     # S6. a second shared file: rejecting Elio's copy leaves Dora's waiting
     shared2 = pdf(["secondo documento condiviso radiografia"])
@@ -570,6 +563,211 @@ def same_file(tmp):
     conn.close()
 
 
+def duplicate_merge(tmp):
+    """S10 (follow-up 2026-09-23): two records that both hold the same file can be merged.
+
+    One live copy per file must remain under the survivor. The copy a dentist got
+    furthest with stands; on a tie the survivor's. The other copy is kept as
+    history (superseded, reason names the kept one): its row, file, extraction
+    and who decided it are untouched, it leaves the index, and it is audited."""
+    import data_rights
+    import patient_identity
+    import zipfile
+    conn = setup(tmp)
+    cf_s, cf_t = "ZZPM000000000021", "ZZPN000000000022"
+    s = patient_id.seed_patient(conn, cf_s, "Sara Sorgente")
+    t = patient_id.seed_patient(conn, cf_t, "Tito Superstite")
+    up = lambda pid, text, name: docs.ingest(conn, pid, pdf([text]), name, *D)
+    # 1. source confirmed, survivor only pending: the confirmed copy stands
+    s1, t1 = up(s, "uno panoramica condivisa", "s1.pdf"), up(t, "uno panoramica condivisa", "t1.pdf")
+    docs.confirm(conn, s1, s, *D)
+    # 2. both confirmed: the survivor's stands
+    s2, t2 = up(s, "due referto condiviso", "s2.pdf"), up(t, "due referto condiviso", "t2.pdf")
+    docs.confirm(conn, s2, s, *D)
+    docs.confirm(conn, t2, t, "dbianchi", "dentist")
+    # 3. both waiting: the survivor's stands
+    s3, t3 = up(s, "tre modulo condiviso", "s3.pdf"), up(t, "tre modulo condiviso", "t3.pdf")
+    # 4. the survivor's copy could not be read, the source's waits for review
+    s4, t4 = up(s, "quattro esame condiviso", "s4.pdf"), up(t, "quattro esame condiviso", "t4.pdf")
+    conn.execute("UPDATE patient_documents SET status = 'extraction_failed', reason = 'timeout'"
+                 " WHERE id = ?", (t4,))
+    # 5. the survivor rejected its copy: no conflict, the source's moves as it is
+    s5, t5 = up(s, "cinque lettera condivisa", "s5.pdf"), up(t, "cinque lettera condivisa", "t5.pdf")
+    docs.reject(conn, t5, t, "wrong patient", *D)
+    # 6. a file only the source holds moves as it is
+    s6 = up(s, "sei solo sorgente", "s6.pdf")
+    docs.confirm(conn, s6, s, *D)
+    conn.commit()
+    before = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM patient_documents")}
+
+    ok, msg = patient_identity.merge(conn, cf_s, cf_t, *ADM)
+    assert ok, f"S10: merge refused: {msg}"
+    assert "kept once" in msg, msg
+    after = {r["id"]: dict(r) for r in conn.execute("SELECT * FROM patient_documents")}
+    assert set(after) == set(before), "S10: a document row was added or removed"
+    assert all(r["patient_id"] == t for r in after.values()), "S10: a document left behind"
+    for kept, lost in ((s1, t1), (t2, s2), (t3, s3), (s4, t4)):
+        assert after[kept]["status"] == before[kept]["status"], f"S10: {kept} changed status"
+        assert after[lost]["status"] == "superseded", f"S10: {lost} still live"
+        assert f"document:{kept}" in after[lost]["reason"], after[lost]["reason"]
+        assert f"was {before[lost]['status']}" in after[lost]["reason"], after[lost]["reason"]
+        for field in ("extraction", "sha256", "stored_path", "decided_by", "decided_at",
+                      "uploaded_by", "display_name"):
+            assert after[lost][field] == before[lost][field], f"S10: {lost}.{field} rewritten"
+        assert docs.original_path(docs.row(conn, lost)).exists(), f"S10: {lost}'s file removed"
+        assert not docs.collection().get(where={"doc_id": lost})["ids"], f"S10: {lost} indexed"
+    assert "(timeout)" in after[t4]["reason"], "S10: the earlier failure reason was lost"
+    for same in (s5, t5, s6):
+        assert after[same]["status"] == before[same]["status"], f"S10: {same} changed"
+    live = conn.execute("SELECT sha256, COUNT(*) FROM patient_documents WHERE patient_id = ?"
+                        " AND status NOT IN ('rejected', 'superseded') GROUP BY sha256"
+                        " HAVING COUNT(*) > 1", (t,)).fetchall()
+    assert not live, "S10: two live copies of one file"
+    hits = [h["doc_id"] for h in docs.search(conn, t, "referto condiviso", *D)]
+    assert hits == [t2], f"S10: {hits}"
+    assert [h["doc_id"] for h in docs.search(conn, t, "panoramica", *D)] == [s1]
+    assert [h["doc_id"] for h in docs.search(conn, t, "sorgente", *D)] == [s6]
+    audit = {r["target"]: r["reason"] for r in conn.execute(
+        "SELECT target, reason FROM audit_log WHERE action = 'document_merge_duplicate'"
+        " AND allowed = 1")}
+    assert set(audit) == {f"document:{x}" for x in (t1, s2, s3, t4)}, audit
+    assert audit[f"document:{t1}"] == f"kept document:{s1}; was pending_review", audit
+    with zipfile.ZipFile(Path(tmp) / "exports" / data_rights.build_export(
+            conn, t, sorted_root=Path(tmp) / "sorted", exports_dir=Path(tmp) / "exports")) as z:
+        names = [n for n in z.namelist() if n.startswith("documents/")]
+    assert sorted(names) == sorted([f"documents/{s1}-s1.pdf", f"documents/{t2}-t2.pdf",
+                                    f"documents/{s6}-s6.pdf"]), names
+    # the survivor can still replace a kept copy; the superseded one cannot be
+    try:
+        docs.replace(conn, s2, t, pdf(["due"]), "x.pdf", *D)
+        raise AssertionError("S10: a superseded copy was replaced")
+    except docs.DocumentError:
+        pass
+    conn.close()
+
+
+CRASH = """
+import os, sys
+from pathlib import Path
+sys.path.insert(0, {root!r})
+import documents as docs
+from storage import init_db
+docs.DOC_ROOT = Path({tmp!r}) / "documents"
+docs.DOC_CHROMA_PATH = str(Path({tmp!r}) / "doc_chroma")
+docs.SLOT_DIR = Path({tmp!r}) / "slots"
+conn = init_db({db!r})
+die = lambda *a, **k: os._exit(9)
+{body}
+"""
+
+
+def crash(tmp, db, body):
+    """Run body in a child process that dies with os._exit - no finally, no rollback."""
+    code = CRASH.format(root=str(ROOT), tmp=str(tmp), db=db, body=body)
+    return subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True).returncode
+
+
+def reconcile_after_crash(tmp):
+    """Files and rows after a process dies half-way (follow-up 2026-09-23).
+
+    The file is written before the row commits, and erasure removes files after
+    its rows commit, so a crash in between leaves a file nothing names - after an
+    erasure, a file of an erased patient. reconcile finds them; only --apply
+    removes them; a row is never deleted or changed."""
+    conn = setup(tmp)
+    db = conn.execute("PRAGMA database_list").fetchone()[2]
+    a = patient_id.seed_patient(conn, "ZZPQ000000000031", "Quinto Crash")
+    b = patient_id.seed_patient(conn, "ZZPR000000000032", "Rino Resta")
+    kept = docs.ingest(conn, b, pdf(["resta al suo posto"]), "b.pdf", *D)
+    docs.confirm(conn, kept, b, *D)
+    files = lambda: sorted(str(p.relative_to(docs.DOC_ROOT)) for p in Path(docs.DOC_ROOT).rglob("*")
+                           if p.is_file())
+    clean = docs.reconcile(conn)
+    assert clean == {"orphan_files": 0, "temp_files": 0, "missing_originals": [],
+                     "damaged_originals": [], "applied": False}, clean
+
+    # R1. killed after the file is written, before the row commits
+    body = (f"docs.display_name = die\n"
+            f"docs.ingest(conn, {a!r}, {pdf(['morto a meta'])!r}, 'x.pdf', 'drossi', 'dentist')")
+    assert crash(tmp, db, body) == 9
+    assert not conn.execute("SELECT 1 FROM patient_documents WHERE patient_id = ?", (a,)).fetchone()
+    assert len(files()) == 2, files()
+    # R2. killed inside the atomic write: a temp file is left
+    body = (f"docs.os.link = die\n"
+            f"docs.ingest(conn, {a!r}, {pdf(['morto nel file'])!r}, 'y.pdf', 'drossi', 'dentist')")
+    assert crash(tmp, db, body) == 9
+    assert any(".upload-" in f for f in files()), files()
+    # R3. an erasure killed after its rows commit, before its files go
+    e = patient_id.seed_patient(conn, "ZZPS000000000033", "Ettore Cancellato")
+    gone = docs.ingest(conn, e, pdf(["da cancellare davvero"]), "e.pdf", *D)
+    erased_file = docs.original_path(docs.row(conn, gone))
+    body = (f"import erasure\n"
+            f"erasure._sqlite(conn, {e!r}, 'ZZPS000000000033', [], False)\n"
+            f"die()")
+    assert crash(tmp, db, body) == 9
+    assert erased_file.exists() and not docs.row(conn, gone), "R3: the crash did not happen"
+
+    # R4. the dry run reports, changes nothing
+    before = files()
+    got = docs.reconcile(conn)
+    assert got["orphan_files"] == 2 and got["temp_files"] == 1, got
+    assert files() == before, "R4: the dry run removed something"
+    assert docs.report_at_startup(db)["orphan_files"] == 2 and files() == before, \
+        "R4: the startup report did not see the crash, or repaired it"
+    # R5. a missing and a damaged original are reported by id; their rows stay
+    lost = docs.ingest(conn, b, pdf(["file perso"]), "lost.pdf", *D)
+    bent = docs.ingest(conn, b, pdf(["file rovinato"]), "bent.pdf", *D)
+    docs.original_path(docs.row(conn, lost)).unlink()
+    docs.original_path(docs.row(conn, bent)).write_bytes(b"%PDF-1.4 changed on disk")
+    rows_before = conn.execute("SELECT * FROM patient_documents ORDER BY id").fetchall()
+    got = docs.reconcile(conn, apply=True)
+    assert got["missing_originals"] == [lost] and got["damaged_originals"] == [bent], got
+    assert got["orphan_files"] == 2 and got["temp_files"] == 1 and got["applied"], got
+    assert [tuple(r) for r in conn.execute("SELECT * FROM patient_documents ORDER BY id")] == \
+        [tuple(r) for r in rows_before], "R5: a row was changed"
+    # R6. apply removed exactly the orphans and the temp; every named file stays
+    left = files()
+    assert not erased_file.exists(), "R6: an erased patient's file survived"
+    assert not any(".upload-" in f for f in left), left
+    named = {r["stored_path"] for r in conn.execute("SELECT stored_path FROM patient_documents")}
+    assert set(left) == named - {docs.row(conn, lost)["stored_path"]}, (left, named)
+    assert not (Path(docs.DOC_ROOT) / e).exists(), "R6: the erased patient's folder is left"
+    assert [h["doc_id"] for h in docs.search(conn, b, "posto", *D)] == [kept]
+    audit = conn.execute("SELECT reason FROM audit_log WHERE action = 'document_reconcile'"
+                         " ORDER BY id").fetchall()
+    assert len(audit) == 1 and "orphan_files 2" in audit[0][0], [tuple(r) for r in audit]
+    assert "Quinto" not in audit[0][0] and a not in audit[0][0]
+    # R7. an upload in flight is never taken for an orphan: reconcile waits for
+    # the same write lock the upload holds while its file exists without a row
+    from storage import init_db
+    real_store = docs._store
+    stored = threading.Event()
+
+    def slow_store(*args):
+        made = real_store(*args)
+        stored.set()
+        time.sleep(0.4)
+        return made
+    docs._store = slow_store
+    out = []
+
+    def upload():
+        c2 = init_db(db)
+        out.append(docs.ingest(c2, b, pdf(["arriva durante il controllo"]), "live.pdf", *D))
+        c2.close()
+    t = threading.Thread(target=upload)
+    try:
+        t.start()
+        assert stored.wait(5)
+        got = docs.reconcile(conn, apply=True)
+        t.join()
+    finally:
+        docs._store = real_store
+    assert got["orphan_files"] == 0, got
+    assert docs.original_path(docs.row(conn, out[0])).exists(), "R7: an upload in flight was removed"
+    conn.close()
+
+
 def routes(tmp):
     from werkzeug.security import generate_password_hash
     import app.db as app_db
@@ -647,6 +845,10 @@ def selftest():
     sandbox_proof()
     with tempfile.TemporaryDirectory() as tmp:
         same_file(tmp)
+    with tempfile.TemporaryDirectory() as tmp:
+        duplicate_merge(tmp)
+    with tempfile.TemporaryDirectory() as tmp:
+        reconcile_after_crash(tmp)
     with tempfile.TemporaryDirectory() as tmp:
         routes(tmp)
     print("selftest ok")

@@ -38,6 +38,9 @@ def page(cf, vid):
         found = sc.find(conn, vid, pid, g.user["username"], g.user["role"], view=view)
     except LookupError:
         abort(404)
+    except sc.Disabled as e:
+        return render_template("similar_cases.html", cf=cf, patient=patient, vid=vid, found=None,
+                               off=str(e))
     return render_template("similar_cases.html", cf=cf, patient=patient, vid=vid, found=found)
 
 
@@ -51,6 +54,9 @@ def feedback(cf, vid, case):
                     request.form.get("reason", ""), g.user["username"], g.user["role"])
     except LookupError:
         abort(404)
+    except sc.Disabled as e:
+        flash(str(e), "danger")
+        return redirect(url_for("similar.page", cf=cf, vid=vid))
     except ValueError as e:
         flash(str(e), "danger")
         return redirect(url_for("similar.page", cf=cf, vid=vid))
@@ -69,5 +75,8 @@ def exclude(cf, vid, case):
                    pid=pid)
     except LookupError:
         abort(404)
+    except sc.Disabled as e:
+        flash(str(e), "danger")
+        return redirect(url_for("similar.page", cf=cf, vid=vid))
     flash("Removed from similar-case search. The visit itself is unchanged.", "success")
     return redirect(url_for("similar.page", cf=cf, vid=vid))

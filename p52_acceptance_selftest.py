@@ -19,6 +19,7 @@ pass for a path that never converted at all.
 
 import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import appointments
@@ -33,6 +34,11 @@ import storage
 # October DST change so the two offsets are genuinely different.
 SUMMER = "2026-09-23"        # CEST (+2)
 WINTER = "2026-11-18"        # CET  (+1)
+
+# "in the future" is only true against a fixed clinic clock. Unpinned, the test
+# started failing on 2026-09-24 because SUMMER had become yesterday and the portal
+# (rightly) no longer showed it. Every read here goes through clinic_time.now().
+TODAY = datetime(2026, 9, 17, 12, 0)
 
 
 def _clinic(tmp):
@@ -171,7 +177,12 @@ def selftest():
 
 def main():
     if "--selftest" in sys.argv:
-        selftest()
+        real = clinic_time.now
+        clinic_time.now = lambda env=None: TODAY
+        try:
+            selftest()
+        finally:
+            clinic_time.now = real
         return
     print("usage: python p52_acceptance_selftest.py --selftest")
 

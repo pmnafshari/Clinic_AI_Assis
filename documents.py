@@ -438,6 +438,40 @@ def replace(conn, doc_id, pid, data, name, actor, role, now=None):
     return new_id
 
 
+# when two records are merged and both hold the same file, the copy a dentist
+# got furthest with stands; a tie keeps the survivor's. lowest first
+STANDING = ("quarantined", "extraction_failed", "pending_review", "confirmed")
+
+
+def settle_duplicates(conn, source_pid, target_pid):
+    """One live copy per file before a merge moves source's documents to target.
+
+    Runs inside the caller's transaction and commits nothing. The other copy is
+    kept as history: superseded, with the reason naming the copy that stands and
+    what it was. Its file, extraction and review stay as they were.
+    -> [(superseded id, kept id, its old status)]"""
+    pairs = conn.execute(
+        "SELECT s.id AS s_id, s.status AS s_status, s.reason AS s_reason,"
+        " t.id AS t_id, t.status AS t_status, t.reason AS t_reason"
+        " FROM patient_documents s JOIN patient_documents t ON t.sha256 = s.sha256"
+        " WHERE s.patient_id = ? AND t.patient_id = ?"
+        " AND s.status NOT IN ('rejected', 'superseded')"
+        " AND t.status NOT IN ('rejected', 'superseded')", (source_pid, target_pid)).fetchall()
+    settled = []
+    for p in pairs:
+        if STANDING.index(p["s_status"]) > STANDING.index(p["t_status"]):
+            lost, kept, status, reason = p["t_id"], p["s_id"], p["t_status"], p["t_reason"]
+        else:
+            lost, kept, status, reason = p["s_id"], p["t_id"], p["s_status"], p["s_reason"]
+        note = f"same file kept as document:{kept} when two records were merged; was {status}"
+        if reason:
+            note += f" ({reason})"
+        conn.execute("UPDATE patient_documents SET status = 'superseded', reason = ? WHERE id = ?",
+                     (note, lost))
+        settled.append((lost, kept, status))
+    return settled
+
+
 def for_patient(conn, pid, limit=100):
     return conn.execute("SELECT * FROM patient_documents WHERE patient_id = ?"
                         " ORDER BY id DESC LIMIT ?", (pid, limit)).fetchall()
@@ -566,3 +600,90 @@ def exportable(conn, pid):
         if path.exists():
             out.append((f"documents/{r['id']}-{r['display_name']}", path.read_bytes()))
     return out
+
+
+# --- files and rows after a crash ------------------------------------------------
+
+def reconcile(conn, apply=False, actor="reconcile", role="system"):
+    """Compare the document store with its rows. -> counts and document ids only.
+
+    ingest writes a file before its row commits and erasure removes files after
+    its rows commit, so a process killed in between leaves a file no row names
+    (after an erasure, an erased patient's file) or a half-written .upload- temp.
+    The scan runs under the same write lock ingest holds while it writes, so an
+    upload in flight is never mistaken for one of these. With apply, those files
+    are removed. A missing or changed original is only reported: its row is the
+    record, and restoring the file from a backup is a person's decision."""
+    root = Path(DOC_ROOT)
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        rows = conn.execute("SELECT id, stored_path, sha256 FROM patient_documents"
+                            " ORDER BY id").fetchall()
+        named = {r["stored_path"] for r in rows}
+        orphans, temps = [], []
+        for path in sorted(root.glob("*/*")) if root.is_dir() else []:
+            if path.is_symlink() or not path.is_file():
+                continue
+            if path.name.startswith(".upload-"):
+                temps.append(path)
+            elif f"{path.parent.name}/{path.name}" not in named:
+                orphans.append(path)
+        if apply:
+            for path in orphans + temps:
+                path.unlink()
+            for folder in {p.parent for p in orphans + temps}:
+                if not any(folder.iterdir()):
+                    folder.rmdir()
+    finally:
+        conn.rollback()
+    # reading the originals needs no lock: a named file is never rewritten
+    missing, damaged = [], []
+    for r in rows:
+        path = root / r["stored_path"]
+        if not path.is_file():
+            missing.append(r["id"])
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != r["sha256"]:
+            damaged.append(r["id"])
+    found = {"orphan_files": len(orphans), "temp_files": len(temps),
+             "missing_originals": missing, "damaged_originals": damaged, "applied": apply}
+    if apply:
+        log_audit(conn, actor, role, "document_reconcile", "documents", allowed=1,
+                  reason=f"orphan_files {len(orphans)}; temp_files {len(temps)};"
+                         f" missing {len(missing)}; damaged {len(damaged)}")
+    return found
+
+
+def report_at_startup(db_path):
+    """One line if a crash left something behind. Changes nothing."""
+    from storage import connect
+    conn = connect(db_path)
+    found = reconcile(conn)
+    conn.close()
+    if found["orphan_files"] or found["temp_files"] or found["missing_originals"] \
+            or found["damaged_originals"]:
+        print(f"documents: {found['orphan_files']} file(s) without a row,"
+              f" {found['temp_files']} unfinished upload(s), {len(found['missing_originals'])}"
+              f" missing and {len(found['damaged_originals'])} changed original(s)."
+              " Run: python documents.py --reconcile")
+    return found
+
+
+def main(argv):
+    """python documents.py --reconcile [--apply]"""
+    if argv[:1] != ["--reconcile"]:
+        print(main.__doc__)
+        return 2
+    from storage import connect
+    conn = connect("db/clinic.sqlite")
+    found = reconcile(conn, apply="--apply" in argv)
+    conn.close()
+    print(json.dumps(found, indent=2))
+    if found["missing_originals"] or found["damaged_originals"]:
+        print("some originals are missing or changed: restore them from a verified backup")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

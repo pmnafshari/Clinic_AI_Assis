@@ -253,6 +253,8 @@ def selftest():
             assert rendered != t("proc_unmapped", lang), f"{code}/{lang} has no phrase template"
 
     glossary_review.REGISTER_PATH = saved
+    import shutil
+    shutil.rmtree(tmp_dir)
 
     # 6. dates
     assert format_date("2026-08-12", "it") == "12/08/2026"

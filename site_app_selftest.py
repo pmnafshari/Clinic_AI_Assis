@@ -180,6 +180,7 @@ def selftest():
     # 11. the loader refuses a file missing a required section. a site that
     # boots with its doctors silently absent is worse than one that will not
     # boot at all.
+    import os
     import tempfile
     with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as fh:
         fh.write("clinic:\n  name: x\n")
@@ -190,6 +191,8 @@ def selftest():
     except RuntimeError as exc:
         assert "missing required section" in str(exc), \
             f"11: expected a missing-section error, got: {exc}"
+    finally:
+        os.unlink(broken)
 
     # 12. the icon sprite is present and inline. section 9 forbids icon-font
     # markup; this asserts the replacement actually shipped, so "no icons at

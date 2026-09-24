@@ -110,10 +110,10 @@
               <input type="hidden" name="purpose" value="{{ c.purpose }}">
               {% if c.granted and not c.outdated %}
               <input type="hidden" name="granted" value="0">
-              <button type="submit" class="btn btn-outline-secondary btn-sm">Record withdrawal</button>
+              <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Record withdrawal: {{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}">Record withdrawal</button>
               {% else %}
               <input type="hidden" name="granted" value="1">
-              <button type="submit" class="btn btn-outline-primary btn-sm">Record consent</button>
+              <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="Record consent: {{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}">Record consent</button>
               {% endif %}
             </form>
             {% endif %}
@@ -256,8 +256,8 @@
               <button type="button" class="btn btn-outline-secondary btn-sm"
                 data-bs-toggle="modal" data-bs-target="#editModal"
                 hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
-                hx-target="#modal-body-target" hx-swap="innerHTML">Edit</button>
-              <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}">Similar cases</a>
+                hx-target="#modal-body-target" hx-swap="innerHTML" aria-label="Edit visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Edit</button>
+              {% if similar_cases_enabled() %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}" aria-label="Similar cases for visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Similar cases</a>{% endif %}
             </div>
             <p class="timeline-note">{{ visit.clinical_notes }}</p>
             {% if visit.procedures %}

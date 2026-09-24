@@ -35,7 +35,7 @@
     <ul class="ds-rows">
       {% for r in results %}
       <li class="ds-row"><span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=r.doc_id) }}">{{ r.display_name }} · page {{ r.page }}</a>
+        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=r.doc_id) }}" aria-label="{{ r.display_name }} · page {{ r.page }}, document {{ r.doc_id }}">{{ r.display_name }} · page {{ r.page }}</a>
         <span class="ds-row-sub text-break">"{{ r.snippet }}"</span>
         <span class="ds-row-sub">confirmed by {{ r.confirmed_by }} · read by {{ r.extractor }}{% if r.uncertain %} · <strong>uncertain reading ({{ r.confidence }}%)</strong>{% endif %}</span>
       </span></li>
@@ -64,7 +64,7 @@
     <ul class="ds-rows">
       {% for d in rows %}
       <li class="ds-row"><span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=d.id) }}">{{ d.display_name }}</a>
+        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=d.id) }}" aria-label="{{ d.display_name }}, document {{ d.id }}, {{ d.status.replace('_', ' ') }}">{{ d.display_name }}</a>
         <span class="ds-row-sub">{{ d.status.replace('_', ' ') }}{% if d.reason %} · {{ d.reason }}{% endif %} · {{ d.uploaded_at | appt_date }}</span>
       </span></li>
       {% endfor %}

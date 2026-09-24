@@ -6,6 +6,19 @@
     <li aria-current="page">Similar cases</li>
   </ol>
 </nav>
+{% if off %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
+    <h1 class="ds-page-title">Similar cases</h1>
+    <p class="ds-page-meta">dentist only</p>
+  </div>
+</div>
+<div class="ds-alert ds-alert-info" role="note">
+  <div><strong class="ds-alert-title">Switched off</strong>
+  {{ off }} No other patient's record was read. The clinic can switch it on when the criteria are approved.</div>
+</div>
+{% else %}
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
@@ -48,16 +61,16 @@
           <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="verdict" value="similar">
-            <button class="btn btn-outline-secondary btn-sm" type="submit">Similar</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Similar: {{ c.label }}">Similar</button>
           </form>
           <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="verdict" value="not_similar">
-            <button class="btn btn-outline-secondary btn-sm" type="submit">Not similar</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Not similar: {{ c.label }}">Not similar</button>
           </form>
           <form method="post" action="{{ url_for('similar.exclude', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-secondary btn-sm" type="submit">Remove from similar-case search</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Remove from similar-case search: {{ c.label }}">Remove from similar-case search</button>
           </form>
         </span>
       </li>
@@ -68,4 +81,5 @@
     {% endif %}
   </div>
 </section>
+{% endif %}
 {% endblock %}

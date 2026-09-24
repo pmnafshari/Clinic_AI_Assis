@@ -22,14 +22,22 @@ similar-case search. Both are append-only, carry the criteria version, are
 audited, and change neither a visit nor the ranking.
 
 Dentist only (read_clinical). Patients have no route here.
+
+OFF BY DEFAULT. The criteria are an unapproved draft, so nothing here runs unless
+the clinic starts the app with CLINIC_SIMILAR_CASES=1. Switched off, a dentist is
+told so, nothing is read or written, and the refusal is audited.
 """
 import json
+import os
 import re
 
 import clinic_time
 from auth import authorize, log_audit
 
 CAPABILITY = "read_clinical"
+ENV_FLAG = "CLINIC_SIMILAR_CASES"
+OFF_MESSAGE = ("Similar cases is switched off on this system: its matching criteria are a draft"
+               " that no clinical owner has approved.")
 CRITERIA = {
     "version": "p16.1-draft",
     "approved_by": None,
@@ -93,10 +101,21 @@ PHONE = re.compile(r"\+?\d[\d .\-]{6,}\d")
 EMAIL = re.compile(r"\S+@\S+")
 
 
+class Disabled(RuntimeError):
+    """The feature is switched off; nothing was read or written."""
+
+
+def enabled():
+    return os.environ.get(ENV_FLAG) == "1"
+
+
 def _require(conn, actor, role, action, target):
     if not authorize(role, CAPABILITY):
         log_audit(conn, actor, role, action, target, allowed=0)
         raise PermissionError(f"{role} may not {action}")
+    if not enabled():
+        log_audit(conn, actor, role, action, target, allowed=0, reason="switched off")
+        raise Disabled(OFF_MESSAGE)
 
 
 def _procedures(raw):

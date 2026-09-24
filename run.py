@@ -1,6 +1,7 @@
 import clinic_time
 import codice_fiscale
 import disk_guard
+import documents
 import upload_worker
 from app import create_app
 
@@ -18,5 +19,8 @@ codice_fiscale.guard_or_exit("db/clinic.sqlite")
 clinic_time.guard_or_exit("db/clinic.sqlite")
 # anything left in drop/ by a previous run was uploaded but never processed
 upload_worker.resume_pending()
+# a crash between a document's file and its row leaves one without the other.
+# reported here, never repaired here: `python documents.py --reconcile --apply`
+documents.report_at_startup("db/clinic.sqlite")
 # no port argument, so this binds flask's default 5000 - tunnel_guard.STAFF_PORT mirrors it, change both together
 app.run(host="127.0.0.1", threaded=True)

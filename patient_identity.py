@@ -336,19 +336,18 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
     if target is None:
         return False, f"no patient with codice fiscale {target_cf}"
     source_pid, target_pid = source["patient_id"], target["patient_id"]
-    if conn.execute(
-            "SELECT 1 FROM patient_documents s JOIN patient_documents t ON t.sha256 = s.sha256"
-            " WHERE s.patient_id = ? AND t.patient_id = ?"
-            " AND s.status NOT IN ('rejected', 'superseded')"
-            " AND t.status NOT IN ('rejected', 'superseded')", (source_pid, target_pid)).fetchone():
-        # which copy's review stands is a dentist's decision, not the merge's
-        return False, ("both records hold the same document; a dentist must reject or replace"
-                       " one copy before they can be merged")
+    import documents
     moved = {}
     try:
-        # one transaction over every relation. sqlite3 opens one implicitly on
-        # the first write and holds it until commit, so a raise anywhere below
-        # rolls the whole thing back and nothing has moved.
+        # one transaction over every relation, taken as the writer up front so
+        # no upload lands between settling the shared documents and moving
+        # them. a raise anywhere below rolls the whole thing back.
+        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")
+        # both records may hold the same file: one live copy stays, the other
+        # is kept as history, before the move would put both under one patient
+        settled = documents.settle_duplicates(conn, source_pid, target_pid)
+        moved["documents_superseded"] = [[lost, kept] for lost, kept, _status in settled]
         for table in MERGE_RELATIONS:
             cur = conn.execute(
                 f"UPDATE {table} SET patient_id = ? WHERE patient_id = ?",
@@ -423,15 +422,22 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
     # P15: the moved documents are re-indexed under the survivor. search also
     # re-checks every hit against the database, so a stale entry can never
     # show a document to the wrong record - this only keeps it findable
-    import documents
     try:
+        documents.unindex([lost for lost, _kept, _status in settled])
         documents.reindex_patient(conn, target_pid)
     except documents.DocumentError:
         moved["documents_index_pending"] = True
 
+    for lost, kept, status in settled:
+        log_audit(conn, actor, actor_role, "document_merge_duplicate", f"document:{lost}",
+                  allowed=1, reason=f"kept document:{kept}; was {status}")
     log_audit(conn, actor, actor_role, "merge_patient",
               f"{source_cf}->{target_cf}", allowed=1)
-    return True, f"Merged into {target['patient_name']}."
+    message = f"Merged into {target['patient_name']}."
+    if settled:
+        message += (f" {len(settled)} document(s) both records held are kept once; the other"
+                    " copy stays in the list as superseded.")
+    return True, message
 
 
 def move_merged_files(conn, sorted_root="sorted"):

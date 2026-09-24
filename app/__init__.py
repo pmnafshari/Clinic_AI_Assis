@@ -4,6 +4,7 @@ from flask import Flask, flash, g, redirect, request, send_from_directory, url_f
 from flask_wtf import CSRFProtect
 
 import clinic_time
+import similar_cases
 import web_session
 from auth import authorize
 from env_config import load_secret_key
@@ -67,6 +68,8 @@ def create_app():
 
     # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
+    # read per render, so the switch is the environment the app was started with
+    app.jinja_env.globals["similar_cases_enabled"] = similar_cases.enabled
     # avatars: initials on a stable tint (phase 43). presentation, not a figure
     app.jinja_env.filters["initials"] = initials
     app.jinja_env.filters["tint"] = tint
