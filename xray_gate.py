@@ -10,9 +10,12 @@ is what keeps it that way until the people who own the decision say otherwise.
   is PASS - an evaluation cannot pass before its criteria do (P18.T1, P18.T3).
   GO needs every item PASS and a named decider and date. the agent cannot sign:
   this code only reads what people recorded.
-- enabled() is the only way any later X-ray feature may ask whether it can run.
+- enabled() is the only way a clinical X-ray feature may ask whether it can run.
   it is False unless the gate is valid, the decision is GO, and the operator
-  also set CLINIC_XRAY_ENABLED=1. today the decision is BLOCKED (D04).
+  also set CLINIC_XRAY_ENABLED=1. nothing clinical exists.
+- demo_enabled() is the only way the non-clinical demo (P19) may run: DEMO_GO
+  (or GO), a valid record, and CLINIC_XRAY_DEMO=1. D04 (2026-09-24) is DEMO_GO
+  with clinical approval pending; the demo is off by default.
 - route_scan() fails when any of the three apps exposes an X-ray, radiograph,
   diagnosis or inference endpoint (P18.T4).
 - split_check() audits a dataset manifest (image_sha256, patient_id, split):
@@ -31,7 +34,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 GATE = ROOT / "docs" / "xray" / "gate.json"
 ENV = "CLINIC_XRAY_ENABLED"
-DECISIONS = ("GO", "NO_GO", "BLOCKED")
+DEMO_ENV = "CLINIC_XRAY_DEMO"
+# DEMO_GO (D04, 2026-09-24): a non-clinical demo on synthetic or licensed public demo data only.
+# it opens demo_enabled() and never enabled(); clinical approval stays pending.
+DECISIONS = ("GO", "DEMO_GO", "NO_GO", "BLOCKED")
+DEMO_SCOPE = ("data", "users", "output", "claims", "excluded")
+CLINICAL_PENDING = "CLINICAL_APPROVAL_PENDING"
 STATUSES = ("PASS", "FAIL", "BLOCKED", "HUMAN_PENDING", "TBC")
 FORBIDDEN_ROUTE = re.compile(r"x-?ray|radiograph|radiograf|diagnos|inference|finding|opg|cbct", re.I)
 
@@ -64,6 +72,15 @@ def problems(gate):
         for need in item.get("requires", []):
             if items.get(need, {}).get("status") != "PASS":
                 out.append(f"{iid}: PASS before {need} is PASS")
+    if gate.get("decision") == "DEMO_GO":
+        if not (_filled(gate.get("decided_by")) and _filled(gate.get("decided_on"))):
+            out.append("DEMO_GO without a named decider and a date")
+        if gate.get("clinical_status") != CLINICAL_PENDING:
+            out.append(f"DEMO_GO must keep clinical_status {CLINICAL_PENDING}")
+        scope = gate.get("demo_scope", {})
+        for field in DEMO_SCOPE:
+            if not _filled(scope.get(field)):
+                out.append(f"DEMO_GO with the demo scope not filled in: {field}")
     if gate.get("decision") == "GO":
         open_items = [iid for iid, i in items.items() if i.get("status") != "PASS"]
         if open_items:
@@ -87,6 +104,17 @@ def enabled(gate=None, env=None):
         return False
     return (not problems(gate) and gate.get("decision") == "GO"
             and (env.get(ENV) or "").strip() == "1")
+
+
+def demo_enabled(gate=None, env=None):
+    """the non-clinical demo (P19): DEMO_GO or GO, a valid record, and its own switch."""
+    env = os.environ if env is None else env
+    try:
+        gate = load() if gate is None else gate
+    except (OSError, ValueError):
+        return False
+    return (not problems(gate) and gate.get("decision") in ("DEMO_GO", "GO")
+            and (env.get(DEMO_ENV) or "").strip() == "1")
 
 
 def route_scan(url_maps):
@@ -125,8 +153,9 @@ def main(argv):
     if argv[:1] == ["check"]:
         gate = load()
         bad = problems(gate) + route_scan(app_routes())
-        print(json.dumps({"decision": gate["decision"], "reason": gate.get("reason"),
-                          "enabled": enabled(gate), "problems": bad}, indent=1))
+        print(json.dumps({"decision": gate["decision"], "clinical_status": gate.get("clinical_status"),
+                          "reason": gate.get("reason"), "clinical_enabled": enabled(gate),
+                          "demo_enabled": demo_enabled(gate), "problems": bad}, indent=1))
         return 1 if bad else 0
     if argv[:1] == ["split-check"] and len(argv) == 2:
         with open(argv[1], newline="") as f:
@@ -152,11 +181,28 @@ def selftest():
           "items": [item("A"), item("CRIT"), item("EVAL", requires=["CRIT"])]}
     on = {ENV: "1"}
 
-    # 1. the real record: consistent, BLOCKED, closed whatever the environment says
+    # 1. the real record (D04, 2026-09-24): a non-clinical demo only. clinically closed whatever
+    # the environment says; the demo opens only with its own switch
     real = load()
     assert problems(real) == [], problems(real)
-    assert real["decision"] == "BLOCKED" and not enabled(real, on), "1: the gate must be closed today"
-    assert all(i["status"] != "PASS" for i in real["items"]), "1: nothing is PASS today"
+    assert real["decision"] == "DEMO_GO" and real["clinical_status"] == "CLINICAL_APPROVAL_PENDING", real["decision"]
+    assert not enabled(real, {ENV: "1", DEMO_ENV: "1"}), "1: no clinical use without GO"
+    assert demo_enabled(real, {DEMO_ENV: "1"}) and not demo_enabled(real, {}), "1: the demo is default-off"
+    assert not demo_enabled(real, {ENV: "1"}), "1: the clinical switch does not open the demo"
+    clinical = [i for i in real["items"] if i["id"].startswith("P18")]
+    assert clinical and all(i["status"] != "PASS" for i in clinical), "1: no clinical item is PASS"
+
+    # 1b. DEMO_GO needs a decider, a date, the demo scope filled in, and clinical approval still pending
+    demo = {"decision": "DEMO_GO", "clinical_status": "CLINICAL_APPROVAL_PENDING", "decided_by": "Owner",
+            "decided_on": "2026-09-24", "intended_use": {}, "items": [item("P18.01", "BLOCKED")],
+            "demo_scope": {k: "set" for k in DEMO_SCOPE}}
+    assert problems(demo) == [] and demo_enabled(demo, {DEMO_ENV: "1"}) and not enabled(demo, on)
+    for change, expect in (({"decided_by": None}, "DEMO_GO without a named decider and a date"),
+                           ({"clinical_status": "APPROVED"}, "DEMO_GO must keep clinical_status CLINICAL_APPROVAL_PENDING"),
+                           ({"demo_scope": {**demo["demo_scope"], "data": "TBC"}}, "DEMO_GO with the demo scope not filled in: data")):
+        bad = {**demo, **change}
+        assert expect in problems(bad) and not demo_enabled(bad, {DEMO_ENV: "1"}), (change, problems(bad))
+    assert not demo_enabled({**demo, "decision": "BLOCKED"}, {DEMO_ENV: "1"}), "1b: BLOCKED keeps the demo closed"
 
     # 2. a complete GO opens only with the operator switch as well
     assert problems(go) == [] and enabled(go, on) and not enabled(go, {}), "2: GO needs the switch too"

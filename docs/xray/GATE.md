@@ -1,14 +1,18 @@
-# X-ray gate (P18)
+# X-ray gate (P18, D04)
 
-**Decision: BLOCKED.** Nobody has decided GO or NO_GO, because the starting decision (D04: the X-ray
-path and its intended use) has no owner yet. There is **no X-ray analysis in this code base**: images
-are only filed and stored. Nothing here is a legal, regulatory, licensing or clinical ruling - those
-come from the named specialists, from current official sources, at the time they decide.
+**Decision: DEMO_GO / CLINICAL_APPROVAL_PENDING** (owner, 2026-09-24). D04 authorises a **non-clinical
+demo only**: synthetic images, or clearly licensed public demo data; no real clinic image, no diagnosis,
+no treatment advice, no production use, no external provider; the demo is **off by default**
+(`CLINIC_XRAY_DEMO=1` turns it on). **Clinical use is not decided**: every clinical item below stays
+BLOCKED until the clinical owner, the responsible consultant and the specialists named in this file
+decide. Nothing here is a legal, regulatory, licensing or clinical ruling.
 
 The machine-checked record is `gate.json`; `python xray_gate.py check` validates it and scans the three
-apps for any X-ray, radiograph, diagnosis or inference endpoint. `xray_gate.enabled()` stays False
-unless the record says GO, every item is PASS with an owner, version, date and evidence, a decider has
-signed, and the operator also sets `CLINIC_XRAY_ENABLED=1`. An agent cannot sign this record.
+apps for any X-ray, radiograph, diagnosis or inference endpoint. `xray_gate.enabled()` (clinical) stays
+False unless the record says GO, every item is PASS with an owner, version, date and evidence, a decider
+has signed, and the operator sets `CLINIC_XRAY_ENABLED=1`. `xray_gate.demo_enabled()` (the demo) needs
+DEMO_GO or GO, a valid record and `CLINIC_XRAY_DEMO=1`; it never opens the clinical path. An agent cannot
+sign this record: it only records what the owner decided.
 
 ## 1. Intended use (P18.01) - to be filled by the owner and the clinical lead
 Country of use; image modality (e.g. bitewing, periapical, panoramic, CBCT); who uses the output;
