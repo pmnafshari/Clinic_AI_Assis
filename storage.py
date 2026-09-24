@@ -201,6 +201,9 @@ def init_db(db_path):
     # similar cases (P16). a dentist's verdicts and removals, append-only
     from similar_cases import SCHEMA as SIMILAR_SCHEMA
     conn.executescript(SIMILAR_SCHEMA)
+    # the non-clinical X-ray demo (P19). reviews of demo output, append-only; no patient link
+    from xray_demo import SCHEMA as XRAY_DEMO_SCHEMA
+    conn.executescript(XRAY_DEMO_SCHEMA)
     conn.commit()
     return conn
 

@@ -30,6 +30,7 @@ human review and the deployment environment are still open.
 | Similar past cases | `CLINIC_SIMILAR_CASES=1` | matching rules are an unapproved draft (clinical owner) |
 | Local speech-to-text for dictation | `CLINIC_STT_ADAPTER=local` | accuracy not clinically approved |
 | Public-site voice demo | `VOICE_DEMO=1` | demo only |
+| X-ray pipeline demo (synthetic images, command line) | `CLINIC_XRAY_DEMO=1` | non-clinical demo only (D04); see `docs/xray/DEMO-MODEL-CARD.md` |
 | Messaging / payments / telephony | `CLINIC_*_ENABLED` + provider + kill switch + spend cap | no provider chosen, no budget |
 
 ## Blocked (nothing in this release does these)
@@ -38,7 +39,7 @@ human review and the deployment environment are still open.
 - Reading a summary aloud (voice licence unresolved).
 - Image similarity and voice search over documents (no model, licence or dataset).
 - Interpreting shorthand procedure codes for patients (no clinical glossary owner).
-- X-ray analysis of any kind (separate legal and clinical gate).
+- Clinical X-ray analysis of any kind: only the non-clinical synthetic demo exists (`docs/xray/GATE.md`).
 - Any hosted service: CI, monitoring delivery, off-machine backups (owner decisions).
 
 ## Before real data (not done)

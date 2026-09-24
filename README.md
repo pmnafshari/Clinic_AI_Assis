@@ -209,8 +209,9 @@ exactly the defects these catch:
 `./ci.sh` runs the fast suite with pins, migrations, the secret scan and the dependency audit;
 `./ci.sh --full` adds every gate above. Operations (health check, restore drill, rollback, runbooks)
 and the trial's release scope are in [`docs/release/`](docs/release/RELEASE.md).
-There is no X-ray analysis; the go/no-go record for it and the checks that keep it closed are in
-[`docs/xray/GATE.md`](docs/xray/GATE.md) (`python xray_gate.py check`).
+There is no clinical X-ray analysis. The go/no-go record and the checks that keep it closed are in
+[`docs/xray/GATE.md`](docs/xray/GATE.md) (`python xray_gate.py check`); a non-clinical pipeline demo on
+synthetic images, off by default, is described in [`docs/xray/DEMO-MODEL-CARD.md`](docs/xray/DEMO-MODEL-CARD.md).
 
 Install the browser tooling with `.venv/bin/pip install -r requirements-dev.txt` then
 `.venv/bin/python -m playwright install chromium`. It is development-only and never goes on
