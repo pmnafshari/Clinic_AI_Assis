@@ -204,6 +204,9 @@ def init_db(db_path):
     # the non-clinical X-ray demo (P19). reviews of demo output, append-only; no patient link
     from xray_demo import SCHEMA as XRAY_DEMO_SCHEMA
     conn.executescript(XRAY_DEMO_SCHEMA)
+    # the pilot machinery around the demo (P20): kill switch, job queue, incidents, validations
+    from xray_pilot_demo import SCHEMA as XRAY_PILOT_SCHEMA
+    conn.executescript(XRAY_PILOT_SCHEMA)
     conn.commit()
     return conn
 

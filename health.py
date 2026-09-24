@@ -61,7 +61,12 @@ def _hours(delta):
     return None if delta is None else round(delta.total_seconds() / 3600, 1)
 
 
-def collect(conn, root=ROOT, now=None, http=probe, fv=filevault):
+def xray_gate_record():
+    import xray_gate
+    return xray_gate.load()
+
+
+def collect(conn, root=ROOT, now=None, http=probe, fv=filevault, gate=xray_gate_record):
     """-> [(check, value, alert or None)]"""
     now = now or clinic_time.now_utc()
     root = Path(root)
@@ -119,6 +124,20 @@ def collect(conn, root=ROOT, now=None, http=probe, fv=filevault):
         out.append((f"provider.{kind}", {"enabled": providers.feature_enabled(kind), "killed": killed,
                                          "spent_cents": spent, "cap_cents": cap},
                     f"{kind} over its spend cap" if over else None))
+    # the X-ray demo (P18-P20): the gate record must stay valid; an incident waits for a dentist
+    import xray_gate
+    try:
+        record = gate()
+        broken = xray_gate.problems(record)
+    except (OSError, ValueError) as e:
+        record, broken = {}, [type(e).__name__]
+    out.append(("xray.gate", {"decision": record.get("decision"), "clinical_enabled": False if broken else
+                              xray_gate.enabled(record), "valid": not broken},
+                "xray gate record invalid" if broken else None))
+    control = conn.execute("SELECT killed FROM xray_demo_control WHERE id = 1").fetchone()
+    open_incidents = conn.execute("SELECT COUNT(*) FROM xray_demo_incidents WHERE status = 'open'").fetchone()[0]
+    out.append(("xray.demo", {"killed": bool(control and control["killed"]), "incidents_open": open_incidents},
+                "xray demo incidents open" if open_incidents else None))
     unknown = conn.execute("SELECT COUNT(*) FROM delivery_receipts WHERE outcome = 'unknown'").fetchone()[0]
     out.append(("provider.deliveries_unresolved", unknown, "deliveries with unknown outcome" if unknown else None))
     return out
@@ -242,6 +261,17 @@ def selftest():
         conn.commit()
         assert "messaging over its spend cap" in alerts(run())
         conn.execute("UPDATE provider_switches SET spend_cap_cents = 0, spent_cents = 0")
+        conn.commit()
+
+        # 3b. the X-ray demo: an invalid gate record and an unacknowledged incident alert; a kill is reported
+        bad_gate = {"decision": "DEMO_GO", "clinical_status": "CLINICAL_APPROVAL_PENDING", "decided_by": None}
+        assert "xray gate record invalid" in alerts(run(gate=lambda: bad_gate)), "3b: a broken gate must alert"
+        assert "xray gate record invalid" not in alerts(run()), "3b: the real gate record is valid"
+        conn.execute("INSERT INTO xray_demo_incidents (job_id, kind, status, raised_by, raised_at)"
+                     " VALUES (1, 'false_negative', 'open', 'dentist', ?)", (now.isoformat(),))
+        conn.commit()
+        assert "xray demo incidents open" in alerts(run()), "3b: an open incident must alert"
+        conn.execute("DELETE FROM xray_demo_incidents")
         conn.commit()
 
         # 4. an alert run appends one PHI-free line and exits 1 through main's path

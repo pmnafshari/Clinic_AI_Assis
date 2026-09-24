@@ -20,3 +20,20 @@ clinical approval pending (`gate.json`: DEMO_GO / CLINICAL_APPROVAL_PENDING). Of
 | Clinical use | **not permitted.** Requires P18.01-P18.06 (intended use, clinical owner, consultant, regulatory and licence review, data permission, criteria) and a written GO |
 
 Run: `CLINIC_XRAY_DEMO=1 .venv/bin/python xray_demo.py demo --out <folder>`.
+
+## Pilot machinery around the demo (P20) - not a pilot
+A real pilot needs approvals nobody has given; these are the controls it would run inside, proven on the demo
+(`xray_pilot_demo.py`):
+- **Queue and kill switch.** Demo images wait in a queue. A dentist or reception can pull the kill switch: queued
+  work is cancelled and nothing new is accepted; only a dentist resumes.
+- **Mandatory review.** Output leaves the queue only after a dentist accepted or corrected it; rejected or
+  unreviewed output never does, and nothing is written to a patient record.
+- **Incidents.** A reject or correct can raise a false-negative / false-positive incident; it is escalated as a
+  one-line alert (kinds and counts only) until a dentist acknowledges it, and `health.py` alerts while it is open.
+- **Model change policy.** A detector version runs only after passing revalidation on the locked benchmark;
+  rollback means choosing an earlier validated version (`demo-marks-threshold-0` is kept for that). Every job keeps
+  its image, version and result, so any past result can be reproduced.
+- **Drift.** The last 20 jobs' abstention rate and marks per image are compared with the benchmark baseline.
+- **Report.** Counts, review coverage, decisions, incidents, versions and drift - with the continue / fix / stop
+  decision left empty for the owner and the clinical owner.
+

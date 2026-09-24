@@ -42,6 +42,12 @@ A missing or changed original is reported, not repaired: restore it from a backu
 .venv/bin/python unlock_user.py <username>
 ```
 
+## X-ray demo (synthetic only)
+Off unless `CLINIC_XRAY_DEMO=1` and `docs/xray/gate.json` is a valid DEMO_GO. To stop it at once, in Python:
+`xray_pilot_demo.kill(conn, <user>, <role>, "<reason>")` - queued demo jobs are cancelled; a dentist resumes with
+`xray_pilot_demo.resume`. An open demo incident shows in `health.py` until a dentist acknowledges it. A broken
+gate record turns the demo off; the three apps are not affected.
+
 ## Outage
 | Symptom | Check | Action |
 |---|---|---|

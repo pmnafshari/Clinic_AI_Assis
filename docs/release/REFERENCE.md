@@ -187,4 +187,8 @@ this file is stale.
 | `visit_summaries` | id, patient_id, status, generator, generator_version, source_ids, source_fingerprint, created_by, created_at, decided_by, decided_at, decision_reason, flags_at_approval |
 | `visit_summary_versions` | id, summary_id, version, kind, body, created_by, created_at |
 | `visits` | id, patient_id, visit_date, procedures, clinical_notes, next_appointment, source_path |
+| `xray_demo_control` | id, killed, reason, active_version, updated_by, updated_at |
+| `xray_demo_incidents` | id, job_id, kind, status, raised_by, raised_at, acknowledged_by, acknowledged_at |
+| `xray_demo_jobs` | id, image, input_sha256, status, detector, result, reason, review_id, created_by, created_at, finished_at |
 | `xray_demo_reviews` | id, input_sha256, generator, detector, output, decision, corrected, reviewer, role, reviewed_at |
+| `xray_demo_validations` | id, version, criteria_sha256, manifest_sha256, passed, report, validated_by, validated_at |

@@ -168,7 +168,7 @@ def _std(pixels):
     return (sum((v - mean) ** 2 for v in flat) / len(flat)) ** 0.5
 
 
-def detect(pixels):
+def detect(pixels, min_area=9):
     """the demo rule: connected squares of the two painted values. no confidence."""
     height, width = len(pixels), len(pixels[0])
     seen, marks = set(), []
@@ -187,7 +187,7 @@ def detect(pixels):
                             seen.add((nx, ny))
                             stack.append((nx, ny))
                 w, h = box[2] - box[0] + 1, box[3] - box[1] + 1
-                if w * h >= 9:
+                if w * h >= min_area:
                     marks.append({"kind": kind, "x": box[0], "y": box[1], "w": w, "h": h})
     return marks
 
@@ -306,7 +306,7 @@ def rate(k, n):
     return {"value": round(p, 4), "ci95": [round(centre - half, 4), round(centre + half, 4)], "n": n}
 
 
-def evaluate(bench, criteria_path, locked, env=None):
+def evaluate(bench, criteria_path, locked, env=None, detector=detect, detector_name=DETECTOR):
     """image-level metrics per mark kind on the test split, against criteria locked beforehand."""
     if _sha_file(criteria_path) != locked["criteria_sha256"]:
         raise Refused("the criteria changed after the benchmark was locked; thresholds cannot move afterwards")
@@ -319,7 +319,7 @@ def evaluate(bench, criteria_path, locked, env=None):
     for case in bench["cases"]:
         if split[case["sha"]] != "test":
             continue
-        result = analyse(case["image"], env=env)
+        result = analyse(case["image"], env=env, detector=detector)
         if result["status"] != "result":
             abstained += 1
             continue
@@ -330,7 +330,7 @@ def evaluate(bench, criteria_path, locked, env=None):
             bucket = by_noise.setdefault(f"noise_{case['noise']}", {"right": 0, "n": 0})
             bucket["n"] += 1
             bucket["right"] += truth == pred
-    report = {"criteria_sha256": locked["criteria_sha256"], "detector": DETECTOR, "abstained": abstained,
+    report = {"criteria_sha256": locked["criteria_sha256"], "detector": detector_name, "abstained": abstained,
               "per_kind": {}, "subgroups": {g: rate(b["right"], b["n"]) for g, b in by_noise.items()},
               "label": DEMO_LABEL}
     for kind, c in per_kind.items():
