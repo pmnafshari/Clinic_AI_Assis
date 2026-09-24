@@ -203,6 +203,12 @@ exactly the defects these catch:
 | `eval_chat.py` / `eval_notes.py` | answer fidelity, and model accuracy |
 | `shot_pages.py` | every page fits at 390px and 1440px with no horizontal scroll |
 | `verify_retrain.py` | run after a retrain: every field against `retrain_baseline.json`, plus the three later-position terms |
+| `e2e_flow_appt.py` / `e2e_cal_keys.py` / `e2e_portal_preview.py` | request-to-confirm booking flow, keyboard-only calendar, portal pages and contrast |
+| `load_check.py` | concurrent load and a restart, on a disposable instance |
+
+`./ci.sh` runs the fast suite with pins, migrations, the secret scan and the dependency audit;
+`./ci.sh --full` adds every gate above. Operations (health check, restore drill, rollback, runbooks)
+and the trial's release scope are in [`docs/release/`](docs/release/RELEASE.md).
 
 Install the browser tooling with `.venv/bin/pip install -r requirements-dev.txt` then
 `.venv/bin/python -m playwright install chromium`. It is development-only and never goes on

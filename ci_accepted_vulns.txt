@@ -1,0 +1,6 @@
+# advisories pip-audit may report without failing ci.sh. every line: id, package, why it does not apply.
+# anything not listed here fails. review this list whenever a dependency moves (P02.05, P17.02).
+PYSEC-2026-311  chromadb 1.3.7  Chroma HTTP server only; the app uses the embedded PersistentClient, no server runs
+PYSEC-2026-3813 chromadb 1.3.7  Chroma HTTP server only (as above); no fixed version at review time (2026-09-10)
+PYSEC-2026-3814 chromadb 1.3.7  Chroma HTTP server only (as above)
+PYSEC-2026-3815 chromadb 1.3.7  Chroma HTTP server only (as above)
