@@ -80,10 +80,11 @@ def main():
             check("3 header search finds the patient", NAME in s.inner_text("#app-search-results"))
 
             # --- staff confirms on /appointments (44 layout, 42 route)
-            s.click(".app-cta"); s.wait_for_load_state("networkidle")
+            # P23: New appointment is Home's one primary action (it was a top-bar button)
+            s.click(".app-primary"); s.wait_for_load_state("networkidle")
             check("4 New appointment lands on the booking form", s.url.endswith("/appointments#book")
                   and s.locator("#book").count() == 1, s.url)
-            item = s.locator(".appt-item", has_text=NAME)
+            item = s.locator("#requests .ux-request", has_text=NAME)
             item.locator("summary").click()
             item.locator("input[name=date]").fill(day)
             item.locator("input[name=time]").fill("16:30")

@@ -1,12 +1,20 @@
 {% extends "base.html" %}
+{# P23 - add note: the three stages the route already has (write, check the draft, saved) made visible; the draft is
+   labelled as a draft; leaving with unsaved text asks first. the clinician review rules are the route's, unchanged. #}
+{% set step = 2 if preview else 1 %}
 {% block content %}
-<div class="ds-page-head">
+<div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Intake</p>
+    <p class="ds-page-eyebrow">Intake{% if locked %} · {{ locked.patient_name }}{% endif %}</p>
     <h1 class="ds-page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
     <p class="ds-page-meta">The notes model reads the note; you check it before it is saved</p>
   </div>
-</div>
+<!--/page-head--></div>
+<ol class="ux-steps" aria-label="Progress">
+  <li data-step="1"{% if step == 1 %} aria-current="step"{% endif %} class="{{ 'done' if step > 1 else '' }}"><span class="ux-step-num">1</span> Write or paste the note</li>
+  <li data-step="2"{% if step == 2 %} aria-current="step"{% endif %}><span class="ux-step-num">2</span> Check the draft</li>
+  <li data-step="3"><span class="ux-step-num">3</span> Saved to the record</li>
+</ol>
 <div class="row g-3">
 <div class="col-12 col-xl-8">
 <div class="card dash-card p-4">
@@ -24,18 +32,19 @@
     confirm.
   </p>
   {% endif %}
-  <form method="post" action="{{ url_for('notes.new_note') }}">
+  <form method="post" action="{{ url_for('notes.new_note') }}" data-unsaved-guard>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
     <div class="mb-3">
-      <label for="raw_note" class="form-label">Paste note</label>
+      <label for="raw_note" class="form-label">The note, as written</label>
       {% if dictated %}
       <div class="ds-alert ds-alert-warning mb-2" role="note"><div><strong class="ds-alert-title">Dictated - check it</strong>
       This is what the speech model heard. Correct it before extracting; nothing is saved until you confirm.</div></div>
       {% endif %}
-      <textarea id="raw_note" name="raw_note" rows="6" class="form-control" autofocus>{{ dictated or '' }}</textarea>
+      <textarea id="raw_note" name="raw_note" rows="6" class="form-control" required aria-describedby="raw-help"{% if not preview %} autofocus{% endif %}>{{ dictated or '' }}</textarea>
+      <p class="ux-muted" id="raw-help">Shorthand and Italian are fine. Nothing is saved at this step.</p>
     </div>
-    <button type="submit" class="btn btn-primary">Extract note</button>
+    <button type="submit" class="btn {{ 'btn-outline-primary' if preview else 'btn-primary' }}">{{ 'Read it again' if preview else 'Extract the draft' }}</button>
   </form>
 
   {% if not preview %}
@@ -54,8 +63,12 @@
 
   {% if preview %}
   <hr class="my-4">
-  <h2 class="ds-card-title mb-3">Check what was read</h2>
-  <form method="post" action="{{ url_for('notes.new_note') }}">
+  <div class="ux-card-head">
+    <h2 class="ux-card-title">Check the draft</h2>
+    <span class="ux-badge ux-badge-draft" role="status">Draft - not saved</span>
+  </div>
+  <p class="ux-muted">Every field can be corrected. Saving files it to the patient's record; until then it exists nowhere.</p>
+  <form method="post" action="{{ url_for('notes.new_note') }}" data-unsaved-guard data-dirty-from-start>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="confirm_token" value="{{ confirm_token }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
@@ -67,7 +80,7 @@
       {% if locked %}
       <input type="text" id="patient_name" name="patient_name" value="{{ locked.patient_name }}" class="form-control bg-body-secondary" readonly>
       {% else %}
-      <input type="text" id="patient_name" name="patient_name" value="{{ preview.patient_name }}" class="form-control">
+      <input type="text" id="patient_name" name="patient_name" value="{{ preview.patient_name }}" class="form-control" required>
       {% endif %}
     </div>
     <div class="mb-3">
@@ -75,7 +88,9 @@
       {% if locked %}
       <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ locked.cf }}" class="form-control bg-body-secondary" readonly>
       {% else %}
-      <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}" class="form-control">
+      <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}" class="form-control" required
+             pattern="[A-Za-z0-9]{16}" title="16 letters and digits" aria-describedby="cf-help">
+      <p class="ux-muted" id="cf-help">16 letters and digits.</p>
       {% endif %}
     </div>
     <div class="mb-3">
@@ -95,7 +110,8 @@
       <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="next_appointment" class="form-label">Next appointment</label>
+      <label for="next_appointment" class="form-label">Recall, as written in the note</label>
+      <p class="ux-muted mb-1">Not a booking - book the visit in Appointments.</p>
       <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}" class="form-control">
     </div>
     {% if preview.invoices %}
@@ -112,22 +128,32 @@
       </ul>
     </div>
     {% endif %}
-    <button type="submit" class="btn btn-primary">Save note</button>
+    <button type="submit" class="btn btn-primary">Save to the record</button>
   </form>
   {% endif %}
 </div>
 </div>
 <div class="col-12 col-xl-4">
-  <aside class="card dash-card" aria-labelledby="note-help-title">
-    <div class="dash-card-head"><h2 class="ds-card-title" id="note-help-title">From note to record</h2></div>
-    <div class="dash-card-body">
-      <ol class="ds-rows steps">
-        <li class="ds-row{{ ' is-current' if not preview else '' }}"><span class="step-num ds-numeral" aria-hidden="true">1</span><span class="ds-row-main"><span class="ds-row-title">Paste the note</span><span class="ds-row-sub">shorthand and Italian are fine</span></span></li>
-        <li class="ds-row{{ ' is-current' if preview else '' }}"><span class="step-num ds-numeral" aria-hidden="true">2</span><span class="ds-row-main"><span class="ds-row-title">Check what was read</span><span class="ds-row-sub">every field can be corrected</span></span></li>
-        <li class="ds-row"><span class="step-num ds-numeral" aria-hidden="true">3</span><span class="ds-row-main"><span class="ds-row-title">Save note</span><span class="ds-row-sub">nothing is stored before this step</span></span></li>
-      </ol>
-    </div>
+  <aside class="card ux-card" aria-labelledby="note-help-title">
+    <h2 class="ux-card-title" id="note-help-title">What happens to the note</h2>
+    <ul class="ux-muted ux-help-list">
+      <li>The model reads it on this machine; nothing leaves the clinic.</li>
+      <li>You correct the draft; only then is it saved.</li>
+      <li>An uploaded note waits for a dentist in Notes to review.</li>
+    </ul>
   </aside>
 </div>
 </div>
+<script>
+  // unsaved-change guard: typing in a note form, or a draft not yet saved, asks before the page is left.
+  (function () {
+    var dirty = false;
+    document.querySelectorAll('[data-unsaved-guard]').forEach(function (f) {
+      if (f.hasAttribute('data-dirty-from-start')) dirty = true;
+      f.addEventListener('input', function () { dirty = true; });
+      f.addEventListener('submit', function () { dirty = false; });
+    });
+    window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+  })();
+</script>
 {% endblock %}

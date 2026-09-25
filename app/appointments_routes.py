@@ -1,5 +1,7 @@
 import calendar
-from datetime import date
+from datetime import date, timedelta
+
+import clinic_time
 
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
@@ -33,7 +35,7 @@ def _pick_day(raw):
     try:
         return date.fromisoformat(raw)
     except (TypeError, ValueError):
-        return date.today()
+        return clinic_time.now().date()     # the clinic's today (P23, F1)
 
 
 def _pick_month(raw, day):
@@ -79,7 +81,7 @@ def _month_grid(conn, first, selected):
     counts = appointments.month_counts(
         conn, first.isoformat(), _shift_month(first, 1).isoformat()
     )
-    today = date.today()
+    today = clinic_time.now().date()
     weeks = []
     for week in calendar.Calendar(firstweekday=0).monthdatescalendar(first.year, first.month):
         cells = []
@@ -101,44 +103,71 @@ def _month_grid(conn, first, selected):
     return weeks
 
 
+VIEWS = ("day", "week", "month")
+STATUS_FILTERS = {"booked": (appointments.BOOKED,), "cancelled": ("cancelled",), "all": (appointments.BOOKED, "cancelled")}
+
+
+def _hours(conn, d):
+    """the clinic's opening hours that day, as whole hours; a closed day still shows 09-18 so a booking is visible."""
+    row = conn.execute("SELECT opens, closes, closed FROM clinic_hours WHERE weekday = ?", (d.weekday(),)).fetchone()
+    first, last = (9, 18) if not row or row["closed"] or not row["opens"] else (int(row["opens"][:2]), int(row["closes"][:2]))
+    return list(range(first, max(last, first + 1)))
+
+
+def _slot(row):
+    start = clinic_time.local_of(row["starts_at"])
+    end = start + timedelta(minutes=row["minutes"])
+    return {"id": row["id"], "patient_name": row["patient_name"], "dentist": row["dentist"], "status": row["status"],
+            "hour": start.hour, "start": start.strftime("%H:%M"), "end": end.strftime("%H:%M"),
+            "minutes": row["minutes"], "note": row["note"], "starts_at": row["starts_at"]}
+
+
 @appointments_bp.route("/appointments")
 def index():
-    # the gate decides whether the query RUNS, so a role without the capability
-    # gets a response with no appointment in it - not a hidden one. same shape
-    # as reports_routes.index and dashboard_routes.index (D-09/D-10, RBAC-03).
     if not _may():
         _denied("manage_appointments")
         return redirect(url_for("dashboard.index"))
 
     selected = _pick_day(request.args.get("day"))
     day = selected.isoformat()
-    first = _pick_month(request.args.get("month"), selected)
+    view = request.args.get("view") or ("month" if request.args.get("month") else "day")
+    if view not in VIEWS:
+        view = "day"
+    status = request.args.get("status") if request.args.get("status") in STATUS_FILTERS else "booked"
     conn = get_db()
-    rows = appointments.agenda(conn, day)
-    # patient requests waiting for a slot. read behind the same gate as the
-    # agenda, so a role without the capability never runs this query either.
-    requests_pending = appointments.pending_requests(conn)
+    dentists = [r["username"] for r in conn.execute(
+        "SELECT username FROM users WHERE role = 'dentist' AND active = 1 ORDER BY username")]
+    dentist = request.args.get("dentist") if request.args.get("dentist") in dentists else None
+    statuses = STATUS_FILTERS[status]
+    first = _pick_month(request.args.get("month"), selected)
+
+    slots = [_slot(r) for r in appointments.day_rows(conn, day, statuses, dentist)]
+    columns = [dentist] if dentist else dentists
+    hours = _hours(conn, selected)
+    extra = sorted({s["hour"] for s in slots} - set(hours))
+    grid = [{"hour": f"{h:02d}:00", "cells": [[s for s in slots if s["hour"] == h and s["dentist"] == c] for c in columns]}
+            for h in sorted(set(hours) | set(extra))]
+    monday = selected - timedelta(days=selected.weekday())
+    week = [{"iso": (monday + timedelta(days=i)).isoformat(), "label": f"{(monday + timedelta(days=i)):%a %-d %b}",
+             "slots": [_slot(r) for r in appointments.day_rows(conn, (monday + timedelta(days=i)).isoformat(), statuses, dentist)]}
+            for i in range(7)] if view == "week" else None
+    step = {"day": timedelta(days=1), "week": timedelta(days=7)}.get(view)
+    prev_day = (selected - step).isoformat() if step else None
+    next_day = (selected + step).isoformat() if step else None
     patients = conn.execute(
-        "SELECT patient_id, codice_fiscale, patient_name FROM patients ORDER BY patient_name"
-    ).fetchall()
-    dentists = conn.execute(
-        "SELECT username FROM users WHERE role = 'dentist' AND active = 1 ORDER BY username"
-    ).fetchall()
+        "SELECT patient_id, codice_fiscale, patient_name FROM patients ORDER BY patient_name").fetchall()
     return render_template(
         "appointments.html",
-        day=day,
-        rows=rows,
-        has_data=bool(rows),
-        patients=patients,
-        dentists=dentists,
-        requests_pending=requests_pending,
-        weeks=_month_grid(conn, first, selected),
-        weekdays=WEEKDAYS,
-        month=first.isoformat()[:7],
-        month_label=first.strftime("%B %Y"),
-        prev_month=_shift_month(first, -1).isoformat()[:7],
-        next_month=_shift_month(first, 1).isoformat()[:7],
-        today=date.today().isoformat(),
+        view=view, day=day, day_label=f"{selected:%a %-d %b %Y}", status=status, dentist=dentist,
+        dentists=[{"username": d} for d in dentists], dentist_names=dentists, columns=columns, grid=grid,
+        slot_count=len(slots), week=week, week_label=f"{monday:%-d %b} - {(monday + timedelta(days=6)):%-d %b %Y}",
+        prev_day=prev_day, next_day=next_day,
+        requests_pending=appointments.pending_requests(conn), patients=patients,
+        open_booking=request.args.get("book") == "1",
+        weeks=_month_grid(conn, first, selected), weekdays=WEEKDAYS,
+        month=first.isoformat()[:7], month_label=first.strftime("%B %Y"),
+        prev_month=_shift_month(first, -1).isoformat()[:7], next_month=_shift_month(first, 1).isoformat()[:7],
+        today=clinic_time.now().date().isoformat(),
     )
 
 
@@ -148,7 +177,7 @@ def book():
         _denied("manage_appointments")
         return redirect(url_for("dashboard.index"))
 
-    day = request.form.get("day") or date.today().isoformat()
+    day = request.form.get("day") or clinic_time.now().date().isoformat()
     starts_at = f"{request.form.get('date', '')}T{request.form.get('time', '')}"
     try:
         new_id = appointments.book(
@@ -174,7 +203,7 @@ def cancel(appointment_id):
         _denied("manage_appointments", str(appointment_id))
         return redirect(url_for("dashboard.index"))
 
-    day = request.form.get("day") or date.today().isoformat()
+    day = request.form.get("day") or clinic_time.now().date().isoformat()
     try:
         appointments.cancel(get_db(), appointment_id)
     except ValueError as e:
@@ -191,7 +220,7 @@ def reschedule(appointment_id):
         _denied("manage_appointments", str(appointment_id))
         return redirect(url_for("dashboard.index"))
 
-    day = request.form.get("day") or date.today().isoformat()
+    day = request.form.get("day") or clinic_time.now().date().isoformat()
     starts_at = f"{request.form.get('date', '')}T{request.form.get('time', '')}"
     try:
         appointments.reschedule(
@@ -219,7 +248,7 @@ def confirm(appointment_id):
         _denied("manage_appointments", str(appointment_id))
         return redirect(url_for("dashboard.index"))
 
-    day = request.form.get("day") or date.today().isoformat()
+    day = request.form.get("day") or clinic_time.now().date().isoformat()
     starts_at = f"{request.form.get('date', '')}T{request.form.get('time', '')}"
     try:
         appointments.confirm(
@@ -240,7 +269,7 @@ def decline(appointment_id):
         _denied("manage_appointments", str(appointment_id))
         return redirect(url_for("dashboard.index"))
 
-    day = request.form.get("day") or date.today().isoformat()
+    day = request.form.get("day") or clinic_time.now().date().isoformat()
     try:
         appointments.decline(get_db(), appointment_id,
                              (request.form.get("reason") or "").strip() or None)

@@ -328,6 +328,11 @@ def walk(browser, note_paths):
     # logout button first and silently logs the walk out instead of uploading.
     upload_form = page.locator('form:has(input[name="files"])')
     submit = upload_form.locator('button[type="submit"]')
+    # P23: on Home the upload zone sits under an "Upload files" disclosure - open it the way a person would
+    folded = page.locator('details.ux-upload > summary')
+    if folded.count():
+        folded.click()
+    check("1b upload zone reachable", upload_form.is_visible(), "the upload form is not shown")
 
     page.set_input_files('input[name="files"]', note_paths)
     # app.js enables the button on the input's change event; if it never

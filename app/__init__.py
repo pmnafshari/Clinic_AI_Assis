@@ -70,6 +70,8 @@ def create_app():
 
     # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
+    from .nav import sidebar
+    app.jinja_env.globals["side_nav"] = sidebar             # P23: the role-aware sidebar
     # read per render, so the switch is the environment the app was started with
     app.jinja_env.globals["similar_cases_enabled"] = similar_cases.enabled
     # avatars: initials on a stable tint (phase 43). presentation, not a figure

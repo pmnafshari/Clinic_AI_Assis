@@ -1,186 +1,25 @@
-{# phase 43 - the header from the reference: brand, tabs, search, one action,
-   avatar. every link keeps the authorize() gate it had in the rail, and the
-   gate matches the route's own - a tab a role cannot follow is the same
-   defect as a hidden withhold, read from the other side. #}
+{# P23 - a compact top bar: the menu button below lg, and patient search for roles that may look anyone up.
+   the account, change password and sign out live in the sidebar foot; the page's one primary action lives in its head. #}
 <header class="app-topbar">
   <div class="app-topbar-inner">
-    <button class="btn btn-link app-topbar-toggle d-xl-none" type="button"
-            data-bs-toggle="offcanvas" data-bs-target="#app-nav"
-            aria-controls="app-nav" aria-label="Open navigation">
-      <i class="bi bi-list"></i>
+    <button class="btn btn-link app-topbar-toggle d-lg-none" type="button" data-bs-toggle="offcanvas"
+            data-bs-target="#app-side" aria-controls="app-side" aria-label="Open navigation">
+      <i class="bi bi-list" aria-hidden="true"></i>
     </button>
-
-    <a class="app-brand" href="{{ url_for('dashboard.index') }}">
+    <a class="app-brand d-lg-none" href="{{ url_for('dashboard.index') }}">
       <span class="app-brand-mark" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
-      <span class="app-brand-text">
-        <span class="app-brand-name">Dental AI</span>
-        <span class="app-brand-sub">Clinic</span>
-      </span>
+      <span class="app-brand-text"><span class="app-brand-name">Dental AI</span></span>
     </a>
-
-    <nav class="app-nav offcanvas-xl offcanvas-start" id="app-nav" tabindex="-1" aria-label="Navigation">
-      <div class="offcanvas-header d-xl-none">
-        <span class="offcanvas-title">Dental AI</span>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"
-                data-bs-target="#app-nav" aria-label="Close navigation"></button>
-      </div>
-      <div class="offcanvas-body">
-        <div class="ds-pill-nav">
-          <a class="nav-link{{ ' active' if request.endpoint == 'dashboard.index' else '' }}"
-             href="{{ url_for('dashboard.index') }}">
-            <i class="bi bi-grid"></i> Dashboard
-          </a>
-          {% if authorize(g.user.role, 'read_notes') %}
-          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('patients.') else '' }}"
-             href="/patients">
-            <i class="bi bi-people"></i> Patients
-          </a>
-          {% endif %}
-          {# manage_appointments, matching appointments_routes' own gate exactly #}
-          {% if authorize(g.user.role, 'manage_appointments') %}
-          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('appointments.') else '' }}"
-             href="{{ url_for('appointments.index') }}">
-            <i class="bi bi-calendar-check"></i> Appointments
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'read_notes') %}
-          <a class="nav-link{{ ' active' if request.endpoint == 'qa.qa_page' else '' }}"
-             href="{{ url_for('qa.qa_page') }}">
-            <i class="bi bi-chat-dots"></i> Q&amp;A
-          </a>
-          <a class="nav-link{{ ' active' if request.endpoint == 'notes.new_note' else '' }}"
-             href="{{ url_for('notes.new_note') }}">
-            <i class="bi bi-journal-plus"></i> Add note
-          </a>
-          {% endif %}
-          {# read_clinical, matching reports_routes.index's own gate exactly #}
-          {% if authorize(g.user.role, 'read_clinical') %}
-          <a class="nav-link{{ ' active' if request.endpoint == 'reports.index' else '' }}"
-             href="{{ url_for('reports.index') }}">
-            <i class="bi bi-graph-up"></i> Reports
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'manage_users') %}
-          <a class="nav-link{{ ' active' if request.endpoint and request.endpoint.startswith('admin.') else '' }}"
-             href="{{ url_for('admin.users_view') }}">
-            <i class="bi bi-people-fill"></i> Staff accounts
-          </a>
-          {# manage_users, matching patients_routes.duplicates_view's own gate.
-             merging two patients is the most destructive action in the
-             product, so it sits with the account admin, not with reception. #}
-          <a class="nav-link{{ ' active' if request.endpoint == 'patients.duplicates_view' else '' }}"
-             href="{{ url_for('patients.duplicates_view') }}">
-            <i class="bi bi-people"></i> Duplicates
-          </a>
-          {% endif %}
-        </div>
-      </div>
-    </nav>
-
-    <div class="app-tools">
-      {# search reads patient names, so it is read_notes or nothing - absent,
-         not disabled, for a role that may not look anyone up #}
-      {% if authorize(g.user.role, 'read_notes') %}
-      <div class="app-search d-none d-md-block" role="search">
-        <i class="bi bi-search" aria-hidden="true"></i>
-        <input type="search" name="q" class="form-control" placeholder="Search patients"
-               aria-label="Search patients" autocomplete="off"
-               hx-get="{{ url_for('patients.search_fragment') }}"
-               hx-trigger="keyup changed delay:300ms, search"
-               hx-target="#app-search-results">
-        <div id="app-search-results" class="app-search-results"></div>
-      </div>
-      {# below md the box above is display:none, and searching then meant
-         opening the drawer and finding /patients by hand. same capability,
-         same destination, one tap. #}
-      <a class="app-search-sm d-inline-flex d-md-none" href="{{ url_for('patients.list_view') }}"
-         aria-label="Search patients"><i class="bi bi-search" aria-hidden="true"></i></a>
-      {% endif %}
-
-      {% if authorize(g.user.role, 'manage_appointments') %}
-      <a class="btn btn-primary app-cta d-inline-flex align-items-center gap-2"
-         href="{{ url_for('appointments.index') }}#book" aria-label="New appointment">
-        <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="d-none d-sm-inline">New appointment</span>
-      </a>
-      {% elif authorize(g.user.role, 'manage_users') %}
-      <a class="btn btn-primary app-cta d-inline-flex align-items-center gap-2"
-         href="{{ url_for('admin.users_view') }}#create" aria-label="New account">
-        <i class="bi bi-plus-lg" aria-hidden="true"></i><span class="d-none d-sm-inline">New account</span>
-      </a>
-      {% endif %}
-
-      <div class="dropdown">
-        <button class="app-user" type="button" data-bs-toggle="dropdown" aria-expanded="false"
-                aria-label="Account menu for {{ g.user.username }}">
-          <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}">{{ g.user.username | initials }}</span>
-          <span class="app-user-text d-none d-xxl-flex">
-            <span class="app-user-name">{{ g.user.username }}</span>
-            <span class="app-user-role">{{ g.user.role }}</span>
-          </span>
-          <i class="bi bi-chevron-down small text-secondary d-none d-xxl-inline" aria-hidden="true"></i>
-        </button>
-        <div class="dropdown-menu dropdown-menu-end app-user-menu">
-          <div class="px-3 py-2 d-xxl-none">
-            <div class="app-user-name">{{ g.user.username }}</div>
-            <div class="app-user-role">{{ g.user.role }}</div>
-          </div>
-          {# an occasional task, so it sits here rather than in a top bar that
-             is already full at 1440px for a dentist (P06) #}
-          {% if authorize(g.user.role, 'use_inventory') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('stock.') else '' }}"
-             href="{{ url_for('stock.index') }}">
-            <i class="bi bi-box-seam"></i> Stock
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'view_billing') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('billing.') else '' }}"
-             href="{{ url_for('billing.index') }}">
-            <i class="bi bi-receipt"></i> Billing
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'view_providers') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('providers.') else '' }}"
-             href="{{ url_for('providers.index') }}">
-            <i class="bi bi-plug"></i> Outside connections
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'review_upload') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('review.') else '' }}"
-             href="{{ url_for('review.queue') }}">
-            <i class="bi bi-clipboard-check"></i> Notes to review
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'handle_handoff') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('handoff.') else '' }}"
-             href="{{ url_for('handoff.index') }}">
-            <i class="bi bi-telephone"></i> Call-backs
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'view_reminders') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('reminders.') else '' }}"
-             href="{{ url_for('reminders.index') }}">
-            <i class="bi bi-bell"></i> Reminders
-          </a>
-          {% endif %}
-          {% if authorize(g.user.role, 'manage_data_requests') %}
-          <a class="dropdown-item{{ ' active' if request.endpoint and request.endpoint.startswith('data_requests.') else '' }}"
-             href="{{ url_for('data_requests.index') }}">
-            <i class="bi bi-shield-lock"></i> Data requests
-          </a>
-          {% endif %}
-          <a class="dropdown-item{{ ' active' if request.endpoint == 'auth.change_password' else '' }}"
-             href="{{ url_for('auth.change_password') }}">
-            <i class="bi bi-key"></i> Change password
-          </a>
-          <hr class="dropdown-divider">
-          <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="dropdown-item">
-              <i class="bi bi-box-arrow-right"></i> Logout
-            </button>
-          </form>
-        </div>
-      </div>
+    {% if authorize(g.user.role, 'read_notes') %}
+    <div class="app-search" role="search">
+      <i class="bi bi-search" aria-hidden="true"></i>
+      <input type="search" name="q" class="form-control" placeholder="Search patients by name or codice fiscale"
+             aria-label="Search patients" autocomplete="off"
+             hx-get="{{ url_for('patients.search_fragment') }}"
+             hx-trigger="keyup changed delay:300ms, search" hx-target="#app-search-results">
+      <div id="app-search-results" class="app-search-results"></div>
     </div>
+    {% endif %}
+    <span class="app-topbar-zone" title="All dates and times are clinic time">Europe/Rome</span>
   </div>
 </header>

@@ -15,7 +15,8 @@
   for them. if such fields are added, e-mails use the reserved example.test.
 - appointments go through appointments.book / request / cancel, so every one is
   on a dentist's roster, inside the clinic's hours and never overlapping; each
-  seeded row carries a "demo-seed:" tag, which is what makes a rerun add nothing.
+  seeded row carries a readable note, "Demo booking (seed N, slot K)" - no identifier - and that note with the
+  patient is what makes a rerun add nothing.
 - the anchor is the first working day the bookings start from; the default is
   fixed so the cohort is the same on every machine. rerun with a later anchor to
   refresh it (old demo bookings stay as they were).
@@ -145,22 +146,25 @@ def seed(conn, seed=22, anchor="2026-10-05"):
                          " VALUES (?, ?, 0, ?, ?, ?)", (pid, visit_id, amount, int(round(amount * 100)), text))
             ledger.ensure_invoice(conn, pid, visit_id)
 
+        def tag(k):
+            return f"Demo booking (seed {seed}, slot {k})"
+
         def tagged(k):
-            return conn.execute("SELECT 1 FROM appointments WHERE note = ?", (f"demo-seed:{p['cf']}:{k}",)).fetchone()
+            return conn.execute("SELECT 1 FROM appointments WHERE patient_id = ? AND note = ?", (pid, tag(k))).fetchone()
 
         if not tagged(0):
             _book_first_free(conn, pid, start + timedelta(days=i), ["09:30", "10:30", "11:30", "15:00"],
-                             f"demo-seed:{p['cf']}:0")
+                             tag(0))
             created["appointments"] += 1
         if i % 3 == 1 and not tagged(1):
             aid = _book_first_free(conn, pid, start + timedelta(days=i + 7), ["16:00", "17:00"],
-                                   f"demo-seed:{p['cf']}:1")
+                                   tag(1))
             appointments.cancel(conn, aid)
             created["appointments"] += 1
         if i % 4 == 2 and not conn.execute("SELECT 1 FROM appointments WHERE patient_id = ? AND status = 'requested'",
                                            (pid,)).fetchone():
             appointments.request(conn, pid, (start + timedelta(days=i + 14)).isoformat(), "morning",
-                                 "demo-seed request")
+                                 f"Demo request (seed {seed})")
             created["appointments"] += 1
         if consent.current(conn, pid, "messaging") is None:
             consent.record(conn, pid, "messaging", i % 2 == 0, "demo-seed", "system", note="demo cohort")

@@ -88,14 +88,15 @@ NAMES = """
 HIDDEN = "(i) => getComputedStyle(document.querySelector('[data-a11y-i=\"' + i + '\"]')).visibility === 'hidden'"
 FOCUSED = "(i) => document.activeElement === document.querySelector('[data-a11y-i=\"' + i + '\"]')"
 
-# the staff chrome (menu toggle, top nav) must show the design-system ring, not
-# the browser's or Bootstrap's: a ring that is merely present can still be the wrong one
+# the staff chrome (menu toggle, sidebar links, sign out) must show the design-system ring,
+# not the browser's or Bootstrap's: a ring that is merely present can still be the wrong one.
+# sign out is the one danger control, so its ring is the danger ring
 CHROME_RING = """
 (i) => {
   const el = document.querySelector('[data-a11y-i="' + i + '"]');
-  if (!el.matches('.app-topbar-toggle, .ds-pill-nav a, .ds-pill-nav .nav-link')) return true;
+  if (!el.matches('.app-topbar-toggle, .app-side-link, .app-side-sub, .app-signout')) return true;
   const probe = document.createElement('div');
-  probe.style.boxShadow = 'var(--ds-focus-ring)';
+  probe.style.boxShadow = el.matches('.app-signout') ? 'var(--ds-focus-ring-danger)' : 'var(--ds-focus-ring)';
   document.body.appendChild(probe);
   const want = getComputedStyle(probe).boxShadow;
   probe.remove();

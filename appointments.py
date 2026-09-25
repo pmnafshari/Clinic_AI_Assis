@@ -443,6 +443,20 @@ def for_patient(conn, patient):
     ).fetchall()
 
 
+def day_rows(conn, day, statuses=(BOOKED,), dentist=None):
+    """P23: one clinic day's appointments in the given statuses, optionally one clinician's, in start order.
+    for (BOOKED,) and no dentist this is exactly agenda(); requests are never included (they have no time)."""
+    lo, hi = clinic_time.day_bounds_utc(day)
+    marks = ",".join("?" * len(statuses))
+    sql = ("SELECT a.*, p.patient_name FROM appointments a JOIN patients p ON p.patient_id = a.patient_id"
+           f" WHERE a.status IN ({marks}) AND a.status != ? AND a.starts_at >= ? AND a.starts_at < ?")
+    args = [*statuses, REQUESTED, lo, hi]
+    if dentist:
+        sql += " AND a.dentist = ?"
+        args.append(dentist)
+    return conn.execute(sql + " ORDER BY a.starts_at, a.dentist", args).fetchall()
+
+
 def next_booked(conn, patient):
     """THE next appointment, for every surface that shows one (P22): the first
     booked row from the start of the clinic's today - the rule open_for_patient

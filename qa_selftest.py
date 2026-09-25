@@ -107,7 +107,7 @@ def selftest():
         )
         assert exact_resp.status_code == 200, "SC1: exact question POST should return 200"
         assert "333123456" in exact_resp.text, "SC1: answer should contain the phone value"
-        assert "[source:" in exact_resp.text, "SC1: answer should carry a source citation"
+        assert "Source:" in exact_resp.text, "SC1: answer should carry a source citation (P23: in words)"
 
         # SC2 - meaning question with no matching record returns the guard, no citation
         csrf_qa2 = _csrf_from(exact_resp.text)
@@ -126,7 +126,7 @@ def selftest():
             data={"question": "what is patient Bianchi's phone number?", "csrf_token": csrf_qa3},
         )
         assert multi_resp.status_code == 200, "multi-cf: POST should return 200"
-        assert "pick one:" in multi_resp.text, "multi-cf: candidate prompt missing"
+        assert "choose one" in multi_resp.text, "multi-cf: candidate prompt missing"
         assert 'name="cf"' in multi_resp.text, "multi-cf: cf radio inputs missing"
 
         # re-post with the chosen cf returns the exact answer for that patient

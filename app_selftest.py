@@ -158,7 +158,7 @@ def selftest():
         dashboard_routes.UNDO_LOG = str(Path(tmp) / "undo_log.jsonl")
         agent.write_undo_entry(
             {
-                "ts": "2026-01-01T00:00:00",
+                "ts": "2026-01-01T00:00:00+00:00",
                 "tool": "update_field",
                 "codice_fiscale": "RSSM800010150100",
                 "target": "sqlite:patients.phone",
@@ -169,7 +169,7 @@ def selftest():
         )
         agent.write_undo_entry(
             {
-                "ts": "2026-01-01T00:00:01",
+                "ts": "2026-01-01T00:00:01+00:00",
                 "tool": "update_field",
                 "codice_fiscale": "MRTLGU900010150100",
                 "target": "sqlite:patients.phone",
@@ -187,12 +187,14 @@ def selftest():
             data={"username": "drossi", "password": "goodpass", "csrf_token": csrf_g},
         )
         dash_resp_g = client_g.get("/")
-        assert b"RSSM800010150100" in dash_resp_g.data, \
+        # P23: the change is shown in plain words and clinic time - never the codice fiscale
+        assert b"Record detail changed (phone)" in dash_resp_g.data and b"1 Jan, 01:00" in dash_resp_g.data, \
             "9: dashboard should show the acting user's own change"
+        assert b"RSSM800010150100" not in dash_resp_g.data, "9: the activity must not print a codice fiscale"
         assert b"Undo change" in dash_resp_g.data, \
             "9: the most-recent row should carry an Undo change link"
-        assert b"MRTLGU900010150100" not in dash_resp_g.data, \
-            "9: another user's entry must not be shown"
+        assert b"MRTLGU900010150100" not in dash_resp_g.data and b"1 Jan, 00:00:01" not in dash_resp_g.data \
+            and dash_resp_g.data.count(b"Record detail changed") == 1, "9: another user's entry must not be shown"
 
         # 10. GUI-06 SC1 - no-CDN: authenticated pages fetch every asset
         # locally, no external http(s) reference in a <script>/<link> tag
@@ -285,7 +287,8 @@ def selftest():
         for tpl, table_file in (("patients_list.html", "patients_list.html"),
                                 ("admin_users.html", "_user_row.html")):
             src = (staff_templates / tpl).read_text()
-            assert "ds-table-cards" in src, f"10f: {tpl} table needs the card treatment"
+            # P23: the staff redesign's ux-table gives the same phone treatment (labelled rows below 768px)
+            assert "ds-table-cards" in src or "ux-table" in src, f"10f: {tpl} table needs the card treatment"
             body = (staff_templates / table_file).read_text()
             tds = body.count("<td")
             labelled = body.count("data-label=")
@@ -301,10 +304,11 @@ def selftest():
             return any(cls in attr.split()
                        for attr in re.findall(r'class="([^"]*)"', html))
 
-        assert not has_class(login_page.text, "app-nav"), \
+        # P23: the navigation is the sidebar now (app-side-nav). property unchanged.
+        assert not has_class(login_page.text, "app-side-nav"), \
             "11: login must render without the navigation"
         dash_with_shell = client_a.get("/")
-        assert has_class(dash_with_shell.text, "app-nav"), \
+        assert has_class(dash_with_shell.text, "app-side-nav"), \
             "11: an authenticated screen must render the navigation"
 
         # ---- AUTH-05 staff password self-service ----
@@ -532,150 +536,67 @@ def selftest():
         })
         asst_resp, asst_ctx = _dashboard_context(client_asst)
 
-        # -- the dentist holds read_clinical, so the figures are computed
-        assert dent_ctx["show_clinical"] is True, \
-            "18: a dentist holds read_clinical and should see the clinical figures"
-        assert dent_ctx["patient_total"] == 3, \
-            f"18: dentist patient_total should be 3, got {dent_ctx['patient_total']}"
-        assert dent_ctx["visit_months"] == ["2031-03", "2031-07"], \
-            f"18: dentist visit months wrong: {dent_ctx['visit_months']}"
-        assert dent_ctx["visit_counts"] == [2, 1], \
-            f"18: dentist visit counts wrong: {dent_ctx['visit_counts']}"
+        # P23: Home no longer draws charts; the visits chart moved to Reports under the same read_clinical gate.
+        # every property below is the one sections 18-19 pinned before, at its new place.
+        def _reports_context(client):
+            seen = []
+            def _record(sender, template, context, **extra):
+                seen.append(context)
+            template_rendered.connect(_record, app)
+            try:
+                resp = client.get("/reports")
+            finally:
+                template_rendered.disconnect(_record, app)
+            return resp, (seen[-1] if seen else None)
 
-        # -- the assistant does NOT hold read_clinical. the query never ran,
-        # so the context carries None - not a zero, not an empty list, and
-        # certainly not the real figure behind a template condition
-        # the withholding assertions come FIRST, ahead of the show_clinical
-        # flag. the flag is the weaker property: a route can report
-        # show_clinical=False and still compute and hand over the figures for
-        # a template to hide, which is precisely the bug D-10 forbids. put the
-        # flag first and it shadows these under mutation.
-        assert asst_ctx["patient_total"] is None, \
-            "18: WITHHELD - an assistant's context must carry no patient total"
-        assert asst_ctx["visit_months"] is None, \
-            "18: WITHHELD - an assistant's context must carry no visit months"
-        assert asst_ctx["visit_counts"] is None, \
-            "18: WITHHELD - an assistant's context must carry no visit counts"
-        assert asst_ctx["show_clinical"] is False, \
-            "18: an assistant must not hold read_clinical"
+        # 18. the dentist holds read_clinical: the figures are computed, on Reports
+        dent_rep, dent_rctx = _reports_context(client_dent)
+        assert dent_rctx["visit_months"] == ["2031-03", "2031-07"], \
+            f"18: dentist visit months wrong: {dent_rctx['visit_months']}"
+        assert dent_rctx["visit_counts"] == [2, 1], f"18: dentist visit counts wrong: {dent_rctx['visit_counts']}"
+        assert dent_rctx["visits_have_data"] is True, "18a: two visit months - the chart has data"
 
-        # -- and nothing of it reaches the wire either
+        # 18. WITHHELD, not hidden: the assistant never gets the page, and Home computes no clinical figure for anyone
+        asst_rep, asst_rctx = _reports_context(client_asst)
+        assert asst_rep.status_code == 302 and asst_rctx is None, "18: WITHHELD - an assistant gets no Reports render"
+        for who, ctx in (("dentist", dent_ctx), ("assistant", asst_ctx)):
+            for key in ("patient_total", "visit_months", "visit_counts"):
+                assert key not in ctx, f"18: Home must compute no clinical figure ({key}) for the {who}"
         assert b"2031-03" not in asst_resp.data and b"2031-07" not in asst_resp.data, \
             "18: an assistant's response body must carry no visit-month label"
 
-        # -- intake status is non-clinical (filenames and states), so both
-        # roles that reach the dashboard get it, each scoped to their own files
+        # 18. intake is non-clinical and per user: both roles get their OWN counts, as a line in their activity
         assert dent_ctx["show_intake"] is True and asst_ctx["show_intake"] is True, \
             "18: both dashboard-reaching roles hold upload_file"
-        for who, ctx in [("dentist", dent_ctx), ("assistant", asst_ctx)]:
-            counts = ctx["intake_counts"]
-            assert counts["sorted"] == 1, f"18: {who} sorted count wrong: {counts}"
-            assert counts["needs_review"] == 1, f"18: {who} needs_review count wrong: {counts}"
-            assert counts["rejected"] == 1, f"18: {who} rejected count wrong: {counts}"
+        for who, ctx in (("dentist", dent_ctx), ("assistant", asst_ctx)):
+            counts = ctx["intake"]
+            assert (counts["sorted"], counts["needs_review"], counts["rejected"]) == (1, 1, 1), f"18: {who} intake: {counts}"
+        assert sum(dent_ctx["intake"].values()) == 3, "18: intake counts must be per-user, not clinic-wide"
 
-        # -- per-user scoping: the counts are the acting user's own files, so
-        # the KPI row cannot contradict the intake list on the same screen
-        assert sum(dent_ctx["intake_counts"].values()) == 3, \
-            "18: intake counts must be per-user, not clinic-wide"
-
-        # -- chart series arrive as plain parallel lists, shaped in python
-        assert dent_ctx["intake_chart_labels"] == [
-            "Sorted", "Needs Review", "Not searchable", "Queued", "External", "Rejected",
-        ], "18: chart labels should mirror the badge labels in _recent_intake.html"
-        assert dent_ctx["intake_chart_values"] == [1, 1, 0, 0, 0, 1], \
-            f"18: chart values wrong: {dent_ctx['intake_chart_values']}"
-        assert asst_ctx["intake_chart_labels"] is not None, \
-            "18: an assistant may see intake status"
-
-        # 18a. GUI-15 - a chart with nothing to draw renders copy, not an
-        # empty canvas. chart.js draws no arcs for an all-zero doughnut and
-        # reports nothing, so the card looked identical to a broken one
-        # (30-AUDIT F-2). the verdict is computed in dashboard_routes, NOT in
-        # jinja - the template still computes nothing (29 D-01).
-        #
-        # has-data and permitted are DIFFERENT questions and this section
-        # exists to keep them from collapsing into one flag. three states:
-        # not permitted -> no canvas and no empty state; permitted with no
-        # data -> empty state; permitted with data -> canvas.
-        assert dent_ctx["intake_has_data"] is True, \
-            "18a: the dentist has three intake rows, so the doughnut has data"
-        assert dent_ctx["visits_have_data"] is True, \
-            "18a: the dentist has two visit months, so the bar chart has data"
-
-        # the assistant is permitted intake and withheld clinical. the clinical
-        # verdict must be False because the query never ran - not because the
-        # figure happened to be empty.
-        assert asst_ctx["intake_has_data"] is True, \
-            "18a: an assistant's own intake rows still count"
-        assert asst_ctx["visits_have_data"] is False, \
-            "18a: WITHHELD - an assistant gets no visits verdict, the query never ran"
-
-        # a permitted role with no rows of its own. seeded fresh with no audit
-        # rows at all, so intake is genuinely zero - the reproduction case from
-        # 31-BASELINE. still a dentist, so visits (clinic-wide) stay populated:
-        # that is the point, the two verdicts are independent.
+        # 18a. permitted with nothing vs withheld stay different renders
         _seed_user(db_path, "zerodent", "goodpass", "dentist")
         client_zero = app.test_client()
         csrf_z = _csrf_from(client_zero.get("/login").text)
-        client_zero.post("/login", data={
-            "username": "zerodent", "password": "goodpass", "csrf_token": csrf_z,
-        })
+        client_zero.post("/login", data={"username": "zerodent", "password": "goodpass", "csrf_token": csrf_z})
         zero_resp, zero_ctx = _dashboard_context(client_zero)
+        assert zero_ctx["show_intake"] is True and not any(zero_ctx["intake"].values()), \
+            "18a: a fresh dentist is permitted intake and has none"
+        assert b"Your uploads: 0 filed" in zero_resp.data, "18a: the empty intake says so, in words"
+        assert b"Nothing yet." in zero_resp.data, "18a: an empty activity list says so"
 
-        assert zero_ctx["show_intake"] is True, \
-            "18a: a dentist holds upload_file - this is the permitted-but-empty case"
-        assert zero_ctx["intake_chart_values"] == [0, 0, 0, 0, 0, 0], \
-            f"18a: a fresh user's chart values should be all zero: {zero_ctx['intake_chart_values']}"
-        assert zero_ctx["intake_has_data"] is False, \
-            "18a: an all-zero series has no data to draw"
-        assert zero_ctx["visits_have_data"] is True, \
-            "18a: visits are clinic-wide - a fresh user still sees them, verdicts are independent"
-
-        # the canvas must be ABSENT, not hidden. a canvas in the body with no
-        # arcs on it is the defect; asserting only on the context would pass
-        # against a template that emitted it anyway.
-        assert b'id="intake-chart"' not in zero_resp.data, \
-            "18a: an empty series must emit no canvas at all"
-        assert b"Nothing filed yet" in zero_resp.data, \
-            "18a: the empty intake card must say so"
-        assert b'id="visits-chart"' in zero_resp.data, \
-            "18a: the visits chart still has data and must still render"
-
-        # and the withheld role gets NEITHER a canvas nor an empty state for
-        # the figure it may not see - no trace, per D-10
-        assert b'id="visits-chart"' not in asst_resp.data, \
-            "18a: WITHHELD - an assistant gets no visits canvas"
-        assert b"No dated visits yet" not in asst_resp.data, \
-            "18a: WITHHELD - an assistant gets no visits empty state either"
-
-        # 19. GUI-12 - the dashboard is the page most likely to break the
-        # no-CDN rule, because it is the only one that loads a charting
-        # library. section 10 already checks an authenticated page generally;
-        # this pins the dashboard specifically, and pins WHERE chart.js comes
-        # from rather than only that no external asset is present.
+        # 19. no external asset anywhere; chart.js is vendored and served locally where a chart is drawn
         dash_assets = client_dent.get("/")
-        assert not re.search(
-            r'<(?:script|link)[^>]+(?:src|href)="https?://', dash_assets.text, re.IGNORECASE
-        ), "19: the dashboard must not reference any external http(s) asset"
-        assert b"/static/vendor/chartjs/chart.umd.min.js" in dash_assets.data, \
-            "19: chart.js must be served from /static, vendored offline"
-        assert b"<canvas" in dash_assets.data, \
-            "19: the dashboard should render at least one chart canvas"
-
-        # the undo history is the one pre-existing feature on this page and a
-        # restyle that drops it is a regression, not a redesign
-        assert b"Recent changes" in dash_assets.data, \
-            "19: the undo history must survive the dashboard restyle"
-
-        # withheld, not hidden, at the MARKUP layer this time: an assistant
-        # gets no canvas and no placeholder telling them a figure exists
+        assert not re.search(r'<(?:script|link)[^>]+(?:src|href)="https?://', dash_assets.text, re.IGNORECASE), \
+            "19: Home must not reference any external http(s) asset"
+        assert not re.search(r'<(?:script|link)[^>]+(?:src|href)="https?://', dent_rep.text, re.IGNORECASE), \
+            "19: Reports must not reference any external http(s) asset"
+        assert b"/static/vendor/chartjs/chart.umd.min.js" in dent_rep.data and b'id="visits-chart"' in dent_rep.data, \
+            "19: the visits chart is on Reports, with chart.js served from /static"
+        # the undo history is the one pre-existing feature on Home: a redesign that drops it is a regression
+        assert b"Your recent activity" in dash_assets.data, "19: the undo history must survive the Home redesign"
         asst_assets = client_asst.get("/")
-        assert b"visits-chart" not in asst_assets.data, \
-            "19: an assistant must not receive the visits canvas"
-        assert b"Visits per month" not in asst_assets.data, \
-            "19: an assistant must not even see the visits card heading"
-        assert b"intake-chart" in asst_assets.data, \
-            "19: an assistant may see intake status"
+        assert b"visits-chart" not in asst_assets.data and b"Visits per month" not in asst_assets.data, \
+            "19: an assistant must not receive the visits chart or its heading"
 
         # 19b. DASH-02/DASH-03 (phase 43) - the dashboard's two new reads, the
         # patient-request queue and today's dentists, come from rows the same
@@ -762,9 +683,10 @@ def selftest():
         # itself lives in shot_pages.py.
         shell = client_dent.get("/")
 
-        assert b"offcanvas-xl" in shell.data, \
-            "20: the nav must be an offcanvas panel below the xl breakpoint"
-        assert b'id="app-nav"' in shell.data, \
+        # P23: the navigation is a sidebar that becomes an off-canvas drawer below lg (992px)
+        assert b"offcanvas-lg" in shell.data, \
+            "20: the nav must be an offcanvas panel below the lg breakpoint"
+        assert b'id="app-side"' in shell.data, \
             "20: the offcanvas panel needs the id the toggle targets"
         assert b"app-topbar" in shell.data, \
             "20: an authenticated screen must carry the top header"
@@ -816,12 +738,15 @@ def selftest():
         # P06 put Data requests in the avatar menu, not the tabs: seven tabs did
         # not fit a dentist's bar at 1440px. it is behind manage_data_requests,
         # which only a dentist holds, and an assistant must not gain it (20a).
-        assert shell.data.count(b'class="nav-link') == 6, \
-            f'20: a dentist should see 6 nav tabs, got {shell.data.count(chr(99).encode() + b"lass=\"nav-link")}'
-        menu = re.findall(rb'class="dropdown-item[^"]*"[^>]*>\s*<i[^>]*></i>\s*([^<]+?)\s*<', shell.data)
-        assert b"Data requests" in menu, f"20: the avatar menu offers a dentist Data requests: {menu}"
-        assert b"Change password" in menu and b"Logout" in menu, \
-            f"20: the avatar menu must carry Change password and Logout, got {menu}"
+        # P23: the sidebar replaces the tabs and the avatar menu. PROPERTY UNCHANGED - counted per role, so a stripped
+        # authorize() cannot hide behind a total: a dentist sees 13 links (ux_selftest pins the exact set per role),
+        # and Change password and Sign out are in the sidebar foot, Sign out a POST form.
+        side_links = re.findall(rb'class="app-side-link[^"]*" href="([^"]+)"', shell.data)
+        assert len(side_links) == 13, f"20: a dentist should see 13 sidebar links, got {len(side_links)}"
+        assert b"/data-requests" in side_links, f"20: a dentist is offered Data requests: {side_links}"
+        foot = shell.data.split(b'data-ux="account"', 1)[1]
+        assert b"Change password" in foot and b'action="/logout"' in foot and b"Sign out" in foot, \
+            "20: the sidebar foot must carry Change password and a Sign out form"
         assert b"Reports" in shell.data, "20: a dentist holds read_clinical and is offered Reports"
         assert b"Staff accounts" not in shell.data, \
             "20: a dentist must not be offered the admin link"
@@ -884,22 +809,11 @@ def selftest():
         # the only way to look a patient up was the drawer. the small-screen
         # link stands in for it, and carries the SAME capability: a role that
         # may not search must not get a second door to it.
-        assert b"app-search-sm" in shell.data, \
-            "20c: a dentist must get the small-screen search link"
-        assert b"app-search-sm" in asst_shell.data, \
-            "20c: an assistant holds read_notes and gets it too"
-        assert b"app-search-sm" not in adm_shell.data, \
-            "20c: an admin does not hold read_notes and must not get it"
-        # it is the small-screen counterpart, so the box it replaces must still
-        # be the one hidden there - if the box stopped being d-none below md,
-        # both would show and this link would be a duplicate
-        assert b'class="app-search d-none d-md-block"' in shell.data, \
-            "20c: the full search box is still the md-and-up one"
-        sm = re.search(rb'<a class="app-search-sm[^>]*>', shell.data)
-        assert b"d-md-none" in sm.group(0), \
-            "20c: and the link is the below-md one, or the two would both show"
-        assert b'href="/patients"' in sm.group(0), \
-            "20c: it goes to the patients list, where the inline search lives"
+        # P23: the compact top bar shows the search field at every width, so there is no second small-screen door.
+        # PROPERTY UNCHANGED: only a role that may look patients up gets it.
+        assert b'class="app-search"' in shell.data, "20c: a dentist must get patient search"
+        assert b'class="app-search"' in asst_shell.data, "20c: an assistant holds read_notes and gets it too"
+        assert b'class="app-search"' not in adm_shell.data, "20c: an admin does not hold read_notes and must not get it"
 
         # 20b. UX-20 - what the reports page must NEVER claim. invoices
         # carry no status and there is no payments table, and patients carry no
@@ -959,7 +873,7 @@ def selftest():
         login_shell = app.test_client().get("/login")
         assert b"app-topbar" not in login_shell.data, \
             "20: a chromeless page must not carry the top bar"
-        assert b"offcanvas-xl" not in login_shell.data, \
+        assert b"offcanvas-lg" not in login_shell.data, \
             "20: a chromeless page must not carry the offcanvas panel"
 
         # 21. GUI-13/GUI-14 - the two rules phase 30 established, pinned so

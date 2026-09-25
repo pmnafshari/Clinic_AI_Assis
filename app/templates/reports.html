@@ -81,7 +81,25 @@
   </div>
 </div>
 
-{% if proc_has_data or billed_has_data %}
+<div class="row g-3 mt-1">
+  <div class="col-12">
+    <section class="card dash-card" aria-labelledby="visits-title">
+      <div class="dash-card-head"><div>
+        <h2 class="ds-card-title" id="visits-title">Visits per month</h2>
+        <p class="ds-card-sub">Dated visits across the clinic, last 12 months on record.</p>
+      </div></div>
+      <div class="dash-card-body">
+      {% if visits_have_data %}
+      <div class="chart-box"><canvas id="visits-chart" aria-label="Visits per month" role="img"></canvas></div>
+      {% else %}
+      <div class="chart-empty"><i class="bi bi-calendar3" aria-hidden="true"></i><p class="mb-0">No dated visits yet.</p></div>
+      {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+{% if proc_has_data or billed_has_data or visits_have_data %}
 <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
 <script>
   // every value here is passed from the route - nothing is summed in jinja
@@ -118,6 +136,14 @@
         afterLabel: (c) => {{ proc_uncoded | tojson }}[c.dataIndex] ? 'not in the procedure glossary' : ''
       }}}
     })
+  });
+{% endif %}
+{% if visits_have_data %}
+  new Chart(document.getElementById('visits-chart'), {
+    type: 'line',
+    data: { labels: {{ visit_months | tojson }},
+            datasets: [{ data: {{ visit_counts | tojson }}, borderColor: dsTeal, backgroundColor: dsTeal, tension: 0.3, cubicInterpolationMode: 'monotone' }] },
+    options: baseOpts
   });
 {% endif %}
 {% if billed_has_data %}

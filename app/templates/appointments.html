@@ -1,270 +1,248 @@
 {% extends "base.html" %}
+{# P23 - appointments: day (time x clinician), week, month; filters; requests apart from bookings; the booking panel
+   opens on demand. every control here posts to a route that already enforces manage_appointments. #}
+{% macro slot_actions(s) %}
+  {% if s.status == 'booked' %}
+  <form method="post" action="{{ url_for('appointments.cancel', appointment_id=s.id) }}" class="ux-inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
+    <button type="submit" class="btn btn-sm btn-outline-secondary" aria-label="Cancel {{ s.patient_name }}'s appointment at {{ s.start }}">Cancel</button>
+  </form>
+  <details class="appt-more">
+    <summary aria-label="Reschedule {{ s.patient_name }}'s appointment at {{ s.start }}">Reschedule</summary>
+    <form method="post" action="{{ url_for('appointments.reschedule', appointment_id=s.id) }}" class="ux-mini-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
+      <label class="form-label small" for="rdate-{{ s.id }}">Move to<span class="visually-hidden"> ({{ s.patient_name }})</span></label>
+      <input type="date" id="rdate-{{ s.id }}" name="date" value="{{ s.starts_at | appt_date }}" class="form-control form-control-sm" required>
+      <label class="form-label small" for="rtime-{{ s.id }}">Time<span class="visually-hidden"> ({{ s.patient_name }})</span></label>
+      <input type="time" id="rtime-{{ s.id }}" name="time" value="{{ s.start }}" class="form-control form-control-sm" required>
+      <label class="form-label small" for="rmin-{{ s.id }}">Minutes<span class="visually-hidden"> ({{ s.patient_name }})</span></label>
+      <input type="number" id="rmin-{{ s.id }}" name="minutes" value="{{ s.minutes }}" min="5" step="5" class="form-control form-control-sm" required>
+      <button type="submit" class="btn btn-sm btn-outline-primary">Reschedule<span class="visually-hidden"> {{ s.patient_name }}</span></button>
+    </form>
+  </details>
+  {% endif %}
+{% endmacro %}
+
+{% macro slot_card(s) %}
+<div class="ux-slot ux-slot-{{ s.status }}">
+  <div class="ux-slot-main">
+    <strong>{{ s.patient_name }}</strong>
+    <span class="ux-muted">{{ s.start }}-{{ s.end }}</span>
+    <span class="ux-badge ux-badge-{{ s.status }}">{{ s.status | capitalize }}</span>
+  </div>
+  {% if s.note %}<p class="ux-slot-note">{{ s.note }}</p>{% endif %}
+  <div class="ux-slot-actions">{{ slot_actions(s) }}</div>
+</div>
+{% endmacro %}
+
 {% block content %}
-<div class="ds-page-head">
+<div class="ds-page-head" data-ux="page-head">
   <div>
     <p class="ds-page-eyebrow">Scheduling</p>
     <h1 class="ds-page-title">Appointments</h1>
-    <p class="ds-page-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ day }}</p>
+    <p class="ds-page-meta">Booked visits and patient requests · clinic time, Europe/Rome</p>
   </div>
-  <form method="get" action="{{ url_for('appointments.index') }}" class="ds-page-actions">
-    <label for="day" class="visually-hidden">Day</label>
-    <input type="date" id="day" name="day" value="{{ day }}" class="form-control w-auto">
-    <button type="submit" class="btn btn-outline-secondary">Show</button>
-    <a href="#book" class="btn btn-primary"><i class="bi bi-plus-lg"></i> Book</a>
-  </form>
-</div>
+  <a class="btn btn-primary app-primary" href="#book" data-open-booking><i class="bi bi-plus-lg" aria-hidden="true"></i> New appointment</a>
+<!--/page-head--></div>
 
-<div class="row g-3">
-  <div class="col-12 col-xl-8">
-    {# the month. a table, not a grid of divs: these cells ARE tabular data -
-       a weekday column and a week row - and a screen reader reading "Wednesday,
-       10 September" out of the header association is the whole point. #}
-    <section class="card dash-card appt-cal-card" aria-labelledby="cal-title">
-      <div class="dash-card-head">
+<form class="ux-toolbar" method="get" action="{{ url_for('appointments.index') }}" aria-label="Choose what to show">
+  <nav class="ux-tabs" aria-label="View">
+    {% for v, label in (('day', 'Day'), ('week', 'Week'), ('month', 'Month')) %}
+    <a class="ux-tab{{ ' active' if view == v else '' }}" {% if view == v %}aria-current="page"{% endif %}
+       href="{{ url_for('appointments.index', view=v, day=day, dentist=dentist, status=status) }}">{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <input type="hidden" name="view" value="{{ view }}">
+  {% if view != 'month' %}
+  <div class="ux-datenav">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view=view, day=prev_day, dentist=dentist, status=status) }}" aria-label="Previous {{ view }}"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+    <label class="visually-hidden" for="day">Go to date</label>
+    <input type="date" id="day" name="day" value="{{ day }}" class="form-control form-control-sm">
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view=view, day=next_day, dentist=dentist, status=status) }}" aria-label="Next {{ view }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+  </div>
+  {% else %}<input type="hidden" name="day" value="{{ day }}">{% endif %}
+  <label class="visually-hidden" for="f-dentist">Show clinician</label>
+  <select id="f-dentist" name="dentist" class="form-select form-select-sm">
+    <option value="">All clinicians</option>
+    {% for d in dentist_names %}<option value="{{ d }}" {{ 'selected' if d == dentist else '' }}>{{ d }}</option>{% endfor %}
+  </select>
+  <label class="visually-hidden" for="f-status">Show status</label>
+  <select id="f-status" name="status" class="form-select form-select-sm">
+    {% for v, label in (('booked', 'Booked'), ('cancelled', 'Cancelled'), ('all', 'Booked and cancelled')) %}
+    <option value="{{ v }}" {{ 'selected' if v == status else '' }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
+  {% if view != 'month' %}<a class="ux-link" href="{{ url_for('appointments.index', view=view, day=today, dentist=dentist, status=status) }}">Today</a>{% endif %}
+</form>
+
+<div class="ux-appt-layout">
+  <div class="ux-appt-main">
+    {% if view == 'day' %}
+    <section class="card ux-card" aria-labelledby="day-title">
+      <div class="ux-card-head"><div>
+        <h2 class="ux-card-title" id="day-title">{{ day_label }}</h2>
+        <p class="ux-card-meta">{{ slot_count }} shown · {{ columns | length }} clinician{{ '' if columns|length == 1 else 's' }}</p>
+      </div></div>
+      <div class="ux-scroll" data-ux="day-grid">
+      {% if columns %}
+      <table class="ux-daygrid">
+        <caption class="visually-hidden">Appointments on {{ day_label }} by hour and clinician</caption>
+        <thead><tr><th scope="col" class="ux-daygrid-time">Time</th>{% for c in columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in grid %}
+        <tr><th scope="row" class="ux-daygrid-time">{{ row.hour }}</th>
+          {% for cell in row.cells %}<td>{% for s in cell %}{{ slot_card(s) }}{% endfor %}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if not slot_count %}<p class="ux-empty">Nothing {{ 'booked' if status == 'booked' else 'to show' }} on this day.</p>{% endif %}
+      {% else %}<p class="ux-empty">No active clinician accounts.</p>{% endif %}
+      <!--/day-grid--></div>
+    </section>
+    {% elif view == 'week' %}
+    <section class="card ux-card" aria-labelledby="week-title">
+      <div class="ux-card-head"><h2 class="ux-card-title" id="week-title">Week of {{ week_label }}</h2></div>
+      <div data-ux="week">
+      {% for d in week %}
+      <h3 class="ux-week-day"><a class="ux-link" href="{{ url_for('appointments.index', view='day', day=d.iso, dentist=dentist, status=status) }}">{{ d.label }}</a>
+        <span class="ux-muted">{{ d.slots | length }}</span></h3>
+      {% if d.slots %}
+      <table class="ux-table">
+        <thead><tr><th scope="col">Time</th><th scope="col">Patient</th><th scope="col">Clinician</th><th scope="col">Status</th></tr></thead>
+        <tbody>{% for s in d.slots %}
+          <tr><td data-label="Time">{{ s.start }}-{{ s.end }}</td><td data-label="Patient">{{ s.patient_name }}</td>
+              <td data-label="Clinician">{{ s.dentist }}</td><td data-label="Status"><span class="ux-badge ux-badge-{{ s.status }}">{{ s.status | capitalize }}</span></td></tr>
+        {% endfor %}</tbody>
+      </table>
+      {% else %}<p class="ux-empty">Nothing on this day.</p>{% endif %}
+      {% endfor %}
+      <!--/week--></div>
+    </section>
+    {% else %}
+    <section class="card ux-card appt-cal-card" aria-labelledby="cal-title" data-ux="month">
+      <div class="ux-card-head">
         <div>
-          <h2 class="ds-card-title" id="cal-title">{{ month_label }}</h2>
-          <p class="ds-card-sub">Pick a day to see its agenda</p>
+          <h2 class="ux-card-title" id="cal-title">{{ month_label }}</h2>
+          <p class="ux-card-meta">Pick a day to open its schedule</p>
         </div>
         <div class="appt-cal-nav">
-          <a class="btn btn-sm btn-outline-secondary" rel="prev"
-             href="{{ url_for('appointments.index', day=day, month=prev_month) }}"
-             aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
-          <a class="btn btn-sm btn-outline-secondary"
-             href="{{ url_for('appointments.index', day=today) }}">Today</a>
-          <a class="btn btn-sm btn-outline-secondary" rel="next"
-             href="{{ url_for('appointments.index', day=day, month=next_month) }}"
-             aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+          <a class="btn btn-sm btn-outline-secondary" rel="prev" href="{{ url_for('appointments.index', day=day, month=prev_month) }}" aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view='month', day=today) }}">Today</a>
+          <a class="btn btn-sm btn-outline-secondary" rel="next" href="{{ url_for('appointments.index', day=day, month=next_month) }}" aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
         </div>
       </div>
-      <div class="dash-card-body">
-        <table class="appt-cal">
-          <caption class="visually-hidden">{{ month_label }}</caption>
-          <thead>
-            <tr>
-              {% for wd in weekdays %}<th scope="col">{{ wd }}</th>{% endfor %}
-            </tr>
-          </thead>
-          <tbody>
-            {% for week in weeks %}
-            <tr>
-              {% for c in week %}
-              <td class="{% if not c.in_month %}appt-cal-out{% endif %}">
-                <a class="appt-cal-day{% if c.is_today %} appt-cal-today{% endif %}{% if c.is_selected %} appt-cal-on{% endif %}"
-                   href="{{ url_for('appointments.index', day=c.iso, month=month) }}"
-                   aria-label="{{ c.label }}"
-                   {% if c.is_selected %}aria-current="date"{% endif %}>
-                  <span class="appt-cal-num" aria-hidden="true">{{ c.number }}</span>
-                  <span class="appt-cal-marks" aria-hidden="true">
-                    {% if c.booked %}<span class="appt-cal-booked">{{ c.booked }}</span>{% endif %}
-                    {% if c.requested %}<span class="appt-cal-req"></span>{% endif %}
-                  </span>
-                </a>
-              </td>
-              {% endfor %}
-            </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <p class="appt-cal-key">
-          <span class="appt-cal-booked">n</span> booked
-          <span class="appt-cal-req"></span> request waiting
-        </p>
-      </div>
-    </section>
-
-    <section class="card dash-card" aria-labelledby="day-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="day-title">{{ day }}</h2>
-          <p class="ds-card-sub">Booked appointments for this day</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        {% if has_data %}
-        <ul class="ds-rows">
-          {% for r in rows %}
-          <li class="appt-item">
-            <div class="ds-row">
-              <span class="ds-row-time">{{ r.starts_at | appt_time }}</span>
-              <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.patient_name | tint }}" aria-hidden="true">{{ r.patient_name | initials }}</span>
-              <span class="ds-row-main">
-                <span class="ds-row-title">{{ r.patient_name }}</span>
-                <span class="ds-row-sub">{{ r.minutes }} min{% if r.note %} · {{ r.note }}{% endif %}</span>
-              </span>
-              <span class="ds-row-aside">
-                <span class="ds-person">
-                  <span class="ds-avatar ds-avatar-xs {{ r.dentist | tint }}" aria-hidden="true">{{ r.dentist | initials }}</span>
-                  {{ r.dentist }}
+      <table class="appt-cal">
+        <caption class="visually-hidden">{{ month_label }}</caption>
+        <thead><tr>{% for wd in weekdays %}<th scope="col">{{ wd }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for w in weeks %}
+          <tr>
+            {% for c in w %}
+            <td class="{% if not c.in_month %}appt-cal-out{% endif %}">
+              <a class="appt-cal-day{% if c.is_today %} appt-cal-today{% endif %}{% if c.is_selected %} appt-cal-on{% endif %}"
+                 href="{{ url_for('appointments.index', day=c.iso, month=month) }}" aria-label="{{ c.label }}"
+                 {% if c.is_selected %}aria-current="date"{% endif %}>
+                <span class="appt-cal-num" aria-hidden="true">{{ c.number }}</span>
+                <span class="appt-cal-marks" aria-hidden="true">
+                  {% if c.booked %}<span class="appt-cal-booked" data-n="{{ c.booked }}"></span>{% endif %}
+                  {% if c.requested %}<span class="appt-cal-req"></span>{% endif %}
                 </span>
-                <form method="post" action="{{ url_for('appointments.cancel', appointment_id=r.id) }}"
-                      class="d-inline">
-                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                  <input type="hidden" name="day" value="{{ day }}">
-                  <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
-                </form>
-              </span>
-            </div>
-            <details class="appt-more">
-              <summary>Reschedule</summary>
-              {# reschedule is a POST like cancel: a GET that moves an appointment
-                 is a link something can follow #}
-              <form method="post" action="{{ url_for('appointments.reschedule', appointment_id=r.id) }}"
-                    class="d-flex gap-2 align-items-end flex-wrap">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="day" value="{{ day }}">
-                <div>
-                  <label class="form-label small" for="rdate-{{ r.id }}">Move to</label>
-                  <input type="date" id="rdate-{{ r.id }}" name="date" value="{{ r.starts_at | appt_date }}"
-                         class="form-control form-control-sm" required>
-                </div>
-                <div>
-                  <label class="form-label small" for="rtime-{{ r.id }}">Time</label>
-                  <input type="time" id="rtime-{{ r.id }}" name="time" value="{{ r.starts_at | appt_time }}"
-                         class="form-control form-control-sm" required>
-                </div>
-                <div>
-                  <label class="form-label small" for="rmin-{{ r.id }}">Minutes</label>
-                  <input type="number" id="rmin-{{ r.id }}" name="minutes" value="{{ r.minutes }}"
-                         min="5" step="5" class="form-control form-control-sm" required>
-                </div>
-                <button type="submit" class="btn btn-sm btn-outline-primary">Reschedule</button>
-              </form>
-            </details>
-          </li>
+              </a>
+            </td>
+            {% endfor %}
+          </tr>
           {% endfor %}
-        </ul>
-        {% else %}
-        {# permitted, nothing booked. not the same render as not-permitted, which
-           never reaches this template at all. #}
-        <div class="ds-state">
-          <i class="bi bi-calendar-x ds-state-icon" aria-hidden="true"></i>
-          <p class="ds-state-body">Nothing booked for this day.</p>
-        </div>
-        {% endif %}
-      </div>
+        </tbody>
+      </table>
+      <p class="appt-cal-key"><span class="appt-cal-booked">n</span> booked <span class="appt-cal-req"></span> request waiting ·
+        <a class="ux-link" href="{{ url_for('appointments.index', view='day', day=day) }}">Open {{ day }}</a></p>
     </section>
+    {% endif %}
   </div>
 
-  <div class="col-12 col-xl-4 d-flex flex-column gap-3">
-    <section class="card dash-card" id="book" aria-labelledby="book-title">
-      <div class="dash-card-head">
-        <h2 class="ds-card-title" id="book-title">Book an appointment</h2>
+  <div class="ux-appt-side">
+    <section class="card ux-card" id="requests" aria-labelledby="requests-title" data-ux="requests">
+      <div class="ux-card-head"><div>
+        <h2 class="ux-card-title" id="requests-title">Patient requests{% if requests_pending %} <span class="ux-badge ux-badge-requested">{{ requests_pending | length }}</span>{% endif %}</h2>
+        <p class="ux-card-meta">Requests are not bookings: a day and a part of it, no time and no clinician yet.</p>
+      </div></div>
+      <div>
+      {% if requests_pending %}
+      <ul class="ux-list">
+        {% for r in requests_pending %}
+        <li class="ux-request">
+          <div><strong>{{ r.patient_name }}</strong>
+            <span class="ux-muted">Preferred {{ r.starts_at[:10] }}, {{ r.period }}{% if r.note %} · {{ r.note }}{% endif %}</span></div>
+          <span class="ux-badge ux-badge-requested">Requested</span>
+          <details class="appt-more ux-request-actions">
+            <summary aria-label="Confirm or decline {{ r.patient_name }}'s request">Confirm or decline</summary>
+            <form method="post" action="{{ url_for('appointments.confirm', appointment_id=r.id) }}" class="ux-mini-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
+              <label class="form-label small" for="cdate-{{ r.id }}">Date<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
+              <input type="date" id="cdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}" class="form-control form-control-sm" required>
+              <label class="form-label small" for="ctime-{{ r.id }}">Time<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
+              <input type="time" id="ctime-{{ r.id }}" name="time" class="form-control form-control-sm" required>
+              <label class="form-label small" for="cdent-{{ r.id }}">Clinician<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
+              <select id="cdent-{{ r.id }}" name="dentist" class="form-select form-select-sm" required>
+                {% for d in dentists %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
+              </select>
+              <label class="form-label small" for="cmin-{{ r.id }}">Minutes<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
+              <input type="number" id="cmin-{{ r.id }}" name="minutes" value="30" min="5" step="5" class="form-control form-control-sm" required>
+              <button type="submit" class="btn btn-sm btn-primary">Confirm as a booking<span class="visually-hidden"> for {{ r.patient_name }}</span></button>
+            </form>
+            <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}" class="ux-mini-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
+              <label class="form-label small" for="dreason-{{ r.id }}">Reason for declining<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
+              <input type="text" id="dreason-{{ r.id }}" name="reason" class="form-control form-control-sm">
+              <button type="submit" class="btn btn-sm btn-outline-secondary">Decline<span class="visually-hidden"> {{ r.patient_name }}</span></button>
+            </form>
+          </details>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="ux-empty">No patient requests waiting.</p>{% endif %}
       </div>
-      <div class="dash-card-body">
-        <form method="post" action="{{ url_for('appointments.book') }}" class="book-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="day" value="{{ day }}">
-          <div>
-            <label for="cf" class="form-label">Patient</label>
-            <select id="cf" name="codice_fiscale" class="form-select" required>
-              {% for p in patients %}
-              <option value="{{ p.codice_fiscale }}">{{ p.patient_name }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div>
-            <label for="dentist" class="form-label">Dentist</label>
-            <select id="dentist" name="dentist" class="form-select" required>
-              {% for d in dentists %}
-              <option value="{{ d.username }}">{{ d.username }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="book-form-pair">
-            <div>
-              <label for="bdate" class="form-label">Date</label>
-              <input type="date" id="bdate" name="date" value="{{ day }}" class="form-control" required>
-            </div>
-            <div>
-              <label for="btime" class="form-label">Time</label>
-              <input type="time" id="btime" name="time" class="form-control" required>
-            </div>
-          </div>
-          <div>
-            <label for="bmin" class="form-label">Minutes</label>
-            <input type="number" id="bmin" name="minutes" value="30" min="5" step="5"
-                   class="form-control" required>
-          </div>
-          <div>
-            <label for="bnote" class="form-label">Note</label>
-            <input type="text" id="bnote" name="note" maxlength="200" class="form-control">
-          </div>
-          <button type="submit" class="btn btn-primary w-100">Book</button>
-        </form>
-      </div>
-    </section>
+    <!--/requests--></section>
 
-    <section class="card dash-card" aria-labelledby="requests-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="requests-title">Patient requests{% if requests_pending %} ({{ requests_pending|length }}){% endif %}</h2>
-          <p class="ds-card-sub">Confirm with a dentist and a time, or decline</p>
+    <details class="card ux-card ux-panel" id="book" {% if open_booking %}open{% endif %}>
+      <summary class="ux-card-title">Book an appointment</summary>
+      <p class="ux-card-meta">Patient, clinician and time. The clinician's roster, clinic hours and overlapping bookings are checked when you save.</p>
+      <form method="post" action="{{ url_for('appointments.book') }}" class="ux-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="day" value="{{ day }}">
+        <label class="form-label" for="cf">Patient</label>
+        <select id="cf" name="codice_fiscale" class="form-select" required>
+          <option value="">Choose a patient</option>
+          {% for p in patients %}<option value="{{ p.codice_fiscale }}">{{ p.patient_name }}</option>{% endfor %}
+        </select>
+        <label class="form-label" for="dentist">Clinician</label>
+        <select id="dentist" name="dentist" class="form-select" required>
+          {% for d in dentists %}<option value="{{ d.username }}" {{ 'selected' if d.username == dentist else '' }}>{{ d.username }}</option>{% endfor %}
+        </select>
+        <div class="ux-pair">
+          <div><label class="form-label" for="bdate">Date</label>
+            <input type="date" id="bdate" name="date" value="{{ day }}" class="form-control" required></div>
+          <div><label class="form-label" for="btime">Time</label>
+            <input type="time" id="btime" name="time" class="form-control" required></div>
         </div>
-      </div>
-      <div class="dash-card-body">
-        {% if requests_pending %}
-        <ul class="ds-rows">
-          {% for r in requests_pending %}
-          <li class="appt-item">
-            <div class="ds-row">
-              <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.patient_name | tint }}" aria-hidden="true">{{ r.patient_name | initials }}</span>
-              <span class="ds-row-main">
-                <span class="ds-row-title">{{ r.patient_name }}</span>
-                {# a request has NO time - only a day and a half of it. rendering the
-                   00:00 that sits in starts_at would invent a slot nobody agreed. #}
-                <span class="ds-row-sub">{{ r.starts_at[:10] }}, {{ r.period }} · {{ r.note or "-" }}</span>
-              </span>
-              <span class="ds-badge ds-badge-warning">Requested</span>
-            </div>
-            <details class="appt-more">
-              <summary>Confirm or decline</summary>
-              <form method="post" action="{{ url_for('appointments.confirm', appointment_id=r.id) }}"
-                    class="book-form">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="day" value="{{ day }}">
-                <div class="book-form-pair">
-                  <div>
-                    <label class="form-label small" for="cdate-{{ r.id }}">Date</label>
-                    <input type="date" id="cdate-{{ r.id }}" name="date" value="{{ r.starts_at[:10] }}" class="form-control form-control-sm" required>
-                  </div>
-                  <div>
-                    <label class="form-label small" for="ctime-{{ r.id }}">Time</label>
-                    <input type="time" id="ctime-{{ r.id }}" name="time" class="form-control form-control-sm" required>
-                  </div>
-                </div>
-                <div class="book-form-pair">
-                  <div>
-                    <label class="form-label small" for="cdent-{{ r.id }}">Dentist</label>
-                    <select id="cdent-{{ r.id }}" name="dentist" class="form-select form-select-sm" required>
-                      {% for d in dentists %}<option value="{{ d.username }}">{{ d.username }}</option>{% endfor %}
-                    </select>
-                  </div>
-                  <div>
-                    <label class="form-label small" for="cmin-{{ r.id }}">Minutes</label>
-                    <input type="number" id="cmin-{{ r.id }}" name="minutes" value="30" min="5" step="5" class="form-control form-control-sm" required>
-                  </div>
-                </div>
-                <button type="submit" class="btn btn-sm btn-primary">Confirm</button>
-              </form>
-              <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}"
-                    class="d-flex gap-2 align-items-end mt-2">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <input type="hidden" name="day" value="{{ day }}">
-                <label class="visually-hidden" for="dreason-{{ r.id }}">Reason</label>
-                <input type="text" id="dreason-{{ r.id }}" name="reason" placeholder="Reason" class="form-control form-control-sm">
-                <button type="submit" class="btn btn-sm btn-outline-secondary">Decline</button>
-              </form>
-            </details>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        {# permitted with an empty queue - a different render from not-permitted,
-           which never reaches this template at all #}
-        <p class="dash-empty-line">No patient requests waiting.</p>
-        {% endif %}
-      </div>
-    </section>
+        <label class="form-label" for="bmin">Minutes</label>
+        <input type="number" id="bmin" name="minutes" value="30" min="5" step="5" class="form-control" required>
+        <label class="form-label" for="bnote">Note <span class="ux-muted">(optional)</span></label>
+        <input type="text" id="bnote" name="note" maxlength="200" class="form-control">
+        <button type="submit" class="btn btn-primary w-100 mt-3">Book</button>
+      </form>
+    </details>
   </div>
 </div>
+<script>
+  // the primary action and a #book link open the booking panel; without scripts the panel still opens by hand
+  (function () {
+    var panel = document.getElementById('book');
+    function open() { if (panel) { panel.open = true; var f = document.getElementById('cf'); if (f) f.focus(); } }
+    if (location.hash === '#book') open();
+    document.querySelectorAll('[data-open-booking]').forEach(function (a) { a.addEventListener('click', open); });
+  })();
+</script>
 {% endblock %}

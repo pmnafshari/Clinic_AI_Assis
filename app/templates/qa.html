@@ -1,69 +1,87 @@
 {% extends "base.html" %}
+{# P23 - ask the records: the scope said plainly, examples that fill the question, a loading state, a sourced answer,
+   and distinct no-record / pick-a-patient / refusal states. access and clinical boundaries are the route's, unchanged.
+   "Ask a question" is asserted verbatim by admin_routes_selftest's CLINICAL_STRINGS (SC5). #}
+{% set no_record = answer and (answer.startswith('no patient') or answer.startswith("couldn't identify")) %}
 {% block content %}
-{# "Ask a question" is asserted verbatim by admin_routes_selftest's
-   CLINICAL_STRINGS (SC5) - an admin's page body must not contain it #}
-<div class="ds-page-head">
+<div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Assistant</p>
+    <p class="ds-page-eyebrow">Ask records</p>
     <h1 class="ds-page-title">Ask a question</h1>
-    <p class="ds-page-meta">Answers are read from filed records, on this machine</p>
+    <p class="ds-page-meta">Answers are read from filed records, on this machine - only patients you may see</p>
   </div>
-</div>
-<div class="row g-3">
-<div class="col-12 col-xl-8">
-<div class="card dash-card">
-  <div class="ds-card-body">
-    {% if not question %}
-    <p class="text-secondary">Ask about a patient's appointments, treatments, or contact details.</p>
-    {% endif %}
-    {% if error %}
-    <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
-    {% endif %}
+<!--/page-head--></div>
 
-    <form method="post" action="{{ url_for('qa.qa_page') }}">
+{% if refused %}
+<section class="card ux-card" data-ux="refused">
+  <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+  <p class="ux-muted">Asking the records is for clinical staff. Your account can manage staff accounts and duplicates.</p>
+<!--/refused--></section>
+{% else %}
+<div class="ux-grid">
+  <section class="card ux-card ux-span-2" aria-labelledby="ask-title">
+    <h2 class="ux-card-title visually-hidden" id="ask-title">Question</h2>
+    {% if error %}<div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>{% endif %}
+    <form method="post" action="{{ url_for('qa.qa_page') }}" class="ux-form" data-busy-form>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="ds-field">
-        <label for="question" class="ds-label">Question</label>
-        <input type="text" id="question" name="question" value="{{ question or '' }}" class="ds-input" autofocus>
-      </div>
+      <label for="question" class="form-label">Your question</label>
+      <input type="text" id="question" name="question" value="{{ question or '' }}" class="form-control" required
+             placeholder="e.g. What is patient Rossi's next appointment?" aria-describedby="question-help">
+      <p class="ux-muted" id="question-help">Write "patient" before the name, and ask about an appointment, phone, invoice or visit date. One patient per question.</p>
       {% if candidates %}
-      <div class="ds-field">
-        <p class="mb-2">Multiple patients named {{ name }} — pick one:</p>
-        <div class="list-group">
-          {% for cf in candidates %}
-          <label class="list-group-item">
-            <input type="radio" name="cf" value="{{ cf }}"> {{ cf }}
-          </label>
-          {% endfor %}
-        </div>
-      </div>
+      <fieldset class="ux-candidates">
+        <legend class="form-label">More than one patient is called {{ name }} - choose one</legend>
+        {% for cf, pname in candidates %}
+        <label class="ux-candidate"><input type="radio" name="cf" value="{{ cf }}" required> {{ pname }} <span class="font-monospace ux-muted">{{ cf }}</span></label>
+        {% endfor %}
+      </fieldset>
       {% endif %}
-      <button type="submit" class="ds-btn ds-btn-primary">Ask</button>
-      <p class="ds-help">Answers can take up to a minute — please wait after submitting.</p>
+      <div class="ux-actions">
+        <button type="submit" class="btn btn-primary" data-busy-label="Reading the records...">Ask</button>
+        <span class="ux-muted" role="status" aria-live="polite" data-busy-status></span>
+      </div>
     </form>
 
-    {# the same exchange component the patient chat uses: the question asked
-       as a turn, the answer beside it. one definition, two surfaces. #}
     {% if answer %}
-    <div class="ds-exchange mt-4">
-      {% if question %}<p class="ds-turn ds-turn-user">{{ question }}</p>{% endif %}
-      <p class="ds-turn ds-turn-agent">{{ answer }}</p>
+    <div class="ux-answer{{ ' ux-answer-empty' if no_record else '' }}" role="region" aria-label="Answer">
+      <p class="ux-answer-q">{{ question }}</p>
+      {% if no_record %}
+      <p><strong>No record found.</strong> {{ answer[0] | upper }}{{ answer[1:] }}.</p>
+      <p class="ux-muted">Check the spelling, or open <a class="ux-link" href="{{ url_for('patients.list_view') }}">Patients</a> to search by name or codice fiscale.</p>
+      {% else %}
+      {% set body, _, source = answer.partition(' [source: ') %}
+      <p>{{ body }}</p>
+      {% if source %}<p class="ux-muted"><i class="bi bi-journal-text" aria-hidden="true"></i> Source: {{ source.rstrip(']').replace('] [source: ', '; ') }}</p>{% endif %}
+      {% endif %}
     </div>
     {% endif %}
-  </div>
-</div>
-</div>
-<div class="col-12 col-xl-4">
-  <aside class="card dash-card" aria-labelledby="qa-help-title">
-    <div class="dash-card-head"><h2 class="ds-card-title" id="qa-help-title">What it can answer</h2></div>
-    <div class="dash-card-body">
-      <ul class="ds-rows">
-        <li class="ds-row"><span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span><span class="ds-row-main"><span class="ds-row-title">Appointments</span><span class="ds-row-sub">When a patient is next due</span></span></li>
-        <li class="ds-row"><span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span><span class="ds-row-main"><span class="ds-row-title">Treatments</span><span class="ds-row-sub">What was done at a visit</span></span></li>
-        <li class="ds-row"><span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-telephone"></i></span><span class="ds-row-main"><span class="ds-row-title">Contact details</span><span class="ds-row-sub">A patient's phone on record</span></span></li>
-      </ul>
-    </div>
+  </section>
+
+  <aside class="card ux-card" aria-labelledby="examples-title">
+    <h2 class="ux-card-title" id="examples-title">Examples</h2>
+    <p class="ux-muted">Pick one to fill the question, then change the name.</p>
+    <ul class="ux-examples">
+      {% for ex in ["What is patient Rossi's next appointment?", "What is patient Ferrari's phone number?", "What is patient Gallo's invoice amount?", "What is patient Conti's last visit date?", "Which patients had a root canal?"] %}
+      <li><button type="button" class="btn btn-sm btn-outline-secondary" data-example="{{ ex }}">{{ ex }}</button></li>
+      {% endfor %}
+    </ul>
+    <p class="ux-muted">It answers from the records only - appointments come from the appointment book, never from a note's recall. It does not give clinical advice.</p>
   </aside>
 </div>
-</div>
+<script>
+  (function () {
+    var q = document.getElementById('question');
+    document.querySelectorAll('[data-example]').forEach(function (b) {
+      b.addEventListener('click', function () { q.value = b.getAttribute('data-example'); q.focus(); });
+    });
+    document.querySelectorAll('[data-busy-form]').forEach(function (f) {
+      f.addEventListener('submit', function () {
+        var b = f.querySelector('[data-busy-label]'), s = f.querySelector('[data-busy-status]');
+        if (b) { b.disabled = true; b.textContent = b.getAttribute('data-busy-label'); }
+        if (s) { s.textContent = 'Reading the records. This can take up to a minute.'; }
+      });
+    });
+  })();
+</script>
+{% endif %}
 {% endblock %}

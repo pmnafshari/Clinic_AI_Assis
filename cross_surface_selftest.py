@@ -118,6 +118,18 @@ def selftest():
         assert patient_accessor.get_next_appointment(c, conn) is None, "5: a request reached the chat"
         assert appointments.open_for_patient(conn, b)[0] == [] and len(appointments.open_for_patient(conn, c)[1]) == 1
 
+        # 5b. P23: staff Q&A answers from the same booking - the surface P22 missed - and names a recall as a recall
+        import ask
+        qa_a = ask.answer_exact("ZZXA800101010101", "appointment", conn)
+        assert "2026-09-23 10:30" in qa_a and "(booked)" in qa_a, f"5b: staff Q&A disagrees: {qa_a}"
+        qa_d = ask.answer_exact("ZZXD800101010104", "appointment", conn)
+        assert "has no booked appointment" in qa_d and "recall says: 6mo" in qa_d, f"5b: a recall answered as a booking: {qa_d}"
+        assert "zzx/" not in qa_a and ".json" not in qa_d, "5b: a file path cited as the source"
+        # 5c. the staff day view reads the same rows as the agenda
+        for d in ("2026-09-23", "2026-09-24", "2026-09-30"):
+            assert [r["id"] for r in appointments.day_rows(conn, d)] == [r["id"] for r in appointments.agenda(conn, d)], \
+                f"5c: day view and agenda disagree on {d}"
+
         # 6. reminders are planned for booked future appointments only
         reminders.plan(conn, now=NOW_UTC)
         planned = {r["subject_id"] for r in conn.execute("SELECT subject_id FROM reminder_jobs WHERE kind = 'appointment'")}

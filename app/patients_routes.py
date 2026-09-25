@@ -41,7 +41,8 @@ def list_view():
         flash("You don't have permission to view patient records.")
         return redirect(url_for("dashboard.index"))
 
-    patients = get_db().execute(f"""
+    conn = get_db()
+    patients = conn.execute(f"""
         SELECT p.patient_id, p.codice_fiscale, p.patient_name, p.phone,
             (SELECT visit_date FROM visits v WHERE v.patient_id = p.patient_id
              {LATEST_VISIT}) AS last_visit
@@ -49,12 +50,34 @@ def list_view():
         ORDER BY p.patient_name
     """).fetchall()
     # the next appointment is a booking (appointments.next_booked), never the
-    # free-text recall a visit note carries - that one is shown on the record (P22)
+    # free-text recall a visit note carries - that one is shown on the record (P22).
+    # a waiting request is shown as a request, never as a booking (P23)
     import appointments
-    conn = get_db()
-    patients = [{**dict(p), "next_appointment": appointments.next_booked_local(conn, p["patient_id"])}
-                for p in patients]
-    return render_template("patients_list.html", patients=patients)
+    import patient_identity
+    requested = {}
+    for r in appointments.pending_requests(conn):
+        requested.setdefault(r["patient_id"], r)
+    flagged = set()
+    for pair in patient_identity.candidates(conn):
+        flagged.add(pair["a"]["codice_fiscale"])
+        flagged.add(pair["b"]["codice_fiscale"])
+    rows = []
+    for p in patients:
+        req = requested.get(p["patient_id"])
+        rows.append({**dict(p), "next_appointment": appointments.next_booked_local(conn, p["patient_id"]),
+                     "request": f"{req['starts_at'][:10]} ({req['period']})" if req else None,
+                     "possible_duplicate": p["codice_fiscale"] in flagged})
+    q = (request.args.get("q") or "").strip().lower()
+    if q:
+        rows = [r for r in rows if q in r["patient_name"].lower() or q in r["codice_fiscale"].lower()]
+    sort = request.args.get("sort") if request.args.get("sort") in ("name", "next", "last") else "name"
+    far = "9999"
+    if sort == "next":
+        rows.sort(key=lambda r: (r["next_appointment"] or far, r["request"] or far, r["patient_name"].lower()))
+    elif sort == "last":
+        rows.sort(key=lambda r: (r["last_visit"] or ""), reverse=True)
+    return render_template("patients_list.html", patients=rows, sort=sort, q=request.args.get("q") or "",
+                           total=len(patients))
 
 
 @patients_bp.route("/patients/search")

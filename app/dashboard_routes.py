@@ -1,5 +1,4 @@
 import json
-from datetime import date, datetime
 from pathlib import Path
 
 from flask import Blueprint, g, redirect, render_template, url_for
@@ -54,14 +53,6 @@ def _user_undo_history(username, log_path=None, limit=10):
     return mine[:limit]
 
 
-def greeting(now):
-    if now.hour < 12:
-        return "Good morning"
-    if now.hour < 18:
-        return "Good afternoon"
-    return "Good evening"
-
-
 def _agenda_view(rows, now):
     # everything the agenda card needs, shaped here so the template computes
     # nothing (D-01). past/current are decided against the server clock -
@@ -90,16 +81,6 @@ def _agenda_view(rows, now):
     return view
 
 
-def _dentists_on(view):
-    # who is working today and how many bookings each holds, from rows the
-    # role already received. there is no presence data, so no online dot.
-    counts = {}
-    for row in view:
-        counts[row["dentist"]] = counts.get(row["dentist"], 0) + 1
-    return [{"name": name, "count": n, "initials": initials(name), "tint": tint(name)}
-            for name, n in counts.items()]
-
-
 def _request_view(rows, limit=5):
     # a request carries a date and a period, never a time (PAPT-05) - the
     # time part of starts_at is meaningless and is not copied out
@@ -111,28 +92,6 @@ def _request_view(rows, limit=5):
         "period": r["period"],
         "reason": r["note"],
     } for r in rows[:limit]]
-
-
-def _distribution(counts):
-    # the stacked bar: one svg rect per non-empty state, x and width in a
-    # 0-100 viewbox, computed here so the template draws what it is given.
-    # the class is the STATE, and app.css paints each state the colour of the
-    # badge phase 23 gave it - the bar and the upload list on the same screen
-    # must agree, and no two failure domains may share a hue.
-    total = sum(counts[state] for state, _ in INTAKE_LABELS)
-    segments = []
-    legend = []
-    x = 0.0
-    for state, label in INTAKE_LABELS:
-        n = counts[state]
-        pct = round(100 * n / total) if total else 0
-        legend.append({"label": label, "count": n, "pct": pct, "cls": f"intake-{state}"})
-        if n:
-            width = 100 * n / total
-            segments.append({"x": round(x, 3), "width": round(width, 3), "cls": f"intake-{state}",
-                             "label": label, "count": n})
-            x += width
-    return total, segments, legend
 
 
 def _intake_counts(conn, username):
@@ -179,108 +138,98 @@ def _visits_by_month(conn, months=12):
 def index():
     # someone who manages users and has no clinical access gets their own
     # landing page - the clinical dashboard is never rendered for them.
-    # phrased as a capability pair so it survives a role being renamed.
     if authorize(g.user["role"], "manage_users") and not authorize(g.user["role"], "read_notes"):
         return redirect(url_for("admin.users_view"))
 
+    role = g.user["role"]
     conn = get_db()
-    history = _user_undo_history(g.user["username"])
-
-    # withheld, not hidden (D-09/D-10, RBAC-03/04). the gate decides whether
-    # the query RUNS, so a role that may not see a figure gets a response
-    # with no trace of it - not a hidden one. same shape as
-    # patients_routes.detail_view's clinical card.
-    show_intake = authorize(g.user["role"], "upload_file")
-    intake_counts = _intake_counts(conn, g.user["username"]) if show_intake else None
-
-    # visit and patient totals are a view of the clinical record in
-    # aggregate, so they sit behind read_clinical - the dentist-only
-    # capability, never read_notes, which assistant also holds (RBAC-03)
-    show_clinical = authorize(g.user["role"], "read_clinical")
-    if show_clinical:
-        visit_months, visit_counts = _visits_by_month(conn)
-        patient_total = conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0]
-    else:
-        visit_months = None
-        visit_counts = None
-        patient_total = None
-
-    # whether a chart has anything to draw is decided here too, for the same
-    # reason the series is (D-01). chart.js draws nothing for an all-zero
-    # doughnut and an empty bar chart, and reports neither - so an empty card
-    # looks exactly like a broken one. the template needs a verdict, not a sum.
-    #
-    # this is NOT the same question as show_intake/show_clinical. those decide
-    # whether the query runs at all; a role that may not see a figure gets no
-    # canvas and no empty state either. permitted-with-no-data and
-    # not-permitted are different renders and must not collapse into one flag.
-    intake_has_data = show_intake and any(intake_counts.values())
-    visits_have_data = show_clinical and bool(visit_months)
-
-    # today's agenda, on the same rule as everything above it: the capability
-    # decides whether the query RUNS, and a separate verdict decides whether
-    # there is anything to draw. permitted-with-nothing-booked and
-    # not-permitted are different renders.
-    show_agenda = authorize(g.user["role"], "manage_appointments")
+    # P23: the CLINIC's today (Europe/Rome), never the server's date (F1)
     now = clinic_time.now()
-    agenda = None
-    agenda_dentists = None
-    next_start = None
-    requests = None
-    request_total = None
-    if show_agenda:
-        agenda = _agenda_view(appointments.agenda(conn, date.today().isoformat()), now)
-        agenda_dentists = _dentists_on(agenda)
-        upcoming = [row for row in agenda if not row["is_past"]]
-        next_start = upcoming[0]["time"] if upcoming else None
-        # the same rows, under the same gate, that /appointments shows this
-        # role as its requests queue - a new read here, not new reach
-        pending = appointments.pending_requests(conn)
-        requests = _request_view(pending)
-        request_total = len(pending)
-    agenda_has_data = bool(agenda)
+    today = now.date().isoformat()
 
-    if show_intake:
-        intake_total, intake_segments, intake_legend = _distribution(intake_counts)
-    else:
-        intake_total = intake_segments = intake_legend = None
+    # withheld, not hidden: the capability decides whether each query runs at all
+    may_book = authorize(role, "manage_appointments")
+    agenda = _agenda_view(appointments.agenda(conn, today), now) if may_book else None
+    pending = appointments.pending_requests(conn) if may_book else None
+    reviews = (conn.execute("SELECT COUNT(*) FROM note_reviews WHERE status IN"
+                            " ('pending', 'extraction_failed', 'confirming')").fetchone()[0]
+               if authorize(role, "review_upload") else None)
+    stock_low = len(inventory.open_alerts(conn)) if authorize(role, "use_inventory") else None
+    callbacks = (conn.execute("SELECT COUNT(*) FROM handoff_requests WHERE status IN ('open', 'claimed')").fetchone()[0]
+                 if authorize(role, "handle_handoff") else None)
 
-    # chart series are shaped here, not in jinja: the template renders what
-    # it is given and computes nothing (D-01, as phase 23 did for the badge)
-    # real open alerts only, for roles that can act on them; nothing when none
-    stock_low = 0
-    if authorize(g.user["role"], "use_inventory"):
-        stock_low = len(inventory.open_alerts(get_db()))
+    attention = []
+    if pending:
+        attention.append((f"{len(pending)} request{'s' if len(pending) != 1 else ''} to confirm", url_for("appointments.index") + "#requests"))
+    if reviews:
+        attention.append((f"{reviews} note{'s' if reviews != 1 else ''} awaiting a dentist", url_for("review.queue")))
+    if stock_low:
+        attention.append((f"{stock_low} item{'s' if stock_low != 1 else ''} low on stock", url_for("stock.index")))
+    if callbacks:
+        attention.append((f"{callbacks} call-back{'s' if callbacks != 1 else ''} open", url_for("handoff.index")))
+
+    kpis = []
+    if may_book:
+        kpis.append(("Appointments today", len(agenda), "booked on the schedule", url_for("appointments.index", day=today)))
+        kpis.append(("Requests to confirm", len(pending), "not bookings yet", url_for("appointments.index") + "#requests"))
+    if reviews is not None:
+        kpis.append(("Notes to review", reviews, "a dentist confirms them", url_for("review.queue")))
+    if stock_low is not None:
+        kpis.append(("Low stock", stock_low, "open stock alerts", url_for("stock.index")))
+
+    show_intake = authorize(role, "upload_file")
+    intake = _intake_counts(conn, g.user["username"]) if show_intake else None
     return render_template(
         "dashboard.html",
-        user=g.user,
-        stock_low=stock_low,
-        history=history,
-        show_intake=show_intake,
-        intake_counts=intake_counts,
-        intake_chart_labels=[label for _, label in INTAKE_LABELS] if show_intake else None,
-        intake_chart_values=(
-            [intake_counts[state] for state, _ in INTAKE_LABELS] if show_intake else None
-        ),
-        intake_has_data=intake_has_data,
-        show_clinical=show_clinical,
-        visit_months=visit_months,
-        visit_counts=visit_counts,
-        visits_have_data=visits_have_data,
-        patient_total=patient_total,
-        show_agenda=show_agenda,
-        agenda=agenda,
-        agenda_has_data=agenda_has_data,
-        agenda_total=len(agenda) if agenda is not None else None,
-        agenda_dentists=agenda_dentists,
-        next_start=next_start,
-        requests=requests,
-        request_total=request_total,
-        intake_total=intake_total,
-        intake_segments=intake_segments,
-        intake_legend=intake_legend,
-        greeting=greeting(now),
-        today_label=f"{now:%A}, {now.day} {now:%B %Y}",
-        user_initials=initials(g.user["username"]),
-        today=date.today().isoformat(),
+        today_label=f"{now:%A} {now.day} {now:%B %Y}",
+        may_book=may_book, agenda=agenda, requests=_request_view(pending) if pending else [],
+        request_total=len(pending) if pending is not None else None,
+        attention=attention, kpis=kpis,
+        activity=_activity(conn, g.user["username"]) if authorize(role, "read_notes") else [],
+        show_intake=show_intake, intake=intake,
     )
+
+
+_TOOL_WORDS = {"update_field": "Record detail changed", "update_visit_field": "Visit detail changed",
+               "add_invoice": "Invoice line added"}
+_FIELD_WORDS = {"patients.phone": "phone", "patients.patient_name": "name",
+                "visits.next_appointment": "recall", "visits.visit_date": "visit date"}
+_STATE_WORDS = {"sorted": "Note filed", "needs_review": "File needs review", "awaiting_review": "Note waiting for a dentist",
+                "not_searchable": "Filed, not searchable yet", "queued": "Upload queued", "external": "File routed by the watcher",
+                "rejected": "Upload refused"}
+
+
+def _who(conn, key):
+    """a patient's name from a patient id or codice fiscale - never the identifier itself."""
+    import patient_id
+    pid = patient_id.resolve(conn, key) if key else None
+    row = conn.execute("SELECT patient_name FROM patients WHERE patient_id = ?", (pid,)).fetchone() if pid else None
+    return row[0] if row else None
+
+
+def _activity(conn, username, limit=8):
+    """P23 (F4): the user's recent work in plain words - who and what, clinic time, no paths or codici fiscali."""
+    items = []
+    for i, entry in enumerate(_user_undo_history(username, limit=limit)):
+        field = (entry.get("target") or "").split(":")[1] if ":" in (entry.get("target") or "") else ""
+        who = _who(conn, entry.get("codice_fiscale"))
+        what = _TOOL_WORDS.get(entry.get("tool"), "Record changed")
+        detail = _FIELD_WORDS.get(field.rsplit(":", 1)[0], "")
+        try:
+            when = clinic_time.local_of(entry["ts"]).strftime("%-d %b, %H:%M")     # stored in UTC
+        except (KeyError, ValueError):
+            # an entry from before stamps were UTC has no known zone: its day, not a guessed time
+            when = (entry.get("ts") or "")[:10]
+        items.append({"when": when, "sort": entry.get("ts", ""), "text": f"{what}{' (' + detail + ')' if detail else ''}",
+                      "who": who or "a patient no longer on record", "undo": i == 0})
+    rows = conn.execute("SELECT ts, target, action, allowed, reason FROM audit_log WHERE username = ? AND action IN"
+                        " ('queue_upload', 'upload_file', 'sync_note', 'note_staged') ORDER BY id DESC LIMIT ?",
+                        (username, limit)).fetchall()
+    for r in rows:
+        parts = Path(r["target"] or "").parts
+        who = _who(conn, parts[1]) if len(parts) > 2 and parts[0] == "sorted" else None
+        items.append({"when": clinic_time.local_of(r["ts"]).strftime("%-d %b, %H:%M") if r["ts"] else "",
+                      "sort": r["ts"] or "", "text": _STATE_WORDS[_intake_state(r)],
+                      "who": who or "no patient matched yet", "undo": False})
+    items.sort(key=lambda x: x["sort"], reverse=True)
+    return items[:limit]

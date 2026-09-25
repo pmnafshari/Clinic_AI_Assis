@@ -96,6 +96,9 @@ def index():
     conn = get_db()
     proc_labels, proc_values, proc_uncoded = _procedure_distribution(conn)
     billed_months, billed_values = _billed_by_month(conn)
+    # P23: visits per month moved here from Home (read_clinical, as it was there)
+    from .dashboard_routes import _visits_by_month
+    visit_months, visit_counts = _visits_by_month(conn)
 
     # the has-data verdict is a route decision, like the series it describes
     # (phase 31 D-01). chart.js draws nothing for an empty series and says
@@ -110,4 +113,7 @@ def index():
         recorded=ledger.fmt(_recorded_payments(conn), "en"),
         billed_values=billed_values,
         billed_has_data=bool(billed_values),
+        visit_months=visit_months,
+        visit_counts=visit_counts,
+        visits_have_data=bool(visit_months),
     )

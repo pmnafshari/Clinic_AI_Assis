@@ -299,7 +299,7 @@ def selftest():
         assert mismatch_resp.status_code == 200, "6: mismatch preview should render, not redirect"
         assert "giulia bianchi" in mismatch_resp.text, "6: notice should name the extracted patient"
         assert "Paolo Lilli" in mismatch_resp.text, "6: notice should name the locked patient"
-        assert "Save note" in mismatch_resp.text, "6: save must stay available on a mismatch (D-03)"
+        assert "Save to the record" in mismatch_resp.text, "6: save must stay available on a mismatch (D-03)"
 
         csrf_mismatch_confirm = _csrf_from(mismatch_resp.text)
         tamper_resp = client.post(
@@ -354,7 +354,7 @@ def selftest():
         assert no_cf_resp.status_code == 200, "6b: a no-cf locked paste should render the preview"
         assert "extraction rejected" not in no_cf_resp.text, \
             "6b: a note without a codice fiscale must not be rejected in the locked flow"
-        assert "Save note" in no_cf_resp.text, "6b: the preview should offer Save note"
+        assert "Save to the record" in no_cf_resp.text, "6b: the preview should offer saving"
         assert FAKE_CF in no_cf_resp.text, "6b: the preview should carry the locked cf"
         assert "it will be filed under" not in no_cf_resp.text, \
             "6b: a blank cf alone is not a mismatch - the names agree"

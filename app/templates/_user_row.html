@@ -30,23 +30,23 @@
       <button type="button" class="btn btn-outline-secondary btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=role&new_role={{ 'dentist' if row.role != 'dentist' else 'assistant' }}"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal">Change role</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Change role for {{ row.username }}">Change role</button>
       {% if row.active %}
       <button type="button" class="btn btn-outline-danger btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=active"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal">Disable</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Disable {{ row.username }}">Disable</button>
       {% else %}
       <button type="button" class="btn btn-outline-secondary btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=active"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal">Enable</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Enable {{ row.username }}">Enable</button>
       {% endif %}
       {% if locked %}
       <button type="button" class="btn btn-outline-secondary btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=lockout"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal">Clear lockout</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Clear lockout for {{ row.username }}">Clear lockout</button>
       {% endif %}
       {% endif %}
     </div>

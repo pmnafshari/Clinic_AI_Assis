@@ -1,226 +1,106 @@
 {% extends "base.html" %}
-{# phase 43 - the reference's layout on this clinic's real figures. every block
-   keeps the gate it had: the route decides whether a query runs, and a figure
-   a role may not see arrives as None, so there is nothing here to hide. the
-   honesty map from reference widget to real figure is 43-CONTEXT D-04. #}
-
-{% macro agenda_card() %}
-<section class="card dash-card" aria-labelledby="agenda-title">
-  <div class="dash-card-head">
-    <div>
-      <h2 class="ds-card-title" id="agenda-title">Today's appointments</h2>
-      <p class="ds-card-sub">{{ agenda_total }} booked{% if next_start %} · next at {{ next_start }}{% endif %}</p>
-    </div>
-    {% if agenda_has_data %}
-    <div class="ds-segmented" role="group" aria-label="Filter today's appointments" data-filter-target="agenda-rows">
-      <button type="button" data-filter="all" aria-pressed="true">All</button>
-      <button type="button" data-filter="upcoming" aria-pressed="false">Upcoming</button>
-      <button type="button" data-filter="past" aria-pressed="false">Past</button>
-    </div>
-    {% endif %}
+{# P23 - Home: the work that waits first, then today's agenda, then plain-words activity.
+   every figure is a count of real rows the role may see; every tile links to where it is acted on. #}
+{% block content %}
+<div class="ds-page-head" data-ux="page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ today_label }}</p>
+    <h1 class="ds-page-title">Clinic overview</h1>
+    <p class="ds-page-meta">Appointments and work that needs attention today</p>
   </div>
-  <div class="dash-card-body">
-    {% if agenda_has_data %}
-    <ul class="ds-rows" id="agenda-rows">
-      {% for a in agenda %}
-      <li class="ds-row{{ ' is-current' if a.is_current else '' }}" data-when="{{ 'past' if a.is_past else 'upcoming' }}">
-        <span class="ds-row-time">{{ a.time }}</span>
-        <span class="ds-avatar ds-avatar-sm ds-row-lead {{ a.tint }}" aria-hidden="true">{{ a.initials }}</span>
-        <span class="ds-row-main">
-          <span class="ds-row-title">{{ a.patient_name }}</span>
-          <span class="ds-row-sub">{{ a.minutes }} min{% if a.note %} · {{ a.note }}{% endif %}</span>
-        </span>
-        <span class="ds-row-aside">
-          {% if a.is_current %}
-          <span class="ds-badge ds-badge-success">In progress</span>
-          {% elif a.is_past %}
-          <span class="ds-badge ds-badge-neutral">Past</span>
-          {% else %}
-          <span class="ds-badge ds-badge-primary">Upcoming</span>
-          {% endif %}
-          <span class="ds-person dash-person">
-            <span class="ds-avatar ds-avatar-xs {{ a.dentist_tint }}" aria-hidden="true">{{ a.dentist_initials }}</span>
-            {{ a.dentist }}
-          </span>
-        </span>
-      </li>
+  {% if may_book %}
+  <a class="btn btn-primary app-primary" href="{{ url_for('appointments.index') }}#book"><i class="bi bi-plus-lg" aria-hidden="true"></i> New appointment</a>
+  {% else %}
+  <a class="btn btn-primary app-primary" href="{{ url_for('notes.new_note') }}"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add note</a>
+  {% endif %}
+<!--/page-head--></div>
+
+<section class="ux-attention{{ ' ux-attention-quiet' if not attention else '' }}" data-ux="attention" aria-label="Needs attention">
+  {% if attention %}
+  <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+  <strong>Needs attention</strong>
+  <ul class="ux-attention-list">
+    {% for text, href in attention %}<li><a href="{{ href }}">{{ text }}</a></li>{% endfor %}
+  </ul>
+  {% else %}
+  <i class="bi bi-check-circle" aria-hidden="true"></i> Nothing is waiting for you.
+  {% endif %}
+<!--/attention--></section>
+
+{% if kpis %}
+<div class="ux-kpis" role="list">
+  {% for label, value, sub, href in kpis %}
+  <a class="ux-kpi" role="listitem" href="{{ href }}">
+    <span class="ux-kpi-label">{{ label }}</span>
+    <span class="ux-kpi-value">{{ value }}</span>
+    <span class="ux-kpi-sub">{{ sub }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="ux-grid">
+  {% if may_book %}
+  <section class="card ux-card ux-span-2" aria-labelledby="agenda-title">
+    <div class="ux-card-head">
+      <div>
+        <h2 class="ux-card-title" id="agenda-title">Today's agenda</h2>
+        <p class="ux-card-meta">{{ agenda | length }} booked · Europe/Rome</p>
+      </div>
+      <a class="ux-link" href="{{ url_for('appointments.index') }}">All appointments <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </div>
+    <div data-ux="agenda">
+    {% if agenda %}
+    <table class="ux-table">
+      <thead><tr><th scope="col">Time</th><th scope="col">Patient</th><th scope="col">Clinician</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+      {% for row in agenda %}
+      <tr class="{{ 'ux-row-past' if row.is_past else '' }}{{ ' ux-row-now' if row.is_current else '' }}">
+        <td data-label="Time"><strong>{{ row.time }}</strong> <span class="ux-muted">{{ row.minutes }} min</span></td>
+        <td data-label="Patient"><span class="ds-avatar ds-avatar-sm {{ row.tint }}" aria-hidden="true">{{ row.initials }}</span> {{ row.patient_name }}</td>
+        <td data-label="Clinician">{{ row.dentist }}</td>
+        <td data-label="Status"><span class="ux-badge ux-badge-booked">{{ 'Now' if row.is_current else ('Done' if row.is_past else 'Booked') }}</span></td>
+      </tr>
       {% endfor %}
-    </ul>
+      </tbody>
+    </table>
     {% else %}
-    {# permitted, nothing booked. a role without the capability never
-       reaches this block at all and gets no empty state either. #}
-    <div class="chart-empty">
-      <i class="bi bi-calendar-check"></i>
-      <p class="mb-0">Nothing booked today. Appointments for today appear here.</p>
-    </div>
+    <p class="ux-empty">Nothing booked today.</p>
     {% endif %}
-  </div>
-  <div class="dash-card-foot">
-    <a class="ds-card-link" href="{{ url_for('appointments.index', day=today) }}">All appointments <i class="bi bi-arrow-right"></i></a>
-  </div>
-</section>
-{% endmacro %}
+    <!--/agenda--></div>
+  </section>
 
-{% macro requests_card() %}
-<section class="card dash-card" aria-labelledby="requests-title">
-  <div class="dash-card-head">
-    <div>
-      <h2 class="ds-card-title" id="requests-title">Patient requests</h2>
-      <p class="ds-card-sub">Waiting for a dentist and a time</p>
+  <section class="card ux-card" aria-labelledby="requests-title">
+    <div class="ux-card-head">
+      <div>
+        <h2 class="ux-card-title" id="requests-title">Requests to confirm</h2>
+        <p class="ux-card-meta">Requests are not bookings</p>
+      </div>
     </div>
-    <a class="ds-card-link" href="{{ url_for('appointments.index') }}">Manage</a>
-  </div>
-  <div class="dash-card-body">
     {% if requests %}
-    <ol class="ds-rows dash-queue">
+    <ul class="ux-list">
       {% for r in requests %}
-      <li class="ds-row">
-        <span class="ds-row-time ds-numeral">{{ loop.index }}.</span>
-        <span class="ds-avatar ds-avatar-sm ds-row-lead {{ r.tint }}" aria-hidden="true">{{ r.initials }}</span>
-        <span class="ds-row-main">
-          <span class="ds-row-title">{{ r.patient_name }}</span>
-          {# a date and a period, never a time (PAPT-05) #}
-          <span class="ds-row-sub">{{ r.day }} · {{ r.period }}</span>
-        </span>
-        <span class="ds-badge ds-badge-warning">Requested</span>
-      </li>
-      {% endfor %}
-    </ol>
-    {% else %}
-    <p class="dash-empty-line">No patient requests waiting.</p>
-    {% endif %}
-  </div>
-</section>
-{% endmacro %}
-
-{% macro intake_card() %}
-<section class="card dash-card" aria-labelledby="intake-title">
-  <div class="dash-card-head">
-    <h2 class="ds-card-title" id="intake-title">Your intake</h2>
-  </div>
-  <div class="dash-card-body">
-    {% if intake_has_data %}
-    <p class="dash-dist-total"><span class="ds-numeral">{{ intake_total }}</span> files</p>
-    <svg id="intake-chart" class="ds-distbar" viewBox="0 0 100 10" preserveAspectRatio="none"
-         role="img" aria-label="Your files by state">
-      <rect x="0" y="0" width="100" height="10"></rect>
-      {% for seg in intake_segments %}
-      <rect class="{{ seg.cls }}" x="{{ seg.x }}" y="0" width="{{ seg.width }}" height="10"><title>{{ seg.label }}: {{ seg.count }}</title></rect>
-      {% endfor %}
-    </svg>
-    {# every state is named with its count - the colour is never the only
-       signal (UX-17) #}
-    <ul class="ds-legend">
-      {% for item in intake_legend %}
-      <li><span class="ds-dot {{ item.cls }}" aria-hidden="true"></span>{{ item.label }} <span class="ds-numeral">{{ item.count }}</span></li>
+      <li><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred {{ r.day }} · {{ r.period }}</span></li>
       {% endfor %}
     </ul>
+    <a class="ux-link" href="{{ url_for('appointments.index') }}#requests">Review requests <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     {% else %}
-    <div class="chart-empty chart-empty-sm">
-      <i class="bi bi-bar-chart-steps"></i>
-      <p class="mb-0">Nothing filed yet. Your uploads will appear here, broken down by state.</p>
-    </div>
+    <p class="ux-empty">No requests waiting.</p>
     {% endif %}
-  </div>
-</section>
-{% endmacro %}
+  </section>
+  {% endif %}
 
-{% macro visits_card() %}
-<section class="card dash-card" aria-labelledby="visits-title">
-  <div class="dash-card-head">
-    <div>
-      <h2 class="ds-card-title" id="visits-title">Visits per month</h2>
-      <p class="ds-card-sub">Dated visits across the clinic, last 12 months on record</p>
-    </div>
-  </div>
-  <div class="dash-card-body">
-    {% if visits_have_data %}
-    <div class="chart-box"><canvas id="visits-chart" aria-label="Visits per month" role="img"></canvas></div>
-    {% else %}
-    <div class="chart-empty">
-      <i class="bi bi-graph-up"></i>
-      <p class="mb-0">No dated visits yet. Visits appear here once a note carries a visit date.</p>
-    </div>
-    {% endif %}
-  </div>
-</section>
-{% endmacro %}
-
-{% macro uploads_card() %}
-<section class="card dash-card dash-list-card" aria-labelledby="uploads-title">
-  <div class="dash-card-head">
-    <h2 class="ds-card-title" id="uploads-title">Recent uploads</h2>
-  </div>
-  <div class="dash-card-body">
-    <div hx-get="{{ url_for('upload.recent_intake') }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
-  </div>
-</section>
-{% endmacro %}
-
-{% macro upload_card() %}
-<section class="card dash-card" aria-labelledby="upload-title">
-  <div class="dash-card-head">
-    <div>
-      <h2 class="ds-card-title" id="upload-title">Upload files</h2>
-      <p class="ds-card-sub">Notes are read, matched to a patient and filed</p>
-    </div>
-  </div>
-  <div class="dash-card-body">
-    {% with cf=None %}{% include "_upload_zone.html" %}{% endwith %}
-    <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
-  </div>
-</section>
-{% endmacro %}
-
-{% macro actions_card() %}
-<section class="card dash-card" aria-labelledby="actions-title">
-  <div class="dash-card-head">
-    <h2 class="ds-card-title" id="actions-title">Quick actions</h2>
-  </div>
-  <div class="dash-card-body">
-    <div class="ds-rows">
-      <a class="ds-row" href="{{ url_for('notes.new_note') }}">
-        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-journal-plus"></i></span>
-        <span class="ds-row-main"><span class="ds-row-title">Add note</span><span class="ds-row-sub">Paste or type a visit note</span></span>
-        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
-      </a>
-      <a class="ds-row" href="{{ url_for('qa.qa_page') }}">
-        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-chat-dots"></i></span>
-        <span class="ds-row-main"><span class="ds-row-title">Ask a question</span><span class="ds-row-sub">Search the records in plain words</span></span>
-        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
-      </a>
-      <a class="ds-row" href="{{ url_for('agent.edit_page') }}">
-        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-pencil-square"></i></span>
-        <span class="ds-row-main"><span class="ds-row-title">Edit a record</span><span class="ds-row-sub">Every change is shown before it is saved</span></span>
-        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
-      </a>
-      <a class="ds-row" href="{{ url_for('agent.command_page') }}">
-        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-terminal"></i></span>
-        <span class="ds-row-main"><span class="ds-row-title">Run a command</span><span class="ds-row-sub">Tell the assistant what to change</span></span>
-        <i class="bi bi-chevron-right text-secondary" aria-hidden="true"></i>
-      </a>
-    </div>
-  </div>
-</section>
-{% endmacro %}
-
-{% macro changes_card() %}
-<section class="card dash-card dash-list-card" aria-labelledby="changes-title">
-  <div class="dash-card-head">
-    <h2 class="ds-card-title" id="changes-title">Recent changes</h2>
-  </div>
-  <div class="dash-card-body">
-    {% if history %}
-    <ul class="ds-rows">
-      {% for entry in history %}
-      <li class="ds-row">
-        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-arrow-counterclockwise"></i></span>
-        <span class="ds-row-main">
-          <span class="ds-row-title">{{ entry.tool }}</span>
-          <span class="ds-row-sub">{{ entry.codice_fiscale }} · {{ entry.ts }}</span>
-        </span>
-        {% if loop.first %}
-        <form method="post" action="{{ url_for('agent.undo_change') }}" class="mb-0">
+  <section class="card ux-card ux-span-2" aria-labelledby="activity-title">
+    <div class="ux-card-head"><h2 class="ux-card-title" id="activity-title">Your recent activity</h2></div>
+    <div data-ux="activity">
+    {% if activity %}
+    <ul class="ux-list">
+      {% for item in activity %}
+      <li class="ux-activity">
+        <span><strong>{{ item.text }}</strong> · {{ item.who }}</span>
+        <span class="ux-muted">{{ item.when }}</span>
+        {% if item.undo %}
+        <form method="post" action="{{ url_for('agent.undo_change') }}" class="ux-inline-form">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <button type="submit" class="btn btn-outline-secondary btn-sm">Undo change</button>
         </form>
@@ -229,166 +109,28 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No changes yet. Your edits will appear here after you save something.</p>
+    <p class="ux-empty">Nothing yet. Notes you file and records you change appear here.</p>
     {% endif %}
-  </div>
-</section>
-{% endmacro %}
+    {% if show_intake and intake %}
+    <p class="ux-muted ux-intake">Your uploads: {{ intake.sorted }} filed · {{ intake.needs_review }} need review · {{ intake.not_searchable }} not searchable · {{ intake.rejected }} refused</p>
+    {% endif %}
+    <!--/activity--></div>
+  </section>
 
-{% block content %}
-<div class="ds-page-head">
-  <div>
-    <p class="ds-page-eyebrow">{{ greeting }}, {{ user.username }}</p>
-    <h1 class="ds-page-title">Clinic overview</h1>
-    <p class="ds-page-meta"><i class="bi bi-calendar3" aria-hidden="true"></i> {{ today_label }}</p>
-    {% if stock_low %}<p class="mb-0 mt-2"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.index', show='low') }}">{{ stock_low }} item{{ 's' if stock_low != 1 }} low on stock</a></p>{% endif %}
-  </div>
-  {% if agenda_dentists %}
-  <ul class="dash-chips" aria-label="Dentists booked today">
-    {% for d in agenda_dentists %}
-    <li class="ds-chip">
-      <span class="ds-avatar ds-avatar-sm {{ d.tint }}" aria-hidden="true">{{ d.initials }}</span>
-      <span class="ds-chip-text">
-        <span class="ds-chip-title">{{ d.name }}</span>
-        <span class="ds-chip-sub">{{ d.count }} booked today</span>
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-  {% endif %}
+  <section class="card ux-card" aria-labelledby="quick-title">
+    <div class="ux-card-head"><h2 class="ux-card-title" id="quick-title">Quick actions</h2></div>
+    <ul class="ux-quick">
+      <li><a class="btn btn-outline-primary" href="{{ url_for('notes.new_note') }}"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add a note</a></li>
+      <li><a class="btn btn-outline-secondary" href="{{ url_for('patients.list_view') }}"><i class="bi bi-search" aria-hidden="true"></i> Find a patient</a></li>
+      <li><a class="btn btn-outline-secondary" href="{{ url_for('qa.qa_page') }}"><i class="bi bi-chat-square-text" aria-hidden="true"></i> Ask the records</a></li>
+    </ul>
+    {% if show_intake %}
+    <details class="ux-upload">
+      <summary>Upload files</summary>
+      {% with cf=None %}{% include "_upload_zone.html" %}{% endwith %}
+      <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+    </details>
+    {% endif %}
+  </section>
 </div>
-
-{% if show_agenda or show_clinical or show_intake %}
-<div class="dash-kpis">
-  {% if show_agenda %}
-  <div class="ds-kpi">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-calendar-check"></i></span>
-    <p class="ds-kpi-value ds-numeral">{{ agenda_total }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">Booked today</span>
-      {% if next_start %}
-      <span class="ds-badge ds-badge-primary">next {{ next_start }}</span>
-      {% elif agenda_has_data %}
-      <span class="ds-badge ds-badge-neutral">day done</span>
-      {% else %}
-      <span class="ds-badge ds-badge-neutral">none booked</span>
-      {% endif %}
-    </div>
-  </div>
-  <div class="ds-kpi">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
-    <p class="ds-kpi-value ds-numeral">{{ request_total }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">Requests</span>
-      {% if request_total %}
-      <span class="ds-badge ds-badge-warning">waiting</span>
-      {% else %}
-      <span class="ds-badge ds-badge-success">all clear</span>
-      {% endif %}
-    </div>
-  </div>
-  {% endif %}
-  {% if show_clinical %}
-  <div class="ds-kpi">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-people"></i></span>
-    <p class="ds-kpi-value ds-numeral">{{ patient_total }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">Patients</span>
-      <span class="ds-badge ds-badge-neutral">on record</span>
-    </div>
-  </div>
-  {% endif %}
-  {% if show_intake %}
-  <div class="ds-kpi">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
-    <p class="ds-kpi-value ds-numeral">{{ intake_counts.sorted }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">Sorted</span>
-      <span class="ds-badge ds-badge-success">your files</span>
-    </div>
-  </div>
-  <div class="ds-kpi">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-exclamation-circle"></i></span>
-    <p class="ds-kpi-value ds-numeral">{{ intake_counts.needs_review }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">Needs Review</span>
-      {% if intake_counts.needs_review %}
-      <span class="ds-badge ds-badge-warning">check</span>
-      {% else %}
-      <span class="ds-badge ds-badge-neutral">clear</span>
-      {% endif %}
-    </div>
-  </div>
-  {% endif %}
-</div>
-{% endif %}
-
-<div class="row g-3">
-  <div class="col-12 col-xl-8 d-flex flex-column gap-3">
-    {% if show_agenda %}{{ agenda_card() }}{% endif %}
-    {% if show_clinical %}{{ visits_card() }}{% elif show_intake %}{{ uploads_card() }}{% endif %}
-    {{ upload_card() }}
-  </div>
-  <div class="col-12 col-xl-4 d-flex flex-column gap-3">
-    {% if show_agenda %}{{ requests_card() }}{% endif %}
-    {% if show_intake %}{{ intake_card() }}{% endif %}
-    {% if show_clinical %}{{ uploads_card() }}{% endif %}
-    {{ actions_card() }}
-    {{ changes_card() }}
-  </div>
-</div>
-
-{% if visits_have_data %}
-<script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.min.js') }}"></script>
-<script>
-  // every value here is rendered by the server. the template computes nothing:
-  // dashboard_routes shapes the label/value lists and decides, per role,
-  // whether a dataset exists at all. a role that did not receive a dataset
-  // gets no canvas and no init code for it - not hidden code, none.
-  (function () {
-    var css = getComputedStyle(document.documentElement);
-    var teal = css.getPropertyValue('--ds-chart-1').trim() || '#0f9d8a';
-    var canvas = document.getElementById('visits-chart');
-    var ctx = canvas.getContext('2d');
-    var fill = ctx.createLinearGradient(0, 0, 0, 260);
-    fill.addColorStop(0, 'rgba(15, 157, 138, 0.22)');
-    fill.addColorStop(1, 'rgba(15, 157, 138, 0)');
-
-    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
-    Chart.defaults.color = '#64748b';
-
-    new Chart(canvas, {
-      type: 'line',
-      data: {
-        labels: {{ visit_months | tojson }},
-        datasets: [{
-          label: 'Visits',
-          data: {{ visit_counts | tojson }},
-          borderColor: teal,
-          backgroundColor: fill,
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          // monotone: a smoothed curve must not dip below a real count
-          // between two points - these are visits, not a signal
-          cubicInterpolationMode: 'monotone',
-          pointRadius: 3,
-          pointHoverRadius: 5,
-          pointBackgroundColor: '#fff',
-          pointBorderColor: teal
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, border: { display: false } },
-          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#eef1f5' }, border: { display: false } }
-        }
-      }
-    });
-  })();
-</script>
-{% endif %}
 {% endblock %}

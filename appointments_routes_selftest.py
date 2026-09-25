@@ -242,7 +242,8 @@ def selftest():
         # 11. the agenda no longer shows it, but the day still renders
         page = dentist.get(f"/appointments?day={DAY}")
         assert page.status_code == 200, "11: the day view should render"
-        assert "14:00" not in page.text, "11: a cancelled appointment leaves the agenda"
+        # P23: the day grid labels every hour, so the check is the slot itself (start-end), not the hour label
+        assert "14:00-14:" not in page.text, "11: a cancelled appointment leaves the agenda"
 
         # --- 12. patient requests (Phase 42, PAPT-04/05) ------------------
         import appointments as _appt
@@ -257,7 +258,9 @@ def selftest():
         assert "Patient requests" in q.text, "12a: the requests queue should render"
         assert soon12 in q.text, "12a: and show the day asked for"
         assert "morning" in q.text, "12a: and the period"
-        assert "00:00" not in q.text, \
+        # P23: the day grid labels every opening hour (this fixture opens at 00:00); the rule is about the request
+        requests_panel = q.text.split('id="requests"', 1)[1].split("<!--/requests-->", 1)[0]
+        assert "00:00" not in requests_panel, \
             "12a: a request must never be rendered with a time"
 
         # 12b. THE WITHHOLD, for the new surface too. admin holds manage_users
@@ -390,7 +393,8 @@ def selftest():
                     "?day=2027-02-30", f"?day={CAL_DAY}&month=", "?day=&month="):
             resp13 = dentist.get(f"/appointments{bad}")
             assert resp13.status_code == 200, f"13g: {bad} must not break the page"
-            assert "appt-cal" in resp13.text, f"13g: {bad} must still draw a month"
+            # P23: a bad ?day= falls back to today's day view; a ?month= still draws the month - a view either way
+            assert "appt-cal" in resp13.text or 'data-ux="day-grid"' in resp13.text, f"13g: {bad} must still draw a view"
 
     print("selftest ok")
 

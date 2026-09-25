@@ -1,4 +1,4 @@
-<h2 class="section-title">Edit next appointment</h2>
+<h2 class="section-title">Edit the recall</h2>
 {% if error %}
 <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% endif %}
@@ -6,9 +6,9 @@
 <form hx-post="{{ url_for('patients.visit_edit_submit', cf=cf, visit_id=visit_id) }}" hx-target="#modal-body-target" hx-swap="innerHTML">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
-    <label for="value" class="form-label">Next appointment</label>
+    <label for="value" class="form-label">Recall, as written in the note</label>
     <input type="text" id="value" name="value" value="{{ value or '' }}" class="form-control" autofocus>
-    <div class="form-text">Free text - leave empty to clear it.</div>
+    <div class="form-text">Free text, not a booking - leave empty to clear it.</div>
   </div>
   <button type="submit" class="btn btn-primary">Save changes</button>
 </form>

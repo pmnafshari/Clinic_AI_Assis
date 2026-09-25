@@ -1,0 +1,36 @@
+{# P23 - the role-aware sidebar. the list and each link's gate live in app/nav.py; this only draws it. #}
+<aside class="app-side offcanvas-lg offcanvas-start" id="app-side" tabindex="-1" aria-label="Main navigation">
+  <div class="app-side-head">
+    <a class="app-brand" href="{{ url_for('dashboard.index') }}">
+      <span class="app-brand-mark" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+      <span class="app-brand-text"><span class="app-brand-name">Dental AI</span><span class="app-brand-sub">Clinic · Staff</span></span>
+    </a>
+    <button type="button" class="btn-close d-lg-none" data-bs-dismiss="offcanvas" data-bs-target="#app-side" aria-label="Close navigation"></button>
+  </div>
+  <nav class="app-side-nav" data-ux="nav" aria-label="Pages">
+    {% for group, items in side_nav() %}
+    <p class="app-side-group" id="nav-group-{{ loop.index }}">{{ group }}</p>
+    <ul class="app-side-list" aria-labelledby="nav-group-{{ loop.index }}">
+      {% for item in items %}
+      <li><a class="app-side-link{{ ' active' if item.active else '' }}" href="{{ item.path }}"{% if item.active %} aria-current="page"{% endif %}>
+        <i class="bi {{ item.icon }}" aria-hidden="true"></i><span>{{ item.label }}</span>
+        {% if item.count %}<span class="app-side-count" aria-label="{{ item.count }} waiting">{{ item.count }}</span>{% endif %}
+      </a></li>
+      {% endfor %}
+    </ul>
+    {% endfor %}
+  <!--/nav--></nav>
+  <div class="app-side-foot" data-ux="account">
+    <div class="app-side-user">
+      <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}" aria-hidden="true">{{ g.user.username | initials }}</span>
+      <span class="app-user-text"><span class="app-user-name">{{ g.user.username }}</span><span class="app-user-role">{{ g.user.role }}</span></span>
+    </div>
+    <a class="app-side-sub{{ ' active' if request.endpoint == 'auth.change_password' else '' }}" href="{{ url_for('auth.change_password') }}">
+      <i class="bi bi-key" aria-hidden="true"></i> Change password
+    </a>
+    <form method="post" action="/logout" class="app-signout-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="app-signout"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sign out</button>
+    </form>
+  <!--/account--></div>
+</aside>

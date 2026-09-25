@@ -162,9 +162,20 @@ def answer_exact(cf, field, conn):
             if summary["unknown"]:
                 answer += f" ({summary['unknown']} invoice(s) not yet reconciled, not counted)"
     elif field == "appointment":
-        next_appt = visits[-1]["next_appointment"] if visits else None
-        value = next_appt or "not recorded"
-        answer = f"{data['patient_name']}'s next appointment: {value}"
+        # P23 (F2): the booking, by the rule every surface uses - never the recall text in a note.
+        # the recall is named separately, as what it is.
+        import appointments
+        pid = _pid.resolve(conn, cf)
+        booked = appointments.next_booked(conn, pid)
+        recall = visits[-1]["next_appointment"] if visits else None
+        if booked:
+            answer = (f"{data['patient_name']}'s next appointment: {appointments.next_booked_local(conn, pid)}"
+                      f" with {booked['dentist']} (booked)")
+        else:
+            answer = f"{data['patient_name']} has no booked appointment"
+        if recall:
+            answer += f"; the latest note's recall says: {recall}"
+        return answer + " [source: the appointment book]"
     elif field == "date":
         last_date = visits[-1]["visit_date"] if visits else None
         value = last_date or "not recorded"
@@ -176,7 +187,8 @@ def answer_exact(cf, field, conn):
         return answer + " (no visit on record to cite)"
 
     last_visit = visits[-1]
-    return answer + f" [source: {last_visit['source_path']}, visit date: {last_visit['visit_date']}]"
+    # a readable source (P23): the visit, not the file path it was filed under
+    return answer + f" [source: the visit of {last_visit['visit_date'] or 'an undated visit'}]"
 
 
 def call_model(prompt, model, urlopen=local_urlopen):
@@ -231,7 +243,7 @@ def answer_meaning(question, collection, urlopen=local_urlopen, k=4):
         cited = metadatas
 
     citations = [
-        f"[source: {meta['source_path']}, visit date: {meta['visit_date']}, patient: {meta['patient_name']}]"
+        f"[source: {meta['patient_name']}, visit of {meta['visit_date'] or 'an undated visit'}]"
         for meta in cited
     ]
     return answer + " " + " ".join(citations)
@@ -338,7 +350,8 @@ def selftest():
         # 4. answer_exact behaviors
         answer = answer_exact(cf, "phone", conn)
         assert "333123456" in answer, "phone value missing from answer"
-        assert "n1.json" in answer, "citation source_path missing from answer"
+        # P23: the source is named for a person - the visit and its date - never the file path (it carries a codice fiscale)
+        assert "the visit of" in answer and "n1.json" not in answer, "the citation must name the visit, not the file"
 
         assert "not recorded" in answer_exact(cf2, "phone", conn)
         assert "no invoices" in answer_exact(cf2, "invoice", conn)
@@ -388,7 +401,7 @@ def selftest():
             "which patients had a root canal?", collection, urlopen=fake_urlopen
         )
         assert "root canal" in meaning_answer, "synthesized answer missing"
-        assert "n1.json" in meaning_answer, "citation source_path missing from meaning answer"
+        assert "n1.json" not in meaning_answer and "visit of" in meaning_answer, "the citation must name the visit, not the file"
         assert "2026-06-01" in meaning_answer, "citation visit_date missing from meaning answer"
         # the answer names rossi only - verdi's retrieved chunk must not be cited
         assert "verdi" not in meaning_answer, "cited a retrieved patient the answer does not name"

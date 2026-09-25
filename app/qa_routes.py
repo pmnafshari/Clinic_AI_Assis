@@ -45,7 +45,7 @@ def qa_page():
     if not authorize(g.user["role"], "read_notes"):
         log_audit(get_db(), g.user["username"], g.user["role"], "read_notes", None, allowed=0)
         return render_template(
-            "qa.html", error="You don't have permission to view clinical records."
+            "qa.html", refused=True, error="You don't have permission to view clinical records."
         )
 
     if request.method == "GET":
@@ -67,9 +67,11 @@ def qa_page():
         log_audit(get_db(), g.user["username"], g.user["role"], action, result["read"], allowed=1)
 
     if "candidates" in result:
-        return render_template(
-            "qa.html", question=question, candidates=result["candidates"], name=result["name"]
-        )
+        # the pick shows the name beside the code: a bare codice fiscale is not something to choose from (P23)
+        conn = get_db()
+        named = [(cf, (conn.execute("SELECT patient_name FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone() or ["?"])[0])
+                 for cf in result["candidates"]]
+        return render_template("qa.html", question=question, candidates=named, name=result["name"])
     if result["answer"] == "invalid codice fiscale":
         return render_template("qa.html", question=question, error=result["answer"])
     return render_template("qa.html", question=question, answer=result["answer"])
