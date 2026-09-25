@@ -1,59 +1,90 @@
 {% extends "base.html" %}
+{# billing overview. P23 follow-up (owner review): three grouped tables with the same columns - patient, invoice,
+   due, amount, status, action. the action is a link to the invoice on the patient's billing page, where the form and
+   its own gate live; a role that may not change an invoice is offered View, never a control that would refuse.
+   what counts as owed is unchanged: issued invoices with money outstanding. drafts and unknown are never owed. #}
+{% macro state_badge(s) %}
+  {% if s.state == 'draft' %}<span class="ux-badge ux-badge-draft">Draft</span>
+  {% elif s.state == 'unknown' %}<span class="ux-badge ux-badge-none">Unknown</span>
+  {% elif s.state == 'partially_paid' %}<span class="ux-badge ux-badge-requested">Part paid</span>
+  {% else %}<span class="ux-badge ux-badge-booked">Issued</span>{% endif %}
+{% endmacro %}
 {% block content %}
-<div class="ds-page-head">
+<div class="ds-page-head" data-ux="page-head">
   <div>
     <p class="ds-page-eyebrow">Billing</p>
     <h1 class="ds-page-title">Invoices and payments</h1>
     <p class="ds-page-meta">Payments recorded by staff · no money moves through this system</p>
   </div>
-</div>
+<!--/page-head--></div>
 
-<div class="ds-alert ds-alert-info mb-4" role="note">
-  <div>
-    <strong class="ds-alert-title">Demo clinic - synthetic data</strong>
-    Every payment here was typed in by a person after money changed hands elsewhere. There is no
-    payment provider and no fiscal invoice is issued. Invoices from before the ledger stay
-    <strong>unknown</strong> - never counted as owed - until someone reconciles them.
+<p class="ux-note" role="note"><i class="bi bi-info-circle" aria-hidden="true"></i>
+  <span><strong>Demo clinic, synthetic data.</strong> Payments are typed in after money changed hands elsewhere - there
+  is no payment provider and no fiscal invoice is issued. Invoices from before the ledger stay <strong>unknown</strong>,
+  never counted as owed, until someone reconciles them.</span></p>
+
+<div class="ux-kpis ux-kpis-3" data-ux="billing-totals">
+  <div class="ux-kpi ux-kpi-static">
+    <span class="ux-kpi-label">Still to pay (issued invoices)</span>
+    <span class="ux-kpi-value">{{ fmt(owed, 'en') }}</span>
+    <span class="ux-kpi-sub">{{ work.owed | length }} invoice{{ 's' if work.owed | length != 1 else '' }}</span>
   </div>
-</div>
-
-<div class="row g-3 mb-4">
-  <div class="col-sm-4"><section class="card dash-card"><div class="dash-card-body">
-    <p class="ds-card-sub mb-1">Still to pay (issued invoices)</p>
-    <p class="h4 mb-0 ds-numeral">{{ fmt(owed, 'en') }}</p>
-  </div></section></div>
-  <div class="col-sm-4"><section class="card dash-card"><div class="dash-card-body">
-    <p class="ds-card-sub mb-1">Recorded payments, net of refunds</p>
-    <p class="h4 mb-0 ds-numeral">{{ fmt(recorded, 'en') }}</p>
-  </div></section></div>
-  <div class="col-sm-4"><section class="card dash-card"><div class="dash-card-body">
-    <p class="ds-card-sub mb-1">Unknown status, to reconcile</p>
-    <p class="h4 mb-0 ds-numeral">{{ work.unknown | length }}</p>
-  </div></section></div>
-</div>
-
-{% for key, title, empty in [('owed', 'Owed, by due date', 'Nothing owed on issued invoices.'),
-                             ('unknown', 'Unknown status - reconcile', 'Nothing to reconcile.'),
-                             ('draft', 'Drafts - not yet issued', 'No drafts.')] %}
-<section class="card dash-card mb-3" aria-labelledby="bill-{{ key }}">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="bill-{{ key }}">{{ title }}</h2></div>
-  <div class="dash-card-body">
-    {% if work[key] %}
-    <ul class="ds-rows">
-      {% for s in work[key] %}
-      <li class="ds-row">
-        <span class="ds-row-main">
-          <a class="ds-row-title" href="{{ url_for('billing.patient', cf=s.cf) }}">{{ s.patient_name }}</a>
-          <span class="ds-row-sub">visit {{ s.visit_date or 'undated' }} · billed {{ fmt(s.total_cents, 'en') }}{% if key == 'owed' %} · due {{ s.due_date }}{% endif %}</span>
-        </span>
-        {% if key == 'owed' %}<span class="ds-numeral ms-auto">{{ fmt(s.outstanding_cents, 'en') }}</span>{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="dash-empty-line">{{ empty }}</p>
-    {% endif %}
+  <div class="ux-kpi ux-kpi-static">
+    <span class="ux-kpi-label">Recorded payments, net of refunds</span>
+    <span class="ux-kpi-value">{{ fmt(recorded, 'en') }}</span>
+    <span class="ux-kpi-sub">entered by staff</span>
   </div>
+  <div class="ux-kpi ux-kpi-static">
+    <span class="ux-kpi-label">Unknown status, to reconcile</span>
+    <span class="ux-kpi-value">{{ work.unknown | length }}</span>
+    <span class="ux-kpi-sub">not counted as owed</span>
+  </div>
+<!--/billing-totals--></div>
+
+{% for key, title, meta, empty in [
+     ('owed', 'Issued and outstanding', 'By due date. Only these are counted as owed.', 'Nothing owed on issued invoices.'),
+     ('unknown', 'Needs reconciliation', 'From before the ledger. Not counted as owed until reconciled.', 'Nothing to reconcile.'),
+     ('draft', 'Drafts', 'Not yet issued. Not counted as owed.', 'No drafts.')] %}
+<section class="card ux-card mb-3" aria-labelledby="bill-{{ key }}">
+  <div class="ux-card-head">
+    <div>
+      <h2 class="ux-card-title" id="bill-{{ key }}">{{ title }} <span class="ux-count">{{ work[key] | length }}</span></h2>
+      <p class="ux-card-meta">{{ meta }}</p>
+    </div>
+  </div>
+  <div data-ux="billing-{{ key }}">
+  {% if work[key] %}
+  <table class="ux-table ux-table-page ux-bill">
+    <caption class="visually-hidden">{{ title }}</caption>
+    <thead><tr>
+      <th scope="col">Patient</th><th scope="col">Invoice</th><th scope="col">Due</th>
+      <th scope="col" class="ux-num">Amount</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th>
+    </tr></thead>
+    <tbody>
+    {% for s in work[key] %}
+    {% set href = url_for('billing.patient', cf=s.cf) ~ '#invoice-' ~ s.id %}
+    <tr>
+      <td data-label="Patient"><strong>{{ s.patient_name }}</strong></td>
+      <td data-label="Invoice">#{{ s.id }} <span class="ux-muted">· visit {{ s.visit_date or 'undated' }}</span></td>
+      <td data-label="Due">{% if key == 'owed' and s.due_date %}{{ s.due_date }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>
+      <td data-label="Amount" class="ux-num">
+        {% if key == 'owed' %}<strong>{{ fmt(s.outstanding_cents, 'en') }}</strong> <span class="ux-muted">of {{ fmt(s.total_cents, 'en') }}</span>
+        {% else %}{{ fmt(s.total_cents, 'en') }}{% endif %}</td>
+      <td data-label="Status">{{ state_badge(s) }}</td>
+      <td data-label="Action">
+        {% if key == 'owed' and can_record %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Record payment for {{ s.patient_name }}, invoice #{{ s.id }}">Record payment</a>
+        {% elif key == 'unknown' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Reconcile {{ s.patient_name }}'s invoice #{{ s.id }}">Reconcile</a>
+        {% elif key == 'draft' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Issue {{ s.patient_name }}'s invoice #{{ s.id }}">Issue</a>
+        {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ href }}" aria-label="View {{ s.patient_name }}'s invoice #{{ s.id }}">View</a>{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="ux-empty">{{ empty }}</p>
+  {% endif %}
+  <!--/billing-{{ key }}--></div>
 </section>
 {% endfor %}
 {% endblock %}

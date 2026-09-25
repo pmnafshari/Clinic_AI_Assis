@@ -62,6 +62,9 @@ def create_app():
     app.config["SESSION_COOKIE_NAME"] = "staff_csrf"
     import phones
     app.jinja_env.filters["phone"] = phones.display      # P22: E.164, or says it is not a number
+    # P23 follow-up: a list shows the codice fiscale shortened (enough to tell two records apart);
+    # the record page, reached through the role's own gate, shows it whole
+    app.jinja_env.filters["cf_short"] = lambda cf: f"{cf[:4]}…{cf[-4:]}" if cf and len(cf) > 8 else (cf or "")
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024

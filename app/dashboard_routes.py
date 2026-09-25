@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from pathlib import Path
 
 from flask import Blueprint, g, redirect, render_template, url_for
@@ -67,6 +68,8 @@ def _agenda_view(rows, now):
         now_minutes = now.hour * 60 + now.minute
         view.append({
             "time": start.strftime("%H:%M"),
+            "end": f"{end_minutes // 60 % 24:02d}:{end_minutes % 60:02d}",
+            "cf": r["cf"],
             "patient_name": r["patient_name"],
             "initials": initials(r["patient_name"]),
             "tint": tint(r["patient_name"]),
@@ -89,6 +92,7 @@ def _request_view(rows, limit=5):
         "initials": initials(r["patient_name"]),
         "tint": tint(r["patient_name"]),
         "day": r["starts_at"][:10],
+        "cf": r["cf"],
         "period": r["period"],
         "reason": r["note"],
     } for r in rows[:limit]]
@@ -158,24 +162,37 @@ def index():
     callbacks = (conn.execute("SELECT COUNT(*) FROM handoff_requests WHERE status IN ('open', 'claimed')").fetchone()[0]
                  if authorize(role, "handle_handoff") else None)
 
+    # the review-and-alerts list: work other than requests, each linked to where it is done
+    alerts = []
+    if reviews:
+        alerts.append((f"{reviews} note{'s' if reviews != 1 else ''} awaiting a dentist", url_for("review.queue")))
+    if stock_low:
+        alerts.append((f"{stock_low} item{'s' if stock_low != 1 else ''} low on stock", url_for("stock.index")))
+    if callbacks:
+        alerts.append((f"{callbacks} call-back{'s' if callbacks != 1 else ''} open", url_for("handoff.index")))
     attention = []
     if pending:
         attention.append((f"{len(pending)} request{'s' if len(pending) != 1 else ''} to confirm", url_for("appointments.index") + "#requests"))
-    if reviews:
-        attention.append((f"{reviews} note{'s' if reviews != 1 else ''} awaiting a dentist", url_for("review.queue")))
-    if stock_low:
-        attention.append((f"{stock_low} item{'s' if stock_low != 1 else ''} low on stock", url_for("stock.index")))
-    if callbacks:
-        attention.append((f"{callbacks} call-back{'s' if callbacks != 1 else ''} open", url_for("handoff.index")))
+    attention += alerts
 
     kpis = []
     if may_book:
-        kpis.append(("Appointments today", len(agenda), "booked on the schedule", url_for("appointments.index", day=today)))
-        kpis.append(("Requests to confirm", len(pending), "not bookings yet", url_for("appointments.index") + "#requests"))
+        kpis.append(("Appointments today", len(agenda), "booked on the schedule", url_for("appointments.index", day=today), "bi-calendar3"))
+        kpis.append(("Requests to confirm", len(pending), "not bookings yet", url_for("appointments.index") + "#requests", "bi-inbox"))
     if reviews is not None:
-        kpis.append(("Notes to review", reviews, "a dentist confirms them", url_for("review.queue")))
+        kpis.append(("Notes to review", reviews, "a dentist confirms them", url_for("review.queue"), "bi-clipboard-check"))
     if stock_low is not None:
-        kpis.append(("Low stock", stock_low, "open stock alerts", url_for("stock.index")))
+        kpis.append(("Low stock", stock_low, "open stock alerts", url_for("stock.index"), "bi-box-seam"))
+
+    # a quiet day says so, and offers the next day that has bookings (a real link, not a filler row)
+    next_day = None
+    if may_book and not agenda:
+        lo, _ = clinic_time.day_bounds_utc((now.date() + timedelta(days=1)).isoformat())
+        row = conn.execute("SELECT starts_at FROM appointments WHERE status = ? AND starts_at >= ?"
+                           " ORDER BY starts_at LIMIT 1", (appointments.BOOKED, lo)).fetchone()
+        if row:
+            d = clinic_time.local_of(row["starts_at"]).date()
+            next_day = {"iso": d.isoformat(), "label": f"{d:%a} {d.day} {d:%b}"}
 
     show_intake = authorize(role, "upload_file")
     intake = _intake_counts(conn, g.user["username"]) if show_intake else None
@@ -184,7 +201,7 @@ def index():
         today_label=f"{now:%A} {now.day} {now:%B %Y}",
         may_book=may_book, agenda=agenda, requests=_request_view(pending) if pending else [],
         request_total=len(pending) if pending is not None else None,
-        attention=attention, kpis=kpis,
+        attention=attention, alerts=alerts, kpis=kpis, next_day=next_day,
         activity=_activity(conn, g.user["username"]) if authorize(role, "read_notes") else [],
         show_intake=show_intake, intake=intake,
     )

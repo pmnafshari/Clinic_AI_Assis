@@ -90,14 +90,16 @@ FOCUSED = "(i) => document.activeElement === document.querySelector('[data-a11y-
 
 # the staff chrome (menu toggle, sidebar links, sign out) must show the design-system ring,
 # not the browser's or Bootstrap's: a ring that is merely present can still be the wrong one.
-# sign out is the one danger control, so its ring is the danger ring
+# sign out is the one danger control, so its ring is the danger ring. the ring is read where the element sits:
+# a surface may define its own (P23 follow-up: light rings on the navy sidebar)
 CHROME_RING = """
 (i) => {
   const el = document.querySelector('[data-a11y-i="' + i + '"]');
   if (!el.matches('.app-topbar-toggle, .app-side-link, .app-side-sub, .app-signout')) return true;
   const probe = document.createElement('div');
   probe.style.boxShadow = el.matches('.app-signout') ? 'var(--ds-focus-ring-danger)' : 'var(--ds-focus-ring)';
-  document.body.appendChild(probe);
+  // beside the element, so it reads the ring its surface defines (the navy sidebar has a light one)
+  el.parentElement.appendChild(probe);
   const want = getComputedStyle(probe).boxShadow;
   probe.remove();
   return getComputedStyle(el).boxShadow === want;

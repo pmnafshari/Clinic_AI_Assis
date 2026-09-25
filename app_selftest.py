@@ -739,10 +739,10 @@ def selftest():
         # not fit a dentist's bar at 1440px. it is behind manage_data_requests,
         # which only a dentist holds, and an assistant must not gain it (20a).
         # P23: the sidebar replaces the tabs and the avatar menu. PROPERTY UNCHANGED - counted per role, so a stripped
-        # authorize() cannot hide behind a total: a dentist sees 13 links (ux_selftest pins the exact set per role),
+        # authorize() cannot hide behind a total: a dentist sees 14 links (13 pages plus the Requests entry, P23 follow-up) (ux_selftest pins the exact set per role),
         # and Change password and Sign out are in the sidebar foot, Sign out a POST form.
         side_links = re.findall(rb'class="app-side-link[^"]*" href="([^"]+)"', shell.data)
-        assert len(side_links) == 13, f"20: a dentist should see 13 sidebar links, got {len(side_links)}"
+        assert len(side_links) == 14, f"20: a dentist should see 14 sidebar links, got {len(side_links)}"
         assert b"/data-requests" in side_links, f"20: a dentist is offered Data requests: {side_links}"
         foot = shell.data.split(b'data-ux="account"', 1)[1]
         assert b"Change password" in foot and b'action="/logout"' in foot and b"Sign out" in foot, \
@@ -887,8 +887,13 @@ def selftest():
 
         adm_tbl = client_adm.get("/admin/users")
         pat_tbl = client_dent.get("/patients")
-        assert b"table-responsive" in pat_tbl.data, \
-            "21: the patients table must be wrapped so it scrolls inside its card"
+        # P23 follow-up (owner review): the patients table belongs to the page - no scroll box inside the card.
+        # it cannot overflow because below 768px every cell stacks under its label; that needs a label on every cell
+        pat_body = pat_tbl.data.split(b"<tbody", 1)[1].split(b"</tbody>", 1)[0]
+        assert b"table-responsive" not in pat_tbl.data and b"<td" in pat_body, \
+            "21: the patients table scrolls inside its card again"
+        assert pat_body.count(b"<td") == pat_body.count(b"<td data-label="), \
+            "21: a patients cell has no label to stack under on a phone"
         assert b"table-responsive" in adm_tbl.data, \
             "21: the staff-accounts table must be wrapped too"
 

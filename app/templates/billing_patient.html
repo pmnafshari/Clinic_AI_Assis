@@ -20,7 +20,7 @@
 </div>
 
 {% for inv in summary.invoices %}
-<section class="card dash-card mb-3" aria-labelledby="inv-{{ loop.index }}">
+<section class="card dash-card mb-3" id="invoice-{{ inv.id }}" aria-labelledby="inv-{{ loop.index }}">
   <div class="dash-card-head">
     <div>
       <h2 class="ds-card-title" id="inv-{{ loop.index }}">Visit {{ inv.visit_date or 'undated' }} · {{ inv.state | replace('_', ' ') }}</h2>

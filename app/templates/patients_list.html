@@ -1,7 +1,9 @@
 {% extends "base.html" %}
-{# P23 - patients: search and sort on the server, explicit missing values, the next BOOKING with its status, a waiting
-   request shown as a request. the codice fiscale is shown here because the roles that reach this page identify
-   patients by it; it is never shown in activity lists. #}
+{# P23 - patients: filter and sort on the server, explicit missing values, the next BOOKING with its status, a waiting
+   request shown as a request. follow-up (owner review): this page FILTERS the list; the top bar's lookup JUMPS to one
+   record - two jobs, two names. no page-level action (Add note belongs to a patient, on the record). one page-level
+   table, no inner scroll. the codice fiscale is shortened here and matched in full by the filter; the record shows
+   it whole. the phone stays: reception calls patients from this list. #}
 {% macro sort_link(key, label) %}
 <a href="{{ url_for('patients.list_view', sort=key, q=q or None) }}" {% if sort == key %}aria-sort="{{ 'descending' if key == 'last' else 'ascending' }}"{% endif %}>{{ label }}{% if sort == key %} <i class="bi bi-caret-{{ 'down' if key == 'last' else 'up' }}-fill" aria-hidden="true"></i>{% endif %}</a>
 {% endmacro %}
@@ -12,21 +14,20 @@
     <h1 class="ds-page-title">Patients</h1>
     <p class="ds-page-meta">{{ total }} on record{% if q %} · {{ patients | length }} matching "{{ q }}"{% endif %}</p>
   </div>
-  <a href="{{ url_for('notes.new_note') }}" class="btn btn-primary app-primary"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add note</a>
 <!--/page-head--></div>
 
 <section class="card ux-card">
-  <form class="ux-search-form" method="get" action="{{ url_for('patients.list_view') }}" role="search">
-    <label class="visually-hidden" for="patients-q">Search patients by name or codice fiscale</label>
-    <input type="search" id="patients-q" name="q" value="{{ q }}" class="form-control" placeholder="Name or codice fiscale">
+  <form class="ux-search-form" method="get" action="{{ url_for('patients.list_view') }}" aria-label="Filter this list">
+    <label class="form-label ux-filter-label" for="patients-q">Filter this list</label>
+    <input type="search" id="patients-q" name="q" value="{{ q }}" class="form-control" placeholder="Name or codice fiscale" aria-describedby="patients-q-help">
     <input type="hidden" name="sort" value="{{ sort }}">
-    <button type="submit" class="btn btn-outline-secondary">Search</button>
+    <button type="submit" class="btn btn-outline-secondary">Filter</button>
+    <span class="ux-muted" id="patients-q-help">Matches part of a name or a whole codice fiscale.</span>
     {% if q %}<a class="ux-link" href="{{ url_for('patients.list_view', sort=sort) }}">Clear</a>{% endif %}
   </form>
   <div data-ux="patient-rows">
   {% if patients %}
-  <div class="table-responsive">
-  <table class="ux-table">
+  <table class="ux-table ux-table-page">
     <caption class="visually-hidden">Patients, sorted by {{ {'name': 'name', 'next': 'next appointment', 'last': 'last visit'}[sort] }}</caption>
     <thead><tr>
       <th scope="col">{{ sort_link('name', 'Patient') }}</th>
@@ -42,7 +43,7 @@
       <td data-label="Patient"><span class="ds-avatar ds-avatar-sm {{ p.patient_name | tint }}" aria-hidden="true">{{ p.patient_name | initials }}</span>
         <strong>{{ p.patient_name }}</strong>
         {% if p.possible_duplicate %}<span class="ux-badge ux-badge-requested" title="The duplicate review lists this record; an admin merges or dismisses it">Possible duplicate</span>{% endif %}</td>
-      <td data-label="Codice fiscale"><span class="font-monospace">{{ p.codice_fiscale }}</span></td>
+      <td data-label="Codice fiscale"><span class="font-monospace" title="Shortened; the record shows it in full">{{ p.codice_fiscale | cf_short }}</span></td>
       <td data-label="Phone">{% if p.phone %}{{ p.phone | phone }}{% else %}<span class="ux-muted">No phone</span>{% endif %}</td>
       <td data-label="Next appointment">
         {% if p.next_appointment %}<span class="ux-badge ux-badge-booked">Booked</span> {{ p.next_appointment }}
@@ -54,7 +55,6 @@
     {% endfor %}
     </tbody>
   </table>
-  </div>
   {% elif q %}
   <p class="ux-empty">No patient matches "{{ q }}".</p>
   {% else %}

@@ -345,7 +345,7 @@ def decline(conn, appointment_id, reason=None):
 
 def pending_requests(conn):
     return conn.execute(
-        "SELECT a.*, p.patient_name FROM appointments a"
+        "SELECT a.*, p.patient_name, p.codice_fiscale AS cf FROM appointments a"
         " JOIN patients p ON p.patient_id = a.patient_id"
         " WHERE a.status = ? ORDER BY a.starts_at, a.created_at",
         (REQUESTED,),
@@ -381,7 +381,7 @@ def agenda(conn, day):
     # stored under the previous date and would vanish from its own day.
     lo, hi = clinic_time.day_bounds_utc(day)
     rows = conn.execute(
-        "SELECT a.*, p.patient_name FROM appointments a"
+        "SELECT a.*, p.patient_name, p.codice_fiscale AS cf FROM appointments a"
         " JOIN patients p ON p.patient_id = a.patient_id"
         " WHERE a.status = ? AND a.starts_at >= ? AND a.starts_at < ?"
         " ORDER BY a.starts_at",

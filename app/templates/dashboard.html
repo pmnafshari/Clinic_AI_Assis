@@ -1,6 +1,38 @@
 {% extends "base.html" %}
 {# P23 - Home: the work that waits first, then today's agenda, then plain-words activity.
-   every figure is a count of real rows the role may see; every tile links to where it is acted on. #}
+   every figure is a count of real rows the role may see; every tile links to where it is acted on.
+   follow-up (owner review): the concept's hierarchy - one attention line, compact KPIs, agenda beside the request
+   queue and the review list, then activity beside two quick actions. #}
+{% macro activity_card() %}
+  <section class="card ux-card ux-home-activity" aria-labelledby="activity-title">
+    <div class="ux-card-head"><h2 class="ux-card-title" id="activity-title">Your recent activity</h2></div>
+    <div data-ux="activity">
+    {% if activity %}
+    <ul class="ux-list ux-activity-list">
+      {% for item in activity[:5] %}
+      <li class="ux-activity">
+        <span><strong>{{ item.text }}</strong> · {{ item.who }}</span>
+        <span class="ux-activity-end">
+          <span class="ux-muted">{{ item.when }}</span>
+          {% if item.undo %}
+          <form method="post" action="{{ url_for('agent.undo_change') }}" class="ux-inline-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">Undo change</button>
+          </form>
+          {% endif %}
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="ux-empty">Nothing yet. Notes you file and records you change appear here.</p>
+    {% endif %}
+    {% if show_intake and intake %}
+    <p class="ux-muted ux-intake">Your uploads: {{ intake.sorted }} filed · {{ intake.needs_review }} need review · {{ intake.not_searchable }} not searchable · {{ intake.rejected }} refused</p>
+    {% endif %}
+    <!--/activity--></div>
+  </section>
+{% endmacro %}
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
@@ -17,7 +49,7 @@
 
 <section class="ux-attention{{ ' ux-attention-quiet' if not attention else '' }}" data-ux="attention" aria-label="Needs attention">
   {% if attention %}
-  <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+  <span class="ux-attention-mark" aria-hidden="true">!</span>
   <strong>Needs attention</strong>
   <ul class="ux-attention-list">
     {% for text, href in attention %}<li><a href="{{ href }}">{{ text }}</a></li>{% endfor %}
@@ -29,9 +61,9 @@
 
 {% if kpis %}
 <div class="ux-kpis" role="list">
-  {% for label, value, sub, href in kpis %}
+  {% for label, value, sub, href, icon in kpis %}
   <a class="ux-kpi" role="listitem" href="{{ href }}">
-    <span class="ux-kpi-label">{{ label }}</span>
+    <span class="ux-kpi-top"><span class="ux-kpi-icon" aria-hidden="true"><i class="bi {{ icon }}"></i></span><span class="ux-kpi-label">{{ label }}</span></span>
     <span class="ux-kpi-value">{{ value }}</span>
     <span class="ux-kpi-sub">{{ sub }}</span>
   </a>
@@ -39,9 +71,10 @@
 </div>
 {% endif %}
 
-<div class="ux-grid">
+<div class="ux-home">
+  <div class="ux-home-main">
   {% if may_book %}
-  <section class="card ux-card ux-span-2" aria-labelledby="agenda-title">
+  <section class="card ux-card ux-home-agenda" aria-labelledby="agenda-title">
     <div class="ux-card-head">
       <div>
         <h2 class="ux-card-title" id="agenda-title">Today's agenda</h2>
@@ -51,79 +84,75 @@
     </div>
     <div data-ux="agenda">
     {% if agenda %}
-    <table class="ux-table">
-      <thead><tr><th scope="col">Time</th><th scope="col">Patient</th><th scope="col">Clinician</th><th scope="col">Status</th></tr></thead>
+    <table class="ux-table ux-agenda">
+      <caption class="visually-hidden">Today's booked appointments</caption>
+      <thead><tr><th scope="col">Time</th><th scope="col">Patient</th><th scope="col">Clinician</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Record</span></th></tr></thead>
       <tbody>
       {% for row in agenda %}
       <tr class="{{ 'ux-row-past' if row.is_past else '' }}{{ ' ux-row-now' if row.is_current else '' }}">
-        <td data-label="Time"><strong>{{ row.time }}</strong> <span class="ux-muted">{{ row.minutes }} min</span></td>
-        <td data-label="Patient"><span class="ds-avatar ds-avatar-sm {{ row.tint }}" aria-hidden="true">{{ row.initials }}</span> {{ row.patient_name }}</td>
+        <td data-label="Time"><strong class="ux-time">{{ row.time }}</strong><span class="ux-muted ux-time-end">{{ row.end }}</span></td>
+        <td data-label="Patient"><span class="ds-avatar ds-avatar-sm {{ row.tint }}" aria-hidden="true">{{ row.initials }}</span> <strong>{{ row.patient_name }}</strong></td>
         <td data-label="Clinician">{{ row.dentist }}</td>
         <td data-label="Status"><span class="ux-badge ux-badge-booked">{{ 'Now' if row.is_current else ('Done' if row.is_past else 'Booked') }}</span></td>
+        <td data-label="Record"><a class="ux-link" href="{{ url_for('patients.detail_view', cf=row.cf) }}" aria-label="Open {{ row.patient_name }}'s record ({{ row.time }})">Open <i class="bi bi-chevron-right" aria-hidden="true"></i></a></td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <p class="ux-empty">Nothing booked today.</p>
+    <div class="ux-empty-block">
+      <p class="ux-empty">Nothing booked today.</p>
+      {% if next_day %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=next_day.iso) }}">Next booked day: {{ next_day.label }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>{% endif %}
+    </div>
     {% endif %}
     <!--/agenda--></div>
   </section>
+  {% endif %}
+  {{ activity_card() }}
+  </div>
 
-  <section class="card ux-card" aria-labelledby="requests-title">
-    <div class="ux-card-head">
-      <div>
-        <h2 class="ux-card-title" id="requests-title">Requests to confirm</h2>
-        <p class="ux-card-meta">Requests are not bookings</p>
+  <div class="ux-home-side">
+  {% if may_book %}
+    <section class="card ux-card" aria-labelledby="requests-title">
+      <div class="ux-card-head">
+        <div>
+          <h2 class="ux-card-title" id="requests-title">Requests to confirm</h2>
+          <p class="ux-card-meta">Requests are not bookings</p>
+        </div>
+        {% if request_total %}<span class="ux-badge ux-badge-requested">{{ request_total }} waiting</span>{% endif %}
       </div>
-    </div>
-    {% if requests %}
-    <ul class="ux-list">
-      {% for r in requests %}
-      <li><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred {{ r.day }} · {{ r.period }}</span></li>
-      {% endfor %}
-    </ul>
-    <a class="ux-link" href="{{ url_for('appointments.index') }}#requests">Review requests <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
-    {% else %}
-    <p class="ux-empty">No requests waiting.</p>
-    {% endif %}
-  </section>
+      {% if requests %}
+      <ul class="ux-list">
+        {% for r in requests %}
+        <li><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred {{ r.day }} · {{ r.period }}</span></li>
+        {% endfor %}
+      </ul>
+      <a class="ux-link" href="{{ url_for('appointments.index') }}#requests">Review requests <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      {% else %}
+      <p class="ux-empty">No requests waiting.</p>
+      {% endif %}
+    </section>
+
+    <section class="card ux-card" aria-labelledby="alerts-title">
+      <div class="ux-card-head"><h2 class="ux-card-title" id="alerts-title">Review and alerts</h2></div>
+      <div data-ux="alerts">
+      {% if alerts %}
+      <ol class="ux-alerts">
+        {% for text, href in alerts %}<li><a href="{{ href }}">{{ text }}</a></li>{% endfor %}
+      </ol>
+      {% else %}
+      <p class="ux-empty">Nothing to review.</p>
+      {% endif %}
+      <!--/alerts--></div>
+    </section>
   {% endif %}
 
-  <section class="card ux-card ux-span-2" aria-labelledby="activity-title">
-    <div class="ux-card-head"><h2 class="ux-card-title" id="activity-title">Your recent activity</h2></div>
-    <div data-ux="activity">
-    {% if activity %}
-    <ul class="ux-list">
-      {% for item in activity %}
-      <li class="ux-activity">
-        <span><strong>{{ item.text }}</strong> · {{ item.who }}</span>
-        <span class="ux-muted">{{ item.when }}</span>
-        {% if item.undo %}
-        <form method="post" action="{{ url_for('agent.undo_change') }}" class="ux-inline-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button type="submit" class="btn btn-outline-secondary btn-sm">Undo change</button>
-        </form>
-        {% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p class="ux-empty">Nothing yet. Notes you file and records you change appear here.</p>
-    {% endif %}
-    {% if show_intake and intake %}
-    <p class="ux-muted ux-intake">Your uploads: {{ intake.sorted }} filed · {{ intake.needs_review }} need review · {{ intake.not_searchable }} not searchable · {{ intake.rejected }} refused</p>
-    {% endif %}
-    <!--/activity--></div>
-  </section>
-
-  <section class="card ux-card" aria-labelledby="quick-title">
+  <section class="card ux-card ux-home-quick" aria-labelledby="quick-title">
     <div class="ux-card-head"><h2 class="ux-card-title" id="quick-title">Quick actions</h2></div>
-    <ul class="ux-quick">
-      <li><a class="btn btn-outline-primary" href="{{ url_for('notes.new_note') }}"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add a note</a></li>
-      <li><a class="btn btn-outline-secondary" href="{{ url_for('patients.list_view') }}"><i class="bi bi-search" aria-hidden="true"></i> Find a patient</a></li>
-      <li><a class="btn btn-outline-secondary" href="{{ url_for('qa.qa_page') }}"><i class="bi bi-chat-square-text" aria-hidden="true"></i> Ask the records</a></li>
-    </ul>
+    <div class="ux-quick">
+      <a class="ux-quick-item ux-quick-main" href="{{ url_for('notes.new_note') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a note</a>
+      <a class="ux-quick-item" href="{{ url_for('patients.list_view') }}">Search patient records <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+    </div>
     {% if show_intake %}
     <details class="ux-upload">
       <summary>Upload files</summary>
@@ -132,5 +161,6 @@
     </details>
     {% endif %}
   </section>
+  </div>
 </div>
 {% endblock %}

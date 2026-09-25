@@ -1053,3 +1053,199 @@ strong {
 .appt-cal-booked[data-n]::before { content: attr(data-n); }
 /* a slot sits on the info surface; the default outline blue is 4.47:1 there */
 .ux-slot .btn-outline-primary { color: var(--ds-primary-active); border-color: var(--ds-primary-active); }
+
+/* ===================================================================== */
+/* P23 follow-up (owner visual review, 2026-09-25): the concept's palette */
+/* and density. dark navy sidebar, white top bar, light ground, one       */
+/* restrained blue for actions, 14px cards. contrast measured: sidebar    */
+/* text #d5deec 12.0:1 and group labels #a9b8d0 8.1:1 on #142036; white   */
+/* on the active #294781 9.1:1; #2453d4 on white 6.4:1. sign out keeps    */
+/* its dark red (#a4161a) on a white chip, 7.75:1 - dark red directly on  */
+/* navy would be 2.1:1. the focus rings inside the sidebar are light,     */
+/* because the blue ring does not show on navy.                           */
+/* ===================================================================== */
+:root {
+  --ds-primary: #2453d4;
+  --ds-primary-hover: #1d44b3;
+  --ds-primary-active: #1a3a9a;
+  --bs-primary: #2453d4;
+  --bs-primary-rgb: 36, 83, 212;
+  --app-accent-hover: #1d44b3;
+  --app-accent-active: #1a3a9a;
+  --ds-ground: #f6f8fc;
+  --bs-body-bg: #f6f8fc;
+  --app-ground: #f6f8fc;
+  --ds-border: #d9e1ec;
+  --app-border: #d9e1ec;
+  --bs-border-color: #d9e1ec;
+  --ds-radius-lg: 14px;
+  --app-card-radius: 14px;
+  --app-card-shadow: none;
+  --ds-focus-ring: 0 0 0 3px rgba(36, 83, 212, 0.32);
+  --app-navy: #142036;
+  --app-navy-active: #294781;
+  --app-navy-text: #d5deec;
+  --app-navy-muted: #a9b8d0;
+}
+.app-shell { background: var(--ds-ground); }
+/* the sidebar */
+.app-side, .app-side.offcanvas-lg { background: var(--app-navy); color: var(--app-navy-text); border-right: 0;
+  --bs-offcanvas-bg: var(--app-navy); --bs-offcanvas-color: var(--app-navy-text);
+  --ds-focus-ring: 0 0 0 3px #8db0ff; --ds-focus-ring-danger: 0 0 0 3px #ffb0b0; }
+.app-side .app-brand, .app-side .app-brand-name { color: #fff; }
+.app-side .app-brand-sub { color: var(--app-navy-muted); }
+.app-side .btn-close { filter: invert(1) grayscale(100%) brightness(200%); }
+.app-side-head { padding: 1.25rem 1.25rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+.app-side-nav { padding: 0.5rem 0.875rem 1rem; }
+.app-side-group { margin: 1.125rem 0.5rem 0.5rem; color: var(--app-navy-muted); }
+.app-side-link { padding: 0.625rem 0.75rem; margin: 2px 0; border-radius: 10px; color: var(--app-navy-text); font-size: 0.9375rem; }
+.app-side-link i { color: var(--app-navy-muted); }
+.app-side-link:hover { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.app-side-link:hover i { color: #fff; }
+.app-side-link.active { background: var(--app-navy-active); color: #fff; font-weight: 600; }
+.app-side-link.active i { color: #fff; }
+.app-side-count { background: #fde7b0; color: #3b2a00; }
+.app-side-foot { border-top: 1px solid rgba(255, 255, 255, 0.1); padding: 1rem 1.25rem 1.25rem; }
+.app-side .app-user-name { color: #fff; }
+.app-side .app-user-role { color: var(--app-navy-muted); }
+.app-side-sub { color: var(--app-navy-text); }
+.app-side-sub:hover, .app-side-sub.active { background: rgba(255, 255, 255, 0.07); color: #fff; }
+.app-signout-form { border-top: 0; padding-top: 0.25rem; }
+.app-signout { justify-content: flex-start; padding: 0.5rem 0.75rem; border-radius: 10px; background: #fff; color: var(--app-signout); }
+.app-signout:hover { background: #fdecec; color: var(--app-signout-hover); }
+/* the top bar and page head */
+.app-main .app-topbar { background: #fff; border-bottom: 1px solid var(--ds-border); }
+.app-main .app-topbar-inner { height: 4rem; }
+.app-main .app-search input { height: 2.625rem; border-radius: 12px; background: #f6f8fc; border-color: var(--ds-border); }
+.ds-page-head { border-bottom: 0; padding-bottom: 1.25rem; align-items: center; }
+.ds-page-eyebrow { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #4a5b73; }
+.ds-page-title { font-size: 2rem; font-weight: 700; letter-spacing: -0.01em; }
+.app-primary { padding: 0.625rem 1.125rem; border-radius: 12px; font-weight: 600; }
+/* surfaces */
+.card, .ux-card, .ux-kpi, .ux-toolbar, .ux-steps { border-color: var(--ds-border); border-radius: 14px; box-shadow: none; }
+.ux-card { padding: 1.25rem 1.375rem; }
+.ux-card-title { font-size: 1.125rem; }
+.ux-count { display: inline-block; min-width: 1.5rem; margin-left: 0.25rem; padding: 0 0.4rem; border-radius: 999px; background: var(--ds-surface-sunken); color: var(--ds-text-muted); font-size: 0.75rem; font-weight: 700; text-align: center; vertical-align: middle; }
+.ds-numeral { font-family: var(--ds-font); font-style: normal; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* home: attention line, compact KPIs, the two-column body */
+.ux-attention { padding: 0.75rem 1.125rem; border-color: #f0d58c; background: #fff8e6; border-radius: 14px; }
+.ux-attention-mark { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; background: #f2c14e; color: #3b2a00; font-weight: 800; font-size: 0.875rem; }
+.ux-attention-list a { color: #5c3d00; font-weight: 600; text-decoration: none; }
+.ux-attention-list a:hover { text-decoration: underline; }
+.ux-attention-list li + li::before { content: "·"; margin-right: 1.25rem; margin-left: -0.75rem; color: #8a6a1f; }
+.ux-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+.ux-kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1199.98px) { .ux-kpis, .ux-kpis-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 575.98px) { .ux-kpis, .ux-kpis-3 { grid-template-columns: minmax(0, 1fr); } }
+.ux-kpi { padding: 0.875rem 1rem; gap: 0.25rem; }
+.ux-kpi-top { display: flex; align-items: center; gap: 0.5rem; }
+.ux-kpi-icon { display: inline-grid; place-items: center; width: 1.625rem; height: 1.625rem; border-radius: 8px; background: var(--app-navy-active); color: #fff; font-size: 0.8125rem; }
+.ux-kpi-label { color: #334155; }
+.ux-kpi-value { font-size: 1.5rem; line-height: 1.15; }
+.ux-kpi-static { cursor: default; }
+.ux-kpi-static:hover { border-color: var(--ds-border); }
+.ux-home { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.ux-home-side { display: flex; flex-direction: column; gap: 1rem; }
+.ux-home > .ux-card { margin: 0; }
+@media (max-width: 1199.98px) { .ux-home { grid-template-columns: minmax(0, 1fr); } }
+.ux-agenda td { padding-top: 0.75rem; padding-bottom: 0.75rem; }
+.ux-time { display: block; font-size: 0.9375rem; }
+.ux-time-end { display: block; font-size: 0.75rem; }
+.ux-empty-block { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.75rem 1rem; border-radius: 10px; background: var(--ds-surface-sunken); }
+.ux-empty-block .ux-empty { margin: 0; }
+.ux-alerts { margin: 0; padding: 0; list-style: none; counter-reset: alert; }
+.ux-alerts li { counter-increment: alert; display: flex; gap: 0.75rem; padding: 0.625rem 0; border-bottom: 1px solid var(--ds-border); }
+.ux-alerts li:last-child { border-bottom: 0; }
+.ux-alerts li::before { content: counter(alert); min-width: 1rem; color: var(--ds-text-muted); font-weight: 600; }
+.ux-alerts a { color: var(--ds-text); text-decoration: none; font-weight: 500; }
+.ux-alerts a:hover { color: var(--ds-primary-active); text-decoration: underline; }
+.ux-alerts a:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 4px; }
+.ux-attention-list a:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 4px; }
+.ux-activity-list > li { padding: 0.5rem 0; }
+.ux-activity-end { display: inline-flex; align-items: center; gap: 0.75rem; }
+.ux-quick { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 0.625rem; margin: 0 0 0.75rem; }
+@media (max-width: 575.98px) { .ux-quick { grid-template-columns: minmax(0, 1fr); } }
+.ux-quick-item { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem; border: 1px solid var(--ds-border); border-radius: 12px; background: #f6f8fc; color: var(--ds-text); font-weight: 600; font-size: 0.9375rem; text-decoration: none; }
+.ux-quick-main { justify-content: flex-start; background: #eaf0fd; border-color: #cddaf8; color: var(--ds-primary-active); }
+.ux-quick-item:hover { border-color: var(--ds-primary); color: var(--ds-primary-active); }
+.ux-quick-item:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+/* tables that belong to the page: no inner scroll box, numbers right-aligned */
+.ux-table-page { table-layout: auto; }
+.ux-table .ux-num { text-align: right; white-space: nowrap; }
+.ux-table th.ux-num { text-align: right; }
+.ux-table tbody tr:hover td { background: #f9fbfe; }
+.ux-bill td:last-child { text-align: right; white-space: nowrap; }
+@media (max-width: 767.98px) { .ux-table .ux-num, .ux-bill td:last-child { text-align: right; } }
+/* patients: the list filter is labelled, the lookup in the top bar is a different job */
+.ux-filter-label { margin: 0; font-weight: 600; font-size: 0.875rem; }
+.ux-search-form { margin-bottom: 1rem; }
+/* billing: the demo note stays visible and short */
+.ux-note { display: flex; gap: 0.625rem; align-items: flex-start; margin: 0 0 1rem; padding: 0.75rem 1rem; border: 1px solid #c9d8f5; border-radius: 12px; background: #eef3fd; color: #1f2f4d; font-size: 0.875rem; }
+.ux-note > i { color: var(--ds-primary-active); margin-top: 0.125rem; }
+/* appointments: the concept's schedule card and filter bar */
+.ux-toolbar { padding: 0.75rem 1rem; }
+.ux-tabs { background: #eef2f8; }
+.ux-slot { border-radius: 8px; border-left-width: 4px; background: #eaf0fd; border-left-color: var(--ds-primary); }
+/* bootstrap sets .offcanvas-lg transparent !important at >= 992px; the sidebar is navy at every width */
+.app-side.offcanvas-lg { background-color: var(--app-navy) !important; }
+/* the three billing tables share one column grid, so amounts and statuses line up down the page */
+@media (min-width: 768px) {
+  .ux-bill { table-layout: fixed; }
+  .ux-bill th:nth-child(1) { width: 22%; } .ux-bill th:nth-child(2) { width: 22%; } .ux-bill th:nth-child(3) { width: 13%; }
+  .ux-bill th:nth-child(4) { width: 17%; } .ux-bill th:nth-child(5) { width: 12%; padding-left: 1.25rem; }
+  .ux-bill td:nth-child(5) { padding-left: 1.25rem; } .ux-bill th:nth-child(6) { width: 14%; }
+}
+.ds-page-head { margin-bottom: 0.25rem; padding-bottom: 1rem; }
+/* phones: a stacked cell keeps its own content together (label in a left gutter, content flowing beside it) */
+@media (max-width: 767.98px) {
+  .ux-table td { display: block; position: relative; padding: 0.3125rem 0 0.3125rem 7.5rem; text-align: left; min-height: 1.75rem; }
+  .ux-table td::before { position: absolute; left: 0; top: 0.3125rem; width: 7rem; }
+  .ux-table .ux-num, .ux-bill td:last-child { text-align: left; }
+  .ux-time, .ux-time-end { display: inline; }
+  .ux-time-end::before { content: " - "; }
+  .ux-attention-list { flex-direction: column; }
+  .ux-attention-list li + li::before { content: none; }
+}
+@media (max-width: 575.98px) {
+  .ux-kpis, .ux-kpis-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+  .ux-kpi { padding: 0.75rem; }
+  .ux-kpi-sub { display: none; }
+}
+/* the tints are translucent and read dark over navy: the account avatar gets its own opaque surface */
+.app-side .ds-avatar { background: #e8eefb; color: #142036; }
+/* page-level tables between a phone and a wide screen: cells wrap instead of widening the page */
+@media (min-width: 768px) and (max-width: 1279.98px) {
+  .ux-table-page th, .ux-table-page td { padding-left: 0.375rem; padding-right: 0.375rem; }
+  .ux-table-page th { white-space: normal; }
+  .ux-table-page .ux-badge { white-space: normal; }
+  .ux-table-page .ds-avatar { display: none; }
+}
+/* phones: the label floats in the gutter and the cell clears it, so a two-line label grows its row instead of
+   overlapping the next one */
+@media (max-width: 767.98px) {
+  .ux-table td::before { position: static; float: left; width: 7rem; margin-left: -7.5rem; }
+  .ux-table td::after { content: ""; display: table; clear: both; }
+}
+/* plain links on the older pages take the staff blue, not bootstrap's default */
+:root { --bs-link-color: #1a3a9a; --bs-link-color-rgb: 26, 58, 154; --bs-link-hover-color: #142036; --bs-link-hover-color-rgb: 20, 32, 54; }
+.ds-alert { border-radius: 12px; }
+@media (max-width: 767.98px) { .ux-table .ux-badge { white-space: normal; } .ux-table { table-layout: fixed; } }
+/* home: two independent columns, so a short agenda leaves no hole above the activity card.
+   below 1200px the columns dissolve and the cards take the concept's reading order */
+.ux-home-main, .ux-home-side { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+@media (max-width: 1199.98px) {
+  .ux-home { display: flex; flex-direction: column; }
+  .ux-home-main, .ux-home-side { display: contents; }
+  .ux-home-agenda { order: 1; } .ux-home-side > section:not(.ux-home-quick) { order: 2; }
+  .ux-home-activity { order: 3; } .ux-home-quick { order: 4; }
+}
+/* however many KPIs a role has, they fill the row */
+.ux-kpis { grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+@media (max-width: 575.98px) { .ux-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* the sidebar column stays navy the full height of a long page (the sidebar itself is sticky, 100vh) */
+@media (min-width: 992px) {
+  .app-shell { background: linear-gradient(to right, var(--app-navy) var(--app-side-w), var(--ds-ground) var(--app-side-w)); }
+}
+@media (max-width: 1199.98px) { .ux-home { align-items: stretch; } }
+.ux-kpis { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
+@media (max-width: 575.98px) { .ux-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

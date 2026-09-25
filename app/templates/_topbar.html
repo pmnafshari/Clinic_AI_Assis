@@ -1,4 +1,5 @@
-{# P23 - a compact top bar: the menu button below lg, and patient search for roles that may look anyone up.
+{# P23 - a compact top bar: the menu button below lg, and a record lookup (jump to one patient) for roles that may
+   look anyone up - not a list filter and not a global search; its results are links to records.
    the account, change password and sign out live in the sidebar foot; the page's one primary action lives in its head. #}
 <header class="app-topbar">
   <div class="app-topbar-inner">
@@ -13,8 +14,8 @@
     {% if authorize(g.user.role, 'read_notes') %}
     <div class="app-search" role="search">
       <i class="bi bi-search" aria-hidden="true"></i>
-      <input type="search" name="q" class="form-control" placeholder="Search patients by name or codice fiscale"
-             aria-label="Search patients" autocomplete="off"
+      <input type="search" name="q" class="form-control" placeholder="Go to a patient record…"
+             aria-label="Go to a patient record" autocomplete="off"
              hx-get="{{ url_for('patients.search_fragment') }}"
              hx-trigger="keyup changed delay:300ms, search" hx-target="#app-search-results">
       <div id="app-search-results" class="app-search-results"></div>

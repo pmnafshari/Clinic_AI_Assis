@@ -12,7 +12,9 @@ from auth import authorize
 # (group, label, endpoint, path, icon, gate or None, count key or None, active prefix)
 ITEMS = [
     ("Workspace", "Home", "dashboard.index", "/", "bi-house", "read_notes", None, "dashboard."),
-    ("Workspace", "Appointments", "appointments.index", "/appointments", "bi-calendar3", "manage_appointments", "requests", "appointments."),
+    ("Workspace", "Appointments", "appointments.index", "/appointments", "bi-calendar3", "manage_appointments", None, "appointments."),
+    # the waiting requests get their own entry (P23 follow-up): a count on Appointments read as appointments
+    ("Workspace", "Requests", "appointments.index", "/appointments#requests", "bi-inbox", "manage_appointments", "requests", "-"),
     ("Workspace", "Patients", "patients.list_view", "/patients", "bi-people", "read_notes", None, "patients.list_view|patients.detail_view|patients.search|patients.edit|patients.visit|patients.files|patients.issue|patients.revoke|patients.consent|documents.|summary.|similar."),
     ("Workspace", "Notes to review", "review.queue", "/reviews", "bi-clipboard-check", "review_upload", "reviews", "review."),
     ("Workspace", "Ask records", "qa.qa_page", "/qa", "bi-chat-square-text", "read_notes", None, "qa."),
@@ -27,6 +29,10 @@ ITEMS = [
     ("Admin", "Staff accounts", "admin.users_view", "/admin/users", "bi-person-gear", "manage_users", None, "admin."),
     ("Admin", "Duplicates", "patients.duplicates_view", "/patients/duplicates", "bi-people-fill", "manage_users", None, "patients.duplicates"),
 ]
+
+
+# what a count counts, for its accessible name: (one, many)
+COUNT_NOUNS = {"requests": ("pending request", "pending requests"), "reviews": ("note to review", "notes to review")}
 
 
 def _counts(conn, role):
@@ -53,8 +59,9 @@ def sidebar():
         if gate and not authorize(role, gate):
             continue
         active = any(endpoint.startswith(p) for p in prefixes.split("|"))
-        item = {"label": label, "path": path, "icon": icon, "active": active,
-                "count": counts.get(count_key) if count_key else None}
+        count = counts.get(count_key) if count_key else None
+        item = {"label": label, "path": path, "icon": icon, "active": active, "count": count,
+                "count_label": f"{count} {COUNT_NOUNS[count_key][count != 1]}" if count else None}
         if not groups or groups[-1][0] != group:
             groups.append((group, []))
         groups[-1][1].append(item)

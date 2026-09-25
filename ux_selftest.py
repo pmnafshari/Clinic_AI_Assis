@@ -209,6 +209,82 @@ def selftest():
             assert "Recall, as written in the note" in src and not re.search(r">\s*Next appointment[^<]*</label>", src), \
                 f"8: {tpl} labels the recall as an appointment"
 
+        # 10. P23 follow-up (owner visual review): the shell, Home, Patients and Billing as behaviour.
+        # 10a. the sidebar count says what it counts - pending requests on their own entry, not on Appointments
+        nav = _section(dentist.get("/").get_data(as_text=True), "nav")
+        appt_link = re.search(r'<a[^>]*href="/appointments"[^>]*>.*?</a>', nav, re.S).group(0)
+        assert "app-side-count" not in appt_link, "10a: a count sits on Appointments, where it reads as appointments"
+        req_link = re.search(r'<a[^>]*href="/appointments#requests"[^>]*>.*?</a>', nav, re.S)
+        assert req_link and "Requests" in req_link.group(0) and ', 1 pending request</span>' in req_link.group(0), \
+            f"10a: no labelled Requests entry: {req_link and req_link.group(0)}"
+        # 10b. home: every agenda row opens the patient's record; alerts sit apart; the quiet day offers the next booked day
+        home = dentist.get("/").get_data(as_text=True)
+        agenda = _section(home, "agenda")
+        assert agenda.count('href="/patients/ZZUA800101010101"') == 1 and ">Open" in agenda, "10b: agenda rows have no Open"
+        assert 'data-ux="alerts"' in home and 'class="ux-kpi-icon' in home, "10b: no alerts card or compact KPI"
+        real_now = clinic_time.now
+        clinic_time.now = lambda env=None: datetime(2031, 3, 4, 9, 0)        # a day with nothing booked
+        try:
+            quiet = _section(dentist.get("/").get_data(as_text=True), "agenda")
+        finally:
+            clinic_time.now = real_now
+        assert "Nothing booked today" in quiet and f"day={DAY}" in quiet and "5 Mar" in _text(quiet), \
+            f"10b: the quiet day does not offer the next booked day: {_text(quiet)}"
+        # 10c. patients: one list filter, one record lookup, differently named; no page action; no inner scroll;
+        # the codice fiscale shortened in the list and still searchable in full
+        pl = dentist.get("/patients").get_data(as_text=True)
+        assert len(re.findall(r'class="[^"]*\bapp-primary\b', _section(pl, "page-head"))) == 0, "10c: page-level Add note"
+        assert "Filter this list" in pl and 'aria-label="Go to a patient record"' in pl, "10c: two searches, one name"
+        assert "table-responsive" not in pl and "ux-scroll" not in pl, "10c: the table scrolls inside the page"
+        rows = _section(pl, "patient-rows")
+        assert "ZZUA800101010101" not in _text(rows) and "ZZUA…0101" in _text(rows), "10c: full codice fiscale in the list"
+        assert 'href="/patients/ZZUA800101010101"' in rows, "10c: the row no longer opens the record"
+        found = _section(dentist.get("/patients?q=ZZUB800101010102").get_data(as_text=True), "patient-rows")
+        assert "Bea Due" in found and "Anna Uno" not in found, "10c: a full codice fiscale no longer finds the patient"
+        # 10d. billing: three grouped tables, the same columns, amounts unchanged, actions only where the role may act
+        import ledger
+        def visit(pid, day, cents):
+            vid = conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                               " VALUES (?, ?, '[]', '', ?)", (pid, day, f"b/{pid}{day}")).lastrowid
+            conn.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                         " VALUES (?, ?, 0, ?, ?, 'visita')", (pid, vid, cents / 100, cents))
+            return vid
+        owed_id = ledger.ensure_invoice(conn, anna, visit(anna, "2031-02-10", 12000))
+        ledger.issue(conn, owed_id, "dentist", "dentist", "2031-03-20")
+        ledger.record_payment(conn, owed_id, "20,00", "cash", "k-ux-1", "dentist", "dentist", "2031-02-11")
+        unknown_id = ledger.ensure_invoice(conn, bea, visit(bea, "2031-01-15", 8000), legacy=True)
+        draft_id = ledger.ensure_invoice(conn, carlo, visit(carlo, "2031-02-20", 5000))
+        conn.commit()
+        bills = {}
+        for who, client in (("dentist", dentist), ("assistant", assistant)):
+            bills[who] = client.get("/billing").get_data(as_text=True)
+        for key, pid, inv in (("owed", anna, owed_id), ("unknown", bea, unknown_id), ("draft", carlo, draft_id)):
+            sec = _section(bills["dentist"], f"billing-{key}")
+            assert "<table" in sec and all(h in sec for h in (">Patient<", ">Invoice<", ">Due<", ">Amount<", ">Status<")), \
+                f"10d: {key} is not the shared table"
+            assert f"#{inv}" in _text(sec), f"10d: {key} row has no invoice reference"
+        owed = _text(_section(bills["dentist"], "billing-owed"))
+        assert "Anna Uno" in owed and "€100.00" in owed and "€120.00" in owed and "2031-03-20" in owed, f"10d: {owed}"
+        head = _text(_section(bills["dentist"], "billing-totals"))
+        assert "€100.00" in head and "€20.00" in head, f"10d: drafts or unknowns counted as owed: {head}"
+        assert "Bea Due" not in owed and "Carlo Tre" not in owed, "10d: an unknown or draft invoice listed as owed"
+        assert ">Issue<" in _section(bills["dentist"], "billing-draft") and ">Reconcile<" in _section(bills["dentist"], "billing-unknown")
+        for key in ("draft", "unknown"):
+            sec = _section(bills["assistant"], f"billing-{key}")
+            assert ">Issue<" not in sec and ">Reconcile<" not in sec and ">View<" in sec, f"10d: assistant offered a {key} action"
+        assert ">Record payment<" in _section(bills["assistant"], "billing-owed"), "10d: reception cannot reach record payment"
+        assert f'href="/patients/ZZUA800101010101/billing#invoice-{owed_id}"' in bills["assistant"], "10d: action goes nowhere"
+        detail = dentist.get("/patients/ZZUA800101010101/billing").get_data(as_text=True)
+        assert f'id="invoice-{owed_id}"' in detail, "10d: the action's anchor is missing on the patient page"
+        assert "no fiscal invoice" in _text(bills["assistant"]), "10d: the demo/manual-payment explanation is gone"
+        # 10e. the staff palette the owner specified
+        css = (Path(__file__).parent / "app" / "static" / "css" / "app.css").read_text().lower()
+        for decl in ("--app-navy: #142036;", "--app-navy-active: #294781;", "--ds-ground: #f6f8fc;",
+                     "--ds-primary: #2453d4;", "--ds-border: #d9e1ec;",
+                     ".app-side.offcanvas-lg { background-color: var(--app-navy) !important; }",
+                     ".app-side-link.active { background: var(--app-navy-active); color: #fff;"):
+            assert decl in css, f"10e: the staff palette lost {decl!r}"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

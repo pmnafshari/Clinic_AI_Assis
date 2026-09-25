@@ -53,7 +53,9 @@ def index():
         "SELECT COALESCE(SUM(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)"
         " FROM payments").fetchone()[0]
     return render_template("billing.html", work=work, fmt=ledger.fmt, recorded=recorded,
-                           owed=sum(s["outstanding_cents"] for s in work["owed"]))
+                           owed=sum(s["outstanding_cents"] for s in work["owed"]),
+                           can_change=authorize(g.user["role"], "manage_billing"),
+                           can_record=authorize(g.user["role"], "record_payment"))
 
 
 @billing_bp.route("/patients/<cf>/billing")
