@@ -1249,3 +1249,86 @@ strong {
 @media (max-width: 1199.98px) { .ux-home { align-items: stretch; } }
 .ux-kpis { grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); }
 @media (max-width: 575.98px) { .ux-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ===================================================================== */
+/* P23 correction 2 (owner's annotated assistant screens of fda69e4)      */
+/* ===================================================================== */
+.ux-eyebrow-note { font-weight: 600; letter-spacing: 0.04em; }
+/* quick actions: one per line, each label on one line */
+.ux-quick { grid-template-columns: minmax(0, 1fr); }
+.ux-quick-item { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* activity: the older group is labelled and quieter */
+.ux-act-group { padding: 0.75rem 0 0.25rem; border-bottom: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ds-text-muted); }
+.ux-activity-older strong { font-weight: 600; }
+.ux-activity-quiet { margin: 0 0 0.25rem; }
+/* the 14-day chart */
+.ux-home-chart .ux-bars { display: block; width: 100%; height: 9rem; }
+.ux-bar { fill: var(--ds-primary); }
+.ux-bar-n { font-size: 7px; font-weight: 700; fill: #0f172a; }
+.ux-bar-day { font-size: 6.5px; fill: #4a5b73; }
+.ux-bars-table { margin-top: 0.5rem; }
+.ux-bars-table summary { cursor: pointer; font-size: 0.875rem; font-weight: 600; color: var(--ds-primary-active); }
+.ux-bars-table summary:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 4px; }
+/* appointments: one control bar in every view */
+.ux-datenav .btn { white-space: nowrap; }
+/* week: seven columns you can scan; a day with nothing is a dash, not a sentence */
+.ux-wk { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.5rem; margin: 0; padding: 0; list-style: none; }
+.ux-wk-day { min-width: 0; padding: 0.5rem; border: 1px solid var(--ds-border); border-radius: 10px; background: #fbfcfe; }
+.ux-wk-today { border-color: var(--ds-primary); }
+.ux-wk-on { box-shadow: inset 0 0 0 1px var(--ds-primary); }
+.ux-wk-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.375rem; color: var(--ds-text); text-decoration: none; font-size: 0.8125rem; }
+.ux-wk-head:hover .ux-wk-name { text-decoration: underline; }
+.ux-wk-head:focus-visible, .ux-wk-appt:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 6px; }
+.ux-wk-name { font-weight: 700; }
+.ux-wk-date { color: var(--ds-text-muted); }
+.ux-wk-count { margin-left: auto; min-width: 1.375rem; padding: 0 0.375rem; border-radius: 999px; background: #eaf0fd; color: #1a3a9a; font-weight: 700; text-align: center; }
+.ux-wk-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.375rem; }
+.ux-wk-appt { display: block; padding: 0.375rem 0.5rem; border-left: 3px solid var(--ds-primary); border-radius: 6px; background: #eaf0fd; color: var(--ds-text); text-decoration: none; font-size: 0.8125rem; line-height: 1.3; }
+.ux-wk-appt:hover { background: #dde7fc; }
+.ux-wk-cancelled { border-left-color: var(--ds-border-strong); background: var(--ds-neutral-surface); }
+.ux-wk-time { font-weight: 700; }
+.ux-wk-who { display: block; overflow-wrap: anywhere; }
+.ux-wk-doc { display: block; color: #4a5b73; font-size: 0.75rem; }
+.ux-wk-none { display: block; margin-top: 0.5rem; color: var(--ds-text-muted); }
+@media (max-width: 991.98px) {
+  .ux-wk { grid-template-columns: minmax(0, 1fr); }
+  .ux-wk-day { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 0.5rem; align-items: start; }
+  .ux-wk-list, .ux-wk-none { margin-top: 0; }
+}
+[data-ux="week"] > .ux-empty-block { margin-bottom: 0.75rem; }
+/* month: the count is written out; a request is a separate, differently worded mark */
+.appt-cal-count { display: inline-block; margin-top: 0.125rem; padding: 0 0.3125rem; border-radius: 999px; background: #eaf0fd; color: #1a3a9a; font-size: 0.6875rem; font-weight: 700; white-space: nowrap; }
+.appt-cal-reqtext { display: inline-block; margin-top: 0.125rem; padding: 0 0.3125rem; border-radius: 999px; background: #fff8e6; color: #5c3d00; border: 1px dashed #d9a520; font-size: 0.6875rem; font-weight: 600; white-space: nowrap; }
+.appt-cal-marks { display: flex; flex-direction: column; align-items: center; gap: 0.125rem; }
+.appt-cal-on .appt-cal-count { background: #fff; color: #1a3a9a; }
+.appt-cal-on .appt-cal-reqtext { background: #fff; }
+.appt-cal-key { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; margin: 0.75rem 0 0.25rem; font-size: 0.8125rem; color: #334155; }
+.appt-cal-open { margin: 0.25rem 0 0; }
+.appt-cal-card > .ux-empty-block { margin-bottom: 0.75rem; }
+@media (max-width: 575.98px) { .appt-cal-count, .appt-cal-reqtext { font-size: 0.5625rem; padding: 0 0.1875rem; } }
+/* the request queue: the same card in every view */
+.ux-requests > li { display: block; }
+.ux-request-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 0.5rem; }
+.ux-request-when { margin: 0.25rem 0 0; font-size: 0.875rem; }
+.ux-request-note { margin: 0.125rem 0 0; }
+.appt-cal-count[data-text]::before, .appt-cal-reqtext[data-text]::before { content: attr(data-text); }
+/* chart: bars stretch, labels do not */
+.ux-home-chart .ux-bars { display: block; width: 100%; height: auto; margin-top: 0.25rem; }
+.ux-bars-svg { display: block; width: 100%; height: 7rem; }
+.ux-bars-row { display: grid; grid-template-columns: repeat(14, minmax(0, 1fr)); text-align: center; }
+.ux-bars-n { min-height: 1.25rem; font-size: 0.75rem; font-weight: 700; color: #0f172a; }
+.ux-bars-day { margin-top: 0.25rem; font-size: 0.6875rem; line-height: 1.2; color: #4a5b73; }
+.ux-bars-day b { display: block; font-weight: 600; }
+/* week header: weekday over date, count beside */
+.ux-wk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.25rem; flex-wrap: nowrap; }
+.ux-wk-when { display: flex; flex-direction: column; line-height: 1.2; }
+.ux-wk-count { margin-left: 0; }
+/* month legend: one line per mark */
+ul.appt-cal-key { display: flex; flex-direction: column; align-items: flex-start; gap: 0.375rem; padding: 0; list-style: none; }
+ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; }
+.ux-wk-doc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* phones and tablets: agenda, then the request queue, then the chart, activity and quick actions */
+@media (max-width: 1199.98px) {
+  .ux-home-agenda { order: 1; } .ux-home-side > section:not(.ux-home-quick) { order: 2; }
+  .ux-home-chart { order: 3; } .ux-home-activity { order: 4; } .ux-home-quick { order: 5; }
+}

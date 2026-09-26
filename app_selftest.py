@@ -613,7 +613,8 @@ def selftest():
             assert q_ctx["request_total"] == 1, \
                 f"19b: a {who} holds manage_appointments and should see 1 request, got {q_ctx['request_total']}"
             queue = q_resp.data.split(b'id="requests-title"', 1)[1].split(b"</section>", 1)[0]
-            assert b"Kpi Uno" in queue and b"2031-11-05" in queue and b"afternoon" in queue, \
+            # correction 2: the day reads as a day ("Wed 5 Nov"), labelled as the preferred day, not a slot
+            assert b"Kpi Uno" in queue and b"Preferred day: Wed 5 Nov" in queue and b"afternoon" in queue, \
                 f"19b: the {who}'s queue must name the patient, the day and the period"
             assert not re.search(rb"\b\d{2}:\d{2}\b", queue), \
                 f"19b: the {who}'s queue drew a requested row as a time"

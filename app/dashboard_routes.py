@@ -162,7 +162,8 @@ def index():
     callbacks = (conn.execute("SELECT COUNT(*) FROM handoff_requests WHERE status IN ('open', 'claimed')").fetchone()[0]
                  if authorize(role, "handle_handoff") else None)
 
-    # the review-and-alerts list: work other than requests, each linked to where it is done
+    # the attention line is the ONE place an alert is listed, each linked to where it is done (correction 2: the
+    # separate review-and-alerts card repeated it)
     alerts = []
     if reviews:
         alerts.append((f"{reviews} note{'s' if reviews != 1 else ''} awaiting a dentist", url_for("review.queue")))
@@ -184,24 +185,47 @@ def index():
     if stock_low is not None:
         kpis.append(("Low stock", stock_low, "open stock alerts", url_for("stock.index"), "bi-box-seam"))
 
-    # a quiet day says so, and offers the next day that has bookings (a real link, not a filler row)
+    # a quiet day says so, and offers the next day with a CONFIRMED booking (a real link, not a filler row)
     next_day = None
     if may_book and not agenda:
-        lo, _ = clinic_time.day_bounds_utc((now.date() + timedelta(days=1)).isoformat())
-        row = conn.execute("SELECT starts_at FROM appointments WHERE status = ? AND starts_at >= ?"
-                           " ORDER BY starts_at LIMIT 1", (appointments.BOOKED, lo)).fetchone()
+        row = appointments.next_confirmed(conn, today)
         if row:
             d = clinic_time.local_of(row["starts_at"]).date()
             next_day = {"iso": d.isoformat(), "label": f"{d:%a} {d.day} {d:%b}"}
+
+    # correction 2: one operational chart - confirmed bookings per clinic day, the next 14 days, all clinicians,
+    # read from the appointment book by the same query the Appointments views use
+    chart = None
+    if may_book:
+        end = now.date() + timedelta(days=14)
+        per_day = {}
+        for r in appointments.range_rows(conn, today, end.isoformat()):
+            k = clinic_time.local_date(r["starts_at"])
+            per_day[k] = per_day.get(k, 0) + 1
+        days = [now.date() + timedelta(days=i) for i in range(14)]
+        bars = [{"iso": d.isoformat(), "label": f"{d:%a} {d.day} {d:%b}", "wd": f"{d:%a}"[:2], "num": d.day,
+                 "count": per_day.get(d.isoformat(), 0)} for d in days]
+        peak = max([b["count"] for b in bars] + [1])
+        for b in bars:
+            b["pct"] = round(100 * b["count"] / peak)
+        total = sum(b["count"] for b in bars)
+        upcoming = None
+        if not total:
+            row = appointments.next_confirmed(conn, days[-1].isoformat())
+            if row:
+                at = clinic_time.local_of(row["starts_at"])
+                upcoming = {"iso": at.date().isoformat(), "label": f"{at:%a} {at.day} {at:%b}, {at:%H:%M}"}
+        chart = {"bars": bars, "total": total, "peak": peak, "upcoming": upcoming,
+                 "period": f"{days[0]:%a} {days[0].day} {days[0]:%b} - {days[-1]:%a} {days[-1].day} {days[-1]:%b}"}
 
     show_intake = authorize(role, "upload_file")
     intake = _intake_counts(conn, g.user["username"]) if show_intake else None
     return render_template(
         "dashboard.html",
-        today_label=f"{now:%A} {now.day} {now:%B %Y}",
+        today_label=f"{now:%A} {now.day} {now:%B %Y}", today_iso=today,
         may_book=may_book, agenda=agenda, requests=_request_view(pending) if pending else [],
         request_total=len(pending) if pending is not None else None,
-        attention=attention, alerts=alerts, kpis=kpis, next_day=next_day,
+        attention=attention, kpis=kpis, next_day=next_day, chart=chart,
         activity=_activity(conn, g.user["username"]) if authorize(role, "read_notes") else [],
         show_intake=show_intake, intake=intake,
     )
@@ -224,8 +248,26 @@ def _who(conn, key):
     return row[0] if row else None
 
 
-def _activity(conn, username, limit=8):
-    """P23 (F4): the user's recent work in plain words - who and what, clinic time, no paths or codici fiscali."""
+def _instant(ts):
+    """a stored stamp -> an aware UTC instant for ordering. legacy undo entries are naive local wall time;
+    they are read as clinic time for ORDER only - their shown time is still the day alone."""
+    from datetime import datetime, timezone
+    try:
+        return clinic_time.read_instant(ts)
+    except (TypeError, ValueError):
+        try:
+            return clinic_time.to_utc(datetime.fromisoformat(ts))
+        except (TypeError, ValueError):
+            return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _activity(conn, username, limit=6):
+    """P23 (F4): the user's recent work in plain words - who and what, clinic time, no paths or codici fiscali.
+    correction 2: one entry per uploaded file (queue, file and index are three audit rows for one upload - the
+    latest state is the one shown), documents named as documents, newest first, and anything older than a week
+    marked as older rather than passed off as recent."""
+    from datetime import timedelta as _td
+    now = clinic_time.now()
     items = []
     for i, entry in enumerate(_user_undo_history(username, limit=limit)):
         field = (entry.get("target") or "").split(":")[1] if ":" in (entry.get("target") or "") else ""
@@ -233,20 +275,32 @@ def _activity(conn, username, limit=8):
         what = _TOOL_WORDS.get(entry.get("tool"), "Record changed")
         detail = _FIELD_WORDS.get(field.rsplit(":", 1)[0], "")
         try:
-            when = clinic_time.local_of(entry["ts"]).strftime("%-d %b, %H:%M")     # stored in UTC
+            local = clinic_time.local_of(entry["ts"])     # stored in UTC
+            when = local.strftime("%-d %b, %H:%M" if local.year == now.year else "%-d %b %Y, %H:%M")
         except (KeyError, ValueError):
             # an entry from before stamps were UTC has no known zone: its day, not a guessed time
             when = (entry.get("ts") or "")[:10]
-        items.append({"when": when, "sort": entry.get("ts", ""), "text": f"{what}{' (' + detail + ')' if detail else ''}",
+        items.append({"when": when, "at": _instant(entry.get("ts")), "text": f"{what}{' (' + detail + ')' if detail else ''}",
                       "who": who or "a patient no longer on record", "undo": i == 0})
-    rows = conn.execute("SELECT ts, target, action, allowed, reason FROM audit_log WHERE username = ? AND action IN"
+    rows = conn.execute("SELECT id, ts, target, action, allowed, reason FROM audit_log WHERE username = ? AND action IN"
                         " ('queue_upload', 'upload_file', 'sync_note', 'note_staged') ORDER BY id DESC LIMIT ?",
-                        (username, limit)).fetchall()
+                        (username, limit * 4)).fetchall()
+    seen = set()
     for r in rows:
+        key = Path(r["target"] or "").name
+        if key in seen:
+            continue        # an earlier step of an upload already shown at its latest state
+        seen.add(key)
         parts = Path(r["target"] or "").parts
         who = _who(conn, parts[1]) if len(parts) > 2 and parts[0] == "sorted" else None
-        items.append({"when": clinic_time.local_of(r["ts"]).strftime("%-d %b, %H:%M") if r["ts"] else "",
-                      "sort": r["ts"] or "", "text": _STATE_WORDS[_intake_state(r)],
-                      "who": who or "no patient matched yet", "undo": False})
-    items.sort(key=lambda x: x["sort"], reverse=True)
-    return items[:limit]
+        state = _intake_state(r)
+        text = "Document filed" if state == "sorted" and "documents" in parts[:-1] else _STATE_WORDS[state]
+        local = clinic_time.local_of(r["ts"]) if r["ts"] else None
+        items.append({"when": local.strftime("%-d %b, %H:%M" if local.year == now.year else "%-d %b %Y, %H:%M") if local else "",
+                      "at": _instant(r["ts"]), "text": text, "who": who or "no patient matched yet", "undo": False})
+    items.sort(key=lambda x: x["at"], reverse=True)
+    items = items[:limit]
+    week_ago = clinic_time.to_utc(now - _td(days=7))
+    for item in items:
+        item["older"] = item["at"] < week_ago
+    return items

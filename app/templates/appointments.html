@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {# P23 - appointments: day (time x clinician), week, month; filters; requests apart from bookings; the booking panel
-   opens on demand. every control here posts to a route that already enforces manage_appointments. #}
+   opens on demand. every control here posts to a route that already enforces manage_appointments.
+   correction 2: the three views draw ONE dataset (range_rows) with the same filters; the controls sit in one bar in
+   every view and keep the date and filters across views; an empty view offers the next confirmed booking. #}
 {% macro slot_actions(s) %}
   {% if s.status == 'booked' %}
   <form method="post" action="{{ url_for('appointments.cancel', appointment_id=s.id) }}" class="ux-inline-form">
@@ -24,7 +26,7 @@
 {% endmacro %}
 
 {% macro slot_card(s) %}
-<div class="ux-slot ux-slot-{{ s.status }}">
+<div class="ux-slot ux-slot-{{ s.status }}" id="appt-{{ s.id }}">
   <div class="ux-slot-main">
     <strong>{{ s.patient_name }}</strong>
     <span class="ux-muted">{{ s.start }}-{{ s.end }}</span>
@@ -40,12 +42,12 @@
   <div>
     <p class="ds-page-eyebrow">Scheduling</p>
     <h1 class="ds-page-title">Appointments</h1>
-    <p class="ds-page-meta">Booked visits and patient requests · clinic time, Europe/Rome</p>
+    <p class="ds-page-meta">Confirmed bookings and patient requests · times are clinic time (Europe/Rome)</p>
   </div>
   <a class="btn btn-primary app-primary" href="#book" data-open-booking><i class="bi bi-plus-lg" aria-hidden="true"></i> New appointment</a>
 <!--/page-head--></div>
 
-<form class="ux-toolbar" method="get" action="{{ url_for('appointments.index') }}" aria-label="Choose what to show">
+<form class="ux-toolbar" method="get" action="{{ url_for('appointments.index') }}" aria-label="Choose what to show" data-ux="appt-controls">
   <nav class="ux-tabs" aria-label="View">
     {% for v, label in (('day', 'Day'), ('week', 'Week'), ('month', 'Month')) %}
     <a class="ux-tab{{ ' active' if view == v else '' }}" {% if view == v %}aria-current="page"{% endif %}
@@ -53,14 +55,13 @@
     {% endfor %}
   </nav>
   <input type="hidden" name="view" value="{{ view }}">
-  {% if view != 'month' %}
-  <div class="ux-datenav">
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view=view, day=prev_day, dentist=dentist, status=status) }}" aria-label="Previous {{ view }}"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+  <div class="ux-datenav{{ ' appt-cal-nav' if view == 'month' else '' }}">
+    <a class="btn btn-sm btn-outline-secondary" rel="prev" href="{{ url_for('appointments.index', view=view, day=prev_day, dentist=dentist, status=status) }}" aria-label="Previous {{ view }}"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
     <label class="visually-hidden" for="day">Go to date</label>
     <input type="date" id="day" name="day" value="{{ day }}" class="form-control form-control-sm">
-    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view=view, day=next_day, dentist=dentist, status=status) }}" aria-label="Next {{ view }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+    <a class="btn btn-sm btn-outline-secondary" rel="next" href="{{ url_for('appointments.index', view=view, day=next_day, dentist=dentist, status=status) }}" aria-label="Next {{ view }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view=view, day=today, dentist=dentist, status=status) }}">Today</a>
   </div>
-  {% else %}<input type="hidden" name="day" value="{{ day }}">{% endif %}
   <label class="visually-hidden" for="f-dentist">Show clinician</label>
   <select id="f-dentist" name="dentist" class="form-select form-select-sm">
     <option value="">All clinicians</option>
@@ -73,8 +74,15 @@
     {% endfor %}
   </select>
   <button type="submit" class="btn btn-sm btn-outline-secondary">Show</button>
-  {% if view != 'month' %}<a class="ux-link" href="{{ url_for('appointments.index', view=view, day=today, dentist=dentist, status=status) }}">Today</a>{% endif %}
-</form>
+<!--/appt-controls--></form>
+
+{% macro next_booking() %}
+<div class="ux-empty-block">
+  <p class="ux-empty">No {{ word if word != 'booked' else 'confirmed' }} bookings {{ {'day': 'on this day', 'week': 'this week', 'month': 'this month'}[view] }}{{ ' for ' ~ dentist if dentist else '' }}.</p>
+  {% if upcoming %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=upcoming.iso, dentist=dentist, status=status) }}">Next confirmed booking: {{ upcoming.label }} · {{ upcoming.patient }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+  {% else %}<span class="ux-muted">Nothing confirmed after this{{ ' for ' ~ dentist if dentist else '' }}.</span>{% endif %}
+</div>
+{% endmacro %}
 
 <div class="ux-appt-layout">
   <div class="ux-appt-main">
@@ -82,10 +90,12 @@
     <section class="card ux-card" aria-labelledby="day-title">
       <div class="ux-card-head"><div>
         <h2 class="ux-card-title" id="day-title">{{ day_label }}</h2>
-        <p class="ux-card-meta">{{ slot_count }} shown · {{ columns | length }} clinician{{ '' if columns|length == 1 else 's' }}</p>
+        <p class="ux-card-meta" data-ux="appt-summary">{{ summary }}<!--/appt-summary--></p>
       </div></div>
-      <div class="ux-scroll" data-ux="day-grid">
-      {% if columns %}
+      <div data-ux="day-grid">
+      {% if not columns %}<p class="ux-empty">No active clinician accounts.</p>
+      {% elif grid %}
+      <div class="ux-scroll">
       <table class="ux-daygrid">
         <caption class="visually-hidden">Appointments on {{ day_label }} by hour and clinician</caption>
         <thead><tr><th scope="col" class="ux-daygrid-time">Time</th>{% for c in columns %}<th scope="col">{{ c }}</th>{% endfor %}</tr></thead>
@@ -97,42 +107,45 @@
         {% endfor %}
         </tbody>
       </table>
-      {% if not slot_count %}<p class="ux-empty">Nothing {{ 'booked' if status == 'booked' else 'to show' }} on this day.</p>{% endif %}
-      {% else %}<p class="ux-empty">No active clinician accounts.</p>{% endif %}
+      </div>
+      {% else %}{{ next_booking() }}{% endif %}
       <!--/day-grid--></div>
     </section>
     {% elif view == 'week' %}
     <section class="card ux-card" aria-labelledby="week-title">
-      <div class="ux-card-head"><h2 class="ux-card-title" id="week-title">Week of {{ week_label }}</h2></div>
+      <div class="ux-card-head"><div>
+        <h2 class="ux-card-title" id="week-title">Week of {{ week_label }}</h2>
+        <p class="ux-card-meta" data-ux="appt-summary">{{ summary }}<!--/appt-summary--></p>
+      </div></div>
       <div data-ux="week">
-      {% for d in week %}
-      <h3 class="ux-week-day"><a class="ux-link" href="{{ url_for('appointments.index', view='day', day=d.iso, dentist=dentist, status=status) }}">{{ d.label }}</a>
-        <span class="ux-muted">{{ d.slots | length }}</span></h3>
-      {% if d.slots %}
-      <table class="ux-table">
-        <thead><tr><th scope="col">Time</th><th scope="col">Patient</th><th scope="col">Clinician</th><th scope="col">Status</th></tr></thead>
-        <tbody>{% for s in d.slots %}
-          <tr><td data-label="Time">{{ s.start }}-{{ s.end }}</td><td data-label="Patient">{{ s.patient_name }}</td>
-              <td data-label="Clinician">{{ s.dentist }}</td><td data-label="Status"><span class="ux-badge ux-badge-{{ s.status }}">{{ s.status | capitalize }}</span></td></tr>
-        {% endfor %}</tbody>
-      </table>
-      {% else %}<p class="ux-empty">Nothing on this day.</p>{% endif %}
-      {% endfor %}
+      {% if not total %}{{ next_booking() }}{% endif %}
+      <ol class="ux-wk" aria-label="Seven days">
+        {% for d in week %}
+        <li class="ux-wk-day{{ ' ux-wk-today' if d.is_today else '' }}{{ ' ux-wk-on' if d.iso == day else '' }}">
+          <a class="ux-wk-head" href="{{ url_for('appointments.index', view='day', day=d.iso, dentist=dentist, status=status) }}"
+             aria-label="{{ d.name }} {{ d.date }} {{ d.slots | length }} {{ word }}"><span class="ux-wk-when"><span class="ux-wk-name">{{ d.name }}</span> <span class="ux-wk-date">{{ d.date }}</span></span>
+            <span class="ux-wk-count">{{ d.slots | length }}</span></a>
+          {% if d.slots %}
+          <ul class="ux-wk-list">
+            {% for s in d.slots %}
+            <li><a class="ux-wk-appt ux-wk-{{ s.status }}" href="{{ url_for('appointments.index', view='day', day=d.iso, dentist=dentist, status=status) }}#appt-{{ s.id }}">
+              <span class="ux-wk-time">{{ s.start }}</span> <span class="ux-wk-who">{{ s.patient_name }}</span>
+              <span class="ux-wk-doc">{{ s.dentist }}{% if s.status != 'booked' %} · {{ s.status }}{% endif %}</span></a></li>
+            {% endfor %}
+          </ul>
+          {% else %}<span class="ux-wk-none" aria-hidden="true">-</span>{% endif %}
+        </li>
+        {% endfor %}
+      </ol>
       <!--/week--></div>
     </section>
     {% else %}
     <section class="card ux-card appt-cal-card" aria-labelledby="cal-title" data-ux="month">
-      <div class="ux-card-head">
-        <div>
-          <h2 class="ux-card-title" id="cal-title">{{ month_label }}</h2>
-          <p class="ux-card-meta">Pick a day to open its schedule</p>
-        </div>
-        <div class="appt-cal-nav">
-          <a class="btn btn-sm btn-outline-secondary" rel="prev" href="{{ url_for('appointments.index', day=day, month=prev_month) }}" aria-label="Previous month"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view='month', day=today) }}">Today</a>
-          <a class="btn btn-sm btn-outline-secondary" rel="next" href="{{ url_for('appointments.index', day=day, month=next_month) }}" aria-label="Next month"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
-        </div>
-      </div>
+      <div class="ux-card-head"><div>
+        <h2 class="ux-card-title" id="cal-title">{{ month_label }}</h2>
+        <p class="ux-card-meta" data-ux="appt-summary">{{ summary }}<!--/appt-summary--></p>
+      </div></div>
+      {% if not total %}{{ next_booking() }}{% endif %}
       <table class="appt-cal">
         <caption class="visually-hidden">{{ month_label }}</caption>
         <thead><tr>{% for wd in weekdays %}<th scope="col">{{ wd }}</th>{% endfor %}</tr></thead>
@@ -142,12 +155,14 @@
             {% for c in w %}
             <td class="{% if not c.in_month %}appt-cal-out{% endif %}">
               <a class="appt-cal-day{% if c.is_today %} appt-cal-today{% endif %}{% if c.is_selected %} appt-cal-on{% endif %}"
-                 href="{{ url_for('appointments.index', day=c.iso, month=month) }}" aria-label="{{ c.label }}"
+                 href="{{ url_for('appointments.index', day=c.iso, month=month, dentist=dentist, status=status) }}" aria-label="{{ c.label }}"
                  {% if c.is_selected %}aria-current="date"{% endif %}>
                 <span class="appt-cal-num" aria-hidden="true">{{ c.number }}</span>
                 <span class="appt-cal-marks" aria-hidden="true">
-                  {% if c.booked %}<span class="appt-cal-booked" data-n="{{ c.booked }}"></span>{% endif %}
-                  {% if c.requested %}<span class="appt-cal-req"></span>{% endif %}
+                  {# drawn by CSS from data-text: the cell's accessible name is its aria-label, and the visible count
+                     must not become extra text beside it (label in name) #}
+                  {% if c.booked %}<span class="appt-cal-count" data-text="{{ c.booked }} {{ word }}"></span>{% endif %}
+                  {% if c.requested %}<span class="appt-cal-reqtext" data-text="{{ c.requested }} request{{ 's' if c.requested != 1 else '' }}"></span>{% endif %}
                 </span>
               </a>
             </td>
@@ -156,8 +171,11 @@
           {% endfor %}
         </tbody>
       </table>
-      <p class="appt-cal-key"><span class="appt-cal-booked">n</span> booked <span class="appt-cal-req"></span> request waiting ·
-        <a class="ux-link" href="{{ url_for('appointments.index', view='day', day=day) }}">Open {{ day }}</a></p>
+      <ul class="appt-cal-key" data-ux="month-legend">
+        <li><span class="appt-cal-count">2 {{ word }}</span> {{ 'confirmed appointments' if word == 'booked' else word ~ ' appointments' }} that day, with the filters above</li>
+        <li><span class="appt-cal-reqtext">1 request</span> a patient's preferred day - not a booking until it is confirmed</li>
+      <!--/month-legend--></ul>
+      <p class="ux-muted appt-cal-open">Selected: {{ day_label }} · <a class="ux-link" href="{{ url_for('appointments.index', view='day', day=day, dentist=dentist, status=status) }}">Open this day</a></p>
     </section>
     {% endif %}
   </div>
@@ -165,17 +183,18 @@
   <div class="ux-appt-side">
     <section class="card ux-card" id="requests" aria-labelledby="requests-title" data-ux="requests">
       <div class="ux-card-head"><div>
-        <h2 class="ux-card-title" id="requests-title">Patient requests{% if requests_pending %} <span class="ux-badge ux-badge-requested">{{ requests_pending | length }}</span>{% endif %}</h2>
-        <p class="ux-card-meta">Requests are not bookings: a day and a part of it, no time and no clinician yet.</p>
+        <h2 class="ux-card-title" id="requests-title">Patient requests <span class="ux-count" aria-label="{{ requests_pending | length }} request{{ 's' if requests_pending | length != 1 else '' }} waiting">{{ requests_pending | length }}</span></h2>
+        <p class="ux-card-meta">Requests are not bookings: a preferred day and part of the day, no time and no clinician. Earliest preferred day first.</p>
       </div></div>
       <div>
       {% if requests_pending %}
-      <ul class="ux-list">
+      <ul class="ux-list ux-requests">
         {% for r in requests_pending %}
         <li class="ux-request">
-          <div><strong>{{ r.patient_name }}</strong>
-            <span class="ux-muted">Preferred {{ r.starts_at[:10] }}, {{ r.period }}{% if r.note %} · {{ r.note }}{% endif %}</span></div>
-          <span class="ux-badge ux-badge-requested">Requested</span>
+          <div class="ux-request-top"><strong class="ux-request-name">{{ r.patient_name }}</strong>
+            <span class="ux-badge ux-badge-requested">Requested - not booked</span></div>
+          <p class="ux-request-when">Preferred day: {{ r.starts_at[:10] | appt_date_label }} · {{ r.period }}</p>
+          {% if r.note %}<p class="ux-muted ux-request-note">{{ r.note }}</p>{% endif %}
           <details class="appt-more ux-request-actions">
             <summary aria-label="Confirm or decline {{ r.patient_name }}'s request">Confirm or decline</summary>
             <form method="post" action="{{ url_for('appointments.confirm', appointment_id=r.id) }}" class="ux-mini-form">

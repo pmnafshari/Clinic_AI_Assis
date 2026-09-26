@@ -443,18 +443,48 @@ def for_patient(conn, patient):
     ).fetchall()
 
 
-def day_rows(conn, day, statuses=(BOOKED,), dentist=None):
-    """P23: one clinic day's appointments in the given statuses, optionally one clinician's, in start order.
-    for (BOOKED,) and no dentist this is exactly agenda(); requests are never included (they have no time)."""
-    lo, hi = clinic_time.day_bounds_utc(day)
+def range_rows(conn, first_day, next_first, statuses=(BOOKED,), dentist=None):
+    """P23: THE query behind Day, Week, Month, the Home agenda and the 14-day chart - appointments in the given
+    statuses whose clinic-local day is in [first_day, next_first), optionally one clinician's, in start order.
+    requests are never included: they carry a preferred day, not a slot. bounded in UTC, then filtered exactly on
+    the local date (the bounds can be an hour wide at a DST edge), the same way agenda() does."""
+    from datetime import date as _date, timedelta as _td
+    last = (_date.fromisoformat(next_first) - _td(days=1)).isoformat()
+    lo, _ = clinic_time.day_bounds_utc(first_day)
+    _, hi = clinic_time.day_bounds_utc(last)
     marks = ",".join("?" * len(statuses))
-    sql = ("SELECT a.*, p.patient_name FROM appointments a JOIN patients p ON p.patient_id = a.patient_id"
+    sql = ("SELECT a.*, p.patient_name, p.codice_fiscale AS cf FROM appointments a"
+           " JOIN patients p ON p.patient_id = a.patient_id"
            f" WHERE a.status IN ({marks}) AND a.status != ? AND a.starts_at >= ? AND a.starts_at < ?")
     args = [*statuses, REQUESTED, lo, hi]
     if dentist:
         sql += " AND a.dentist = ?"
         args.append(dentist)
-    return conn.execute(sql + " ORDER BY a.starts_at, a.dentist", args).fetchall()
+    rows = conn.execute(sql + " ORDER BY a.starts_at, a.dentist", args).fetchall()
+    return [r for r in rows if first_day <= clinic_time.local_date(r["starts_at"]) < next_first]
+
+
+def day_rows(conn, day, statuses=(BOOKED,), dentist=None):
+    """P23: one clinic day of range_rows. for (BOOKED,) and no dentist this is exactly agenda()."""
+    from datetime import date as _date, timedelta as _td
+    return range_rows(conn, day, (_date.fromisoformat(day) + _td(days=1)).isoformat(), statuses, dentist)
+
+
+def next_confirmed(conn, after_day, dentist=None):
+    """P23: the first BOOKED appointment on a clinic day after `after_day` (optionally one clinician's) - where an
+    empty Day, Week or chart sends the user. -> row or None. never a request or a cancelled row."""
+    from datetime import date as _date, timedelta as _td
+    lo, _ = clinic_time.day_bounds_utc((_date.fromisoformat(after_day) + _td(days=1)).isoformat())
+    sql = ("SELECT a.*, p.patient_name FROM appointments a JOIN patients p ON p.patient_id = a.patient_id"
+           " WHERE a.status = ? AND a.starts_at >= ?")
+    args = [BOOKED, lo]
+    if dentist:
+        sql += " AND a.dentist = ?"
+        args.append(dentist)
+    for r in conn.execute(sql + " ORDER BY a.starts_at LIMIT 5", args):
+        if clinic_time.local_date(r["starts_at"]) > after_day:
+            return r
+    return None
 
 
 def next_booked(conn, patient):

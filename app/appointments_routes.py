@@ -56,39 +56,33 @@ def _shift_month(first, step):
     return date(year, (month - 1) % 12 + 1, 1)
 
 
-def _day_label(d, booked, requested):
+def _day_label(d, booked, requested, word="booked"):
     # what a screen reader gets instead of a bare number in a grid
     parts = [d.strftime("%-d %B %Y")]
     counts = []
     if booked:
-        counts.append(f"{booked} booked")
+        counts.append(f"{booked} {word}")
     if requested:
         counts.append(f"{requested} request" if requested == 1 else f"{requested} requests")
     if counts:
         parts.append(", ".join(counts))
     else:
-        parts.append("nothing booked")
+        parts.append(f"nothing {word}")
     return ": ".join(parts)
 
 
-def _month_grid(conn, first, selected):
-    """The weeks of one month, each day carrying everything the template shows.
-
-    Built here rather than in Jinja: the template would otherwise be doing date
-    arithmetic and dictionary lookups per cell, and the counts have to line up
-    with the aria-label on the same cell.
-    """
-    counts = appointments.month_counts(
-        conn, first.isoformat(), _shift_month(first, 1).isoformat()
-    )
+def _month_grid(conn, first, selected, per_day, word):
+    """The weeks of one month, each day carrying everything the template shows. `per_day` is the view's own
+    range_rows grouped by clinic day - the same rows Day and Week draw - so a month count cannot disagree with them.
+    requests come from month_counts and stay a separate mark: a preferred day, never a booking."""
+    requested_by_day = appointments.month_counts(conn, first.isoformat(), _shift_month(first, 1).isoformat())
     today = clinic_time.now().date()
     weeks = []
     for week in calendar.Calendar(firstweekday=0).monthdatescalendar(first.year, first.month):
         cells = []
         for d in week:
-            day_counts = counts.get(d.isoformat(), {})
-            booked = day_counts.get(appointments.BOOKED, 0)
-            requested = day_counts.get(appointments.REQUESTED, 0)
+            booked = len(per_day.get(d.isoformat(), [])) if d.month == first.month else 0
+            requested = requested_by_day.get(d.isoformat(), {}).get(appointments.REQUESTED, 0)
             cells.append({
                 "iso": d.isoformat(),
                 "number": d.day,
@@ -97,7 +91,7 @@ def _month_grid(conn, first, selected):
                 "is_selected": d == selected,
                 "booked": booked,
                 "requested": requested,
-                "label": _day_label(d, booked, requested),
+                "label": _day_label(d, booked, requested, word),
             })
         weeks.append(cells)
     return weeks
@@ -105,13 +99,10 @@ def _month_grid(conn, first, selected):
 
 VIEWS = ("day", "week", "month")
 STATUS_FILTERS = {"booked": (appointments.BOOKED,), "cancelled": ("cancelled",), "all": (appointments.BOOKED, "cancelled")}
-
-
-def _hours(conn, d):
-    """the clinic's opening hours that day, as whole hours; a closed day still shows 09-18 so a booking is visible."""
-    row = conn.execute("SELECT opens, closes, closed FROM clinic_hours WHERE weekday = ?", (d.weekday(),)).fetchone()
-    first, last = (9, 18) if not row or row["closed"] or not row["opens"] else (int(row["opens"][:2]), int(row["closes"][:2]))
-    return list(range(first, max(last, first + 1)))
+# what the summary and the month cells call the rows each status filter shows
+STATUS_WORDS = {"booked": ("confirmed booking", "confirmed bookings", "booked"),
+                "cancelled": ("cancelled appointment", "cancelled appointments", "cancelled"),
+                "all": ("booked or cancelled appointment", "booked or cancelled appointments", "booked or cancelled")}
 
 
 def _slot(row):
@@ -139,21 +130,50 @@ def index():
         "SELECT username FROM users WHERE role = 'dentist' AND active = 1 ORDER BY username")]
     dentist = request.args.get("dentist") if request.args.get("dentist") in dentists else None
     statuses = STATUS_FILTERS[status]
+    one, many, word = STATUS_WORDS[status]
     first = _pick_month(request.args.get("month"), selected)
-
-    slots = [_slot(r) for r in appointments.day_rows(conn, day, statuses, dentist)]
-    columns = [dentist] if dentist else dentists
-    hours = _hours(conn, selected)
-    extra = sorted({s["hour"] for s in slots} - set(hours))
-    grid = [{"hour": f"{h:02d}:00", "cells": [[s for s in slots if s["hour"] == h and s["dentist"] == c] for c in columns]}
-            for h in sorted(set(hours) | set(extra))]
     monday = selected - timedelta(days=selected.weekday())
+
+    # ONE dataset per view: the same range_rows, the same filters, grouped by clinic day
+    if view == "day":
+        lo, hi = selected, selected + timedelta(days=1)
+    elif view == "week":
+        lo, hi = monday, monday + timedelta(days=7)
+    else:
+        lo, hi = first, _shift_month(first, 1)
+    per_day = {}
+    for r in appointments.range_rows(conn, lo.isoformat(), hi.isoformat(), statuses, dentist):
+        per_day.setdefault(clinic_time.local_date(r["starts_at"]), []).append(_slot(r))
+    total = sum(len(v) for v in per_day.values())
+    period = {"day": f"on {selected:%a %-d %b}", "week": "this week", "month": f"in {first:%B %Y}"}[view]
+    summary = f"{total} {one if total == 1 else many} {period} · {dentist or 'all clinicians'}"
+
+    # an empty view sends the user to the next CONFIRMED booking after it (with the clinician filter)
+    upcoming = None
+    if not total:
+        nxt = appointments.next_confirmed(conn, (hi - timedelta(days=1)).isoformat(), dentist)
+        if nxt:
+            at = clinic_time.local_of(nxt["starts_at"])
+            upcoming = {"iso": at.date().isoformat(), "label": f"{at:%a %-d %b}, {at:%H:%M}", "patient": nxt["patient_name"]}
+
+    columns = [dentist] if dentist else dentists
+    slots = per_day.get(day, []) if view == "day" else []
+    grid = []
+    if slots:
+        # only the hours that hold something - no screen of empty rows
+        hours = range(min(s["hour"] for s in slots), max(s["hour"] for s in slots) + 1)
+        grid = [{"hour": f"{h:02d}:00", "cells": [[s for s in slots if s["hour"] == h and s["dentist"] == c] for c in columns]}
+                for h in hours]
     week = [{"iso": (monday + timedelta(days=i)).isoformat(), "label": f"{(monday + timedelta(days=i)):%a %-d %b}",
-             "slots": [_slot(r) for r in appointments.day_rows(conn, (monday + timedelta(days=i)).isoformat(), statuses, dentist)]}
+             "name": f"{(monday + timedelta(days=i)):%a}", "date": f"{(monday + timedelta(days=i)):%-d %b}",
+             "is_today": monday + timedelta(days=i) == clinic_time.now().date(),
+             "slots": per_day.get((monday + timedelta(days=i)).isoformat(), [])}
             for i in range(7)] if view == "week" else None
-    step = {"day": timedelta(days=1), "week": timedelta(days=7)}.get(view)
-    prev_day = (selected - step).isoformat() if step else None
-    next_day = (selected + step).isoformat() if step else None
+    if view == "month":
+        prev_day, next_day = _shift_keep_day(selected, -1), _shift_keep_day(selected, 1)
+    else:
+        step = timedelta(days=1 if view == "day" else 7)
+        prev_day, next_day = (selected - step).isoformat(), (selected + step).isoformat()
     patients = conn.execute(
         "SELECT patient_id, codice_fiscale, patient_name FROM patients ORDER BY patient_name").fetchall()
     return render_template(
@@ -161,14 +181,21 @@ def index():
         view=view, day=day, day_label=f"{selected:%a %-d %b %Y}", status=status, dentist=dentist,
         dentists=[{"username": d} for d in dentists], dentist_names=dentists, columns=columns, grid=grid,
         slot_count=len(slots), week=week, week_label=f"{monday:%-d %b} - {(monday + timedelta(days=6)):%-d %b %Y}",
+        summary=summary, upcoming=upcoming, word=word, total=total,
         prev_day=prev_day, next_day=next_day,
         requests_pending=appointments.pending_requests(conn), patients=patients,
         open_booking=request.args.get("book") == "1",
-        weeks=_month_grid(conn, first, selected), weekdays=WEEKDAYS,
+        weeks=_month_grid(conn, first, selected, per_day, word) if view == "month" else [], weekdays=WEEKDAYS,
         month=first.isoformat()[:7], month_label=first.strftime("%B %Y"),
-        prev_month=_shift_month(first, -1).isoformat()[:7], next_month=_shift_month(first, 1).isoformat()[:7],
         today=clinic_time.now().date().isoformat(),
     )
+
+
+def _shift_keep_day(d, step):
+    # the same day-of-month one month away, clamped to that month's length - so Month -> Day keeps a real date
+    first = _shift_month(d.replace(day=1), step)
+    last = calendar.monthrange(first.year, first.month)[1]
+    return first.replace(day=min(d.day, last)).isoformat()
 
 
 @appointments_bp.route("/appointments/book", methods=["POST"])

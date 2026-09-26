@@ -71,7 +71,12 @@ def main():
             s.click('button[type="submit"]'); s.wait_for_load_state("networkidle")
             dash = s.content()
             queue = dash.split('id="requests-title"', 1)[1].split("</section>", 1)[0] if 'id="requests-title"' in dash else ""
-            check("2 staff dashboard queue shows the request", NAME in queue and day in queue and "afternoon" in queue)
+            # P23 correction 2: the queue names the preferred day as people read it ("Mon 28 Sep"), labelled as such
+            from datetime import date as _d
+            _dd = _d.fromisoformat(day)
+            day_label = f"Preferred day: {_dd:%a} {_dd.day} {_dd:%b}"
+            check("2 staff dashboard queue shows the request", NAME in queue and day_label in queue and "afternoon" in queue,
+                  day_label)
             check("2b queue draws no time for it", not re.search(r"\b\d{2}:\d{2}\b", queue))
 
             # --- header search finds the patient (43 -> patients.search_fragment)

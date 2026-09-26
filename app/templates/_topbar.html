@@ -1,5 +1,6 @@
 {# P23 - a compact top bar: the menu button below lg, and a record lookup (jump to one patient) for roles that may
    look anyone up - not a list filter and not a global search; its results are links to records.
+   correction 2: the static "Europe/Rome" label is gone (it did nothing); pages that show times say "clinic time" once.
    the account, change password and sign out live in the sidebar foot; the page's one primary action lives in its head. #}
 <header class="app-topbar">
   <div class="app-topbar-inner">
@@ -21,6 +22,5 @@
       <div id="app-search-results" class="app-search-results"></div>
     </div>
     {% endif %}
-    <span class="app-topbar-zone" title="All dates and times are clinic time">Europe/Rome</span>
   </div>
 </header>

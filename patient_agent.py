@@ -567,7 +567,14 @@ def selftest():
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] == "--selftest":
-        selftest()
+        # the fixture's bookings are dated around its own t0 (Monday 2026-09-22), so "today" is pinned there too:
+        # read from the machine clock, the 2026-09-25 booking stopped being upcoming on 2026-09-26 (a time bomb)
+        real = clinic_time.now
+        clinic_time.now = lambda env=None: clinic_time.to_local(clinic_time.read_instant("2026-09-22T08:00:00+00:00"))
+        try:
+            selftest()
+        finally:
+            clinic_time.now = real
         return
     print("usage: python patient_agent.py --selftest")
     sys.exit(1)

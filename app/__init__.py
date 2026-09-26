@@ -86,6 +86,8 @@ def create_app():
     # and silently shows the UTC hour now that one of them is not.
     app.jinja_env.filters["appt_time"] = appt_time
     app.jinja_env.filters["appt_date"] = appt_date
+    # a stored bare date ("2026-10-25") as people read it ("Sun 25 Oct"); a bad value is shown as it is
+    app.jinja_env.filters["appt_date_label"] = _date_label
 
     # read db.DB_PATH at call time (not imported by value) so a selftest
     # can point create_app() at a temp db by patching app.db.DB_PATH
@@ -169,3 +171,12 @@ def create_app():
             return redirect(url_for("auth.change_password"))
 
     return app
+
+
+def _date_label(iso):
+    from datetime import date
+    try:
+        d = date.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return iso
+    return f"{d:%a} {d.day} {d:%b}"

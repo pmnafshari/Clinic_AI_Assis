@@ -221,7 +221,8 @@ def selftest():
         home = dentist.get("/").get_data(as_text=True)
         agenda = _section(home, "agenda")
         assert agenda.count('href="/patients/ZZUA800101010101"') == 1 and ">Open" in agenda, "10b: agenda rows have no Open"
-        assert 'data-ux="alerts"' in home and 'class="ux-kpi-icon' in home, "10b: no alerts card or compact KPI"
+        # (the follow-up's alerts card was rejected by the owner in correction 2 - 11j asserts it is gone)
+        assert 'class="ux-kpi-icon' in home, "10b: no compact KPI"
         real_now = clinic_time.now
         clinic_time.now = lambda env=None: datetime(2031, 3, 4, 9, 0)        # a day with nothing booked
         try:
@@ -284,6 +285,130 @@ def selftest():
                      ".app-side.offcanvas-lg { background-color: var(--app-navy) !important; }",
                      ".app-side-link.active { background: var(--app-navy-active); color: #fff;"):
             assert decl in css, f"10e: the staff palette lost {decl!r}"
+
+        # 11. P23 correction 2 (owner's annotated assistant screens of fda69e4)
+        A = assistant
+        def appt(view, day=DAY, **kw):
+            q = "&".join(f"{k}={v}" for k, v in kw.items())
+            return A.get(f"/appointments?view={view}&day={day}" + (f"&{q}" if q else "")).get_data(as_text=True)
+        # 11a. no timezone text in the top bar; one labelled clinic-time cue per page
+        for path in ("/", f"/appointments?view=day&day={DAY}"):
+            page = A.get(path).get_data(as_text=True)
+            top = re.search(r'<header class="app-topbar".*?</header>', page, re.S).group(0)
+            assert "Europe/Rome" not in top and "app-topbar-zone" not in top, f"11a: {path} top bar still shows the zone"
+            assert _text(page).count("clinic time") == 1, f"11a: {path} has {_text(page).count('clinic time')} clinic-time cues"
+        # 11b. Day, Week and Month count the same confirmed bookings, with and without a clinician filter
+        def summary(html):
+            return _text(_section(html, "appt-summary")).strip()
+        assert "2 confirmed bookings" in summary(appt("day")), summary(appt("day"))
+        assert "3 confirmed bookings" in summary(appt("week")), summary(appt("week"))
+        assert "3 confirmed bookings" in summary(appt("month")), summary(appt("month"))
+        assert "1 confirmed booking" in summary(appt("day", dentist="drbianchi"))
+        assert "1 confirmed booking" in summary(appt("week", dentist="drbianchi"))
+        month_b = appt("month", dentist="drbianchi")
+        def cell(html, iso):
+            # the visible count is drawn from data-text (label in name), so that is what is on screen
+            tag = re.search(r'<a class="appt-cal-day[^>]*\bday=' + iso + r'&[^>]*>(.*?)</a>', html, re.S)
+            return re.search(r'aria-label="([^"]*)"', tag.group(0)).group(1), " ".join(re.findall(r'data-text="([^"]*)"', tag.group(1)))
+        assert cell(month_b, "2031-03-05")[0] == "5 March 2031: 1 booked", cell(month_b, "2031-03-05")
+        assert cell(month_b, "2031-03-07")[0] == "7 March 2031: nothing booked", "11b: month ignores the clinician filter"
+        label, shown = cell(appt("month"), "2031-03-05")
+        assert label == "5 March 2031: 2 booked" and "2 booked" in shown, f"11b: month count not visible: {shown!r}"
+        assert "1 request" in cell(appt("month"), "2031-03-10")[1], "11b: a preferred day is not marked as a request"
+        # 11c. the controls sit in one place and switching views keeps the date and the filters
+        for view in ("day", "week", "month"):
+            html = appt(view, dentist="drbianchi", status="all")
+            bar = _section(html, "appt-controls")
+            for other in ("day", "week", "month"):
+                link = re.search(rf'<a[^>]*class="ux-tab[^"]*"[^>]*href="([^"]*view={other}[^"]*)"', bar).group(1)
+                assert f"day={DAY}" in link and "dentist=drbianchi" in link and "status=all" in link, f"11c: {view}->{other} {link}"
+            assert re.search(r'<input[^>]*type="date"[^>]*id="day"', bar) and ">Today<" in bar and 'rel="prev"' in bar \
+                and 'rel="next"' in bar, f"11c: {view} lost a control"
+            assert "appt-cal-nav" not in html.split('data-ux="appt-controls"')[1].split("<!--/appt-controls-->")[1], \
+                f"11c: {view} has a second date navigation outside the controls"
+        # 11d. empty states: no empty hour rows, no seven repeated messages, a route to the next confirmed booking
+        empty_day = appt("day", day="2031-03-06")
+        grid = _section(empty_day, "day-grid")
+        assert "<table" not in grid and "No confirmed bookings" in _text(grid), "11d: an empty day draws hour rows"
+        assert 'href="/appointments?view=day&amp;day=2031-03-07' in grid and "Fri 7 Mar" in _text(grid), \
+            f"11d: no route to the next confirmed booking: {_text(grid)}"
+        empty_week = _section(appt("week", day="2031-02-24"), "week")
+        assert _text(empty_week).count("Nothing") + _text(empty_week).count("No confirmed") <= 1, "11d: repeated empty messages"
+        assert "day=2031-03-05" in empty_week and "Wed 5 Mar" in _text(empty_week), "11d: empty week has no next booking"
+        full_day = _section(appt("day"), "day-grid")
+        hours = re.findall(r'<th scope="row" class="ux-daygrid-time">(\d\d):00</th>', full_day)
+        assert hours and hours[0] == "09" and hours[-1] == "10", f"11d: the day draws empty hours {hours}"
+        # 11e. the month legend: counts as words, a request never shown as a booking
+        legend = _text(_section(appt("month"), "month-legend"))
+        assert " n " not in f" {legend} " and "booked" in legend and "not a booking" in legend, f"11e: {legend}"
+        # 11f. one request queue, the same in every view, with zero and with several requests
+        queues = [_section(appt(v), "requests") for v in ("day", "week", "month")]
+        assert queues[0] == queues[1] == queues[2], "11f: the request queue differs between views"
+        assert "Preferred day" in _text(queues[0]) and "not booked" in _text(queues[0]).lower(), "11f: a request reads like a slot"
+        dino = conn.execute("SELECT patient_id FROM patients WHERE patient_name = 'Dino Quattro'").fetchone()[0]
+        extra = appointments.request(conn, dino, "2031-03-08", "afternoon", "dolore")
+        conn.commit()
+        q2 = _section(appt("week"), "requests")
+        names = re.findall(r'<strong class="ux-request-name">([^<]+)</strong>', q2)
+        assert names == ["Dino Quattro", "Carlo Tre"], f"11f: not ordered by preferred day: {names}"
+        assert '<span class="ux-count" aria-label="2 requests waiting">2</span>' in q2, "11f: the count does not match"
+        for r in conn.execute("SELECT id FROM appointments WHERE status = 'requested'").fetchall():
+            conn.execute("UPDATE appointments SET status = 'declined' WHERE id = ?", (r[0],))
+        conn.commit()
+        q0 = _section(appt("month"), "requests")
+        assert "No patient requests waiting" in _text(q0) and "ux-request-name" not in q0, "11f: the empty queue"
+        conn.execute("UPDATE appointments SET status = 'requested' WHERE id = ?", (extra,))
+        conn.execute("UPDATE appointments SET status = 'requested' WHERE note = 'controllo' AND patient_id = ?", (carlo,))
+        conn.commit()
+        # 11g. a booking in Week links to the same booking in Day
+        wk = _section(appt("week"), "week")
+        ids = re.findall(r'href="/appointments\?view=day&amp;day=2031-03-05[^"#]*#appt-(\d+)"', wk)
+        dg = _section(appt("day"), "day-grid")
+        assert ids and all(f'id="appt-{i}"' in dg for i in ids), f"11g: week links {ids} do not reach the day"
+        # 11h. home: All appointments opens this week; next booked day opens that day
+        home_a = A.get("/").get_data(as_text=True)
+        allv = re.search(r'<a class="ux-link" href="([^"]+)">All appointments', home_a).group(1)
+        assert "view=week" in allv and f"day={DAY}" in allv, f"11h: All appointments -> {allv}"
+        # 11i. activity: one item per uploaded file, documents named as documents, older work labelled as older
+        now_utc = "2031-03-05T08:00:00+00:00"
+        rows = [("queue_upload", "drop/n1.txt", now_utc), ("upload_file", "sorted/ZZUA800101010101/notes/n1.txt", now_utc),
+                ("sync_note", "sorted/ZZUA800101010101/notes/n1.txt", now_utc),
+                ("upload_file", "sorted/ZZUB800101010102/documents/consent.pdf", "2031-01-10T08:00:00+00:00")]
+        for action, target, ts in rows:
+            conn.execute("INSERT INTO audit_log (ts, username, role, action, target, allowed) VALUES (?, 'assistant', 'assistant', ?, ?, 1)",
+                         (ts, action, target))
+        conn.commit()
+        act = _section(A.get("/").get_data(as_text=True), "activity")
+        items = re.findall(r'<li class="ux-activity', act)
+        assert len(items) == 2, f"11i: {len(items)} items for two files"
+        assert "Note filed" in _text(act) and "Document filed" in _text(act), f"11i: {_text(act)}"
+        assert re.search(r"Older.*Document filed", _text(act)) and not re.search(r"Older.*Note filed", _text(act)), \
+            f"11i: older activity not labelled: {_text(act)}"
+        # 11j. stock is alerted once, still actionable; no separate alerts card repeating the line
+        import inventory
+        inventory.create_item(conn, "guanti", "pz", 5, "dentist", "dentist")     # balance 0 <= 5: one open alert
+        home_s = A.get("/").get_data(as_text=True)
+        assert "Review and alerts" not in home_s and 'data-ux="alerts"' not in home_s, "11j: the alerts card repeats the line"
+        att = _section(home_s, "attention")
+        assert "1 item low on stock" in _text(att) and 'href="/stock"' in att, "11j: the stock alert lost its link"
+        assert _text(home_s).count("low on stock") == 1, "11j: the stock alert is repeated"
+        # 11k. the operational chart: confirmed bookings per day, next 14 days, with a table equivalent
+        chart = _section(A.get("/").get_data(as_text=True), "bookings-14d")
+        t = _text(chart)
+        assert "next 14 days" in t and "confirmed" in t.lower() and "appointment book" in t, f"11k: {t[:200]}"
+        cells = re.findall(r'<tr><th scope="row">([^<]+)</th><td>(\d+)</td></tr>', chart)
+        assert len(cells) == 14 and cells[0] == ("Wed 5 Mar", "2") and ("Fri 7 Mar", "1") in cells, f"11k: {cells[:3]}"
+        clinic_time.now = lambda env=None: datetime(2031, 2, 10, 9, 0)
+        try:
+            quiet = _text(_section(A.get("/").get_data(as_text=True), "bookings-14d"))
+            clinic_time.now = lambda env=None: datetime(2031, 6, 1, 9, 0)
+            none_ahead = _text(_section(A.get("/").get_data(as_text=True), "bookings-14d"))
+        finally:
+            clinic_time.now = lambda env=None: TODAY
+        assert "No confirmed bookings" in quiet and "Wed 5 Mar" in quiet, f"11k: quiet chart: {quiet}"
+        assert "No confirmed bookings" in none_ahead and "Next confirmed" not in none_ahead, f"11k: {none_ahead}"
+        # 11l. quick actions keep their labels on one line
+        assert re.search(r"\.ux-quick-item \{[^}]*white-space: nowrap", css), "11l: quick actions wrap"
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

@@ -2,16 +2,22 @@
 {# P23 - Home: the work that waits first, then today's agenda, then plain-words activity.
    every figure is a count of real rows the role may see; every tile links to where it is acted on.
    follow-up (owner review): the concept's hierarchy - one attention line, compact KPIs, agenda beside the request
-   queue and the review list, then activity beside two quick actions. #}
+   queue and the review list, then activity beside two quick actions.
+   correction 2 (owner's annotated assistant screens): one clinic-time cue (by the date), "All appointments" opens
+   this week, the attention line is the only alert list (no second card), one activity entry per file with older
+   work labelled, a 14-day chart of confirmed bookings with its table, quick actions on one line each. #}
 {% macro activity_card() %}
   <section class="card ux-card ux-home-activity" aria-labelledby="activity-title">
     <div class="ux-card-head"><h2 class="ux-card-title" id="activity-title">Your recent activity</h2></div>
     <div data-ux="activity">
     {% if activity %}
+    {% set recent = activity | rejectattr('older') | list %}
+    {% if not recent %}<p class="ux-muted ux-activity-quiet">Nothing in the last 7 days.</p>{% endif %}
     <ul class="ux-list ux-activity-list">
-      {% for item in activity[:5] %}
-      <li class="ux-activity">
-        <span><strong>{{ item.text }}</strong> · {{ item.who }}</span>
+      {% for item in activity %}
+      {% if item.older and (loop.first or not loop.previtem.older) %}<li class="ux-act-group" aria-hidden="true">Older - more than a week ago</li>{% endif %}
+      <li class="ux-activity{{ ' ux-activity-older' if item.older else '' }}">
+        <span><strong>{{ item.text }}</strong> · {{ item.who }}{% if item.older %}<span class="visually-hidden"> (older)</span>{% endif %}</span>
         <span class="ux-activity-end">
           <span class="ux-muted">{{ item.when }}</span>
           {% if item.undo %}
@@ -36,7 +42,7 @@
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">{{ today_label }}</p>
+    <p class="ds-page-eyebrow">{{ today_label }} <span class="ux-eyebrow-note">· clinic time</span></p>
     <h1 class="ds-page-title">Clinic overview</h1>
     <p class="ds-page-meta">Appointments and work that needs attention today</p>
   </div>
@@ -78,9 +84,9 @@
     <div class="ux-card-head">
       <div>
         <h2 class="ux-card-title" id="agenda-title">Today's agenda</h2>
-        <p class="ux-card-meta">{{ agenda | length }} booked · Europe/Rome</p>
+        <p class="ux-card-meta">{{ agenda | length }} confirmed booking{{ '' if agenda | length == 1 else 's' }} today</p>
       </div>
-      <a class="ux-link" href="{{ url_for('appointments.index') }}">All appointments <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      <a class="ux-link" href="{{ url_for('appointments.index', view='week', day=today_iso) }}">All appointments <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     </div>
     <div data-ux="agenda">
     {% if agenda %}
@@ -102,11 +108,41 @@
     {% else %}
     <div class="ux-empty-block">
       <p class="ux-empty">Nothing booked today.</p>
-      {% if next_day %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=next_day.iso) }}">Next booked day: {{ next_day.label }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>{% endif %}
+      {% if next_day %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=next_day.iso) }}">Next booked day: {{ next_day.label }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      {% else %}<span class="ux-muted">Nothing confirmed after today.</span>{% endif %}
     </div>
     {% endif %}
     <!--/agenda--></div>
   </section>
+  <section class="card ux-card ux-home-chart" aria-labelledby="chart-title" data-ux="bookings-14d">
+    <div class="ux-card-head"><div>
+      <h2 class="ux-card-title" id="chart-title">Confirmed bookings, next 14 days</h2>
+      <p class="ux-card-meta">{{ chart.period }} · {{ chart.total }} in total · all clinicians · booked only (requests and cancellations are not counted) · source: the appointment book</p>
+    </div></div>
+    {% if chart.total %}
+    <div class="ux-bars" aria-hidden="true">
+      <div class="ux-bars-row ux-bars-n">{% for b in chart.bars %}<span>{{ b.count if b.count else '' }}</span>{% endfor %}</div>
+      <svg class="ux-bars-svg" viewBox="0 0 140 100" preserveAspectRatio="none" focusable="false">
+        {% for b in chart.bars %}<rect class="ux-bar" x="{{ loop.index0 * 10 + 2 }}" y="{{ 100 - b.pct }}" width="6" height="{{ b.pct }}"></rect>{% endfor %}
+      </svg>
+      <div class="ux-bars-row ux-bars-day">{% for b in chart.bars %}<span><b>{{ b.wd }}</b>{{ b.num }}</span>{% endfor %}</div>
+    </div>
+    {% else %}
+    <div class="ux-empty-block">
+      <p class="ux-empty">No confirmed bookings in the next 14 days.</p>
+      {% if chart.upcoming %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=chart.upcoming.iso) }}">Next confirmed booking: {{ chart.upcoming.label }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      {% else %}<span class="ux-muted">Nothing confirmed after that either.</span>{% endif %}
+    </div>
+    {% endif %}
+    <details class="ux-bars-table"{% if not chart.total %} hidden{% endif %}>
+      <summary>Show as a table</summary>
+      <table class="ux-table">
+        <caption class="visually-hidden">Confirmed bookings per day, {{ chart.period }}</caption>
+        <thead><tr><th scope="col">Day</th><th scope="col">Confirmed bookings</th></tr></thead>
+        <tbody>{% for b in chart.bars %}<tr><th scope="row">{{ b.label }}</th><td>{{ b.count }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </details>
+  <!--/bookings-14d--></section>
   {% endif %}
   {{ activity_card() }}
   </div>
@@ -124,26 +160,13 @@
       {% if requests %}
       <ul class="ux-list">
         {% for r in requests %}
-        <li><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred {{ r.day }} · {{ r.period }}</span></li>
+        <li><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred day: {{ r.day | appt_date_label }} · {{ r.period }}</span></li>
         {% endfor %}
       </ul>
-      <a class="ux-link" href="{{ url_for('appointments.index') }}#requests">Review requests <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      <a class="ux-link" href="{{ url_for('appointments.index', view='day', day=today_iso) }}#requests">Review requests <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
       {% else %}
       <p class="ux-empty">No requests waiting.</p>
       {% endif %}
-    </section>
-
-    <section class="card ux-card" aria-labelledby="alerts-title">
-      <div class="ux-card-head"><h2 class="ux-card-title" id="alerts-title">Review and alerts</h2></div>
-      <div data-ux="alerts">
-      {% if alerts %}
-      <ol class="ux-alerts">
-        {% for text, href in alerts %}<li><a href="{{ href }}">{{ text }}</a></li>{% endfor %}
-      </ol>
-      {% else %}
-      <p class="ux-empty">Nothing to review.</p>
-      {% endif %}
-      <!--/alerts--></div>
     </section>
   {% endif %}
 
