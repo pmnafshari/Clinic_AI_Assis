@@ -273,9 +273,38 @@
       </div>
     </section>
 
+    <section class="card dash-card" aria-labelledby="timeline-files-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="timeline-files-title">File timeline</h2>
+          <p class="ds-card-sub">Confirmed files and notes, newest first</p>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.index', cf=cf) }}#timeline">All files</a>
+      </div>
+      <div class="dash-card-body">
+        {% if file_timeline %}
+        <ol class="ds-rows" aria-label="Most recent confirmed files and notes">
+          {% for e in file_timeline[:8] %}
+          <li class="ds-row"><span class="ds-row-main">
+            <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
+            {% if e.kind == 'file' %}<a class="ds-row-title text-break" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ e.category }} · {{ e.display_name }}</a>{% else %}<span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>{% endif %}
+            <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% endif %}{% if e.kind == 'file' %} · {{ 'shown to patient' if e.published else 'not shown to patient' }}{% endif %}</span>
+          </span></li>
+          {% endfor %}
+        </ol>
+        {% if file_timeline | length > 8 %}<p class="ds-row-sub mb-0">{{ file_timeline | length - 8 }} more on the <a href="{{ url_for('documents.index', cf=cf) }}#timeline">Files page</a>.</p>{% endif %}
+        {% else %}
+        <p class="dash-empty-line">No confirmed files or notes yet.</p>
+        {% endif %}
+      </div>
+    </section>
+
     <section class="card dash-card" aria-labelledby="files-title">
       <div class="dash-card-head">
-        <h2 class="ds-card-title" id="files-title">Files</h2>
+        <div>
+          <h2 class="ds-card-title" id="files-title">Files</h2>
+          <p class="ds-card-sub">The intake folder as filed - not all reviewed</p>
+        </div>
       </div>
       <div class="dash-card-body patient-files">
         <div hx-get="{{ url_for('patients.files_fragment', cf=cf) }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>

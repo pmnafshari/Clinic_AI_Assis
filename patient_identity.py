@@ -232,8 +232,11 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 # visit_summaries (P13) move with the visits they cite. a moved summary then
 # reads as outdated, because the survivor's notes are not what it was made from
 # note_reviews (POL-9) move too: a note waiting for review belongs to the survivor
+# import_items (P25): a staged proposal for the folded record is a proposal for the survivor.
+# document_publications deliberately NOT: a publication names the patient it was shown to,
+# and a merge withdraws it (patient_files.on_merge) rather than showing it to the survivor
 MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries",
-                   "note_reviews", "patient_documents")
+                   "note_reviews", "patient_documents", "import_items")
 
 # Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
 # on `patient_merges.source_cf` because resolving an OLD one is that table's
@@ -348,6 +351,8 @@ def merge(conn, source_cf, target_cf, actor, actor_role, collection=None,
         # is kept as history, before the move would put both under one patient
         settled = documents.settle_duplicates(conn, source_pid, target_pid)
         moved["documents_superseded"] = [[lost, kept] for lost, kept, _status in settled]
+        import patient_files
+        moved["publications_withdrawn"] = patient_files.on_merge(conn, source_pid, actor)
         for table in MERGE_RELATIONS:
             cur = conn.execute(
                 f"UPDATE {table} SET patient_id = ? WHERE patient_id = ?",

@@ -37,6 +37,73 @@
   </div>
 </section>
 
+<section class="card dash-card mb-3" aria-labelledby="file-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="file-title">In the record</h2></div>
+  <div class="dash-card-body">
+    {% if previewable %}
+    <figure class="file-preview mb-3">
+      <img src="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" alt="Preview of {{ doc.display_name }}">
+      <figcaption class="ds-row-sub">Preview for orientation only - not suitable for diagnosis. Download the original to read it properly.</figcaption>
+    </figure>
+    {% elif doc.kind == 'pdf' or doc.kind == 'text' %}
+    <p class="ds-row-sub">No preview for this type. Download the original to open it.</p>
+    {% endif %}
+    <ul class="ds-rows">
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Category</span><span class="ds-row-title">{{ label }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Date</span><span class="ds-row-title">{{ date[0] }} · {{ date[1] }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Visit</span><span class="ds-row-title">{{ visit.visit_date if visit else 'no visit linked' }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Came from</span><span class="ds-row-title">{{ 'legacy import (item ' ~ doc.import_item_id ~ ')' if doc.source == 'legacy_import' else 'uploaded here' }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Patient portal</span><span class="ds-row-title">{% if published %}<span class="ds-badge ds-badge-success">Shown to patient</span>{% else %}<span class="ds-badge ds-badge-warning">Not shown to patient</span>{% endif %}</span></span></li>
+    </ul>
+    {% if doc.status == 'confirmed' %}
+    <div class="d-flex flex-wrap gap-2 align-items-end mt-2">
+      {% if published %}
+      <form method="post" action="{{ url_for('documents.withdraw', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label for="wreason" class="form-label">Why withdraw it (optional)</label>
+        <input id="wreason" name="reason" class="form-control form-control-sm" maxlength="300"></div>
+        <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw from the portal</button>
+      </form>
+      {% else %}
+      <form method="post" action="{{ url_for('documents.publish', cf=cf, did=doc.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-primary btn-sm" type="submit">Show to patient</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if doc.status in ('confirmed', 'pending_review') %}
+<section class="card dash-card mb-3" aria-labelledby="move-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="move-title">Wrong patient?</h2></div>
+  <div class="dash-card-body">
+    <p class="ds-row-sub">Moves this file to the right record and stops showing it in anyone's portal at once. The file itself is not changed. Recorded with your reason.</p>
+    <form method="post" action="{{ url_for('documents.correct', cf=cf, did=doc.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="to_cf" class="form-label">Right patient's codice fiscale</label>
+      <input id="to_cf" name="to_cf" class="form-control form-control-sm" maxlength="40" required autocomplete="off"></div>
+      <div><label for="creason" class="form-label">Why it belongs to that patient</label>
+      <input id="creason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">Move to that record</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{% if history %}
+<section class="card dash-card mb-3" aria-labelledby="hist-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">Who decided what</h2></div>
+  <div class="dash-card-body"><ol class="ds-rows">
+    {% for h in history %}
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ h.action }} by {{ h.actor }}</span>
+      <span class="ds-row-sub">{{ h.at | appt_date }} {{ h.at | appt_time }}{% if h.reason %} · {{ h.reason }}{% endif %}</span></span></li>
+    {% endfor %}
+  </ol></div>
+</section>
+{% endif %}
+
 {% if pages %}
 <section class="card dash-card mb-3" aria-labelledby="text-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="text-title">Text as read</h2></div>

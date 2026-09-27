@@ -7,14 +7,15 @@ place, the same shape app/__init__.py uses for CHANGE_PW_ALLOWED.
 
 from pathlib import Path
 
-from flask import (Blueprint, current_app, g, redirect, render_template, request, send_file,
-                   url_for)
+from flask import (Blueprint, Response, abort, current_app, g, redirect, render_template, request,
+                   send_file, url_for)
 
 from codice_fiscale import normalize as normalize_cf
 import appointments
 import consent
 import ledger
 import data_rights
+import documents
 import patient_accessor
 import patient_auth
 import storage
@@ -191,6 +192,54 @@ def data_download(req_id):
               ip=net.from_request(request))
     return send_file(path.resolve(), as_attachment=True,
                      download_name=f"my-data-{req_id}.zip", max_age=0)
+
+
+# P25: a file reaches this page only while it is confirmed, this patient's, and published to
+# this patient. every list, preview and download reads that again through patient_accessor and
+# re-hashes the bytes; another patient's file, an unpublished one and a missing number are the
+# same 404, and every refusal is audited
+@patient_bp.route("/files")
+def files_page():
+    files = patient_accessor.get_published_files(g.patient["patient_id"], get_db(),
+                                                  ip=net.from_request(request))
+    return render_template("patient_files.html", files=files)
+
+
+def _published_file(doc_id, action, images_only=False):
+    conn = get_db()
+    pid = g.patient["patient_id"]
+    ip = net.from_request(request)
+    row = patient_accessor.get_published_file(pid, doc_id, conn, ip=ip)
+    if row and images_only and row["kind"] not in ("png", "jpeg"):
+        row = None
+    data = documents.verified_bytes(row) if row else None
+    if data is None:
+        log_audit(conn, pid, "patient", "patient_file_denied", f"document:{doc_id}", allowed=0, ip=ip)
+        abort(404)
+    log_audit(conn, pid, "patient", action, f"document:{doc_id}", allowed=1, ip=ip)
+    return row, data
+
+
+def _file_response(data, mimetype):
+    resp = Response(data, mimetype=mimetype)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@patient_bp.route("/files/<int:doc_id>/download")
+def file_download(doc_id):
+    row, data = _published_file(doc_id, "patient_file_download")
+    resp = _file_response(data, documents.MIMETYPES.get(row["kind"], "application/octet-stream"))
+    resp.headers.set("Content-Disposition", "attachment", filename=row["download_name"])
+    return resp
+
+
+@patient_bp.route("/files/<int:doc_id>/preview")
+def file_preview(doc_id):
+    row, data = _published_file(doc_id, "patient_file_preview", images_only=True)
+    return _file_response(data, documents.MIMETYPES[row["kind"]])
 
 
 @patient_bp.route("/billing")

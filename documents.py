@@ -258,6 +258,17 @@ def original_path(row):
     return Path(DOC_ROOT) / row["stored_path"]
 
 
+def verified_bytes(r):
+    """The stored original, only if it still hashes to what was confirmed and its bytes are its kind."""
+    path = original_path(r)
+    if path.is_symlink() or not path.is_file():
+        return None
+    data = path.read_bytes()
+    if hashlib.sha256(data).hexdigest() != r["sha256"] or detect(data, r["display_name"]) != r["kind"]:
+        return None
+    return data
+
+
 def row(conn, doc_id):
     return conn.execute("SELECT * FROM patient_documents WHERE id = ?", (doc_id,)).fetchone()
 

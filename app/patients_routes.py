@@ -9,6 +9,7 @@ import ask
 import consent
 import data_rights
 import patient_auth
+import patient_files
 import patient_identity
 import pending_actions
 from auth import authorize, log_audit
@@ -243,6 +244,9 @@ def detail_view(cf):
         timeline=patient_identity.timeline(conn, cf, show_clinical=show_clinical),
         consents=consent.state(conn, pid, "en"),
         requests=data_rights.for_patient(conn, pid),
+        # P25: the same gate as the clinical card; the timeline itself re-checks it
+        file_timeline=patient_files.timeline(conn, pid, g.user["username"], g.user["role"])
+        if show_clinical else [],
     )
 
 

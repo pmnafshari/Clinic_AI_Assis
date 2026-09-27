@@ -30,6 +30,33 @@ STRINGS = {
     "nav_chat": {"it": "Assistente", "en": "Assistant"},
     "nav_profile": {"it": "Profilo", "en": "Profile"},
     "nav_billing": {"it": "Pagamenti", "en": "Payments"},
+    "nav_files": {"it": "I miei file", "en": "My files"},
+    # P25: only files a dentist confirmed and then chose to show
+    "files_heading": {"it": "File condivisi dallo studio", "en": "Files the clinic has shared with you"},
+    "files_notice": {"it": "Qui trovi solo i file che il dentista ha scelto di condividere con te. Per una copia"
+                               " completa dei tuoi dati usa la richiesta nel tuo profilo.",
+                     "en": "Only files your dentist has chosen to share appear here. For a full copy of your"
+                           " data, use the request in your profile."},
+    "files_none": {"it": "Non ci sono ancora file condivisi con te.", "en": "No files have been shared with you yet."},
+    "files_download": {"it": "Scarica", "en": "Download"},
+    "files_taken": {"it": "Data:", "en": "Date:"},
+    "files_added": {"it": "Aggiunto il", "en": "Added"},
+    "files_preview_note": {"it": "Anteprima solo per orientarsi: non adatta a una diagnosi.",
+                           "en": "Preview for orientation only - not suitable for diagnosis."},
+    "files_no_preview": {"it": "Nessuna anteprima per questo tipo di file: scaricalo per aprirlo.",
+                         "en": "No preview for this type of file: download it to open it."},
+    "files_preview_alt": {"it": "Anteprima di {name} (solo per orientarsi)", "en": "Preview of {name} (for orientation only)"},
+    "filecat_opg": {"it": "Ortopanoramica (OPG)", "en": "OPG"},
+    "filecat_xray": {"it": "Radiografia", "en": "X-ray"},
+    "filecat_photo": {"it": "Foto", "en": "Photo"},
+    "filecat_report": {"it": "Referto", "en": "Report"},
+    "filecat_letter": {"it": "Lettera", "en": "Letter"},
+    "filecat_consent": {"it": "Modulo di consenso", "en": "Consent form"},
+    "filecat_other": {"it": "Documento", "en": "Document"},
+    "filecat_png": {"it": "Immagine", "en": "Image"},
+    "filecat_jpeg": {"it": "Immagine", "en": "Image"},
+    "filecat_pdf": {"it": "Documento PDF", "en": "PDF document"},
+    "filecat_text": {"it": "Documento di testo", "en": "Text document"},
 
     # phase 45 - the reference's header and overview. the brand names the
     # surface, never the clinic: this app has no clinic name to show.

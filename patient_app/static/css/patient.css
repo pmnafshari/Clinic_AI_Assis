@@ -476,3 +476,6 @@ h1 {
 .form-control, .form-select { background-color: #fff; }
 
 .patient-brand-inline:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 0.625rem; }
+
+/* P25 my files: a small preview beside the details */
+.patient-file-thumb { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid #d3dae4; background: #fff; flex: none; }

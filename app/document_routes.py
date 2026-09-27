@@ -1,9 +1,10 @@
 import json
 
-from flask import (Blueprint, abort, flash, g, redirect, render_template, request, send_file,
+from flask import (Blueprint, Response, abort, flash, g, redirect, render_template, request,
                    url_for)
 
 import documents as docs
+import patient_files as pf
 import patient_id
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
@@ -47,7 +48,9 @@ def index(cf):
             results = docs.search(conn, pid, query, *_who())
         except docs.DocumentError as e:
             error = str(e)
-    return render_template("documents.html", cf=cf, patient=patient, rows=docs.for_patient(conn, pid),
+    timeline = pf.timeline(conn, pid, *_who())
+    others = [r for r in docs.for_patient(conn, pid) if r["status"] != "confirmed"]
+    return render_template("documents.html", cf=cf, patient=patient, rows=others, timeline=timeline,
                            query=query, results=results, error=error)
 
 
@@ -80,11 +83,15 @@ def detail(cf, did):
     except LookupError:
         abort(404)
     pages = json.loads(r["extraction"])["pages"] if r["extraction"] else []
+    visit = conn.execute("SELECT visit_date FROM visits WHERE id = ? AND patient_id = ?",
+                         (r["visit_id"], pid)).fetchone() if r["visit_id"] else None
     return render_template("document_detail.html", cf=cf, patient=patient, doc=r, pages=pages,
-                           uncertain_below=docs.UNCERTAIN_BELOW)
+                           uncertain_below=docs.UNCERTAIN_BELOW, published=pf.published(conn, did, pid),
+                           history=pf.history(conn, did, *_who()), label=pf.label(r),
+                           date=pf.dated(r), visit=visit, previewable=r["kind"] in pf.PREVIEWABLE)
 
 
-def _step(cf, did, fn, done, **kwargs):
+def _step(cf, did, fn, done, back="detail", **kwargs):
     conn, pid, _patient_row = _patient(cf)
     try:
         out = fn(conn, did, pid, actor=g.user["username"], role=g.user["role"], **kwargs)
@@ -94,6 +101,8 @@ def _step(cf, did, fn, done, **kwargs):
         flash(str(e), "danger")
         return redirect(url_for("documents.detail", cf=cf, did=did))
     flash(done, "success")
+    if back == "index":
+        return redirect(url_for("documents.index", cf=cf) + "#timeline")
     return redirect(url_for("documents.detail", cf=cf, did=out if isinstance(out, int) else did))
 
 
@@ -129,6 +138,17 @@ def replace(cf, did):
                  data=data, name=blob.filename if blob else "")
 
 
+def _serve(data, mimetype, download_name=None):
+    """No caching, no sniffing, nothing the file can run. A download is always an attachment."""
+    resp = Response(data, mimetype=mimetype)
+    if download_name:
+        resp.headers.set("Content-Disposition", "attachment", filename=download_name)
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
 @documents_bp.route("/patients/<cf>/documents/<int:did>/file")
 def original(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
@@ -138,13 +158,54 @@ def original(cf, did):
         r = docs.load(conn, did, pid, *_who())
     except LookupError:
         abort(404)
-    path = docs.original_path(r)
-    if not path.exists():
+    # the bytes must still be the ones that were confirmed (P25), or nothing is served
+    data = docs.verified_bytes(r)
+    if data is None:
         abort(404)
     # always a download, never rendered in the page: a PDF viewer or an image
     # decoder in the browser is not something a stored file gets to drive
-    resp = send_file(str(path.resolve()), mimetype=docs.MIMETYPES.get(r["kind"], "application/octet-stream"),
-                     as_attachment=True, download_name=r["display_name"])
-    resp.headers["X-Content-Type-Options"] = "nosniff"
-    resp.headers["Content-Security-Policy"] = "sandbox; default-src 'none'"
-    return resp
+    return _serve(data, docs.MIMETYPES.get(r["kind"], "application/octet-stream"), r["display_name"])
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/preview")
+def preview(cf, did):
+    # P25: PNG and JPEG only, as an <img>, for orientation - not a diagnostic viewer
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_read", f"document:{did}")
+    conn, pid, _patient_row = _patient(cf)
+    try:
+        data, mimetype = pf.preview(conn, did, pid, *_who())
+    except (LookupError, docs.DocumentError):
+        abort(404)
+    return _serve(data, mimetype)
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/publish", methods=["POST"])
+def publish(cf, did):
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_publish", f"document:{did}")
+    return _step(cf, did, pf.publish, "Shown to the patient in their portal.", back="index")
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/withdraw", methods=["POST"])
+def withdraw(cf, did):
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_withdraw", f"document:{did}")
+    return _step(cf, did, pf.withdraw, "No longer shown to the patient.", back="index",
+                 reason=request.form.get("reason", ""))
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/correct", methods=["POST"])
+def correct(cf, did):
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_correct", f"document:{did}")
+    conn, pid, _patient_row = _patient(cf)
+    try:
+        pf.correct(conn, did, pid, request.form.get("to_cf", ""), request.form.get("reason", ""), *_who())
+    except LookupError:
+        abort(404)
+    except docs.DocumentError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("documents.detail", cf=cf, did=did))
+    flash("Moved to the other patient's record. It is no longer shown to anyone in the portal.", "success")
+    return redirect(url_for("documents.index", cf=cf))

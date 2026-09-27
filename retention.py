@@ -73,6 +73,13 @@ def plan(conn, types, now=None):
                     "SELECT COUNT(*) FROM patient_documents WHERE uploaded_at < ?",
                     (cut,)).fetchone()[0],
                 "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
+    # P25: legacy files staged but not yet decided are clinical material of
+    # someone - counted, never swept; the old shared folder keeps its own copies
+    out.append({"type": "staged_imports", "sweep": types["clinical_records"]["sweep"],
+                "past_period": conn.execute(
+                    "SELECT COUNT(*) FROM import_items WHERE state IN ('staged', 'proposed',"
+                    " 'unmatched', 'conflict', 'held') AND created_at < ?", (cut,)).fetchone()[0],
+                "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
     # P16: a dentist's verdicts on past cases are clinical judgments - counted,
     # never swept
     out.append({"type": "similar_case_feedback", "sweep": types["clinical_records"]["sweep"],
@@ -160,7 +167,8 @@ def selftest():
         counts = {r["type"]: r["past_period"] for r in plan(conn, types, now)}
         assert counts == {"audit_log": 1, "closed_data_requests": 1, "exports": 0,
                           "clinical_records": 1, "clinical_summaries": 1, "staged_notes": 0,
-                          "patient_documents": 0, "similar_case_feedback": 0, "staff_sessions": 1, "invoices": 1}, \
+                          "patient_documents": 0, "staged_imports": 0, "similar_case_feedback": 0,
+                          "staff_sessions": 1, "invoices": 1}, \
             f"1: {counts}"
 
         # 2. apply deletes only sweep=delete types, and the audit purge says so

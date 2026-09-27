@@ -73,8 +73,9 @@ NAME_PREFIX = "clinic-"
 SUFFIX = ".cbk"
 # stores, relative to the data root. the sqlite db is handled separately.
 # staging/ holds uploads awaiting a dentist's review (POL-9): originals and
-# extractions that exist nowhere else
-FILE_STORES = ("sorted", "drop", "staging", "documents", "db/undo_log.jsonl")
+# extractions that exist nowhere else. import_staging/ (P25) holds the staged
+# copies of legacy files a dentist has not decided yet
+FILE_STORES = ("sorted", "drop", "staging", "documents", "import_staging", "db/undo_log.jsonl")
 DB_REL = "db/clinic.sqlite"
 CHROMA_REL = "db/chroma"
 

@@ -112,6 +112,7 @@ def create_app():
     from .reports_routes import reports_bp
     from .stock_routes import stock_bp
     from .document_routes import documents_bp
+    from .import_routes import imports_bp
     from .similar_routes import similar_bp
     from .review_routes import review_bp
     from .summary_routes import summary_bp
@@ -131,6 +132,7 @@ def create_app():
     app.register_blueprint(summary_bp)
     app.register_blueprint(review_bp)
     app.register_blueprint(documents_bp)
+    app.register_blueprint(imports_bp)
     app.register_blueprint(similar_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)

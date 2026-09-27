@@ -21,10 +21,11 @@ import storage
 TODAY = datetime(2031, 3, 5, 9, 0)            # a Wednesday, and not the machine's date
 DAY = "2031-03-05"
 NAV = {
-    "dentist": {"/", "/appointments", "/patients", "/reviews", "/qa", "/notes/new", "/billing", "/stock",
+    # /imports (P25): the dentist reviews, reception sees progress only; admin never
+    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/qa", "/notes/new", "/billing", "/stock",
                 "/handoffs", "/reminders", "/data-requests", "/reports", "/providers"},
-    "assistant": {"/", "/appointments", "/patients", "/qa", "/notes/new", "/billing", "/stock", "/handoffs",
-                  "/reminders", "/providers"},
+    "assistant": {"/", "/appointments", "/patients", "/imports", "/qa", "/notes/new", "/billing", "/stock",
+                  "/handoffs", "/reminders", "/providers"},
     "admin": {"/admin/users", "/patients/duplicates"},
 }
 CF_SHAPE = re.compile(r"\b[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]\b|\b[A-Z]{4}[0-9]{12}\b")
@@ -100,7 +101,7 @@ def selftest():
         # 2b. a page left out of a role's sidebar is also refused at its route, not only hidden
         for path in ("/reviews", "/reports", "/data-requests", "/admin/users"):
             assert assistant.get(path).status_code in (302, 403), f"2b: assistant reached {path}"
-        for path in ("/", "/appointments", "/patients", "/notes/new"):
+        for path in ("/", "/appointments", "/patients", "/notes/new", "/imports"):
             assert clients["admin"].get(path).status_code in (302, 403), f"2b: admin reached {path}"
         refused = clients["admin"].get("/qa").get_data(as_text=True)      # refuses in-page, and audits it
         assert "permission" in refused and "data-example" not in refused and 'name="question"' not in refused, \

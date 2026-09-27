@@ -89,6 +89,42 @@ def get_billing(pid, conn, ip=None):
     return summary
 
 
+EXTENSION = {"pdf": "pdf", "png": "png", "jpeg": "jpg", "text": "txt"}
+
+
+def _file(row):
+    # never the original file name: a legacy name can carry anyone's name or code
+    import clinic_time
+    date = clinic_time.local_date(row["acquired_at"] or row["uploaded_at"])
+    return {"id": row["id"], "kind": row["kind"],
+            "download_name": f"{row['category'] or row['kind']}-{date}-{row['id']}.{EXTENSION.get(row['kind'], 'bin')}",
+            "category": row["category"], "sha256": row["sha256"], "stored_path": row["stored_path"],
+            "date": date, "display_name": row["display_name"],
+            "dated_by_evidence": bool(row["acquired_at"])}
+
+
+# P25: a file is the patient's to see only while it is confirmed, theirs, and has a live
+# publication naming them. the one rule for it; patient_files.published() reads it here too
+PUBLISHED = ("SELECT d.id, d.patient_id, d.display_name, d.kind, d.category, d.sha256, d.stored_path,"
+             " d.acquired_at, d.uploaded_at FROM patient_documents d JOIN document_publications p"
+             " ON p.document_id = d.id AND p.patient_id = d.patient_id AND p.withdrawn_at IS NULL")
+
+
+def get_published_files(pid, conn, ip=None):
+    rows = conn.execute(
+        PUBLISHED + " WHERE d.patient_id = ? AND d.status = 'confirmed'"
+        " ORDER BY COALESCE(d.acquired_at, d.uploaded_at) DESC, d.id DESC LIMIT 200", (pid,)).fetchall()
+    rows = _scope_rows(rows, pid, conn, "get_published_files", ip=ip)
+    return [_file(row) for row in rows]
+
+
+def get_published_file(pid, doc_id, conn, ip=None):
+    rows = conn.execute(
+        PUBLISHED + " WHERE d.patient_id = ? AND d.status = 'confirmed' AND d.id = ?", (pid, doc_id)).fetchall()
+    rows = _scope_rows(rows, pid, conn, "get_published_file", ip=ip)
+    return _file(rows[0]) if rows else None
+
+
 # ip rides along so the mismatch row records where the request came from.
 # this is the most security-relevant of the three patient rows, and a sweep
 # with no source recorded is invisible after the fact. it defaults to None,

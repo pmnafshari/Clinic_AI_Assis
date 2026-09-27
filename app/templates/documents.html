@@ -3,27 +3,77 @@
 <nav aria-label="Breadcrumb" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
-    <li aria-current="page">Documents</li>
+    <li aria-current="page">Files</li>
   </ol>
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
-    <h1 class="ds-page-title">Documents</h1>
+    <h1 class="ds-page-title">Files and documents</h1>
     <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span> · dentist only</p>
   </div>
 </div>
 
 <div class="ds-alert ds-alert-info mb-3" role="note">
-  <div><strong class="ds-alert-title">Sources, not answers</strong>
-  Search finds this patient's confirmed documents and shows where each result came from. It does not
-  interpret, diagnose or summarise, and an image result is not a clinical finding. A document's text
-  is searchable only after you confirm it.</div>
+  <div><strong class="ds-alert-title">Two separate decisions</strong>
+  A file is part of this record once you confirm it. The patient sees it in their portal only after you
+  choose <em>Show to patient</em>, and stops seeing it the moment you withdraw it or move it to another
+  record. Previews are for orientation only and are not suitable for diagnosis; open the original for that.</div>
 </div>
+
+<section class="card dash-card mb-3" aria-labelledby="timeline-title" id="timeline">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="timeline-title">File timeline</h2>
+    <span class="ds-row-sub">confirmed files and confirmed notes, newest first</span></div>
+  <div class="dash-card-body">
+    {% if timeline %}
+    <ol class="ds-rows file-timeline" aria-label="Confirmed files and notes, newest first">
+      {% for e in timeline %}
+      <li class="ds-row file-entry">
+        {% if e.preview %}
+        <img class="file-thumb" src="{{ url_for('documents.preview', cf=cf, did=e.doc_id) }}" alt="Preview of {{ e.display_name }} (for orientation only)" width="56" height="56" loading="lazy">
+        {% else %}
+        <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi {{ 'bi-journal-text' if e.kind == 'note' else 'bi-file-earmark' }}"></i></span>
+        {% endif %}
+        <span class="ds-row-main">
+          <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
+          {% if e.kind == 'file' %}
+          <a class="ds-row-title text-break" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ e.category }} · {{ e.display_name }}</a>
+          {% else %}
+          <span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>
+          {% endif %}
+          <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% elif e.kind == 'file' %} · no visit linked{% endif %}</span>
+        </span>
+        {% if e.kind == 'file' %}
+        <span class="file-actions">
+          {% if e.published %}<span class="ds-badge ds-badge-success">Shown to patient</span>{% else %}<span class="ds-badge ds-badge-warning">Not shown to patient</span>{% endif %}
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.original', cf=cf, did=e.doc_id) }}" >Download<span class="visually-hidden"> the original of {{ e.display_name }}</span></a>
+          {% if e.published %}
+          <form method="post" action="{{ url_for('documents.withdraw', cf=cf, did=e.doc_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw<span class="visually-hidden"> {{ e.display_name }} from the patient's portal</span></button>
+          </form>
+          {% else %}
+          <form method="post" action="{{ url_for('documents.publish', cf=cf, did=e.doc_id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-outline-primary btn-sm" type="submit">Show to patient<span class="visually-hidden">: {{ e.display_name }}</span></button>
+          </form>
+          {% endif %}
+        </span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="dash-empty-line">No confirmed files yet. Upload one below, or confirm one from <a href="{{ url_for('imports.index') }}">Legacy import</a>.</p>
+    {% endif %}
+  </div>
+</section>
 
 <section class="card dash-card mb-3" aria-labelledby="search-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="search-title">Search</h2></div>
   <div class="dash-card-body">
+    <p class="ds-row-sub mb-2">Finds this patient's confirmed documents and shows where each result came from. It does not
+    interpret, diagnose or summarise, and an image result is not a clinical finding.</p>
     <form method="get" action="{{ url_for('documents.index', cf=cf) }}" class="d-flex gap-2 mb-2" role="search">
       <label for="q" class="visually-hidden">Search this patient's documents</label>
       <input id="q" name="q" class="form-control" value="{{ query }}" maxlength="200">
@@ -58,7 +108,7 @@
 </section>
 
 <section class="card dash-card" aria-labelledby="list-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="list-title">All documents</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="list-title">Waiting, not accepted and earlier versions</h2></div>
   <div class="dash-card-body">
     {% if rows %}
     <ul class="ds-rows">
@@ -70,7 +120,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No documents yet.</p>
+    <p class="dash-empty-line">Nothing waiting.</p>
     {% endif %}
   </div>
 </section>

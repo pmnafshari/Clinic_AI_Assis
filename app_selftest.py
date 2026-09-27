@@ -740,10 +740,11 @@ def selftest():
         # not fit a dentist's bar at 1440px. it is behind manage_data_requests,
         # which only a dentist holds, and an assistant must not gain it (20a).
         # P23: the sidebar replaces the tabs and the avatar menu. PROPERTY UNCHANGED - counted per role, so a stripped
-        # authorize() cannot hide behind a total: a dentist sees 14 links (13 pages plus the Requests entry, P23 follow-up) (ux_selftest pins the exact set per role),
+        # authorize() cannot hide behind a total: a dentist sees 15 links (14 pages plus the Requests entry; P25 added Legacy import) (ux_selftest pins the exact set per role),
         # and Change password and Sign out are in the sidebar foot, Sign out a POST form.
         side_links = re.findall(rb'class="app-side-link[^"]*" href="([^"]+)"', shell.data)
-        assert len(side_links) == 14, f"20: a dentist should see 14 sidebar links, got {len(side_links)}"
+        # P25 adds Legacy import: 15
+        assert len(side_links) == 15, f"20: a dentist should see 15 sidebar links, got {len(side_links)}"
         assert b"/data-requests" in side_links, f"20: a dentist is offered Data requests: {side_links}"
         foot = shell.data.split(b'data-ux="account"', 1)[1]
         assert b"Change password" in foot and b'action="/logout"' in foot and b"Sign out" in foot, \

@@ -35,6 +35,12 @@ this file is stale.
 | GET | `/handoffs` | `handoff.index` |
 | POST | `/handoffs/<int:handoff_id>/claim` | `handoff.claim` |
 | POST | `/handoffs/<int:handoff_id>/resolve` | `handoff.resolve` |
+| GET | `/imports` | `imports.index` |
+| GET | `/imports/items/<int:import_id>` | `imports.item` |
+| POST | `/imports/items/<int:import_id>/confirm` | `imports.confirm` |
+| POST | `/imports/items/<int:import_id>/hold` | `imports.hold` |
+| GET | `/imports/items/<int:import_id>/original` | `imports.original` |
+| POST | `/imports/items/<int:import_id>/reject` | `imports.reject` |
 | GET,POST | `/login` | `auth.login` |
 | POST | `/logout` | `auth.logout` |
 | POST | `/notes/dictate` | `notes.dictate` |
@@ -48,10 +54,14 @@ this file is stale.
 | POST | `/patients/<cf>/documents` | `documents.upload` |
 | GET | `/patients/<cf>/documents/<int:did>` | `documents.detail` |
 | POST | `/patients/<cf>/documents/<int:did>/confirm` | `documents.confirm` |
+| POST | `/patients/<cf>/documents/<int:did>/correct` | `documents.correct` |
 | GET | `/patients/<cf>/documents/<int:did>/file` | `documents.original` |
+| GET | `/patients/<cf>/documents/<int:did>/preview` | `documents.preview` |
+| POST | `/patients/<cf>/documents/<int:did>/publish` | `documents.publish` |
 | POST | `/patients/<cf>/documents/<int:did>/reject` | `documents.reject` |
 | POST | `/patients/<cf>/documents/<int:did>/replace` | `documents.replace` |
 | POST | `/patients/<cf>/documents/<int:did>/retry` | `documents.retry` |
+| POST | `/patients/<cf>/documents/<int:did>/withdraw` | `documents.withdraw` |
 | POST | `/patients/<cf>/edit` | `patients.edit_submit` |
 | GET | `/patients/<cf>/edit-form` | `patients.edit_form_fragment` |
 | GET | `/patients/<cf>/files` | `patients.files_fragment` |
@@ -110,6 +120,9 @@ this file is stale.
 | POST | `/consent` | `patient.consent_submit` |
 | POST | `/data-request` | `patient.data_request` |
 | GET | `/data-requests/<int:req_id>/download` | `patient.data_download` |
+| GET | `/files` | `patient.files_page` |
+| GET | `/files/<int:doc_id>/download` | `patient.file_download` |
+| GET | `/files/<int:doc_id>/preview` | `patient.file_preview` |
 | GET | `/lang/<code>` | `set_language` |
 | GET,POST | `/login` | `patient.login` |
 | POST | `/logout` | `patient.logout` |
@@ -153,7 +166,11 @@ this file is stale.
 | `demo_identities` | patient_id, seed, created_at |
 | `dentist_absences` | id, dentist, from_date, to_date, reason |
 | `dentist_schedule` | id, dentist, weekday, starts, ends |
+| `document_identity_events` | id, document_id, action, from_pid, to_pid, actor, at, reason |
+| `document_publications` | id, document_id, patient_id, published_by, published_at, withdrawn_by, withdrawn_at, withdraw_reason |
 | `handoff_requests` | id, patient_id, reason, topic, status, created_at, claimed_by, claimed_at, resolved_by, resolved_at |
+| `import_batches` | id, source_key, source_label, started_by, started_at, finished_at, status, clock_offset, totals |
+| `import_items` | id, batch_id, source_key, rel_path, size, mtime, sha256, kind, state, strength, patient_id, candidates, evidence, extraction, extractor, reason, document_id, decided_by, decided_at, decision_reason, created_at |
 | `installment_plans` | id, invoice_id, created_by, created_at |
 | `installments` | id, plan_id, seq, due_date, amount_cents |
 | `inventory_alerts` | id, item_id, opened_at, balance_at_open, threshold_at_open, acknowledged_at, acknowledged_by, resolved_at, resolved_by |
@@ -166,7 +183,7 @@ this file is stale.
 | `ops_health_samples` | id, at, all_up, alerts, checks |
 | `patient_agent_actions` | id, patient_id, kind, payload, status, created_at, expires_at, resolved_at, result_id |
 | `patient_credentials` | id, patient_id, pin_hash, must_change_pin, issued_at, expires_at, failed_attempts, locked_until, active |
-| `patient_documents` | id, patient_id, kind, display_name, stored_path, sha256, size, status, reason, extraction, extractor, uploaded_by, uploaded_at, decided_by, decided_at, supersedes_id |
+| `patient_documents` | id, patient_id, kind, display_name, stored_path, sha256, size, status, reason, extraction, extractor, uploaded_by, uploaded_at, decided_by, decided_at, supersedes_id, category, source, import_item_id, acquired_at, acquired_basis, visit_id |
 | `patient_duplicate_dismissals` | id, patient_id_a, patient_id_b, cf_a, cf_b, dismissed_at, dismissed_by, reason |
 | `patient_login_attempts` | id, ip, attempted_at |
 | `patient_merges` | id, source_cf, target_cf, target_patient_id, merged_at, merged_by, source_row, moved |

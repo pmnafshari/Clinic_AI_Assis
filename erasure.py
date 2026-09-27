@@ -59,6 +59,16 @@ def _has(conn, table):
                         (table,)).fetchone() is not None
 
 
+def _import_items(conn, pid):
+    """P25: staged legacy files proposed for, or naming, this patient. Read before _sqlite."""
+    if not _has(conn, "import_items"):
+        return set()
+    return {r[0] for r in conn.execute(
+        "SELECT sha256 FROM import_items WHERE sha256 IS NOT NULL AND (patient_id = ? OR EXISTS"
+        " (SELECT 1 FROM json_each(COALESCE(import_items.candidates, '[]')) WHERE value = ?))",
+        (pid, pid))}
+
+
 def _sqlite(conn, pid, cf, sources, hold_invoices):
     invoiced = []
     if hold_invoices:
@@ -112,6 +122,15 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
                          " (SELECT id FROM visits WHERE patient_id = ?)", (pid, pid))
             conn.execute("DELETE FROM similar_case_exclusions WHERE visit_id IN"
                          " (SELECT id FROM visits WHERE patient_id = ?)", (pid,))
+        if _has(conn, "import_items"):
+            # P25: a staged file that names this patient is their data, reviewed or not.
+            # the old shared folder is outside this system and keeps its own copy
+            import legacy_import
+            legacy_import.forget_patient(conn, pid)
+        if _has(conn, "document_publications"):
+            # P25: what was shown to the patient, and who said whose each file is
+            import patient_files
+            patient_files.on_erase(conn, pid)
         if _has(conn, "patient_documents"):
             # P15: clinical documents go with the patient; their files and index
             # entries are removed after the transaction (_remove_documents)
@@ -286,6 +305,12 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     if _has(conn, "patient_documents"):
         left["documents"] = conn.execute("SELECT COUNT(*) FROM patient_documents WHERE"
                                          " patient_id = ?", (pid,)).fetchone()[0]
+    if _has(conn, "document_publications"):
+        left["publications"] = conn.execute("SELECT COUNT(*) FROM document_publications WHERE"
+                                            " patient_id = ?", (pid,)).fetchone()[0]
+    if _has(conn, "import_items"):
+        left["import_items"] = conn.execute("SELECT COUNT(*) FROM import_items WHERE patient_id = ?",
+                                            (pid,)).fetchone()[0]
     if _has(conn, "note_reviews"):
         left["note_reviews"] = conn.execute(
             f"SELECT COUNT(*) FROM note_reviews WHERE patient_id = ? OR codice_fiscale IN"
@@ -336,9 +361,13 @@ def erase(conn, pid, actor, role, req_id, sorted_root=Path("sorted"), drop_dir=P
     held_types = holds(policy_path)
     staged = _staging_dirs(conn, pid, keys)
     doc_files = _document_files(conn, pid)
+    import_blobs = _import_items(conn, pid)
     held = _sqlite(conn, pid, cf, sources, "invoices" in held_types)
     _remove_staging(staged)
     _remove_documents(doc_files, pid)
+    if import_blobs:
+        import legacy_import
+        legacy_import.remove_unreferenced(conn, import_blobs)
     _files(pid, keys, sorted_root, drop_dir, keep_records=held)
     _undo_log(undo_log, keys)
     _index(collection, pid, keys)

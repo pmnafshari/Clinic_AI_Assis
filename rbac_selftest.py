@@ -112,6 +112,10 @@ def _seed(db_path, root):
         "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size,"
         " status, uploaded_by, uploaded_at) VALUES (?, 'text', 'rb.txt', 'rb/none', 'rbsha', 1,"
         " 'pending_review', 'rb_dentist', '2026-09-23T06:00:00+00:00')", (pid,)).lastrowid
+    # a proposed legacy import item (P25), the state the import review routes act on
+    import_id = conn.execute(
+        "INSERT INTO import_items (batch_id, source_key, rel_path, sha256, kind, state, created_at)"
+        " VALUES (1, 'rb', 'rb.txt', 'rbsha', 'text', 'proposed', '2026-09-23T06:00:00+00:00')").lastrowid
     # a reviewed visit of a second patient: a similar case the P16 routes act on
     other = conn.execute("SELECT patient_id FROM patients WHERE patient_id != ? LIMIT 1",
                          (pid,)).fetchone()
@@ -134,7 +138,7 @@ def _seed(db_path, root):
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
-            "vid": visit_id, "case": case_id,
+            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did,
             "username": "rb_target", "filename": "app.css"}
 
 

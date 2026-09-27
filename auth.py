@@ -11,8 +11,8 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers", "review_summary", "review_upload", "review_xray_demo", "manage_xray_demo", "stop_xray_demo", "manage_support"},
-    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "stop_xray_demo"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers", "review_summary", "review_upload", "review_xray_demo", "manage_xray_demo", "stop_xray_demo", "manage_support", "view_import_progress"},
+    "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "stop_xray_demo", "view_import_progress"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
     # patient record at all, so granting any of them would widen admin's reach
@@ -139,6 +139,18 @@ ROUTE_POLICY = {
     "documents.reject": "read_clinical",
     "documents.replace": "read_clinical",
     "documents.original": "read_clinical",
+    # P25: previews, portal publication and correction are the dentist's; the import
+    # page shows reception progress only, every item and decision is the dentist's
+    "documents.preview": "read_clinical",
+    "documents.publish": "read_clinical",
+    "documents.withdraw": "read_clinical",
+    "documents.correct": "read_clinical",
+    "imports.index": "view_import_progress",
+    "imports.item": "read_clinical",
+    "imports.original": "read_clinical",
+    "imports.confirm": "read_clinical",
+    "imports.reject": "read_clinical",
+    "imports.hold": "read_clinical",
     "similar.page": "read_clinical",
     "similar.feedback": "read_clinical",
     "similar.exclude": "read_clinical",

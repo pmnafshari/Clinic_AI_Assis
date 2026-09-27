@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('imports.index') }}">Legacy import</a></li>
+    <li aria-current="page">Item {{ item.id }}</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Item {{ item.id }} · run {{ item.batch_id }}</p>
+    <h1 class="ds-page-title text-break">{{ name }}</h1>
+    <p class="ds-page-meta"><strong>{{ labels[item.state] }}</strong>{% if item.strength %} · {{ strength[item.strength] }}{% endif %}</p>
+  </div>
+</div>
+
+{% if item.state in open_states %}
+<div class="ds-alert ds-alert-warning mb-3" role="note">
+  <div><strong class="ds-alert-title">Nothing is attached until you confirm</strong>
+  Check the original and every clue below, including the ones against. A name, a date, a folder or a
+  camera time alone never proves whose a file is. Confirming adds the file to that patient's record only;
+  showing it to the patient is a separate choice on their Files page.</div>
+</div>
+{% endif %}
+
+<section class="card dash-card mb-3" aria-labelledby="orig-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="orig-title">The original</h2></div>
+  <div class="dash-card-body">
+    <p class="ds-row-sub text-break">Path in the old folder: {{ item.rel_path }} · {{ item.kind }} · {{ item.size }} bytes · sha256 {{ (item.sha256 or '')[:16] }}…</p>
+    {% if item.state == 'refused' %}
+    <p class="dash-empty-line">{{ item.reason }}</p>
+    {% else %}
+    {% if previewable %}
+    <figure class="file-preview mb-2">
+      <img src="{{ url_for('imports.original', import_id=item.id) }}" alt="Preview of {{ name }}">
+      <figcaption class="ds-row-sub">Preview for orientation only - not suitable for diagnosis.</figcaption>
+    </figure>
+    {% else %}
+    <p class="ds-row-sub">No preview for this type.</p>
+    {% endif %}
+    <a href="{{ url_for('imports.original', import_id=item.id, download=1) }}">Download the original</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="clue-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="clue-title">Evidence found in the file</h2></div>
+  <div class="dash-card-body">
+    {% if ev.clues %}
+    
+    <table class="ux-table ux-table-page import-evidence">
+      <caption class="visually-hidden">Each clue, where it came from, and whose it points to</caption>
+      <thead><tr><th scope="col">Clue</th><th scope="col">Value</th><th scope="col">Where</th><th scope="col">Points to</th></tr></thead>
+      <tbody>
+      {% for c in ev.clues %}
+      <tr>
+        <th scope="row" data-label="Clue">{{ {'cf': 'Codice fiscale', 'clinic_id': 'Clinic patient id', 'name': 'Name', 'birth_date': 'Birth date', 'doc_date': 'Date on the document'}[c.type] }}{% if c.labelled %} (labelled){% endif %}</th>
+        <td data-label="Value" class="text-break font-monospace">{{ c.value }}{% if c.time %} {{ c.time }}{% endif %}</td>
+        <td data-label="Where">{{ c.where }}{% if c.source == 'path' %} - a file or folder name can be wrong{% elif c.source == 'ocr' %} - OCR can misread{% endif %}</td>
+        <td data-label="Points to">
+          {% if c.type in ('cf', 'clinic_id') %}
+            {% if not c.valid %}not used: fails the check{% elif c.patient and people.get(c.patient) %}{{ people[c.patient].patient_name }}{% else %}no patient of this clinic{% endif %}
+          {% elif c.type == 'name' %}
+            {% if c.patients %}{% for p in c.patients %}{{ people[p].patient_name if people.get(p) else p }} ({{ people[p].codice_fiscale if people.get(p) else '' }}){% if not loop.last %}; {% endif %}{% endfor %}{% else %}nobody with this name{% endif %}
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dash-empty-line">No identifying clue was found in this file.</p>
+    {% endif %}
+    {% if ev.conflicts %}
+    <h3 class="ds-card-title mt-3">Against</h3>
+    <ul>{% for c in ev.conflicts %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if ev.leads %}
+    <h3 class="ds-card-title mt-3">Weak leads (never enough on their own)</h3>
+    <ul>{% for c in ev.leads %}<li>{{ c }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if ev.duplicates %}
+    <h3 class="ds-card-title mt-3">The same bytes are also at</h3>
+    <ul>{% for d in ev.duplicates %}<li class="text-break">{{ d }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="time-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="time-title">Times</h2></div>
+  <div class="dash-card-body">
+    <ul class="ds-rows">
+      {% for t in ev.times %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ t.what }}</span>
+        <span class="ds-row-title">{{ t.value }}{% if t.where %} · {{ t.where }}{% endif %}</span></span></li>
+      {% endfor %}
+    </ul>
+    {% for f in ev.flags %}<p class="ds-row-sub"><strong>{{ f }}</strong></p>{% endfor %}
+    <p class="ds-row-sub">Date used for the timeline: {{ ev.acquired_at | appt_date if ev.acquired_at else 'not established' }}{% if ev.acquired_basis %} ({{ ev.acquired_basis.replace('_', ' ') }}){% endif %}. A time never decides whose a file is.</p>
+  </div>
+</section>
+
+{% if people %}
+<section class="card dash-card mb-3" aria-labelledby="cand-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="cand-title">Patients the evidence touches</h2></div>
+  <div class="dash-card-body"><ul class="ds-rows">
+    {% for pid, p in people.items() %}
+    <li class="ds-row"><span class="ds-row-main">
+      <a class="ds-row-title" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}">{{ p.patient_name }}</a>
+      <span class="ds-row-sub font-monospace">{{ p.codice_fiscale }}{% if pid == item.patient_id %} · proposed{% endif %}</span>
+    </span></li>
+    {% endfor %}
+  </ul></div>
+</section>
+{% endif %}
+
+{% if item.state in open_states %}
+<section class="card dash-card mb-3" aria-labelledby="decide-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="decide-title">Decide</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('imports.confirm', import_id=item.id) }}" class="mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="expected_sha" value="{{ item.sha256 }}">
+      <div class="row g-2">
+        <div class="col-sm-6"><label for="patient_cf" class="form-label">Patient's codice fiscale</label>
+          <input id="patient_cf" name="patient_cf" class="form-control form-control-sm font-monospace" maxlength="40" required autocomplete="off"
+                 value="{{ people[item.patient_id].codice_fiscale if item.patient_id and people.get(item.patient_id) else '' }}"
+                 aria-describedby="patient_cf_help">
+          <span id="patient_cf_help" class="ds-row-sub">{% if item.patient_id %}Filled with the proposal. Change it to choose another patient (a reason is then required).{% else %}No proposal: type the code of the patient you have established it belongs to, and give the reason.{% endif %}</span></div>
+        <div class="col-sm-6"><label for="category" class="form-label">Category (a label, not a finding)</label>
+          <select id="category" name="category" class="form-select form-select-sm">
+            <option value="">Not set</option>
+            {% for k, v in categories.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+          </select></div>
+        {% if visits %}
+        <div class="col-sm-6"><label for="visit_id" class="form-label">Visit (optional)</label>
+          <select id="visit_id" name="visit_id" class="form-select form-select-sm">
+            <option value="">No visit</option>
+            {% for v in visits %}<option value="{{ v.id }}">{{ v.visit_date }}{% if v.id in suggested %} - same date as the file{% endif %}</option>{% endfor %}
+          </select></div>
+        {% endif %}
+        <div class="col-sm-6"><label for="reason" class="form-label">Reason{% if item.state != 'proposed' %} (required){% endif %}</label>
+          <input id="reason" name="reason" class="form-control form-control-sm" maxlength="300" {% if item.state != 'proposed' %}required{% endif %}></div>
+      </div>
+      <button class="btn btn-primary btn-sm mt-2" type="submit">Confirm: this file is this patient's</button>
+    </form>
+    <div class="d-flex flex-wrap gap-3">
+      <form method="post" action="{{ url_for('imports.hold', import_id=item.id) }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label for="hreason" class="form-label">Why hold it</label>
+        <input id="hreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Hold for investigation</button>
+      </form>
+      <form method="post" action="{{ url_for('imports.reject', import_id=item.id) }}" class="d-flex gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label for="rreason" class="form-label">Why reject it</label>
+        <input id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+        <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% elif item.state == 'confirmed' %}
+<p class="dash-empty-line">Confirmed by {{ item.decided_by }}{% if item.decision_reason %} · {{ item.decision_reason }}{% endif %}.</p>
+{% elif item.decided_by %}
+<p class="dash-empty-line">{{ labels[item.state] }} by {{ item.decided_by }}{% if item.decision_reason %} · {{ item.decision_reason }}{% endif %}.</p>
+{% endif %}
+{% endblock %}

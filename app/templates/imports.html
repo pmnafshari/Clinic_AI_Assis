@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Files from the old shared folder</p>
+    <h1 class="ds-page-title">Legacy import</h1>
+    <p class="ds-page-meta">{% if queue is not none %}dentist review{% else %}progress only{% endif %}</p>
+  </div>
+</div>
+
+<div class="ds-alert ds-alert-info mb-3" role="note">
+  <div><strong class="ds-alert-title">Nothing is attached by the import</strong>
+  The import only reads the old folder and never changes it. Each file gets a proposal, a conflict or
+  no match, with the evidence behind it. A file joins a record only when a dentist confirms whose it is,
+  and a patient sees it only if a dentist then chooses to show it. This build reads only the synthetic
+  test folder; a real shared folder needs the owner's separate authorisation.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="batches-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="batches-title">Import runs</h2></div>
+  <div class="dash-card-body">
+    {% if progress %}
+    
+    <table class="ux-table ux-table-page">
+      <caption class="visually-hidden">Import runs with how many files are in each state</caption>
+      <thead><tr><th scope="col">Run</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Files by state</th><th scope="col">By type</th></tr></thead>
+      <tbody>
+      {% for b in progress %}
+      <tr>
+        <td data-label="Run">{{ b.batch }}</td>
+        <td data-label="Started">{{ b.started_at | appt_date }} {{ b.started_at | appt_time }}</td>
+        <td data-label="Status">{{ 'finished' if b.status == 'done' else 'interrupted or running - run it again to resume' }}</td>
+        <td data-label="Files by state">{% for s, n in b.counts | dictsort %}{{ labels.get(s, s) }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+        <td data-label="By type">{% for k, n in b.types | dictsort %}{{ k }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dash-empty-line">No import has been run. A dry run comes first: <code>python legacy_import.py --dry-run FOLDER</code>.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% if queue is not none %}
+<section class="card dash-card" aria-labelledby="queue-title" id="queue">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="queue-title">Waiting for a decision</h2></div>
+  <div class="dash-card-body">
+    <nav aria-label="Filter by result" class="d-flex flex-wrap gap-2 mb-2">
+      <a class="btn btn-sm {{ 'btn-primary' if not state else 'btn-outline-secondary' }}" href="{{ url_for('imports.index') }}#queue" {% if not state %}aria-current="page"{% endif %}>All</a>
+      {% for s in open_states %}
+      <a class="btn btn-sm {{ 'btn-primary' if state == s else 'btn-outline-secondary' }}" href="{{ url_for('imports.index', state=s) }}#queue" {% if state == s %}aria-current="page"{% endif %}>{{ labels[s] }}</a>
+      {% endfor %}
+    </nav>
+    {% if queue %}
+    <ul class="ds-rows">
+      {% for r in queue %}
+      <li class="ds-row"><span class="ds-row-main">
+        <a class="ds-row-title text-break" href="{{ url_for('imports.item', import_id=r.id) }}">{{ name_of(r) }}</a>
+        <span class="ds-row-sub">item {{ r.id }} · {{ r.kind }} · <strong>{{ labels[r.state] }}</strong>{% if r.strength %} ({{ 'strong' if r.strength == 'strong' else 'needs checking' }}){% endif %}{% if r.patient_id and people.get(r.patient_id) %} · proposed: {{ people[r.patient_id].patient_name }}{% endif %}</span>
+      </span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">Nothing is waiting{% if state %} in this state{% endif %}.</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+{% endblock %}

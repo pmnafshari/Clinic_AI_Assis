@@ -8,6 +8,7 @@ executes anything in it, and prints either {"pages": [...]} or {"error": code}.
 """
 import json
 import os
+import struct
 import subprocess
 import sys
 
@@ -84,6 +85,51 @@ def _image(path):
     return {"pages": [{"page": 1, "text": " ".join(words), "confidence": confidence}]}
 
 
+EXIF_TAGS = {0x9003: "original", 0x9011: "offset", 0x0132: "modified"}
+EXIF_READ = 256 * 1024
+
+
+def _exif(path):
+    """The camera's own times from a JPEG's EXIF, as written. Dates only; no pixel is read."""
+    with open(path, "rb") as f:
+        data = f.read(EXIF_READ)
+    i = 2
+    while i + 4 <= len(data) and data[i] == 0xFF:
+        marker = data[i + 1]
+        length = int.from_bytes(data[i + 2:i + 4], "big")
+        if marker == 0xE1 and data[i + 4:i + 10] == b"Exif\x00\x00":
+            return _tiff_times(data[i + 10:i + 2 + length])
+        if marker == 0xDA:
+            break
+        i += 2 + length
+    return {}
+
+
+def _tiff_times(tiff):
+    order = {b"II": "<", b"MM": ">"}.get(tiff[:2])
+    if order is None or len(tiff) < 8:
+        return {}
+    found, seen = {}, set()
+    todo = [struct.unpack(order + "I", tiff[4:8])[0]]
+    while todo and len(seen) < 4:
+        at = todo.pop()
+        if at in seen or at + 2 > len(tiff):
+            continue
+        seen.add(at)
+        count = struct.unpack(order + "H", tiff[at:at + 2])[0]
+        for n in range(min(count, 64)):
+            e = at + 2 + 12 * n
+            if e + 12 > len(tiff):
+                break
+            tag, kind, size, value = struct.unpack(order + "HHII", tiff[e:e + 12])
+            if tag == 0x8769:
+                todo.append(value)
+            elif tag in EXIF_TAGS and kind == 2 and size <= 64:
+                raw = tiff[e + 8:e + 8 + size] if size <= 4 else tiff[value:value + size]
+                found[EXIF_TAGS[tag]] = raw.split(b"\x00")[0].decode("ascii", "replace")
+    return found
+
+
 def _text(path):
     with open(path, "rb") as f:
         raw = f.read()
@@ -97,6 +143,8 @@ def main():
             result = _pdf(path)
         elif kind in ("png", "jpeg"):
             result = _image(path)
+            if kind == "jpeg" and "pages" in result:
+                result["exif"] = _exif(path)
         elif kind == "text":
             result = _text(path)
         else:

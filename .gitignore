@@ -35,6 +35,8 @@ sorted/
 staging/
 # patient document originals (P15)
 documents/
+# P25: staged copies of legacy files awaiting a dentist's decision
+import_staging/
 # encrypted backups (backup.py) - never committed, even encrypted
 backups/
 *.cbk

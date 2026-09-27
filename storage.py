@@ -197,6 +197,13 @@ def init_db(db_path):
     # patient documents (P15). originals under documents/, never under sorted/
     from documents import SCHEMA as DOCUMENTS_SCHEMA
     conn.executescript(DOCUMENTS_SCHEMA)
+    # patient files and legacy import (P25, M25): nullable columns on the same
+    # table, publication kept apart from confirmation, staged imports apart from both
+    import patient_files
+    import legacy_import
+    patient_files.ensure_columns(conn)
+    conn.executescript(patient_files.SCHEMA)
+    conn.executescript(legacy_import.SCHEMA)
 
     # similar cases (P16). a dentist's verdicts and removals, append-only
     from similar_cases import SCHEMA as SIMILAR_SCHEMA
