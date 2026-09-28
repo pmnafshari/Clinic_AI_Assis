@@ -2,12 +2,14 @@ from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import secrets
 import sqlite3
 
 import agent
 import ask
 import consent
 import data_rights
+import imaging_requests
 import patient_auth
 import patient_files
 import patient_identity
@@ -247,6 +249,11 @@ def detail_view(cf):
         # P25: the same gate as the clinical card; the timeline itself re-checks it
         file_timeline=patient_files.timeline(conn, pid, g.user["username"], g.user["role"])
         if show_clinical else [],
+        # P26: the dentist sees every version, reception the active requests only
+        imaging=imaging_requests.for_patient(conn, pid, g.user["username"], g.user["role"])
+        if authorize(g.user["role"], imaging_requests.VIEW) else [],
+        imaging_empty=imaging_requests.NO_REQUEST, imaging_exams=imaging_requests.EXAMS,
+        imaging_token=secrets.token_urlsafe(16),
     )
 
 

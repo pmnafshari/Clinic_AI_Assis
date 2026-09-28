@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb">
+    <li><a href="{{ url_for('patients.detail_view', cf=cf) }}#imaging">{{ patient.patient_name }}</a></li>
+    <li aria-current="page">Imaging request {{ r.id }}</li>
+  </ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Demo imaging request · synthetic, not a real order</p>
+    <h1 class="ds-page-title">{{ r.exam_label }}</h1>
+    <p class="ds-page-meta">For <strong>{{ patient.patient_name }}</strong> · <span class="font-monospace">{{ cf }}</span> · request {{ r.id }}, version {{ r.version }}</p>
+  </div>
+  <span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ r.state }}</span>
+</div>
+
+{% if h.current %}
+<section class="card dash-card mb-3" aria-labelledby="handoff-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="handoff-title">For reception</h2></div>
+  <div class="dash-card-body">
+    <ul class="ds-rows">
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Requested by the dentist</span><span class="ds-row-title">{{ r.activated_by }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Active since (clinic time, Europe/Rome)</span><span class="ds-row-title">{{ r.activated_at | appt_date }} {{ r.activated_at | appt_time }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Type, exactly as the dentist chose it</span><span class="ds-row-title">{{ r.exam_label }}</span></span></li>
+      {% if r.note %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Dentist's administrative note</span><span class="ds-row-title text-break">{{ r.note }}</span></span></li>{% endif %}
+    </ul>
+    <h3 class="ds-card-title mt-3">Next step</h3>
+    {% if guide and guide.citation %}
+    {% set c = guide.citation %}
+    <p class="ds-row-sub mb-1">From the approved procedure {{ c.title }}, version {{ c.version }}, page {{ c.page }} (checked against the page):</p>
+    <blockquote class="guide-passage" lang="{{ c.language }}">{{ c.passage }}</blockquote>
+    {% for w in guide.warnings %}<p class="ds-row-sub"><strong>{{ w.text }}</strong> (page {{ w.page }})</p>{% endfor %}
+    <a href="{{ url_for('guides.source_view', guide_id=c.source_id, page=c.page) }}#page-{{ c.page }}">Open the procedure at page {{ c.page }}</a>
+    {% else %}
+    <p class="dash-empty-line">No approved procedure gives the steps for this request{% if guide and guide.why %} ({{ guide.why }}){% endif %}. Ask the dentist what to do.</p>
+    {% endif %}
+    <div class="d-flex flex-wrap gap-2 mt-3">
+      <form method="post" action="{{ url_for('imaging.acknowledge', cf=cf, rid=r.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
+        <button class="btn btn-outline-primary btn-sm" type="submit">Mark as seen</button>
+      </form>
+      <form method="post" action="{{ url_for('imaging.ask', cf=cf, rid=r.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Ask the dentist about it</button>
+      </form>
+    </div>
+  </div>
+</section>
+{% else %}
+<div class="ds-alert ds-alert-warning mb-3" role="status">
+  <div><strong class="ds-alert-title">Nothing to act on</strong> {{ h.message }}
+  {% if h.replaced_by %} <a href="{{ url_for('imaging.view', cf=cf, rid=h.replaced_by) }}">Open the current version</a>.{% endif %}</div>
+</div>
+{% endif %}
+
+{% if manage %}
+<section class="card dash-card mb-3" aria-labelledby="dentist-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="dentist-title">Dentist</h2></div>
+  <div class="dash-card-body">
+    {% if r.state == 'draft' %}
+    <p>Activate this request for <strong>{{ patient.patient_name }}</strong> (<span class="font-monospace">{{ cf }}</span>): <strong>{{ r.exam_label }}</strong>, version {{ r.version }}{% if r.supersedes_id %}, replacing request {{ r.supersedes_id }}{% endif %}. Reception will see it as current.</p>
+    <form method="post" action="{{ url_for('imaging.activate', cf=cf, rid=r.id) }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
+      <button class="btn btn-primary btn-sm" type="submit">Activate</button>
+    </form>
+    {% endif %}
+    {% if r.state in ('draft', 'active') %}
+    <form method="post" action="{{ url_for('imaging.cancel', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
+      <div><label for="reason" class="form-label">Why cancel it</label><input id="reason" name="reason" class="form-control form-control-sm" maxlength="200" required></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">Cancel request</button>
+    </form>
+    {% endif %}
+    {% if r.state == 'active' %}
+    <form method="post" action="{{ url_for('imaging.revise', cf=cf, rid=r.id) }}" class="row g-2 align-items-end mt-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="submit_token" value="{{ token }}">
+      <div class="col-sm-4"><label for="rexam" class="form-label">Corrected type</label><select id="rexam" name="exam" class="form-select form-select-sm">{% for k, v in exams.items() %}<option value="{{ k }}" {% if k == r.exam %}selected{% endif %}>{{ v or 'Other (write it)' }}</option>{% endfor %}</select></div>
+      <div class="col-sm-4"><label for="rlabel" class="form-label">If other: the type</label><input id="rlabel" name="label" class="form-control form-control-sm" maxlength="80"></div>
+      <div class="col-sm-4"><label for="rnote" class="form-label">Administrative note (optional)</label><input id="rnote" name="note" class="form-control form-control-sm" maxlength="300"></div>
+      <div class="col-12"><button class="btn btn-outline-secondary btn-sm" type="submit">Revise (new version, draft)</button></div>
+    </form>
+    <section id="files" class="mt-3" aria-labelledby="files-link-title">
+      <h3 class="ds-card-title" id="files-link-title">Files linked to this request</h3>
+      {% if files %}<ul>{% for f in files %}<li>{{ f.display_name }} <span class="ds-row-sub">linked by {{ f.linked_by }}</span></li>{% endfor %}</ul>{% else %}<p class="ds-row-sub">None linked.</p>{% endif %}
+      {% if linkable %}
+      <form method="post" action="{{ url_for('imaging.link', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label for="document_id" class="form-label">A file already confirmed for this patient</label><select id="document_id" name="document_id" class="form-select form-select-sm">{% for d in linkable %}<option value="{{ d.id }}">{{ d.display_name }}</option>{% endfor %}</select></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="verified" value="1" id="verified" required><label class="form-check-label" for="verified">I checked the patient, this request and the file</label></div>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">Link file</button>
+      </form>
+      <p class="ds-row-sub mt-1">Linking does not publish the file, mark it as read or mark the examination as done.</p>
+      {% else %}<p class="ds-row-sub">No confirmed file of this patient to link.</p>{% endif %}
+    </section>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section class="card dash-card" aria-labelledby="hist-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">History</h2></div>
+  <div class="dash-card-body"><ol class="ds-rows">{% for e in history %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">Version {{ e.version }}: {{ e.action.replace('_', ' ') }} by {{ e.actor }}</span><span class="ds-row-sub">{{ e.at | appt_date }} {{ e.at | appt_time }}</span></span></li>{% endfor %}</ol></div>
+</section>
+{% endblock %}

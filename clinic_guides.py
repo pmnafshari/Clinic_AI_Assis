@@ -491,10 +491,12 @@ CLINICAL = re.compile(r"\b(should|dovrebbe|deve|devo)\b.*\b(have|get|fare|avere|
 # imaging or treatment with no dentist order behind it: reception may never decide, add or book it (P24 follow-up:
 # "the dentist forgot the order, can I book the OPG anyway?" was answered with the booking steps)
 IMAGING = r"(opg|ortopanoramic\w*|x-?rays?|radiograf\w*|radiograph\w*|bitewing\w*|imaging|scan|cbct|tac)"
-NO_ORDER = re.compile(r"\b(decide|decides|deciding|decidere|decido|forgot|forgotten|dimentic\w*|without|senza|anyway|"
+# a spoken or reported claim is not an order either (P26): only a request the dentist recorded counts
+CLAIM = r"told me|tells me|said|says|asked me|mi ha detto|ha detto|dice che|detto che|according to|secondo"
+NO_ORDER = re.compile(r"\b(" + CLAIM + r"|decide|decides|deciding|decidere|decido|forgot|forgotten|dimentic\w*|without|senza|anyway|"
                       r"comunque|not ordered|hasn'?t ordered|has not ordered|didn'?t order|did not order|no order|"
                       r"non (?:l'?)?ha prescritt\w*|non (?:l'?)?ha richiest\w*)\b.*\b" + IMAGING + r"\b|\b" + IMAGING +
-                      r"\b.*\b(decide|decides|decidere|forgot|forgotten|dimentic\w*|without|senza|anyway|comunque|"
+                      r"\b.*\b(" + CLAIM + r"|decide|decides|decidere|forgot|forgotten|dimentic\w*|without|senza|anyway|comunque|"
                       r"not ordered|hasn'?t ordered|has not ordered|didn'?t order|did not order|no order|"
                       r"non (?:l'?)?ha prescritt\w*|non (?:l'?)?ha richiest\w*)\b", re.IGNORECASE)
 SERVICING = re.compile(r"service menu|menu di servizio|calibrat\w*|taratur\w*|\brepair\w*|ripar\w*|firmware|"
@@ -515,8 +517,8 @@ ESCALATE = {
     "restricted": "This is for the dentist or an authorised technician.",
     "servicing": "This is service work for an authorised technician. The approved documents here list no contact: "
                  "ask the dentist who to call.",
-    "clinical": "This is a clinical decision for the dentist. Reception acts only on an order the dentist has "
-                "written in the patient's record.",
+    "clinical": "This is a clinical decision for the dentist. Reception acts only on an active demo imaging request "
+                "the dentist has recorded in the patient's record - never on what someone says was ordered.",
     "patient_data": "Patient information is not in the clinic guides. The dentist or reception reads it in the "
                     "patient's record.",
     "not_for_role": "An approved document covers this for the dentist only.",

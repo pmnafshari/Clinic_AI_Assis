@@ -80,6 +80,11 @@ def plan(conn, types, now=None):
                     "SELECT COUNT(*) FROM import_items WHERE state IN ('staged', 'proposed',"
                     " 'unmatched', 'conflict', 'held') AND created_at < ?", (cut,)).fetchone()[0],
                 "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
+    # P26: a dentist's demo imaging requests are clinical records - counted, never swept
+    out.append({"type": "imaging_requests", "sweep": types["clinical_records"]["sweep"],
+                "past_period": conn.execute("SELECT COUNT(*) FROM imaging_requests WHERE created_at < ?",
+                                            (cut,)).fetchone()[0],
+                "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
     # P16: a dentist's verdicts on past cases are clinical judgments - counted,
     # never swept
     out.append({"type": "similar_case_feedback", "sweep": types["clinical_records"]["sweep"],
@@ -167,7 +172,7 @@ def selftest():
         counts = {r["type"]: r["past_period"] for r in plan(conn, types, now)}
         assert counts == {"audit_log": 1, "closed_data_requests": 1, "exports": 0,
                           "clinical_records": 1, "clinical_summaries": 1, "staged_notes": 0,
-                          "patient_documents": 0, "staged_imports": 0, "similar_case_feedback": 0,
+                          "patient_documents": 0, "staged_imports": 0, "imaging_requests": 0, "similar_case_feedback": 0,
                           "staff_sessions": 1, "invoices": 1}, \
             f"1: {counts}"
 

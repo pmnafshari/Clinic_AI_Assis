@@ -236,7 +236,8 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 # document_publications deliberately NOT: a publication names the patient it was shown to,
 # and a merge withdraws it (patient_files.on_merge) rather than showing it to the survivor
 MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries",
-                   "note_reviews", "patient_documents", "import_items")
+                   "note_reviews", "patient_documents", "import_items", "imaging_requests",
+                   "imaging_request_events", "imaging_request_files")
 
 # Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
 # on `patient_merges.source_cf` because resolving an OLD one is that table's

@@ -116,6 +116,12 @@ def _seed(db_path, root):
     import_id = conn.execute(
         "INSERT INTO import_items (batch_id, source_key, rel_path, sha256, kind, state, created_at)"
         " VALUES (1, 'rb', 'rb.txt', 'rbsha', 'text', 'proposed', '2026-09-23T06:00:00+00:00')").lastrowid
+    # an active demo imaging request (P26), the state the imaging routes act on
+    rid = conn.execute(
+        "INSERT INTO imaging_requests (series_id, version, patient_id, exam, exam_label, state, created_by, created_at,"
+        " activated_by, activated_at, submit_token) VALUES (1, 1, ?, 'opg', 'OPG (panoramic) - demo', 'active',"
+        " 'rb_dentist', '2026-09-23T06:00:00+00:00', 'rb_dentist', '2026-09-23T06:00:00+00:00', 'rb-token')",
+        (pid,)).lastrowid
     # a reviewed visit of a second patient: a similar case the P16 routes act on
     other = conn.execute("SELECT patient_id FROM patients WHERE patient_id != ? LIMIT 1",
                          (pid,)).fetchone()
@@ -138,7 +144,7 @@ def _seed(db_path, root):
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
-            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1,
+            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid,
             "username": "rb_target", "filename": "app.css"}
 
 

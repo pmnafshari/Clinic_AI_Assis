@@ -127,6 +127,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # the old shared folder is outside this system and keeps its own copy
             import legacy_import
             legacy_import.forget_patient(conn, pid)
+        if _has(conn, "imaging_requests"):
+            # P26: demo imaging requests, their history and file links go with the patient
+            import imaging_requests
+            imaging_requests.on_erase(conn, pid)
         if _has(conn, "document_publications"):
             # P25: what was shown to the patient, and who said whose each file is
             import patient_files
@@ -308,6 +312,9 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     if _has(conn, "document_publications"):
         left["publications"] = conn.execute("SELECT COUNT(*) FROM document_publications WHERE"
                                             " patient_id = ?", (pid,)).fetchone()[0]
+    if _has(conn, "imaging_requests"):
+        left["imaging_requests"] = conn.execute("SELECT COUNT(*) FROM imaging_requests WHERE patient_id = ?",
+                                                (pid,)).fetchone()[0]
     if _has(conn, "import_items"):
         left["import_items"] = conn.execute("SELECT COUNT(*) FROM import_items WHERE patient_id = ?",
                                             (pid,)).fetchone()[0]

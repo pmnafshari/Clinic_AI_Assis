@@ -312,6 +312,43 @@
     </section>
     {% endif %}
 
+    {% if authorize(g.user.role, 'view_imaging_requests') %}
+    <section class="card dash-card" aria-labelledby="imaging-title" id="imaging">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="imaging-title">Imaging requests (demo)</h2>
+          <p class="ds-card-sub">Synthetic demo: only what a dentist recorded and activated counts</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if imaging %}
+        <ul class="ds-rows">
+          {% for r in imaging %}
+          <li class="ds-row"><span class="ds-row-main">
+            <a class="ds-row-title" href="{{ url_for('imaging.view', cf=cf, rid=r.id) }}">{{ r.exam_label }}, request {{ r.id }} v{{ r.version }}</a>
+            <span class="ds-row-sub">{{ r.state }}{% if r.activated_at %} · active since {{ r.activated_at | appt_date }}{% endif %} · by {{ r.activated_by or r.created_by }}</span>
+          </span>
+          <span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ r.state }}</span></li>
+          {% endfor %}
+        </ul>
+        {% elif not authorize(g.user.role, 'manage_imaging_requests') %}
+        <p class="dash-empty-line">{{ imaging_empty }}</p>
+        {% else %}
+        <p class="dash-empty-line">No imaging request for this patient.</p>
+        {% endif %}
+        {% if authorize(g.user.role, 'manage_imaging_requests') %}
+        <form method="post" action="{{ url_for('imaging.create', cf=cf) }}" class="row g-2 align-items-end mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="submit_token" value="{{ imaging_token }}">
+          <div class="col-sm-4"><label for="exam" class="form-label">Type (demo list)</label><select id="exam" name="exam" class="form-select form-select-sm">{% for k, v in imaging_exams.items() %}<option value="{{ k }}">{{ v or 'Other (write it)' }}</option>{% endfor %}</select></div>
+          <div class="col-sm-4"><label for="exam_label" class="form-label">If other: the type</label><input id="exam_label" name="label" class="form-control form-control-sm" maxlength="80"></div>
+          <div class="col-sm-4"><label for="exam_note" class="form-label">Administrative note (optional)</label><input id="exam_note" name="note" class="form-control form-control-sm" maxlength="300"></div>
+          <div class="col-12"><button class="btn btn-outline-primary btn-sm" type="submit">New demo imaging request</button> <span class="ds-row-sub">saved as a draft for {{ patient.patient_name }}; you activate it separately</span></div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
     {% if authorize(g.user.role, 'upload_file') %}
     <section class="card dash-card" aria-labelledby="upload-title">
       <div class="dash-card-head">

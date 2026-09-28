@@ -77,6 +77,15 @@ this file is stale.
 | POST | `/patients/<cf>/edit` | `patients.edit_submit` |
 | GET | `/patients/<cf>/edit-form` | `patients.edit_form_fragment` |
 | GET | `/patients/<cf>/files` | `patients.files_fragment` |
+| POST | `/patients/<cf>/imaging` | `imaging.create` |
+| GET | `/patients/<cf>/imaging/<int:rid>` | `imaging.view` |
+| POST | `/patients/<cf>/imaging/<int:rid>/acknowledge` | `imaging.acknowledge` |
+| POST | `/patients/<cf>/imaging/<int:rid>/activate` | `imaging.activate` |
+| POST | `/patients/<cf>/imaging/<int:rid>/ask` | `imaging.ask` |
+| POST | `/patients/<cf>/imaging/<int:rid>/cancel` | `imaging.cancel` |
+| GET | `/patients/<cf>/imaging/<int:rid>/files` | `imaging.files` |
+| POST | `/patients/<cf>/imaging/<int:rid>/link` | `imaging.link` |
+| POST | `/patients/<cf>/imaging/<int:rid>/revise` | `imaging.revise` |
 | POST | `/patients/<cf>/issue-pin` | `patients.issue_pin_submit` |
 | POST | `/patients/<cf>/revoke-pin` | `patients.revoke_pin_submit` |
 | GET | `/patients/<cf>/summary` | `summary.page` |
@@ -181,6 +190,9 @@ this file is stale.
 | `document_identity_events` | id, document_id, action, from_pid, to_pid, actor, at, reason |
 | `document_publications` | id, document_id, patient_id, published_by, published_at, withdrawn_by, withdrawn_at, withdraw_reason |
 | `handoff_requests` | id, patient_id, reason, topic, status, created_at, claimed_by, claimed_at, resolved_by, resolved_at |
+| `imaging_request_events` | id, request_id, series_id, version, patient_id, action, actor, role, at |
+| `imaging_request_files` | request_id, document_id, patient_id, linked_by, linked_at |
+| `imaging_requests` | id, series_id, version, patient_id, exam, exam_label, note, state, created_by, created_at, activated_by, activated_at, ended_by, ended_at, end_reason, supersedes_id, submit_token |
 | `import_batches` | id, source_key, source_label, started_by, started_at, finished_at, status, clock_offset, totals |
 | `import_items` | id, batch_id, source_key, rel_path, size, mtime, sha256, kind, state, strength, patient_id, candidates, evidence, extraction, extractor, reason, document_id, decided_by, decided_at, decision_reason, created_at |
 | `installment_plans` | id, invoice_id, created_by, created_at |
