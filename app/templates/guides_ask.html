@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Approved manuals and clinic procedures</p>
+    <h1 class="ds-page-title">Ask clinic guides</h1>
+    <p class="ds-page-meta">Answers are passages copied from an approved page, checked against it. No patient information is here.</p>
+  </div>
+  <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('guides.library') }}">Guides library</a>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="ask-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="ask-title">Your question</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('guides.ask') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-2">
+        <div class="col-md-4">
+          <label for="device_id" class="form-label">Device</label>
+          <select id="device_id" name="device_id" class="form-select" aria-describedby="device-help">
+            <option value="">Not about a device, or named in the question</option>
+            {% for d in devices %}<option value="{{ d.id }}" {% if device_id == d.id %}selected{% endif %}>{{ label(d) }}</option>{% endfor %}
+          </select>
+          <span id="device-help" class="ds-row-sub">Only this device's current approved manual is searched.</span>
+        </div>
+        <div class="col-md-8">
+          <label for="question" class="form-label">Question (English or Italian)</label>
+          <textarea id="question" name="question" class="form-control" rows="2" maxlength="500" required>{{ question }}</textarea>
+        </div>
+      </div>
+      <div class="d-flex flex-wrap gap-3 align-items-center mt-2">
+        <button class="btn btn-primary btn-sm" type="submit">Ask</button>
+        <div class="form-check mb-0">
+          <input class="form-check-input" type="checkbox" name="explain" value="1" id="explain">
+          <label class="form-check-label" for="explain">Add one plain-language line (local model; shown only if the passage supports it)</label>
+        </div>
+      </div>
+    </form>
+    {% if not result %}
+    <p class="ds-row-sub mt-3 mb-1">For example:</p>
+    <ul class="mb-0">{% for e in examples %}<li class="ds-row-sub">{{ e }}</li>{% endfor %}</ul>
+    {% if not devices %}<p class="dash-empty-line mt-2">No device is registered yet. A dentist adds devices and documents in the guides library.</p>{% endif %}
+    {% endif %}
+  </div>
+</section>
+
+{% if result %}
+<section class="card dash-card" aria-labelledby="answer-title" aria-live="polite" id="answer">
+  {% if result.outcome == 'answer' %}
+  {% set c = result.citations[0] %}
+  {% set t = titles[c.source_id] %}
+  <div class="dash-card-head"><h2 class="ds-card-title" id="answer-title">From {{ c.title }}</h2>
+    <span class="ds-badge ds-badge-success">Checked against the page</span></div>
+  <div class="dash-card-body">
+    <p class="ds-row-sub mb-1">
+      {% if t.make %}{{ t.make }} {{ t.model }}{% if t.room %} ({{ t.room }}){% endif %} · {% endif %}{{ c.edition or ('version ' ~ c.version) }} · page {{ c.page }} · {{ 'Italian' if c.language == 'it' else 'English' }}
+    </p>
+    <blockquote class="guide-passage" lang="{{ c.language }}">{{ c.passage }}</blockquote>
+    {% if c.from_figure %}<p class="ds-row-sub">Read from a picture on the page by OCR ({{ c.confidence|round|int }}% confidence) - check it on the page image.</p>{% endif %}
+    {% if result.explanation %}<p class="mb-2"><strong>In plain words:</strong> {{ result.explanation }}</p>{% endif %}
+    {% if result.warnings %}
+    <div class="ds-alert ds-alert-warning mb-2" role="note">
+      <div><strong class="ds-alert-title">Warnings in this document</strong>
+        <ul class="mb-0">{% for w in result.warnings %}<li lang="{{ c.language }}">{{ w.text }} <span class="ds-row-sub">(page {{ w.page }})</span></li>{% endfor %}</ul>
+      </div>
+    </div>
+    {% endif %}
+    <figure class="file-preview mb-2">
+      <img src="{{ url_for('guides.page_image', guide_id=c.source_id, page=c.page) }}" alt="Page {{ c.page }} of {{ c.title }}">
+      <figcaption class="ds-row-sub">Page {{ c.page }} as approved. Figures are shown as they are in the document.</figcaption>
+    </figure>
+    <a href="{{ url_for('guides.source_view', guide_id=c.source_id, page=c.page) }}#page-{{ c.page }}">Open the document at page {{ c.page }}</a>
+  </div>
+  {% else %}
+  <div class="dash-card-head"><h2 class="ds-card-title" id="answer-title">{{ reason_titles[result.reason] }}</h2>
+    <span class="ds-badge ds-badge-warning">No answer given</span></div>
+  <div class="dash-card-body">
+    <p class="mb-1">{{ result.message }}</p>
+    <p class="mb-2"><strong>What to do:</strong> {{ result.escalation }}</p>
+    {% if result.reason == 'ask_device' %}<p class="ds-row-sub mb-0">Choose it in <label for="device_id" class="d-inline">Device</label> above and ask again.</p>{% endif %}
+    {% if result.see and result.reason == 'unreadable' %}
+    <a href="{{ url_for('guides.source_view', guide_id=result.see.source_id, page=result.see.page) }}#page-{{ result.see.page }}">Open page {{ result.see.page }} of the document</a>
+    {% endif %}
+    {% if result.reason == 'conflict' and result.conflicting %}
+    <ul class="mb-0">{% for x in result.conflicting %}<li><a href="{{ url_for('guides.source_view', guide_id=x.source_id, page=x.page) }}#page-{{ x.page }}">{{ titles[x.source_id].title }}, page {{ x.page }}</a></li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1345,3 +1345,11 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
   .file-entry { flex-wrap: wrap; }
   .file-actions { margin-left: 0; width: 100%; }
 }
+
+/* P24 clinic guides: the quoted passage, and a page beside its image */
+.guide-passage { margin: 0 0 0.75rem; padding: 0.75rem 1rem; border-left: 4px solid var(--ds-border-strong); background: #fff; font-size: 1rem; white-space: pre-wrap; }
+.guide-page { display: grid; grid-template-columns: minmax(0, 280px) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.guide-page-image { width: 100%; height: auto; border: 1px solid var(--ds-border-strong); border-radius: 8px; background: #fff; }
+.guide-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem; }
+.guide-focus { outline: 2px solid var(--ds-border-strong); outline-offset: 2px; }
+@media (max-width: 767.98px) { .guide-page { grid-template-columns: 1fr; } }

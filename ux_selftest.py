@@ -22,9 +22,10 @@ TODAY = datetime(2031, 3, 5, 9, 0)            # a Wednesday, and not the machine
 DAY = "2031-03-05"
 NAV = {
     # /imports (P25): the dentist reviews, reception sees progress only; admin never
-    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/qa", "/notes/new", "/billing", "/stock",
+    # /guides/ask (P24): dentist and reception; admin never
+    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
                 "/handoffs", "/reminders", "/data-requests", "/reports", "/providers"},
-    "assistant": {"/", "/appointments", "/patients", "/imports", "/qa", "/notes/new", "/billing", "/stock",
+    "assistant": {"/", "/appointments", "/patients", "/imports", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
                   "/handoffs", "/reminders", "/providers"},
     "admin": {"/admin/users", "/patients/duplicates"},
 }
@@ -75,6 +76,10 @@ def selftest():
         import app.db as app_db
         from app import create_app
         app_db.DB_PATH = str(db)
+        # the sidebar walk opens Ask clinic guides (P24): its store goes to this temp folder, never db/
+        import clinic_guides
+        clinic_guides.DB_PATH = str(Path(db).parent / "guides.sqlite")
+        clinic_guides.STORE = Path(db).parent / "guides"
         app = create_app()
         app.config["WTF_CSRF_ENABLED"] = False
         clients = {u: _client(app, u, f"{u}-pw-123") for u in ("dentist", "assistant", "admin")}
@@ -101,7 +106,7 @@ def selftest():
         # 2b. a page left out of a role's sidebar is also refused at its route, not only hidden
         for path in ("/reviews", "/reports", "/data-requests", "/admin/users"):
             assert assistant.get(path).status_code in (302, 403), f"2b: assistant reached {path}"
-        for path in ("/", "/appointments", "/patients", "/notes/new", "/imports"):
+        for path in ("/", "/appointments", "/patients", "/notes/new", "/imports", "/guides/ask", "/guides"):
             assert clients["admin"].get(path).status_code in (302, 403), f"2b: admin reached {path}"
         refused = clients["admin"].get("/qa").get_data(as_text=True)      # refuses in-page, and audits it
         assert "permission" in refused and "data-example" not in refused and 'name="question"' not in refused, \

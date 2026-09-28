@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Clinic-wide, never patient records</p>
+    <h1 class="ds-page-title">Guides library</h1>
+    <p class="ds-page-meta">{% if manage %}dentist: register devices, upload, review and approve{% else %}approved documents you may read{% endif %}</p>
+  </div>
+  <a class="btn btn-primary btn-sm" href="{{ url_for('guides.ask') }}">Ask clinic guides</a>
+</div>
+
+<div class="ds-alert ds-alert-info mb-3" role="note">
+  <div><strong class="ds-alert-title">Reviewed before anyone can ask</strong>
+  A document is searchable only after approval: a dentist approves device manuals and procedures with clinical
+  content; a named administrative approver may approve administrative procedures only. Withdrawing or replacing
+  a document removes it from answers at once. This demo approves only the synthetic documents; real manuals need
+  their own permission first.</div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="docs-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="docs-title">Documents</h2></div>
+  <div class="dash-card-body">
+    {% if rows %}
+    <table class="ux-table ux-table-page">
+      <caption class="visually-hidden">Documents with their device, edition, status and owner</caption>
+      <thead><tr><th scope="col">Document</th><th scope="col">Device</th><th scope="col">Edition / version</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">Owner</th></tr></thead>
+      <tbody>
+      {% for r in rows %}
+      <tr>
+        <td data-label="Document"><a href="{{ url_for('guides.source_view', guide_id=r.id) }}">{{ r.title }}, {{ r.edition or ('version ' ~ r.version) }}</a> <span class="ds-row-sub">({{ 'Italian' if r.language == 'it' else 'English' }})</span></td>
+        <td data-label="Device">{% if r.make %}{{ r.make }} {{ r.model }}{% if r.room %} ({{ r.room }}){% endif %}{% else %}-{% endif %}</td>
+        <td data-label="Edition / version">{{ r.edition or ('version ' ~ r.version) }}</td>
+        <td data-label="Kind">{{ {'device': 'Device manual', 'admin': 'Administrative procedure', 'clinical': 'Procedure with clinical content'}[r.kind] }}{% if r.audience == 'dentist' %} · dentist only{% endif %}</td>
+        <td data-label="Status"><span class="ds-badge {{ 'ds-badge-success' if r.status == 'approved' else 'ds-badge-warning' }}">{{ r.status.replace('_', ' ') }}</span>{% if r.approved_by %} <span class="ds-row-sub">by {{ r.approved_by }}</span>{% endif %}</td>
+        <td data-label="Owner">{{ r.owner }} · from {{ r.effective }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="dash-empty-line">No document is available yet.</p>
+    {% endif %}
+  </div>
+</section>
+
+{% if manage %}
+<section class="card dash-card mb-3" aria-labelledby="dev-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="dev-title">Devices</h2></div>
+  <div class="dash-card-body">
+    {% if devices %}<ul class="ds-rows mb-2">{% for d in devices %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ label(d) }}</span><span class="ds-row-sub">{{ d.type or 'no type words' }}</span></span></li>{% endfor %}</ul>
+    {% else %}<p class="dash-empty-line">No device registered.</p>{% endif %}
+    <form method="post" action="{{ url_for('guides.add_device') }}" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-sm-3"><label for="make" class="form-label">Make</label><input id="make" name="make" class="form-control form-control-sm" required maxlength="60"></div>
+      <div class="col-sm-3"><label for="model" class="form-label">Model</label><input id="model" name="model" class="form-control form-control-sm" required maxlength="40"></div>
+      <div class="col-sm-3"><label for="room" class="form-label">Room (optional)</label><input id="room" name="room" class="form-control form-control-sm" maxlength="60"></div>
+      <div class="col-sm-3"><label for="type_words" class="form-label">What staff call it</label><input id="type_words" name="type_words" class="form-control form-control-sm" maxlength="120" placeholder="autoclave, autoclave"></div>
+      <div class="col-12"><button class="btn btn-outline-secondary btn-sm" type="submit">Register device</button></div>
+    </form>
+  </div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="up-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="up-title">Add a document</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('guides.upload') }}" enctype="multipart/form-data" class="row g-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-sm-6"><label for="file" class="form-label">PDF, up to 10 MB. Read on this machine only.</label><input id="file" name="file" type="file" accept=".pdf" class="form-control form-control-sm" required></div>
+      <div class="col-sm-6"><label for="title" class="form-label">Title</label><input id="title" name="title" class="form-control form-control-sm" required maxlength="120"></div>
+      <div class="col-sm-4"><label for="kind" class="form-label">Kind</label><select id="kind" name="kind" class="form-select form-select-sm"><option value="device">Device manual</option><option value="admin">Administrative procedure</option><option value="clinical">Procedure with clinical content</option></select></div>
+      <div class="col-sm-4"><label for="up_device" class="form-label">Device (manuals)</label><select id="up_device" name="device_id" class="form-select form-select-sm"><option value="">None</option>{% for d in devices %}<option value="{{ d.id }}">{{ label(d) }}</option>{% endfor %}</select></div>
+      <div class="col-sm-4"><label for="edition" class="form-label">Edition it applies to</label><input id="edition" name="edition" class="form-control form-control-sm" maxlength="60"></div>
+      <div class="col-sm-3"><label for="language" class="form-label">Language</label><select id="language" name="language" class="form-select form-select-sm"><option value="it">Italian</option><option value="en">English</option></select></div>
+      <div class="col-sm-3"><label for="version" class="form-label">Version</label><input id="version" name="version" class="form-control form-control-sm" required maxlength="20"></div>
+      <div class="col-sm-3"><label for="owner" class="form-label">Owner</label><input id="owner" name="owner" class="form-control form-control-sm" required maxlength="80"></div>
+      <div class="col-sm-3"><label for="effective" class="form-label">Effective from</label><input id="effective" name="effective" type="date" class="form-control form-control-sm" required></div>
+      <div class="col-sm-4"><label for="audience" class="form-label">Who may read it</label><select id="audience" name="audience" class="form-select form-select-sm"><option value="staff">Dentist and reception</option><option value="dentist">Dentist only</option></select></div>
+      <div class="col-12"><button class="btn btn-outline-secondary btn-sm" type="submit">Upload for review</button></div>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{% if approve %}
+<section class="card dash-card" aria-labelledby="appr-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="appr-title">Administrative approvers</h2></div>
+  <div class="dash-card-body">
+    <p class="ds-row-sub">A named approver (the owner or practice manager, on a reception account) may approve administrative procedures only. It gives no clinical permission; admin accounts cannot be named.</p>
+    {% if approvers %}<ul class="ds-rows mb-2">{% for a in approvers %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ a.username }}</span><span class="ds-row-sub">named by {{ a.designated_by }}</span></span>
+      <form method="post" action="{{ url_for('guides.approvers') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ a.username }}"><input type="hidden" name="action" value="revoke"><button class="btn btn-outline-danger btn-sm" type="submit">Remove<span class="visually-hidden"> {{ a.username }}</span></button></form></li>{% endfor %}</ul>
+    {% else %}<p class="dash-empty-line">No administrative approver named.</p>{% endif %}
+    <form method="post" action="{{ url_for('guides.approvers') }}" class="d-flex gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="username" class="form-label">Staff account</label><select id="username" name="username" class="form-select form-select-sm">{% for u in staff %}<option>{{ u.username }}</option>{% endfor %}</select></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Name as approver</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

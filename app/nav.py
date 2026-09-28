@@ -20,6 +20,8 @@ ITEMS = [
     # P25: reception sees progress only; the count is of files waiting for a dentist's decision
     ("Workspace", "Legacy import", "imports.index", "/imports", "bi-folder-symlink", "view_import_progress", "imports", "imports."),
     ("Workspace", "Ask records", "qa.qa_page", "/qa", "bi-chat-square-text", "read_notes", None, "qa."),
+    # P24: clinic-wide manuals and procedures - no patient data; admin holds no guides capability
+    ("Workspace", "Ask clinic guides", "guides.ask", "/guides/ask", "bi-journal-bookmark", "ask_guides", None, "guides."),
     ("Workspace", "Add note", "notes.new_note", "/notes/new", "bi-journal-plus", "read_notes", None, "notes."),
     ("Operations", "Billing", "billing.index", "/billing", "bi-receipt", "view_billing", None, "billing."),
     ("Operations", "Stock", "stock.index", "/stock", "bi-box-seam", "use_inventory", None, "stock."),

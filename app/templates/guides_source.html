@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block content %}
+<nav aria-label="Breadcrumb" class="mb-3">
+  <ol class="ds-breadcrumb"><li><a href="{{ url_for('guides.library') }}">Guides library</a></li><li aria-current="page">{{ s.title }}</li></ol>
+</nav>
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">{% if device %}{{ label(device) }}{% else %}{{ {'admin': 'Administrative procedure', 'clinical': 'Procedure with clinical content', 'device': 'Device manual'}[s.kind] }}{% endif %}</p>
+    <h1 class="ds-page-title text-break">{{ s.title }}</h1>
+    <p class="ds-page-meta">{{ s.edition or ('version ' ~ s.version) }} · {{ 'Italian' if s.language == 'it' else 'English' }} · owner {{ s.owner }} · effective {{ s.effective }} ·
+      <span class="ds-badge {{ 'ds-badge-success' if s.status == 'approved' else 'ds-badge-warning' }}">{{ s.status.replace('_', ' ') }}</span>{% if s.approved_by %} by {{ s.approved_by }}{% endif %}</p>
+  </div>
+</div>
+
+{% if s.status == 'pending_review' %}
+<div class="ds-alert ds-alert-warning mb-3" role="note">
+  <div><strong class="ds-alert-title">Not searchable yet</strong>
+  Check every page against its image, especially pages read by OCR and pages flagged below. Nothing in a document
+  is followed as an instruction.{% if not s.synthetic %} <strong>This is not a synthetic demo document: it cannot be approved in this build (real manuals need document-specific permission).</strong>{% endif %}{% if s.reason %} {{ s.reason }}.{% endif %}</div>
+</div>
+{% elif s.status in ('superseded', 'withdrawn', 'rejected') %}
+<div class="ds-alert ds-alert-info mb-3" role="note"><div><strong class="ds-alert-title">Not used for answers</strong> {{ s.reason or '' }}</div></div>
+{% endif %}
+{% if hidden and not reviewer %}<p class="ds-row-sub">{{ hidden }} page(s) of this document are for the dentist only.</p>{% endif %}
+
+{% if reviewer %}
+<section class="card dash-card mb-3" aria-labelledby="decide-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="decide-title">Review</h2></div>
+  <div class="dash-card-body d-flex flex-wrap gap-3 align-items-end">
+    {% if s.status == 'pending_review' %}
+    <form method="post" action="{{ url_for('guides.approve', guide_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm" type="submit">Approve</button></form>
+    <form method="post" action="{{ url_for('guides.reject', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="rreason" class="form-label">Why reject it</label><input id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button></form>
+    {% endif %}
+    {% if s.status == 'approved' %}
+    <form method="post" action="{{ url_for('guides.withdraw', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="wreason" class="form-label">Why withdraw it</label><input id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw from answers</button></form>
+    {% if approve and others %}
+    <form method="post" action="{{ url_for('guides.supersede', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="old_id" class="form-label">This edition replaces</label><select id="old_id" name="old_id" class="form-select form-select-sm">{% for o in others %}<option value="{{ o.id }}">{{ o.title }} - {{ o.edition or o.version }}</option>{% endfor %}</select></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Replace it</button></form>
+    {% endif %}
+    {% endif %}
+  </div>
+  {% if approve and pages %}
+  <div class="dash-card-body pt-0">
+    <form method="post" action="{{ url_for('guides.restrict', guide_id=s.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <fieldset><legend class="form-label">Pages for the dentist only (service menus, calibration)</legend>
+      <div class="d-flex flex-wrap gap-3">{% for p in pages %}<div class="form-check"><input class="form-check-input" type="checkbox" name="restricted" value="{{ p.page }}" id="r{{ p.page }}" {% if p.restricted %}checked{% endif %}><label class="form-check-label" for="r{{ p.page }}">Page {{ p.page }}</label></div>{% endfor %}</div>
+      </fieldset>
+      <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">Save restricted pages</button>
+    </form>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% for p in pages %}
+<section class="card dash-card mb-3{% if focus == p.page %} guide-focus{% endif %}" aria-labelledby="page-{{ p.page }}-title" id="page-{{ p.page }}">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="page-{{ p.page }}-title">Page {{ p.page }}</h2>
+    <span>{% if p.restricted %}<span class="ds-badge ds-badge-warning">Dentist only</span>{% endif %}
+    {% if not p.readable %}<span class="ds-badge ds-badge-warning">Cannot be read reliably ({{ p.ocr_conf|round|int }}%)</span>{% endif %}</span></div>
+  <div class="dash-card-body">
+    <div class="guide-page">
+      {% if p.image_path %}<img class="guide-page-image" src="{{ url_for('guides.page_image', guide_id=s.id, page=p.page) }}" alt="Page {{ p.page }} of {{ s.title }}" loading="lazy">{% endif %}
+      <div class="min-w-0">
+        {% if p.text %}<p class="ds-row-sub mb-1">Text of the page</p><div class="guide-text" lang="{{ s.language }}">{{ p.text }}</div>{% endif %}
+        {% if p.ocr_text %}<p class="ds-row-sub mb-1 mt-2">Read from pictures by OCR ({{ p.ocr_conf|round|int }}% confidence{% if p.ocr_conf < readable_at %} - not quoted{% endif %})</p><div class="guide-text" lang="{{ s.language }}">{{ p.ocr_text }}</div>{% endif %}
+        {% if reviewer and flags[p.page] %}<ul class="mt-2 mb-0">{% for f in flags[p.page] %}<li class="ds-row-sub"><strong>Check:</strong> {{ f }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+    </div>
+  </div>
+</section>
+{% endfor %}
+
+{% if reviewer and history %}
+<section class="card dash-card" aria-labelledby="hist-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">Who decided what</h2></div>
+  <div class="dash-card-body"><ol class="ds-rows">{% for h in history %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ h.action.replace('_', ' ') }} by {{ h.actor }}</span><span class="ds-row-sub">{{ h.at | appt_date }} {{ h.at | appt_time }}{% if h.reason %} · {{ h.reason }}{% endif %}</span></span></li>{% endfor %}</ol></div>
+</section>
+{% endif %}
+{% endblock %}

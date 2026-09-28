@@ -138,7 +138,7 @@ def _seed(db_path, root):
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
-            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did,
+            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1,
             "username": "rb_target", "filename": "app.css"}
 
 
@@ -275,6 +275,10 @@ def selftest():
         documents.DOC_ROOT = root / "documents"
         documents.DOC_CHROMA_PATH = str(root / "doc_chroma")
         documents._collection_cache.clear()
+        # the clinic guides store too (P24): the walk posts to every route and must never touch db/guides.sqlite
+        import clinic_guides
+        clinic_guides.DB_PATH = str(root / "guides.sqlite")
+        clinic_guides.STORE = root / "guides"
         sorted_root = root / "sorted"
         for mod in (agent_routes, notes_routes, patients_routes, upload_routes):
             mod.SORTED_ROOT = sorted_root

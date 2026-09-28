@@ -75,7 +75,10 @@ SUFFIX = ".cbk"
 # staging/ holds uploads awaiting a dentist's review (POL-9): originals and
 # extractions that exist nowhere else. import_staging/ (P25) holds the staged
 # copies of legacy files a dentist has not decided yet
-FILE_STORES = ("sorted", "drop", "staging", "documents", "import_staging", "db/undo_log.jsonl")
+FILE_STORES = ("sorted", "drop", "staging", "documents", "import_staging", "guides", "db/undo_log.jsonl")
+# other sqlite stores, snapshotted with the online backup api like the main one. db/guides.sqlite (P24) holds
+# the clinic guides: devices, documents, pages and their index - no patient data
+EXTRA_DBS = ("db/guides.sqlite",)
 DB_REL = "db/clinic.sqlite"
 CHROMA_REL = "db/chroma"
 
@@ -206,6 +209,11 @@ def create(data_root=ROOT, dest=None, key_path=None, keep=None, stamp=None):
         counts, user_version = snapshot_db(live_db, staged_db)
 
         members = [(staged_db, DB_REL)]
+        for rel in EXTRA_DBS:
+            if (data_root / rel).is_file():
+                extra = stage / Path(rel).name
+                snapshot_db(data_root / rel, extra)
+                members.append((extra, rel))
         for rel in FILE_STORES:
             path = data_root / rel
             if path.is_file():

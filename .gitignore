@@ -37,6 +37,8 @@ staging/
 documents/
 # P25: staged copies of legacy files awaiting a dentist's decision
 import_staging/
+# P24: clinic guide originals and page images (the database is under db/)
+/guides/
 # encrypted backups (backup.py) - never committed, even encrypted
 backups/
 *.cbk
