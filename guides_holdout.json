@@ -1,5 +1,5 @@
 {
- "about": "P24 held-out set, written 2026-09-28 after evaluation run 2 and before its first run; new phrasings of the same synthetic library. Reported as run; not used for tuning.",
+ "about": "P24 held-out set, written 2026-09-28 after evaluation run 2 and before its first run. NO LONGER HELD OUT: its run-1 failures (H07, H08, H10, H13, H20) were seen and fixed; since then it is a regression set. Questions and expectations unchanged.",
  "cases": [
   {"id": "H01", "q": "What is the B-PROG key for?", "role": "assistant", "device": "ax200", "expect": "answer", "source": "ax200_v2", "pages": [2], "include": "B-PROG selects program B"},
   {"id": "H02", "q": "The display says E07. What now?", "role": "assistant", "device": "ax200", "expect": "answer", "source": "ax200_v2", "pages": [4], "include": "E07 Water tank empty"},

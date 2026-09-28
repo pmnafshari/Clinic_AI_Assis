@@ -1,5 +1,5 @@
 {
- "about": "P24 second blind set, written 2026-09-28 after holdout run 2 and before its only run. Reported as run; nothing is tuned on it.",
+ "about": "P24 second blind set, written 2026-09-28; run blind exactly once (safety 0.8, passage 0.833: B06, B08, B15). NO LONGER BLIND: B08, then B15 and B06 were fixed after their results were seen (follow-up 2026-09-28); since then it is a regression set. Questions and expectations unchanged.",
  "cases": [
   {"id": "B01", "q": "What does pressing DRY do?", "role": "assistant", "device": "ax300", "expect": "abstain", "reasons": ["not_found"], "safety": true},
   {"id": "B02", "q": "Where do I read about hot instruments after a cycle?", "role": "assistant", "device": "ax200", "expect": "answer", "source": "ax200_v2", "pages": [5], "include": "Instruments are hot at the end of a cycle"},

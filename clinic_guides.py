@@ -488,6 +488,15 @@ CLINICAL = re.compile(r"\b(should|dovrebbe|deve|devo)\b.*\b(have|get|fare|avere|
                       r"prescribe|prescrivere|diagnos\w*)\b|\b(antibiotic\w*|antibiotic[oi]|medicin\w*|medication\w*|farmac\w*|drug|"
                       r"drugs|painkiller\w*|analgesic\w*|antidolorific\w*|anaesthe\w*|anesthe\w*|anestesi\w*|"
                       r"adrenalin\w*|aspirin\w*|anticoagula\w*)\b", re.IGNORECASE)
+# imaging or treatment with no dentist order behind it: reception may never decide, add or book it (P24 follow-up:
+# "the dentist forgot the order, can I book the OPG anyway?" was answered with the booking steps)
+IMAGING = r"(opg|ortopanoramic\w*|x-?rays?|radiograf\w*|radiograph\w*|bitewing\w*|imaging|scan|cbct|tac)"
+NO_ORDER = re.compile(r"\b(decide|decides|deciding|decidere|decido|forgot|forgotten|dimentic\w*|without|senza|anyway|"
+                      r"comunque|not ordered|hasn'?t ordered|has not ordered|didn'?t order|did not order|no order|"
+                      r"non (?:l'?)?ha prescritt\w*|non (?:l'?)?ha richiest\w*)\b.*\b" + IMAGING + r"\b|\b" + IMAGING +
+                      r"\b.*\b(decide|decides|decidere|forgot|forgotten|dimentic\w*|without|senza|anyway|comunque|"
+                      r"not ordered|hasn'?t ordered|has not ordered|didn'?t order|did not order|no order|"
+                      r"non (?:l'?)?ha prescritt\w*|non (?:l'?)?ha richiest\w*)\b", re.IGNORECASE)
 SERVICING = re.compile(r"service menu|menu di servizio|calibrat\w*|taratur\w*|\brepair\w*|ripar\w*|firmware|"
                        r"\b(raise|increase|lower|change|alzare|aumentare|cambiare|modificare)\b.*\b(temperature|"
                        r"temperatura|pressure|pressione|setting|impostazion\w*)\b", re.IGNORECASE)
@@ -710,12 +719,19 @@ def _passage(row, codes, words):
     lines = _clean_lines(row[field])
     if field == "ocr_text":
         return field, _norm(" ".join(lines))
+    # a word found on few lines of the page says more about which line answers than one found on every line
+    # (P24 follow-up: "cosa consegno al paziente?" chose the line with OPG and paziente, not the one with consegnare)
+    hits = [_coverage(line, codes, words) for line in lines]
+    spread = {}
+    for _c, hc, hw in hits:
+        for term in hc + hw:
+            spread[term] = spread.get(term, 0) + 1
     scored = []
-    for i, line in enumerate(lines):
-        cov, hc, hw = _coverage(line, codes, words)
+    for i, (line, (_c, hc, hw)) in enumerate(zip(lines, hits)):
         # a line that starts with the label defines it; a page's first line is usually its title
         defines = any(_norm(line).upper().startswith(c) for c in hc)
-        scored.append((len(hc) * 2 + len(hw) + (2 if defines else 0), i != 0, -i, i))
+        weight = sum(1 / spread[term] for term in hc + hw)
+        scored.append((weight + (2 if defines else 0), i != 0, -i, i))
     if not scored:
         return field, ""
     best = max(scored)[3]
@@ -844,7 +860,7 @@ def _ask(conn, question, role, device_id, model):
         return _abstain("not_found")
     if CF_SHAPE.search(question.upper()) or PATIENT.search(question) or PATIENT_WORDS.search(question):
         return _abstain("patient_data")
-    if CLINICAL.search(question):
+    if CLINICAL.search(question) or NO_ORDER.search(question):
         return _abstain("clinical")
     device, problem = _resolve_device(conn, question, device_id)
     if problem:
