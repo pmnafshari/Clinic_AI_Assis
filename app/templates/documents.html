@@ -30,7 +30,7 @@
       {% for e in timeline %}
       <li class="ds-row file-entry">
         {% if e.preview %}
-        <img class="file-thumb" src="{{ url_for('documents.preview', cf=cf, did=e.doc_id) }}" alt="Preview of {{ e.display_name }} (for orientation only)" width="56" height="56" loading="lazy">
+        <a class="file-thumb-link" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}#preview"><img class="file-thumb" src="{{ url_for('documents.preview', cf=cf, did=e.doc_id) }}" alt="Preview of {{ e.display_name }} (for orientation only)" width="56" height="56" loading="lazy"></a>
         {% else %}
         <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi {{ 'bi-journal-text' if e.kind == 'note' else 'bi-file-earmark' }}"></i></span>
         {% endif %}
@@ -46,6 +46,7 @@
         {% if e.kind == 'file' %}
         <span class="file-actions">
           {% if e.published %}<span class="ds-badge ds-badge-success">Shown to patient</span>{% else %}<span class="ds-badge ds-badge-warning">Not shown to patient</span>{% endif %}
+          {% if e.preview %}<a class="btn btn-outline-primary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}#preview">View image<span class="visually-hidden"> {{ e.display_name }}</span></a>{% endif %}
           <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.original', cf=cf, did=e.doc_id) }}" >Download<span class="visually-hidden"> the original of {{ e.display_name }}</span></a>
           {% if e.published %}
           <form method="post" action="{{ url_for('documents.withdraw', cf=cf, did=e.doc_id) }}">

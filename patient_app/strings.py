@@ -39,6 +39,7 @@ STRINGS = {
                            " data, use the request in your profile."},
     "files_none": {"it": "Non ci sono ancora file condivisi con te.", "en": "No files have been shared with you yet."},
     "files_download": {"it": "Scarica", "en": "Download"},
+    "files_open_full": {"it": "Apri a grandezza intera", "en": "Open full size"},
     "files_taken": {"it": "Data:", "en": "Date:"},
     "files_added": {"it": "Aggiunto il", "en": "Added"},
     "files_preview_note": {"it": "Anteprima solo per orientarsi: non adatta a una diagnosi.",

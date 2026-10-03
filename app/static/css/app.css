@@ -1334,11 +1334,13 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 }
 
 /* P25 file timeline: a thumbnail, the entry, then its status and actions */
-.file-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--ds-border-strong); flex: none; background: #fff; }
+.file-thumb { width: 56px; height: 56px; object-fit: contain; border-radius: 8px; border: 1px solid var(--ds-border-strong); flex: none; background: #fff; }
 .file-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-left: auto; }
 .file-actions form { margin: 0; }
 .file-preview { margin: 0; }
 .file-preview img { display: block; max-width: 100%; max-height: 360px; height: auto; border: 1px solid var(--ds-border-strong); border-radius: 8px; background: #fff; }
+/* an image file opened from the record: the whole image, as large as the screen allows, never cropped */
+.file-preview .file-view { width: auto; max-width: 100%; max-height: 75vh; height: auto; object-fit: contain; }
 .import-evidence th { font-weight: 600; white-space: nowrap; }
 .import-evidence td, .import-evidence th { vertical-align: top; }
 @media (max-width: 575.98px) {

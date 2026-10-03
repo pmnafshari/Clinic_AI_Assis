@@ -16,12 +16,15 @@
   <li class="ds-card patient-profile-card mb-3">
     <div class="ds-card-body d-flex flex-wrap gap-3 align-items-start">
       {% if f.kind in ('png', 'jpeg') %}
-      <img class="patient-file-thumb" src="{{ url_for('patient.file_preview', doc_id=f.id) }}" alt="{{ t('files_preview_alt', lang).format(name=t('filecat_' ~ (f.category or f.kind), lang)) }}" width="96" height="96" loading="lazy">
+      <figure class="patient-file-figure">
+        <a href="{{ url_for('patient.file_preview', doc_id=f.id) }}" target="_blank" rel="noopener"><img class="patient-file-image" src="{{ url_for('patient.file_preview', doc_id=f.id) }}" alt="{{ t('files_preview_alt', lang).format(name=t('filecat_' ~ (f.category or f.kind), lang)) }}" loading="lazy"></a>
+      </figure>
       {% endif %}
       <div class="min-w-0 flex-grow-1">
         <h2 class="h6 mb-1 text-break">{{ t('filecat_' ~ (f.category or f.kind), lang) }}</h2>
         <p class="small mb-1">{{ t('files_taken' if f.dated_by_evidence else 'files_added', lang) }} {{ f.date | appt_day(lang) }}</p>
         {% if f.kind in ('png', 'jpeg') %}<p class="small text-secondary mb-1">{{ t('files_preview_note', lang) }}</p>{% else %}<p class="small text-secondary mb-1">{{ t('files_no_preview', lang) }}</p>{% endif %}
+        {% if f.kind in ('png', 'jpeg') %}<a class="btn btn-outline-secondary btn-sm me-1" href="{{ url_for('patient.file_preview', doc_id=f.id) }}" target="_blank" rel="noopener">{{ t('files_open_full', lang) }}<span class="visually-hidden">: {{ t('filecat_' ~ (f.category or f.kind), lang) }}</span></a>{% endif %}
         <a class="btn btn-outline-primary btn-sm" href="{{ url_for('patient.file_download', doc_id=f.id) }}" >{{ t('files_download', lang) }}<span class="visually-hidden">: {{ t('filecat_' ~ (f.category or f.kind), lang) }}, {{ f.date }}</span></a>
       </div>
     </div>

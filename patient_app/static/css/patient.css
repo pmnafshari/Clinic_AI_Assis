@@ -478,4 +478,8 @@ h1 {
 .patient-brand-inline:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 0.625rem; }
 
 /* P25 my files: a small preview beside the details */
-.patient-file-thumb { width: 96px; height: 96px; object-fit: cover; border-radius: 8px; border: 1px solid #d3dae4; background: #fff; flex: none; }
+/* an image file: the whole image across the card, as tall as the screen allows, never cropped */
+.patient-file-figure { flex: 1 1 100%; margin: 0; }
+.patient-file-image { display: block; width: 100%; max-height: 70vh; height: auto; object-fit: contain; border-radius: 8px; border: 1px solid #d3dae4; background: #fff; }
+/* on a phone the card's 24px padding would shrink a wide panoramic image: let it run to the card's edges */
+@media (max-width: 575.98px) { .patient-file-figure { margin: 0 -24px; } .patient-file-image { border-radius: 0; border-left: 0; border-right: 0; } }

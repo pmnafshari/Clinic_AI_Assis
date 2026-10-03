@@ -41,9 +41,11 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="file-title">In the record</h2></div>
   <div class="dash-card-body">
     {% if previewable %}
-    <figure class="file-preview mb-3">
-      <img src="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" alt="Preview of {{ doc.display_name }}">
-      <figcaption class="ds-row-sub">Preview for orientation only - not suitable for diagnosis. Download the original to read it properly.</figcaption>
+    <figure class="file-preview mb-3" id="preview">
+      <img class="file-view" src="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" alt="{{ doc.display_name }} - image preview for orientation only, not for diagnosis">
+      <figcaption class="ds-row-sub">Fitted to the screen, for orientation only - not suitable for diagnosis.
+        <a href="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" target="_blank" rel="noopener">Open full size<span class="visually-hidden"> (opens {{ doc.display_name }} in a new tab)</span></a>
+        or download the original.</figcaption>
     </figure>
     {% elif doc.kind == 'pdf' or doc.kind == 'text' %}
     <p class="ds-row-sub">No preview for this type. Download the original to open it.</p>
