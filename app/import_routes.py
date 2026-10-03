@@ -4,6 +4,7 @@ from pathlib import Path
 from flask import Blueprint, Response, abort, flash, g, redirect, render_template, request, url_for
 
 import documents as docs
+import drive_source as ds
 import legacy_import as li
 import patient_files as pf
 from auth import authorize, log_audit
@@ -41,14 +42,16 @@ def _people(conn, pids):
 def _page(check=None, checked=None):
     conn = get_db()
     progress = li.progress(conn, *_who())
-    queue, people, inbox, state = None, {}, None, request.args.get("state")
+    queue, people, inbox, drive, state = None, {}, None, None, request.args.get("state")
     if authorize(g.user["role"], li.REVIEW):
         queue = li.queue(conn, *_who(), state=state)
         inbox = li.inbox_folders()
+        drive = ds.status(conn)
         found = [r["candidate"] for r in check["items"]] if check else []
         people = _people(conn, [r["patient_id"] for r in queue] + found)
     return render_template("imports.html", progress=progress, queue=queue, people=people, state=state,
-                           inbox=inbox, check=check, checked=checked, labels=STATE_LABELS, open_states=li.OPEN,
+                           inbox=inbox, drive=drive, intervals=ds.INTERVALS, check=check, checked=checked,
+                           labels=STATE_LABELS, open_states=li.OPEN,
                            name_of=lambda r: Path(r["rel_path"]).name)
 
 
@@ -72,6 +75,34 @@ def check():
         return redirect(url_for("imports.index"))
     log_audit(get_db(), g.user["username"], g.user["role"], "import_check", "import", allowed=1)
     return _page(check=report, checked=name)
+
+
+@imports_bp.route("/imports/drive/sync", methods=["POST"])
+def drive_sync():
+    """Sync now: list the approved Drive folder, fetch what is new, stage it. Attaches nothing."""
+    if not authorize(g.user["role"], li.REVIEW):
+        return _refuse("drive_sync", "drive")
+    try:
+        run_id = ds.sync(get_db(), *_who())
+    except ds.DriveError as e:
+        flash(str(e), "danger")
+        return redirect(url_for("imports.index") + "#drive")
+    r = ds.run(get_db(), run_id)
+    if r["status"] == "error":
+        flash(f"The check failed: {r['error_message']}", "danger")
+    else:
+        flash(f"Drive checked: {r['new_files']} new file(s) staged. Nothing is attached until you confirm.", "success")
+    return redirect(url_for("imports.index") + "#drive")
+
+
+@imports_bp.route("/imports/drive/auto", methods=["POST"])
+def drive_auto():
+    if not authorize(g.user["role"], li.REVIEW):
+        return _refuse("drive_auto", "drive")
+    interval = request.form.get("interval", "")
+    ds.set_auto(get_db(), request.form.get("enabled") == "1", int(interval) if interval.isdigit() else 0, *_who())
+    flash("Automatic check updated.", "success")
+    return redirect(url_for("imports.index") + "#drive")
 
 
 @imports_bp.route("/imports/inbox/stage", methods=["POST"])

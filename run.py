@@ -2,6 +2,7 @@ import clinic_time
 import codice_fiscale
 import disk_guard
 import documents
+import drive_source
 import upload_worker
 from app import create_app
 
@@ -22,5 +23,8 @@ upload_worker.resume_pending()
 # a crash between a document's file and its row leaves one without the other.
 # reported here, never repaired here: `python documents.py --reconcile --apply`
 documents.report_at_startup("db/clinic.sqlite")
+# DRV: the Drive source's automatic check (off until a dentist turns it on; one check at a time)
+if drive_source.FOLDER_ID:
+    drive_source.start_auto_thread("db/clinic.sqlite")
 # no port argument, so this binds flask's default 5000 - tunnel_guard.STAFF_PORT mirrors it, change both together
 app.run(host="127.0.0.1", threaded=True)

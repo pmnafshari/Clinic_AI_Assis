@@ -210,6 +210,9 @@ def init_db(db_path):
     # their bookings and completions (P27): the appointment stays an ordinary appointment
     import imaging_bookings
     conn.executescript(imaging_bookings.SCHEMA)
+    # DRV (P25-D4): the read-only Drive source - its checks, the files it fetched, the automatic check
+    import drive_source
+    conn.executescript(drive_source.SCHEMA)
 
     # similar cases (P16). a dentist's verdicts and removals, append-only
     from similar_cases import SCHEMA as SIMILAR_SCHEMA

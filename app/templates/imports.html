@@ -16,6 +16,54 @@
   test folder; a real shared folder needs the owner's separate authorisation.</div>
 </div>
 
+{% if drive is not none %}
+<section class="card dash-card mb-3" aria-labelledby="drive-title" id="drive">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="drive-title">Google Drive source</h2></div>
+  <div class="dash-card-body">
+    {% if drive.configured %}
+    <p class="mb-2">Connected read-only to the Drive test folder <code>{{ drive.folder_id }}</code> (synthetic files only).
+    The app lists the folder, fetches new or changed files and stages them for review; it never changes Drive and
+    attaches nothing until you confirm each file.</p>
+    {% else %}
+    <p class="mb-2">Not connected: {{ drive.reason }}.</p>
+    {% endif %}
+    {% set last = drive['last'] %}
+    <ul class="ds-rows">
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Last check</span>
+        <span class="ds-row-title">{% if last %}{{ last.started_at | appt_date }} {{ last.started_at | appt_time }} · {{ drive.labels[last.status] }} · {{ last.listed }} listed, {{ last.new_files }} new{% if last.skipped %}, {{ last.skipped }} skipped{% endif %} · {{ last.trigger }}{% else %}never{% endif %}</span></span></li>
+      {% if last and last.error_message %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ 'Error' if last.status == 'error' else 'Skipped' }}</span>
+        <span class="ds-row-title text-break">{{ last.error_message }}</span></span></li>
+      {% endif %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">From Drive, waiting for your review</span>
+        <span class="ds-row-title">{{ drive.pending }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Automatic check</span>
+        <span class="ds-row-title">{% if drive.settings.auto_enabled %}on, every {{ drive.settings.interval_min }} min (turned on by {{ drive.settings.enabled_by }}){% else %}off{% if drive.settings.disabled_reason %} - {{ drive.settings.disabled_reason }}{% endif %}{% endif %}</span></span></li>
+    </ul>
+    {% if drive.configured %}
+    <div class="d-flex flex-wrap gap-2 align-items-end mt-2">
+      <form method="post" action="{{ url_for('imports.drive_sync') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-sm btn-primary">Sync now</button>
+      </form>
+      <form method="post" action="{{ url_for('imports.drive_auto') }}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {% if drive.settings.auto_enabled %}
+        <input type="hidden" name="enabled" value="0"><input type="hidden" name="interval" value="{{ drive.settings.interval_min }}">
+        <button type="submit" class="btn btn-sm btn-outline-secondary">Turn off automatic check</button>
+        {% else %}
+        <input type="hidden" name="enabled" value="1">
+        <div><label for="drive-interval" class="form-label">Every (minutes, {{ intervals[0] }}-{{ intervals[1] }})</label>
+        <input id="drive-interval" type="number" name="interval" min="{{ intervals[0] }}" max="{{ intervals[1] }}" value="{{ drive.settings.interval_min }}" class="form-control form-control-sm"></div>
+        <button type="submit" class="btn btn-sm btn-outline-primary">Turn on automatic check</button>
+        {% endif %}
+      </form>
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 {% if inbox is not none %}
 <section class="card dash-card mb-3" aria-labelledby="inbox-title" id="inbox">
   <div class="dash-card-head"><h2 class="ds-card-title" id="inbox-title">Import a synthetic test folder</h2></div>

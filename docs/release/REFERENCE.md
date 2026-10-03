@@ -49,6 +49,8 @@ this file is stale.
 | POST | `/handoffs/<int:handoff_id>/resolve` | `handoff.resolve` |
 | GET | `/imaging/tasks` | `imaging.tasks` |
 | GET | `/imports` | `imports.index` |
+| POST | `/imports/drive/auto` | `imports.drive_auto` |
+| POST | `/imports/drive/sync` | `imports.drive_sync` |
 | POST | `/imports/inbox/check` | `imports.check` |
 | POST | `/imports/inbox/stage` | `imports.stage` |
 | GET | `/imports/items/<int:import_id>` | `imports.item` |
@@ -197,6 +199,9 @@ this file is stale.
 | `dentist_schedule` | id, dentist, weekday, starts, ends |
 | `document_identity_events` | id, document_id, action, from_pid, to_pid, actor, at, reason |
 | `document_publications` | id, document_id, patient_id, published_by, published_at, withdrawn_by, withdrawn_at, withdraw_reason |
+| `drive_files` | drive_id, folder_id, name, rel, md5, size, modified_time, sha256, first_seen_at, downloaded_at, last_run_id |
+| `drive_settings` | id, auto_enabled, interval_min, enabled_by, enabled_at, consecutive_errors, disabled_reason |
+| `drive_sync_runs` | id, folder_id, started_by, trigger, started_at, finished_at, status, listed, new_files, skipped, error_code, error_message, batch_id |
 | `handoff_requests` | id, patient_id, reason, topic, status, created_at, claimed_by, claimed_at, resolved_by, resolved_at |
 | `imaging_bookings` | id, series_id, request_id, request_version, appointment_id, patient_id, booked_by, booked_at, appt_starts_at, state, flag, flagged_at, resolution, resolution_note, resolved_by, resolved_at, submit_token |
 | `imaging_completions` | id, series_id, request_id, patient_id, document_id, recorded_by, recorded_at, verified, reversed_by, reversed_at, reversal_reason |
