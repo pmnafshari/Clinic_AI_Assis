@@ -42,6 +42,11 @@ def main():
         # correct behaviour and would fail this tool for the wrong reason.
         import clinic_time as _ct
         _ts = _ct.stamp()
+        # the demo cohort books one weekday after another, so today+3 is not always empty:
+        # the label must count what is already there plus ours
+        lo, hi = _ct.day_bounds_utc(day)
+        already = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'booked'"
+                               " AND starts_at >= ? AND starts_at < ?", (lo, hi)).fetchone()[0]
         conn.execute(
             "INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status,"
             " created_at, updated_at) VALUES (?,?,?,30,'booked',?,?)",
@@ -94,7 +99,7 @@ def main():
             # the booked day announces its count to a screen reader, and Enter
             # on a focused day actually navigates
             label = s.get_attribute(f'.appt-cal-day[href*="day={day}"]', "aria-label")
-            check("6 the booked day states its count", label and "1 booked" in label, label)
+            check("6 the booked day states its count", label and f": {already + 1} booked" in label, label)
 
             s.focus(f'.appt-cal-day[href*="day={day}"]')
             s.keyboard.press("Enter")

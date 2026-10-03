@@ -60,6 +60,17 @@ def _reset(conn, pid):
 
 
 def run():
+    # "upcoming" is read from clinic_time.now(), so it is pinned to the fixture's now as well: from the
+    # machine clock the 2026-10-02 booking stopped being upcoming on 2026-10-03 and every cancel case failed
+    real = clinic_time.now
+    clinic_time.now = lambda env=None: clinic_time.to_local(clinic_time.read_instant("2026-09-22T08:00:00+00:00"))
+    try:
+        return _run()
+    finally:
+        clinic_time.now = real
+
+
+def _run():
     data = json.loads(CASES_PATH.read_text())
     now = clinic_time.read_instant("2026-09-22T08:00:00+00:00")
     results = []
