@@ -44,6 +44,8 @@ from auth import authorize, log_audit
 
 MARKER = ".synthetic-legacy-fixture"
 STAGING_ROOT = Path("import_staging")
+# the only place the browser can import from: its direct sub-folders, picked by name (UIF)
+INBOX = Path(os.environ.get("CLINIC_IMPORT_INBOX", "import_inbox"))
 REVIEW = "read_clinical"
 PROGRESS = "view_import_progress"
 MAX_FILES = 5000
@@ -125,6 +127,27 @@ def _check_source(root):
                             " Reading a real shared folder needs the owner's separate"
                             " authorisation (P25-D1).")
     return root.resolve()
+
+
+def inbox_folders(inbox=None):
+    """The import inbox's direct sub-folders, by name. Links, hidden folders and files are not offered."""
+    root = Path(inbox or INBOX)
+    if root.is_symlink() or not root.is_dir():
+        return []
+    out = []
+    for path in sorted(root.iterdir()):
+        if path.name.startswith(".") or path.is_symlink() or not path.is_dir():
+            continue
+        out.append({"name": path.name, "synthetic": (path / MARKER).is_file()})
+    return out
+
+
+def inbox_folder(name, inbox=None):
+    """The folder the browser named - only one the inbox lists, so no path can be sent instead."""
+    for folder in inbox_folders(inbox):
+        if folder["name"] == name:
+            return Path(inbox or INBOX) / name
+    raise ImportProblem("no_folder", "That folder is not in the import inbox.")
 
 
 def source_key(root):
@@ -593,8 +616,13 @@ def stage(conn, root, actor, role, now=None, clock_offset=0):
     key = source_key(root)
     running = conn.execute("SELECT id FROM import_batches WHERE source_key = ? AND status = 'running'"
                            " ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+    done = _already_imported(conn, key, files)
     if running:
         batch = running[0]
+    elif done:
+        # the same folder, unchanged: the same import (a second click must not add an empty run)
+        log_audit(conn, actor, role, "import_stage", f"batch:{done}", allowed=1)
+        return done
     else:
         batch = conn.execute("INSERT INTO import_batches (source_key, source_label, started_by, started_at,"
                              " status, clock_offset) VALUES (?, ?, ?, ?, 'running', ?)",
@@ -613,6 +641,25 @@ def stage(conn, root, actor, role, now=None, clock_offset=0):
                  (_now(now), json.dumps(totals), batch))
     conn.commit()
     return batch
+
+
+def _already_imported(conn, key, files):
+    """-> the last finished run of this folder if every file in it now is already an item, else None."""
+    last = conn.execute("SELECT id FROM import_batches WHERE source_key = ? AND status = 'done'"
+                        " ORDER BY id DESC LIMIT 1", (key,)).fetchone()
+    if last is None:
+        return None
+    for rel, path, refused in files:
+        if refused:
+            seen = conn.execute("SELECT 1 FROM import_items WHERE source_key = ? AND rel_path = ? AND sha256 IS NULL",
+                                (key, rel)).fetchone()
+        else:
+            sha = hashlib.sha256(_read_source(path)[0]).hexdigest()
+            seen = conn.execute("SELECT 1 FROM import_items WHERE source_key = ? AND rel_path = ? AND sha256 = ?",
+                                (key, rel, sha)).fetchone()
+        if seen is None:
+            return None
+    return last[0]
 
 
 def _discover(conn, batch, key, rel, path, refused, now):

@@ -2,6 +2,7 @@
 
     python legacy_fixtures.py <empty folder>          the evaluation folder (temp databases, selftests)
     python legacy_fixtures.py --uat <empty folder>    the UAT folder from the dev database's fictional cohort
+    python legacy_fixtures.py --drive <empty folder>  the five-file Drive test set (UIF), same cohort
 
 Every person here is fictional; the codes are real-shaped with a correct check
 character so the checksum rules are exercised. The folder carries the marker
@@ -229,7 +230,57 @@ def build_uat(root, conn):
     return cases
 
 
+DRIVE_PEOPLE = {k: UAT_PEOPLE[k] for k in ("lorenzo", "marco", "giulia")}
+
+
+def build_drive(root, conn=None):
+    """The small set placed in the Drive test folder (UIF): flat, five files and the marker.
+    Pass conn to check the fictional people are in that database. -> {case: (file name, expected)}"""
+    if conn is not None:
+        for code, name in DRIVE_PEOPLE.values():
+            if not conn.execute("SELECT 1 FROM patients WHERE codice_fiscale = ? AND patient_name = ?",
+                                (code, name)).fetchone():
+                raise SystemExit(f"{name} ({code}) is not in this database")
+    root = Path(root)
+    root.mkdir(parents=True, exist_ok=True)
+    (root / MARKER).write_text("UIF synthetic Drive test fixture - fictional people only\n")
+    L, M, G = (DRIVE_PEOPLE[k][0] for k in ("lorenzo", "marco", "giulia"))
+    cases = {}
+
+    def put(case, name, data, expected):
+        (root / name).write_bytes(data)
+        cases[case] = (name, expected)
+    # the fields last on the line: a value runs to the next label or the end of the line
+    report = pdf([f"Referto DEMO (dati inventati) Paziente: Lorenzo Bruno Codice fiscale: {L}"])
+    put("D01", "D01-referto-bruno.pdf", report, "proposed, strong - Lorenzo Bruno")
+    put("D02", "D02-referto-due-codici.txt",
+        f"Referto DEMO\nPaziente: Marco Gallo\nCodice fiscale: {M}\nCodice fiscale: {G}\n".encode(),
+        "conflict - identifiers name different patients")
+    put("D03", "D03-lettera-santoro.txt",
+        b"Lettera DEMO\nPaziente: Giulia Santoro\nData esame: 07/10/2026 09:30\n",
+        "unmatched - a name and a date are leads, never a candidate")
+    if shutil.which("sips"):
+        work = root.parent / (root.name + ".work")
+        work.mkdir(exist_ok=True)
+        # a thumbnail: small enough to place in Drive through a connector byte for byte
+        big = work / "d04.jpg"
+        big.write_bytes(jpeg_from_text("SCAN DEMO", work))
+        subprocess.run(["sips", "-Z", "48", str(big)], check=True, capture_output=True)
+        put("D04", "D04-scan-senza-dati.jpg", strip_app1(big.read_bytes()), "unmatched - nothing identifies anyone")
+        shutil.rmtree(work, ignore_errors=True)
+    put("D05", "D05-referto-bruno-copia.pdf", report, "proposed, strong - Lorenzo Bruno (same bytes as D01)")
+    return cases
+
+
 def main(argv):
+    if argv[:1] == ["--drive"] and len(argv) == 2:
+        from storage import connect
+        conn = connect("db/clinic.sqlite")
+        cases = build_drive(argv[1], conn)
+        conn.close()
+        for case, (name, expected) in sorted(cases.items()):
+            print(f"{case}  {name:30}  {expected}")
+        return 0
     if argv[:1] == ["--uat"] and len(argv) == 2:
         from storage import connect
         conn = connect("db/clinic.sqlite")

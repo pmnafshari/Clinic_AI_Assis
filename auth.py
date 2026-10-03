@@ -151,6 +151,8 @@ ROUTE_POLICY = {
     "imports.confirm": "read_clinical",
     "imports.reject": "read_clinical",
     "imports.hold": "read_clinical",
+    "imports.check": "read_clinical",
+    "imports.stage": "read_clinical",
     # P24: asking and reading approved guides is dentist and reception; managing is the dentist's. The decision
     # routes are open to asking staff because a named administrative approver (a reception account) may approve
     # administrative procedures; clinic_guides checks who may decide on each document

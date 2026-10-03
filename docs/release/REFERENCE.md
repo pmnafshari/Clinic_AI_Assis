@@ -49,6 +49,8 @@ this file is stale.
 | POST | `/handoffs/<int:handoff_id>/resolve` | `handoff.resolve` |
 | GET | `/imaging/tasks` | `imaging.tasks` |
 | GET | `/imports` | `imports.index` |
+| POST | `/imports/inbox/check` | `imports.check` |
+| POST | `/imports/inbox/stage` | `imports.stage` |
 | GET | `/imports/items/<int:import_id>` | `imports.item` |
 | POST | `/imports/items/<int:import_id>/confirm` | `imports.confirm` |
 | POST | `/imports/items/<int:import_id>/hold` | `imports.hold` |

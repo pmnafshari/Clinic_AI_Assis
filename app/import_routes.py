@@ -38,18 +38,54 @@ def _people(conn, pids):
         f"SELECT patient_id, codice_fiscale, patient_name FROM patients WHERE patient_id IN ({marks})", pids)}
 
 
+def _page(check=None, checked=None):
+    conn = get_db()
+    progress = li.progress(conn, *_who())
+    queue, people, inbox, state = None, {}, None, request.args.get("state")
+    if authorize(g.user["role"], li.REVIEW):
+        queue = li.queue(conn, *_who(), state=state)
+        inbox = li.inbox_folders()
+        found = [r["candidate"] for r in check["items"]] if check else []
+        people = _people(conn, [r["patient_id"] for r in queue] + found)
+    return render_template("imports.html", progress=progress, queue=queue, people=people, state=state,
+                           inbox=inbox, check=check, checked=checked, labels=STATE_LABELS, open_states=li.OPEN,
+                           name_of=lambda r: Path(r["rel_path"]).name)
+
+
 @imports_bp.route("/imports")
 def index():
     if not authorize(g.user["role"], li.PROGRESS):
         return _refuse("import_progress")
-    conn = get_db()
-    progress = li.progress(conn, *_who())
-    queue, people, state = None, {}, request.args.get("state")
-    if authorize(g.user["role"], li.REVIEW):
-        queue = li.queue(conn, *_who(), state=state)
-        people = _people(conn, [r["patient_id"] for r in queue])
-    return render_template("imports.html", progress=progress, queue=queue, people=people, state=state,
-                           labels=STATE_LABELS, open_states=li.OPEN, name_of=lambda r: Path(r["rel_path"]).name)
+    return _page()
+
+
+@imports_bp.route("/imports/inbox/check", methods=["POST"])
+def check():
+    """The dry run from the browser: every file and what staging would make of it. Writes nothing."""
+    if not authorize(g.user["role"], li.REVIEW):
+        return _refuse("import_check")
+    name = request.form.get("folder", "")
+    try:
+        report = li.dry_run(get_db(), li.inbox_folder(name))
+    except li.ImportProblem as e:
+        flash(str(e), "danger")
+        return redirect(url_for("imports.index"))
+    log_audit(get_db(), g.user["username"], g.user["role"], "import_check", "import", allowed=1)
+    return _page(check=report, checked=name)
+
+
+@imports_bp.route("/imports/inbox/stage", methods=["POST"])
+def stage():
+    """Copy the folder's files into staging and propose an owner for each. Attaches nothing."""
+    if not authorize(g.user["role"], li.REVIEW):
+        return _refuse("import_stage")
+    try:
+        batch = li.stage(get_db(), li.inbox_folder(request.form.get("folder", "")), *_who())
+    except li.ImportProblem as e:
+        flash(str(e), "danger")
+        return redirect(url_for("imports.index"))
+    flash(f"Run {batch} is staged. Nothing is attached to any patient until you confirm each file.", "success")
+    return redirect(url_for("imports.index") + "#queue")
 
 
 @imports_bp.route("/imports/items/<int:import_id>")

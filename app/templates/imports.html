@@ -16,6 +16,75 @@
   test folder; a real shared folder needs the owner's separate authorisation.</div>
 </div>
 
+{% if inbox is not none %}
+<section class="card dash-card mb-3" aria-labelledby="inbox-title" id="inbox">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="inbox-title">Import a synthetic test folder</h2></div>
+  <div class="dash-card-body">
+    <p class="mb-2">Folders placed in the clinic's import inbox (<code>import_inbox/</code> on this computer).
+    <strong>Check</strong> lists every file and what the import would propose, and writes nothing.
+    <strong>Stage and propose</strong> copies the files into staging and proposes an owner for each from the
+    evidence; it attaches nothing.</p>
+    {% if inbox %}
+    <ul class="ds-rows">
+      {% for f in inbox %}
+      <li class="ds-row"><span class="ds-row-main">
+        <span class="ds-row-title text-break">{{ f.name }}</span>
+        {% if f.synthetic %}
+        <span class="ds-row-sub">synthetic test folder</span>
+        {% else %}
+        <span class="ds-row-sub">not a synthetic test folder - a real folder needs the owner's separate authorisation (P25-D1)</span>
+        {% endif %}
+      </span>
+      {% if f.synthetic %}
+      <span class="d-flex flex-wrap gap-2">
+        <form method="post" action="{{ url_for('imports.check') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="folder" value="{{ f.name }}">
+          <button type="submit" class="btn btn-sm btn-outline-primary">Check this folder<span class="visually-hidden"> {{ f.name }}</span></button>
+        </form>
+        <form method="post" action="{{ url_for('imports.stage') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="folder" value="{{ f.name }}">
+          <button type="submit" class="btn btn-sm btn-primary">Stage and propose<span class="visually-hidden"> {{ f.name }}</span></button>
+        </form>
+      </span>
+      {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No folder is in the import inbox. Copy a synthetic test folder (it carries the
+    <code>.synthetic-legacy-fixture</code> marker) into <code>import_inbox/</code>, then reload this page.</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+{% if check %}
+<section class="card dash-card mb-3" aria-labelledby="check-title" id="check">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="check-title">Check of {{ checked }}: nothing was written</h2></div>
+  <div class="dash-card-body">
+    <p class="mb-2">{{ check.totals.files }} files. Nothing has been staged or attached; this is what
+    <strong>Stage and propose</strong> would find.</p>
+    <table class="ux-table ux-table-page">
+      <caption class="visually-hidden">Each file in the folder and what the import would make of it</caption>
+      <thead><tr><th scope="col">File</th><th scope="col">Type</th><th scope="col">Result</th><th scope="col">Proposed owner</th><th scope="col">Why</th></tr></thead>
+      <tbody>
+      {% for r in check["items"] %}
+      <tr>
+        <td data-label="File" class="text-break">{{ r.rel }}</td>
+        <td data-label="Type">{{ r.kind or 'unknown' }}</td>
+        <td data-label="Result">{{ labels.get(r.result, r.result) }}{% if r.strength %} ({{ 'strong' if r.strength == 'strong' else 'needs checking' }}){% endif %}</td>
+        <td data-label="Proposed owner">{% if r.candidate and people.get(r.candidate) %}{{ people[r.candidate].patient_name }}{% else %}none{% endif %}</td>
+        <td data-label="Why">{{ r.reason or '' }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
 <section class="card dash-card mb-3" aria-labelledby="batches-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="batches-title">Import runs</h2></div>
   <div class="dash-card-body">
@@ -37,7 +106,7 @@
       </tbody>
     </table>
     {% else %}
-    <p class="dash-empty-line">No import has been run. A dry run comes first: <code>python legacy_import.py --dry-run FOLDER</code>.</p>
+    <p class="dash-empty-line">No import has been run.{% if inbox is not none %} Check a folder above first.{% endif %}</p>
     {% endif %}
   </div>
 </section>
