@@ -23,7 +23,7 @@ from patient_files_selftest import csrf, staff_client
 
 D, A, ADM = ("drossi", "dentist"), ("aassist", "assistant"), ("anadmin", "admin")
 FOLDER = "fakefolder0000000000000000000001"
-KEY = "AIzaFAKEKEY-not-a-real-key-0123456789ab"
+KEY = "AIza" + "x" * 35                      # the shape of a key, obviously not one
 T0 = clinic_time.read_instant("2026-10-03T08:00:00+00:00")
 D06 = (b"Referto DEMO (dati inventati)\nPaziente: Marco Gallo\nCodice fiscale: " + fx.DRIVE_PEOPLE["marco"][0].encode()
        + b"\n")
