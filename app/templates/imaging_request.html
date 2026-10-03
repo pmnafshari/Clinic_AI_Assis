@@ -54,6 +54,47 @@
 </div>
 {% endif %}
 
+{% if status or booking or (h.current and can_book) %}
+<section class="card dash-card mb-3" aria-labelledby="booking-title" id="booking">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="booking-title">Appointment and status</h2></div>
+  <div class="dash-card-body">
+    {% if status %}<p class="mb-2"><strong>{{ status }}</strong></p>{% endif %}
+    {% if booking and booking.state == 'needs_action' %}
+    <div class="ds-alert ds-alert-warning mb-2" role="status"><div><strong class="ds-alert-title">Needs reception action</strong>
+      The appointment on {{ booking.when }} with {{ booking.dentist }} was left as it is because {{ booking.reason }}. Do not treat it as a booking for this request until a resolution is recorded. Nobody has been contacted.</div></div>
+    {% if can_book %}
+    <form method="post" action="{{ url_for('imaging.resolve', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="resolution" class="form-label">What reception did</label><select id="resolution" name="resolution" class="form-select form-select-sm">{% for k, v in booking.choices %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div><label for="rnote-b" class="form-label">Why, in a few words</label><input id="rnote-b" name="note" class="form-control form-control-sm" maxlength="200"></div>
+      <button class="btn btn-primary btn-sm" type="submit">Record resolution</button>
+    </form>
+    {% endif %}
+    {% elif booking and can_book %}
+    <p class="ds-row-sub mb-1">Booked by {{ booking.booked_by }} with {{ booking.dentist }}, {{ booking.minutes }} minutes. The patient sees an ordinary appointment.</p>
+    <form method="post" action="{{ url_for('imaging.move', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="mday" class="form-label">New day</label><input id="mday" type="date" name="day" class="form-control form-control-sm" required></div>
+      <div><label for="mtime" class="form-label">New time</label><input id="mtime" type="time" name="time" class="form-control form-control-sm" required></div>
+      <div><label for="mminutes" class="form-label">Minutes</label><input id="mminutes" type="number" name="minutes" value="{{ booking.minutes }}" min="5" max="480" class="form-control form-control-sm" required></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">Move appointment</button>
+    </form>
+    {% elif h.current and can_book and not completion %}
+    <h3 class="ds-card-title">Book an appointment for this request</h3>
+    <form method="post" action="{{ url_for('imaging.book', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}"><input type="hidden" name="booking_token" value="{{ booking_token }}">
+      <div><label for="bdentist" class="form-label">Dentist</label><select id="bdentist" name="dentist" class="form-select form-select-sm">{% for d in dentists %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select></div>
+      <div><label for="bday" class="form-label">Day</label><input id="bday" type="date" name="day" class="form-control form-control-sm" required></div>
+      <div><label for="btime" class="form-label">Time (clinic time)</label><input id="btime" type="time" name="time" class="form-control form-control-sm" required></div>
+      <div><label for="bminutes" class="form-label">Minutes</label><input id="bminutes" type="number" name="minutes" value="20" min="5" max="480" class="form-control form-control-sm" required></div>
+      <button class="btn btn-primary btn-sm" type="submit">Book for {{ patient.patient_name }}</button>
+    </form>
+    <p class="ds-row-sub mt-1">For version {{ r.version }} only. The patient's portal and reminders show an ordinary appointment.</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 {% if manage %}
 <section class="card dash-card mb-3" aria-labelledby="dentist-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="dentist-title">Dentist</h2></div>
@@ -92,6 +133,25 @@
       </form>
       <p class="ds-row-sub mt-1">Linking does not publish the file, mark it as read or mark the examination as done.</p>
       {% else %}<p class="ds-row-sub">No confirmed file of this patient to link.</p>{% endif %}
+    </section>
+    <section id="completion" class="mt-3" aria-labelledby="completion-title">
+      <h3 class="ds-card-title" id="completion-title">Completion</h3>
+      {% if completion %}
+      <p>Recorded as done by {{ completion.recorded_by }} on {{ completion.recorded_at | appt_date }}.</p>
+      <form method="post" action="{{ url_for('imaging.reverse', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div><label for="rreason" class="form-label">Why reverse it</label><input id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required></div>
+        <button class="btn btn-outline-danger btn-sm" type="submit">Reverse completion</button>
+      </form>
+      {% elif files %}
+      <form method="post" action="{{ url_for('imaging.complete', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
+        <div><label for="cdoc" class="form-label">The linked image</label><select id="cdoc" name="document_id" class="form-select form-select-sm">{% for f in files %}<option value="{{ f.document_id }}">{{ f.display_name }}</option>{% endfor %}</select></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="verified" value="1" id="cverified" required><label class="form-check-label" for="cverified">I checked this image belongs to this patient and this request</label></div>
+        <button class="btn btn-outline-primary btn-sm" type="submit">Record completion</button>
+      </form>
+      <p class="ds-row-sub mt-1">Records the request as done only. It does not publish the file, read it or report on it.</p>
+      {% else %}<p class="ds-row-sub">Link a confirmed image of this patient first; only a linked image can complete the request.</p>{% endif %}
     </section>
     {% endif %}
   </div>

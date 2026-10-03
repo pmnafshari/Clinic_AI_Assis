@@ -131,6 +131,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # P26: demo imaging requests, their history and file links go with the patient
             import imaging_requests
             imaging_requests.on_erase(conn, pid)
+        if _has(conn, "imaging_bookings"):
+            # P27: bookings and completions of those requests
+            import imaging_bookings
+            imaging_bookings.on_erase(conn, pid)
         if _has(conn, "document_publications"):
             # P25: what was shown to the patient, and who said whose each file is
             import patient_files
@@ -315,6 +319,10 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     if _has(conn, "imaging_requests"):
         left["imaging_requests"] = conn.execute("SELECT COUNT(*) FROM imaging_requests WHERE patient_id = ?",
                                                 (pid,)).fetchone()[0]
+    if _has(conn, "imaging_bookings"):
+        left["imaging_bookings"] = conn.execute("SELECT (SELECT COUNT(*) FROM imaging_bookings WHERE patient_id = ?)"
+                                                " + (SELECT COUNT(*) FROM imaging_completions WHERE patient_id = ?)",
+                                                (pid, pid)).fetchone()[0]
     if _has(conn, "import_items"):
         left["import_items"] = conn.execute("SELECT COUNT(*) FROM import_items WHERE patient_id = ?",
                                             (pid,)).fetchone()[0]

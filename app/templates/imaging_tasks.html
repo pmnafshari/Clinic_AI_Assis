@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Demo imaging requests · synthetic</p>
+    <h1 class="ds-page-title">Imaging tasks</h1>
+    <p class="ds-page-meta">Appointments linked to an imaging request that changed. Each stays here until reception records what it did.</p>
+  </div>
+</div>
+<section class="card dash-card" aria-labelledby="tasks-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="tasks-title">Needs reception action</h2></div>
+  <div class="dash-card-body">
+    {% if tasks %}
+    <ul class="ds-rows">
+      {% for t in tasks %}
+      <li class="ds-row"><span class="ds-row-main">
+        <a class="ds-row-title" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking">{{ t.patient_name }} · appointment {{ t.when }}</a>
+        <span class="ds-row-sub">Needs reception action: {{ t.reason }}. The appointment was left as it is.</span>
+      </span><span class="ds-badge ds-badge-warning">needs action</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No imaging appointment needs reception action.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

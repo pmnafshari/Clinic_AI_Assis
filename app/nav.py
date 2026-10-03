@@ -19,6 +19,8 @@ ITEMS = [
     ("Workspace", "Notes to review", "review.queue", "/reviews", "bi-clipboard-check", "review_upload", "reviews", "review."),
     # P25: reception sees progress only; the count is of files waiting for a dentist's decision
     ("Workspace", "Legacy import", "imports.index", "/imports", "bi-folder-symlink", "view_import_progress", "imports", "imports."),
+    # P27: bookings of demo imaging requests that changed; the count is of tasks waiting for reception
+    ("Workspace", "Imaging tasks", "imaging.tasks", "/imaging/tasks", "bi-calendar2-check", "view_imaging_requests", "imaging", "imaging.tasks"),
     ("Workspace", "Ask records", "qa.qa_page", "/qa", "bi-chat-square-text", "read_notes", None, "qa."),
     # P24: clinic-wide manuals and procedures - no patient data; admin holds no guides capability
     ("Workspace", "Ask clinic guides", "guides.ask", "/guides/ask", "bi-journal-bookmark", "ask_guides", None, "guides."),
@@ -37,7 +39,8 @@ ITEMS = [
 
 # what a count counts, for its accessible name: (one, many)
 COUNT_NOUNS = {"requests": ("pending request", "pending requests"), "reviews": ("note to review", "notes to review"),
-               "imports": ("imported file to review", "imported files to review")}
+               "imports": ("imported file to review", "imported files to review"),
+               "imaging": ("imaging task", "imaging tasks")}
 
 
 def _counts(conn, role):
@@ -50,6 +53,8 @@ def _counts(conn, role):
     if authorize(role, "read_clinical"):
         out["imports"] = conn.execute("SELECT COUNT(*) FROM import_items WHERE state IN"
                                       " ('proposed', 'unmatched', 'conflict', 'held')").fetchone()[0]
+    if authorize(role, "view_imaging_requests"):
+        out["imaging"] = conn.execute("SELECT COUNT(*) FROM imaging_bookings WHERE state = 'needs_action'").fetchone()[0]
     return out
 
 

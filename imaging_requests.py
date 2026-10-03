@@ -170,6 +170,8 @@ def revise(conn, request_id, pid, exam, label, note, actor, role, token, now=Non
             return seen["id"]
         if r["state"] != "active":
             raise RequestError("not_current", "only the active version can be revised")
+        import imaging_bookings
+        imaging_bookings.refuse_if_completed(conn, r)
         version = conn.execute("SELECT MAX(version) FROM imaging_requests WHERE series_id = ?",
                                (r["series_id"],)).fetchone()[0] + 1
         cur = conn.execute("INSERT INTO imaging_requests (series_id, version, patient_id, exam, exam_label, note, state,"
@@ -203,6 +205,9 @@ def activate(conn, request_id, pid, expected_version, actor, role, now=None):
                          " end_reason = ? WHERE id = ? AND state = 'active'",
                          (actor, _now(now), f"replaced by version {r['version']}", old["id"]))
             _event(conn, old, "superseded", actor, role, now)
+            # P27-D1: its appointment stays; the booking waits for reception, never moves by itself
+            import imaging_bookings
+            imaging_bookings.on_request_ended(conn, old, "request_revised", now)
         conn.execute("UPDATE imaging_requests SET state = 'active', activated_by = ?, activated_at = ? WHERE id = ?"
                      " AND state = 'draft'", (actor, _now(now), request_id))
         _event(conn, r, "activated", actor, role, now)
@@ -220,6 +225,9 @@ def cancel(conn, request_id, pid, expected_version, reason, actor, role, now=Non
             raise RequestError("not_open", "this request is already cancelled or replaced")
         if r["version"] != int(expected_version):
             raise RequestError("stale", "the request changed since this page was opened: reload it")
+        import imaging_bookings
+        imaging_bookings.refuse_if_completed(conn, r)
+        imaging_bookings.on_request_ended(conn, r, "request_cancelled", now)
         conn.execute("UPDATE imaging_requests SET state = 'cancelled', ended_by = ?, ended_at = ?, end_reason = ?"
                      " WHERE id = ?", (actor, _now(now), (reason or "").strip()[:200] or None, request_id))
         _event(conn, r, "cancelled", actor, role, now)

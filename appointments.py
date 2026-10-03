@@ -163,7 +163,7 @@ def _check_schedule(conn, dentist, start, minutes, exclude_id=None):
 SLOT_TAKEN = "that slot overlaps another appointment for this dentist"
 
 
-def book(conn, patient, dentist, starts_at, minutes, note=None):
+def book(conn, patient, dentist, starts_at, minutes, note=None, commit=True):
     # `patient` is a codice fiscale, a patient_id, or a folded CF - resolved
     # once at the boundary (Phase 51) so nothing below stores a second copy of
     # identity.
@@ -195,24 +195,32 @@ def book(conn, patient, dentist, starts_at, minutes, note=None):
         # dressed up as a booking conflict.
         if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
             raise
-        conn.rollback()
+        if commit:
+            conn.rollback()
         raise ValueError(SLOT_TAKEN)
-    conn.commit()
+    if commit:
+        conn.commit()
     return cur.lastrowid
 
 
-def cancel(conn, appointment_id):
+# commit=False (P27): the caller owns the transaction, so an imaging booking and its appointment are one write.
+# cancel and reschedule flag a linked imaging booking in the same transaction, whichever path called them.
+def cancel(conn, appointment_id, commit=True):
     # a status, never a DELETE - see the module docstring
+    import imaging_bookings
     cur = conn.execute(
         "UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?",
         (CANCELLED, _now(), appointment_id),
     )
-    conn.commit()
+    if cur.rowcount:
+        imaging_bookings.reconcile(conn, appointment_id)
+    if commit:
+        conn.commit()
     if cur.rowcount == 0:
         raise ValueError("no such appointment")
 
 
-def reschedule(conn, appointment_id, starts_at, minutes):
+def reschedule(conn, appointment_id, starts_at, minutes, commit=True):
     minutes = _check_minutes(minutes)
     local, stored = _window(starts_at, minutes)
     row = conn.execute(
@@ -233,9 +241,13 @@ def reschedule(conn, appointment_id, starts_at, minutes):
     except sqlite3.IntegrityError as e:
         if "idx_appointments_slot" not in str(e) and "unique" not in str(e).lower():
             raise
-        conn.rollback()
+        if commit:
+            conn.rollback()
         raise ValueError(SLOT_TAKEN)
-    conn.commit()
+    import imaging_bookings
+    imaging_bookings.reconcile(conn, appointment_id)
+    if commit:
+        conn.commit()
 
 
 def _check_period(period):

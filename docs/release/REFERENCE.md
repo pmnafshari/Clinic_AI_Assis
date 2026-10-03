@@ -47,6 +47,7 @@ this file is stale.
 | GET | `/handoffs` | `handoff.index` |
 | POST | `/handoffs/<int:handoff_id>/claim` | `handoff.claim` |
 | POST | `/handoffs/<int:handoff_id>/resolve` | `handoff.resolve` |
+| GET | `/imaging/tasks` | `imaging.tasks` |
 | GET | `/imports` | `imports.index` |
 | GET | `/imports/items/<int:import_id>` | `imports.item` |
 | POST | `/imports/items/<int:import_id>/confirm` | `imports.confirm` |
@@ -82,9 +83,14 @@ this file is stale.
 | POST | `/patients/<cf>/imaging/<int:rid>/acknowledge` | `imaging.acknowledge` |
 | POST | `/patients/<cf>/imaging/<int:rid>/activate` | `imaging.activate` |
 | POST | `/patients/<cf>/imaging/<int:rid>/ask` | `imaging.ask` |
+| POST | `/patients/<cf>/imaging/<int:rid>/book` | `imaging.book` |
+| POST | `/patients/<cf>/imaging/<int:rid>/bookings/<int:bid>/move` | `imaging.move` |
+| POST | `/patients/<cf>/imaging/<int:rid>/bookings/<int:bid>/resolve` | `imaging.resolve` |
 | POST | `/patients/<cf>/imaging/<int:rid>/cancel` | `imaging.cancel` |
+| POST | `/patients/<cf>/imaging/<int:rid>/complete` | `imaging.complete` |
 | GET | `/patients/<cf>/imaging/<int:rid>/files` | `imaging.files` |
 | POST | `/patients/<cf>/imaging/<int:rid>/link` | `imaging.link` |
+| POST | `/patients/<cf>/imaging/<int:rid>/reverse` | `imaging.reverse` |
 | POST | `/patients/<cf>/imaging/<int:rid>/revise` | `imaging.revise` |
 | POST | `/patients/<cf>/issue-pin` | `patients.issue_pin_submit` |
 | POST | `/patients/<cf>/revoke-pin` | `patients.revoke_pin_submit` |
@@ -190,6 +196,8 @@ this file is stale.
 | `document_identity_events` | id, document_id, action, from_pid, to_pid, actor, at, reason |
 | `document_publications` | id, document_id, patient_id, published_by, published_at, withdrawn_by, withdrawn_at, withdraw_reason |
 | `handoff_requests` | id, patient_id, reason, topic, status, created_at, claimed_by, claimed_at, resolved_by, resolved_at |
+| `imaging_bookings` | id, series_id, request_id, request_version, appointment_id, patient_id, booked_by, booked_at, appt_starts_at, state, flag, flagged_at, resolution, resolution_note, resolved_by, resolved_at, submit_token |
+| `imaging_completions` | id, series_id, request_id, patient_id, document_id, recorded_by, recorded_at, verified, reversed_by, reversed_at, reversal_reason |
 | `imaging_request_events` | id, request_id, series_id, version, patient_id, action, actor, role, at |
 | `imaging_request_files` | request_id, document_id, patient_id, linked_by, linked_at |
 | `imaging_requests` | id, series_id, version, patient_id, exam, exam_label, note, state, created_by, created_at, activated_by, activated_at, ended_by, ended_at, end_reason, supersedes_id, submit_token |

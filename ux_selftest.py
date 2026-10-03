@@ -23,9 +23,10 @@ DAY = "2031-03-05"
 NAV = {
     # /imports (P25): the dentist reviews, reception sees progress only; admin never
     # /guides/ask (P24): dentist and reception; admin never
-    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
+    # /imaging/tasks (P27): dentist and reception; admin never
+    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
                 "/handoffs", "/reminders", "/data-requests", "/reports", "/providers"},
-    "assistant": {"/", "/appointments", "/patients", "/imports", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
+    "assistant": {"/", "/appointments", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
                   "/handoffs", "/reminders", "/providers"},
     "admin": {"/admin/users", "/patients/duplicates"},
 }

@@ -122,6 +122,12 @@ def _seed(db_path, root):
         " activated_by, activated_at, submit_token) VALUES (1, 1, ?, 'opg', 'OPG (panoramic) - demo', 'active',"
         " 'rb_dentist', '2026-09-23T06:00:00+00:00', 'rb_dentist', '2026-09-23T06:00:00+00:00', 'rb-token')",
         (pid,)).lastrowid
+    # its booking (P27), the state the booking follow-up routes act on
+    bid = conn.execute(
+        "INSERT INTO imaging_bookings (series_id, request_id, request_version, appointment_id, patient_id, booked_by,"
+        " booked_at, appt_starts_at, state, submit_token) SELECT 1, ?, 1, id, ?, 'rb_assistant',"
+        " '2026-09-23T06:00:00+00:00', starts_at, 'booked', 'rb-booking' FROM appointments WHERE id = ?",
+        (rid, pid, appt_id)).lastrowid
     # a reviewed visit of a second patient: a similar case the P16 routes act on
     other = conn.execute("SELECT patient_id FROM patients WHERE patient_id != ? LIMIT 1",
                          (pid,)).fetchone()
@@ -144,7 +150,7 @@ def _seed(db_path, root):
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
-            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid,
+            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid, "bid": bid,
             "username": "rb_target", "filename": "app.css"}
 
 

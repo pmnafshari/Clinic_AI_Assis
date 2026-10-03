@@ -207,6 +207,9 @@ def init_db(db_path):
     # demo imaging requests (P26): patient-linked, so here with the record - never in db/guides.sqlite
     import imaging_requests
     conn.executescript(imaging_requests.SCHEMA)
+    # their bookings and completions (P27): the appointment stays an ordinary appointment
+    import imaging_bookings
+    conn.executescript(imaging_bookings.SCHEMA)
 
     # similar cases (P16). a dentist's verdicts and removals, append-only
     from similar_cases import SCHEMA as SIMILAR_SCHEMA

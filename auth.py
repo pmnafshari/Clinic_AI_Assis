@@ -176,6 +176,14 @@ ROUTE_POLICY = {
     "imaging.acknowledge": "view_imaging_requests",
     "imaging.ask": "view_imaging_requests",
     "imaging.link": "manage_imaging_requests",
+    # P27: reception books and records follow-up (also needs manage_appointments, checked in the view); the
+    # dentist alone records completion
+    "imaging.book": "view_imaging_requests",
+    "imaging.move": "view_imaging_requests",
+    "imaging.resolve": "view_imaging_requests",
+    "imaging.complete": "manage_imaging_requests",
+    "imaging.reverse": "manage_imaging_requests",
+    "imaging.tasks": "view_imaging_requests",
     "similar.page": "read_clinical",
     "similar.feedback": "read_clinical",
     "similar.exclude": "read_clinical",

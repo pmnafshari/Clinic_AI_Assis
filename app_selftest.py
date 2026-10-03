@@ -743,8 +743,8 @@ def selftest():
         # authorize() cannot hide behind a total: a dentist sees 15 links (14 pages plus the Requests entry; P25 added Legacy import) (ux_selftest pins the exact set per role),
         # and Change password and Sign out are in the sidebar foot, Sign out a POST form.
         side_links = re.findall(rb'class="app-side-link[^"]*" href="([^"]+)"', shell.data)
-        # P25 adds Legacy import, P24 Ask clinic guides: 16
-        assert len(side_links) == 16, f"20: a dentist should see 16 sidebar links, got {len(side_links)}"
+        # P25 adds Legacy import, P24 Ask clinic guides, P27 Imaging tasks: 17
+        assert len(side_links) == 17, f"20: a dentist should see 17 sidebar links, got {len(side_links)}"
         assert b"/data-requests" in side_links, f"20: a dentist is offered Data requests: {side_links}"
         foot = shell.data.split(b'data-ux="account"', 1)[1]
         assert b"Change password" in foot and b'action="/logout"' in foot and b"Sign out" in foot, \

@@ -80,10 +80,13 @@ def plan(conn, types, now=None):
                     "SELECT COUNT(*) FROM import_items WHERE state IN ('staged', 'proposed',"
                     " 'unmatched', 'conflict', 'held') AND created_at < ?", (cut,)).fetchone()[0],
                 "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
-    # P26: a dentist's demo imaging requests are clinical records - counted, never swept
+    # P26: a dentist's demo imaging requests are clinical records - counted, never swept.
+    # P27: with their bookings and completions, which belong to the same record
     out.append({"type": "imaging_requests", "sweep": types["clinical_records"]["sweep"],
-                "past_period": conn.execute("SELECT COUNT(*) FROM imaging_requests WHERE created_at < ?",
-                                            (cut,)).fetchone()[0],
+                "past_period": conn.execute("SELECT (SELECT COUNT(*) FROM imaging_requests WHERE created_at < ?)"
+                                            " + (SELECT COUNT(*) FROM imaging_bookings WHERE booked_at < ?)"
+                                            " + (SELECT COUNT(*) FROM imaging_completions WHERE recorded_at < ?)",
+                                            (cut, cut, cut)).fetchone()[0],
                 "cutoff": cut, "keep_days": types["clinical_records"]["keep_days"]})
     # P16: a dentist's verdicts on past cases are clinical judgments - counted,
     # never swept
