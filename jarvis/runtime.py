@@ -1,23 +1,16 @@
-"""Start-up and periodic checks. Honest by construction: never READY until listening exists (J01)."""
+"""The clinic link check. Since J01 it no longer decides the state: READY comes only from real listening
+(jarvis/listen.py); the link is shown beside it, because guide answers (J02) and protected requests (J03) need it."""
 from jarvis.clinic import LinkDown, LinkRefused
 
-LISTENING_BUILT = False   # J01 turns this on with a real wake-phrase engine; until then READY would be a false claim
 
-
-def check(machine, link):
-    """One pass: link, device, listening. Moves the machine to the true state with the reason."""
-    if machine.state not in ("STARTING", "DEGRADED"):
-        return
-    if machine.state == "DEGRADED":
-        machine.go("STARTING", "checking again")
+def check_link(machine, link):
     if link is None:
-        return machine.go("DEGRADED", "no device credential on this machine")
+        return machine.set_clinic(False, "no device credential on this machine")
     try:
-        link.whoami()
-    except LinkRefused as e:
-        return machine.go("DEGRADED", str(e))
-    except LinkDown as e:
-        return machine.go("DEGRADED", str(e))
-    if not LISTENING_BUILT:
-        return machine.go("DEGRADED", "listening is not built yet (J01)")
-    machine.go("READY", "listening for the wake phrase")
+        who = link.whoami()
+    except (LinkRefused, LinkDown) as e:
+        return machine.set_clinic(False, str(e))
+    acting = who.get("delegation")
+    detail = f"connected as {who.get('device')}" + (f"; acting for {acting['username']} ({acting['role']})" if acting else
+                                                     "; no staff session delegated")
+    machine.set_clinic(True, detail)

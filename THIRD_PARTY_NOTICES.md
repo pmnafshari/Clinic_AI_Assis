@@ -31,3 +31,19 @@ Text-to-speech: none installed. See the P14 evidence for why it is still blocked
 
 Not used: poppler/`pdftotext` (GPL, installed on the machine but not called) - kept out for the same
 reason text-to-speech is blocked: the project's licence and distribution plan are undecided.
+
+# Third-party notices - Jarvis wake phrase and listening (J01)
+
+| Component | Version / file sha256 | Licence | Notes |
+|---|---|---|---|
+| sounddevice (bundles PortAudio V19.7) | 0.5.6 | MIT; PortAudio licence (MIT-style) | microphone capture at 16 kHz; nothing is written or sent |
+| rumps | 0.4.0 | BSD | menu-bar indicator |
+| PyObjC (core, Cocoa) | 12.2.2 | MIT | required by rumps |
+| openWakeWord feature models `melspectrogram.onnx`, `embedding_model.onnx` (release v0.5.1) | `ba2b0e0f8b7b875369a2…`, `70d164290c1d095d1d4e…` | melspectrogram: an ONNX export of a fixed Torch function (no training data); embedding: openWakeWord's reimplementation of Google's `speech_embedding` model (published by Google under **Apache 2.0**) | stored in `models/jarvis/features/` (git-ignored). The release assets carry no per-file licence; provenance rests on the openWakeWord README (code Apache-2.0) and Google's model. The streaming design follows openWakeWord (Apache-2.0, © David Scripka) and is reimplemented in `jarvis/features.py`. |
+| openWakeWord pre-trained wake models | — | CC BY-NC-SA 4.0 (non-commercial) | **not downloaded, installed or shipped**; the `openwakeword` package is not installed |
+| Custom "Hey Jarvis" model `models/jarvis/wake/hey_jarvis.npz` | recorded in the J01 evidence | this project's own | trained locally from the sources below; nothing left the Mac |
+| Piper voice `en_US-libritts-high` (used only to generate training audio, never shipped to speak) | `9127a559e11603f10b36…` | voices repository MIT; model card: trained from scratch on LibriTTS train-clean-360 | **Attribution:** LibriTTS, Zen et al. 2019, OpenSLR 60, **CC BY 4.0**. Phonemes written by hand; espeak-ng (GPL-3.0) not used. `models/jarvis/generator/` (git-ignored) |
+| LibriSpeech dev-clean, test-clean, test-other | OpenSLR 12 | **CC BY 4.0** | **Attribution:** LibriSpeech ASR corpus, Panayotov, Chen, Povey, Khudanpur, 2015. Training negatives (dev-clean) and the false-wake evaluation (test sets). Kept outside the repository |
+
+Rejected: `en_US-libritts_r-medium` and the VCTK/HFC voices (fine-tuned from the lessac voice, whose dataset licence is
+research-only, or CC BY-NC-SA). Text-to-speech for answers is still not installed (POL-13).

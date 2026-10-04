@@ -15,7 +15,7 @@ TRANSITIONS = {
     "DEGRADED": {"STARTING"},
 }
 MEANING = {
-    "STARTING": "starting: checking the clinic link, the microphone and the engines",
+    "STARTING": "starting: opening the microphone and the wake engine",
     "READY": "ready: only the wake phrase is listened for; nothing is recorded or sent",
     "ACTIVE": "listening to one request",
     "AUTH_REQUIRED": "this needs a staff member's signed-in session on this device",
@@ -39,6 +39,7 @@ class Machine:
         self._lock = threading.Condition()
         self.state, self.reason, self.since = "STARTING", "starting up", clinic_time.to_storage(clinic_time.now_utc())
         self.version = 0
+        self.clinic = {"ok": False, "detail": "not checked yet"}
         self.history = deque([{"state": self.state, "reason": self.reason, "at": self.since}], maxlen=20)
 
     def go(self, state, reason):
@@ -55,10 +56,19 @@ class Machine:
             self.history.append({"state": state, "reason": reason, "at": self.since})
             self._lock.notify_all()
 
+    def set_clinic(self, ok, detail):
+        """The clinic link is shown beside the state, never as a listening state (J01)."""
+        with self._lock:
+            new = {"ok": bool(ok), "detail": detail}
+            if new != self.clinic:
+                self.clinic = new
+                self.version += 1
+                self._lock.notify_all()
+
     def snapshot(self):
         with self._lock:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
-                    "version": self.version, "history": list(self.history)}
+                    "version": self.version, "history": list(self.history), "clinic": dict(self.clinic)}
 
     def wait_change(self, version, timeout):
         """Block until the state changes from `version` or the timeout passes. -> snapshot."""

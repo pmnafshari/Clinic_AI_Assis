@@ -177,7 +177,8 @@ def clinic(tmp):
 
 
 def boot(tmp):
-    # 4. the companion's start-up is honest: never READY without listening (J01); a missing piece is DEGRADED, with why
+    # 4. the companion's start-up is honest: the clinic link never makes Jarvis READY (only real listening does, J01);
+    #    every link outcome is shown as the clinic status, with why, and leaves the listening state alone
     class FakeLink:
         def __init__(self, outcome):
             self.outcome = outcome
@@ -186,21 +187,19 @@ def boot(tmp):
             if isinstance(self.outcome, Exception):
                 raise self.outcome
             return self.outcome
-    for outcome, reason in ((LinkDown("clinic app unreachable"), "clinic app unreachable"),
-                            (LinkRefused("device not registered or revoked"), "device not registered or revoked"),
-                            ({"device": "Reception Mac", "delegation": None}, "listening is not built yet (J01)")):
+    for outcome, ok, detail in ((LinkDown("clinic app unreachable"), False, "clinic app unreachable"),
+                                (LinkRefused("device not registered or revoked"), False, "device not registered or revoked"),
+                                ({"device": "Reception Mac", "delegation": None}, True,
+                                 "connected as Reception Mac; no staff session delegated")):
         m = states.Machine()
-        runtime.check(m, FakeLink(outcome))
-        assert m.state == "DEGRADED" and m.reason == reason, f"4: {outcome!r} -> {m.state} / {m.reason}"
+        runtime.check_link(m, FakeLink(outcome))
+        assert m.state == "STARTING" and m.snapshot()["clinic"] == {"ok": ok, "detail": detail}, \
+            f"4: {outcome!r} -> {m.state} / {m.snapshot()['clinic']}"
     m = states.Machine()
-    runtime.check(m, None)
-    assert m.state == "DEGRADED" and m.reason == "no device credential on this machine", "4: no credential"
-    # a later check recovers through STARTING when the cause clears
-    m = states.Machine()
-    runtime.check(m, FakeLink(LinkDown("clinic app unreachable")))
-    runtime.check(m, FakeLink({"device": "Reception Mac", "delegation": None}))
-    assert [h["state"] for h in m.snapshot()["history"]][-2:] == ["STARTING", "DEGRADED"] and "J01" in m.reason, \
-        "4: recovery goes back through STARTING"
+    runtime.check_link(m, None)
+    assert m.state == "STARTING" and m.snapshot()["clinic"]["detail"] == "no device credential on this machine", \
+        "4: no credential"
+    assert not hasattr(runtime, "LISTENING_BUILT") or not runtime.LISTENING_BUILT, "4: no flag can claim listening"
     # the credential file is the owner's: read from 600, never echoed
     key = tmp / "jarvis-device"
     key.write_text("secret-token\n")

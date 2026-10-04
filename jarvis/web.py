@@ -30,6 +30,8 @@ PAGE = """<!doctype html>
     <p id="meaning">{{ s.meaning }}</p>
     <p><strong>Why:</strong> <span id="reason">{{ s.reason }}</span></p>
     <p class="muted">Since <span id="since">{{ s.since }}</span> (UTC)</p>
+    <p class="muted">Clinic link: <span id="clinic">{{ s.clinic.detail }}</span>
+      (needed for answers and anything about a patient, not for listening)</p>
   </section>
   <section class="card">
     <h2>How Jarvis works</h2>
@@ -37,9 +39,9 @@ PAGE = """<!doctype html>
     Anything about a patient needs a staff member's own signed-in session, delegated to this device in the clinic app
     (<em>Jarvis</em> in the sidebar). A voice, a name or a spoken "yes" never proves who you are.</p>
     <ol class="muted">
-      <li>STARTING - checking the clinic link, the microphone and the engines</li>
+      <li>STARTING - opening the microphone and the wake engine; READY only once real sound is being heard</li>
       <li>READY - only the wake phrase is listened for; nothing is recorded or sent</li>
-      <li>ACTIVE - one request; then back to READY</li>
+      <li>ACTIVE - one request after a short tone; then back to READY (answers arrive in a later step)</li>
       <li>AUTH_REQUIRED - needs a delegated staff session; nothing protected is said</li>
       <li>CONFIRMING - a spoken confirmation of an action that is already authorised</li>
       <li>DEGRADED - not available, with the reason (asleep, microphone denied or muted, engine missing, fault)</li>
@@ -55,6 +57,7 @@ PAGE = """<!doctype html>
     document.getElementById("meaning").textContent = s.meaning;
     document.getElementById("reason").textContent = s.reason;
     document.getElementById("since").textContent = s.since;
+    document.getElementById("clinic").textContent = s.clinic.detail;
   };
 </script>
 </body></html>"""

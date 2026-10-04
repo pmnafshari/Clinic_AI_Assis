@@ -1,8 +1,10 @@
-"""Jarvis, the clinic's local voice companion - the background service (J00).
+"""Jarvis, the clinic's local voice companion - the background service (J00, listening since J01).
 
-    .venv/bin/python jarvis_run.py                 run the service: page and status on http://127.0.0.1:5020
-    .venv/bin/python jarvis_run.py --store-token   save this device's credential (from Admin > Jarvis devices), 600
-    .venv/bin/python jarvis_run.py --agent-plist   print the LaunchAgent that starts Jarvis at login (install: J-D4)
+    .venv/bin/python jarvis_run.py                     run the service: page and status on http://127.0.0.1:5020
+    .venv/bin/python jarvis_run.py --store-token       save this device's credential (from Admin > Jarvis devices), 600
+    .venv/bin/python jarvis_run.py --agent-plist       print the service's LaunchAgent
+    .venv/bin/python jarvis_run.py --install-agents    start Jarvis and its menu-bar indicator at login (this user only)
+    .venv/bin/python jarvis_run.py --uninstall-agents  stop them and remove both login items
 
     JARVIS_CLINIC_URL   the clinic staff app (default http://127.0.0.1:5000)
 """
@@ -14,7 +16,7 @@ import sys
 import threading
 from pathlib import Path
 
-from jarvis import launchd, runtime, states
+from jarvis import launchd, listen, runtime, states
 from jarvis.clinic import DEFAULT_KEY, ClinicLink, store_key
 from jarvis.web import PORT, create_app
 
@@ -28,6 +30,15 @@ def _link():
         return None
 
 
+def _detector():
+    from jarvis.features import Features
+    from jarvis.wake import MODEL, Detector, WakeModel
+    try:
+        return Detector(WakeModel(MODEL), Features())
+    except (FileNotFoundError, OSError, KeyError) as e:
+        raise listen.EngineMissing(f"{type(e).__name__}: {e}") from None
+
+
 def serve():
     from werkzeug.serving import make_server
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
@@ -37,12 +48,22 @@ def serve():
     def checks():
         while not stop.is_set():
             try:
-                runtime.check(machine, _link())
-            except Exception as e:  # a fault is a state with its reason, never a silent stop
-                if machine.state != "DEGRADED":
-                    machine.go("DEGRADED", f"service fault ({type(e).__name__})")
+                runtime.check_link(machine, _link())
+            except Exception as e:
+                machine.set_clinic(False, f"link check fault ({type(e).__name__})")
             stop.wait(CHECK_SECONDS)
+
+    def listening():
+        lst = listen.Listener(machine, _detector, listen.SoundDeviceSource, cue=listen.chime)
+        try:
+            lst.run(stop)
+        except Exception as e:  # a fault is a state with its reason, then a crash so launchd restarts us
+            if machine.state != "DEGRADED":
+                machine.go("DEGRADED", f"service fault ({type(e).__name__})")
+            logging.exception("listener fault")
+            os._exit(1)
     threading.Thread(target=checks, name="jarvis-checks", daemon=True).start()
+    threading.Thread(target=listening, name="jarvis-listen", daemon=True).start()
     server = make_server("127.0.0.1", PORT, create_app(machine), threaded=True)
     signal.signal(signal.SIGTERM, lambda *a: (stop.set(), threading.Thread(target=server.shutdown).start()))
     print(f"jarvis: page and status on http://127.0.0.1:{PORT}", flush=True)
@@ -58,6 +79,16 @@ def main(argv):
     if argv[:1] == ["--agent-plist"]:
         root = str(Path(__file__).resolve().parent)
         sys.stdout.write(launchd.plist(f"{root}/.venv/bin/python", root, str(Path("~/Library/Logs").expanduser())).decode())
+        return 0
+    if argv[:1] in (["--install-agents"], ["--uninstall-agents"]):
+        import subprocess
+        root = str(Path(__file__).resolve().parent)
+        agents = Path("~/Library/LaunchAgents").expanduser()
+        run = lambda cmd: print(" ".join(cmd), "->", subprocess.run(cmd, check=False).returncode)  # noqa: E731
+        if argv[0] == "--install-agents":
+            launchd.install(f"{root}/.venv/bin/python", root, str(Path("~/Library/Logs").expanduser()), agents, run, os.getuid())
+        else:
+            launchd.uninstall(agents, run, os.getuid())
         return 0
     if argv:
         print(__doc__)

@@ -18,3 +18,12 @@ av==18.1.0
 # document text (P15). BSD-3-Clause, pure Python; only ever run inside the
 # sandboxed document_worker.py
 pypdf==6.19.0
+# jarvis (J01): microphone capture through PortAudio (MIT), the menu-bar
+# indicator (BSD) on PyObjC (MIT); numpy is imported directly by the listener.
+# the wake model files live in models/jarvis/ (sha256 in models/jarvis/SHA256SUMS,
+# provenance in THIRD_PARTY_NOTICES.md); openwakeword itself is not installed
+numpy==2.5.0
+sounddevice==0.5.6
+rumps==0.4.0
+pyobjc-core==12.2.2
+pyobjc-framework-Cocoa==12.2.2
