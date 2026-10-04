@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Jarvis · local voice companion (J00)</p>
+    <h1 class="ds-page-title">Use Jarvis on this device</h1>
+    <p class="ds-page-meta">Jarvis can answer approved clinic-guide questions for anyone nearby. For anything about a patient
+    or an action it needs your signed-in session: delegate it here. It ends when you sign out, after {{ hours }} hours, when
+    your session goes idle, or when you stop it. Your voice, a name or a spoken "yes" never proves who you are.</p>
+  </div>
+</div>
+<section class="card dash-card mb-3" aria-labelledby="mine-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="mine-title">Jarvis acting for you</h2></div>
+  <div class="dash-card-body">
+    {% if mine %}
+    <ul class="ds-rows">
+      {% for m in mine %}
+      <li class="ds-row"><span class="ds-row-main">
+        <span class="ds-row-title">{{ m.name }}</span>
+        <span class="ds-row-sub">since {{ m.created_at | appt_date }} {{ m.created_at | appt_time }} · ends at the latest {{ m.expires_at | appt_date }} {{ m.expires_at | appt_time }}</span>
+      </span>
+      <form method="post" action="{{ url_for('jarvis.revoke_delegation', delegation_id=m.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm">Stop<span class="visually-hidden"> Jarvis acting for you on {{ m.name }}</span></button>
+      </form></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">Jarvis is not acting for you on any device.</p>
+    {% endif %}
+  </div>
+</section>
+<section class="card dash-card" aria-labelledby="devices-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="devices-title">Registered devices</h2></div>
+  <div class="dash-card-body">
+    {% if devices %}
+    <ul class="ds-rows">
+      {% for d in devices %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ d.name }}</span></span>
+      <form method="post" action="{{ url_for('jarvis.delegate', device_id=d.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-primary btn-sm">Use Jarvis on this device<span class="visually-hidden">: {{ d.name }}</span></button>
+      </form></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No Jarvis device is registered. An administrator registers one.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

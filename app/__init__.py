@@ -18,7 +18,8 @@ from . import db
 # page needs it before any session exists, which is the same reason "static"
 # is here. named explicitly - a prefix match would open anything starting
 # with "s".
-WHITELIST_ENDPOINTS = {"static", "shared", "auth.login"}
+# jarvis.api_whoami carries a device credential, not a staff cookie; it checks it itself (J00)
+WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami"}
 
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave
@@ -115,6 +116,7 @@ def create_app():
     from .import_routes import imports_bp
     from .guides_routes import guides_bp
     from .imaging_routes import imaging_bp
+    from .jarvis_routes import jarvis_bp
     from .similar_routes import similar_bp
     from .review_routes import review_bp
     from .summary_routes import summary_bp
@@ -137,6 +139,7 @@ def create_app():
     app.register_blueprint(imports_bp)
     app.register_blueprint(guides_bp)
     app.register_blueprint(imaging_bp)
+    app.register_blueprint(jarvis_bp)
     app.register_blueprint(similar_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)

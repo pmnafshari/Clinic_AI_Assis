@@ -24,11 +24,12 @@ NAV = {
     # /imports (P25): the dentist reviews, reception sees progress only; admin never
     # /guides/ask (P24): dentist and reception; admin never
     # /imaging/tasks (P27): dentist and reception; admin never
-    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
+    # /jarvis/link (Jarvis J00): dentist and reception delegate their own session; admin registers devices instead
+    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/notes/new", "/billing", "/stock",
                 "/handoffs", "/reminders", "/data-requests", "/reports", "/providers"},
-    "assistant": {"/", "/appointments", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/notes/new", "/billing", "/stock",
+    "assistant": {"/", "/appointments", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/notes/new", "/billing", "/stock",
                   "/handoffs", "/reminders", "/providers"},
-    "admin": {"/admin/users", "/patients/duplicates"},
+    "admin": {"/admin/users", "/patients/duplicates", "/jarvis/devices"},
 }
 CF_SHAPE = re.compile(r"\b[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]\b|\b[A-Z]{4}[0-9]{12}\b")
 

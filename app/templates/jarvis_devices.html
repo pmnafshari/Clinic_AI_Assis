@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="ds-page-head">
+  <div class="min-w-0">
+    <p class="ds-page-eyebrow">Jarvis · local voice companion (J00)</p>
+    <h1 class="ds-page-title">Jarvis devices</h1>
+    <p class="ds-page-meta">A registered device may ask the clinic app only what its rules allow. Voice is never a credential:
+    anything protected also needs a staff member's own signed-in session, delegated to the device.</p>
+  </div>
+</div>
+{% if shown %}
+<div class="ds-alert ds-alert-warning mb-3" role="alert">
+  <div><strong class="ds-alert-title">Device credential - shown once</strong>
+  Store it on the Jarvis machine with <code>.venv/bin/python jarvis_run.py --store-token</code> and paste it when asked.
+  It is not shown again; if it is lost, revoke the device and register it again.
+  <p class="font-monospace text-break mb-0 mt-2" id="device-token">{{ shown }}</p></div>
+</div>
+{% endif %}
+<section class="card dash-card mb-3" aria-labelledby="register-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="register-title">Register a device</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('jarvis.devices') }}" class="d-flex flex-wrap gap-2 align-items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label for="device-name" class="form-label">Name (where it is)</label>
+      <input id="device-name" name="name" class="form-control form-control-sm" maxlength="60" required></div>
+      <button type="submit" class="btn btn-primary btn-sm">Register device</button>
+    </form>
+  </div>
+</section>
+<section class="card dash-card" aria-labelledby="devices-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="devices-title">Devices</h2></div>
+  <div class="dash-card-body">
+    {% if devices %}
+    <ul class="ds-rows">
+      {% for d in devices %}
+      <li class="ds-row"><span class="ds-row-main">
+        <span class="ds-row-title">{{ d.name }}</span>
+        <span class="ds-row-sub">registered by {{ d.registered_by }} · {{ d.registered_at | appt_date }}{% if d.revoked_at %} · revoked{% endif %}</span>
+      </span>
+      {% if not d.revoked_at %}
+      <form method="post" action="{{ url_for('jarvis.revoke_device', device_id=d.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-outline-danger btn-sm">Revoke<span class="visually-hidden"> {{ d.name }}</span></button>
+      </form>
+      {% else %}<span class="ds-badge ds-badge-danger">revoked</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No Jarvis device is registered.</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

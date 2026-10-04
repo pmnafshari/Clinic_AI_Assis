@@ -17,6 +17,7 @@ this file is stale.
 | POST | `/agent/dictate` | `agent.dictate_command` |
 | GET,POST | `/agent/edit` | `agent.edit_page` |
 | POST | `/agent/undo` | `agent.undo_change` |
+| GET | `/api/jarvis/whoami` | `jarvis.api_whoami` |
 | GET | `/appointments` | `appointments.index` |
 | POST | `/appointments/<int:appointment_id>/cancel` | `appointments.cancel` |
 | POST | `/appointments/<int:appointment_id>/confirm` | `appointments.confirm` |
@@ -58,6 +59,11 @@ this file is stale.
 | POST | `/imports/items/<int:import_id>/hold` | `imports.hold` |
 | GET | `/imports/items/<int:import_id>/original` | `imports.original` |
 | POST | `/imports/items/<int:import_id>/reject` | `imports.reject` |
+| GET,POST | `/jarvis/devices` | `jarvis.devices` |
+| POST | `/jarvis/devices/<int:device_id>/revoke` | `jarvis.revoke_device` |
+| GET | `/jarvis/link` | `jarvis.link` |
+| POST | `/jarvis/link/<int:device_id>` | `jarvis.delegate` |
+| POST | `/jarvis/link/delegations/<int:delegation_id>/revoke` | `jarvis.revoke_delegation` |
 | GET,POST | `/login` | `auth.login` |
 | POST | `/logout` | `auth.logout` |
 | POST | `/notes/dictate` | `notes.dictate` |
@@ -217,6 +223,8 @@ this file is stale.
 | `inventory_job_runs` | id, started_at, finished_at, checked, opened, resolved, status |
 | `inventory_movements` | id, item_id, kind, delta, counted, reason, idempotency_key, actor, actor_role, ts |
 | `invoices` | id, patient_id, visit_id, line_index, amount, description, amount_cents |
+| `jarvis_delegations` | id, device_id, username, session_hash, created_at, expires_at, revoked_by, revoked_at |
+| `jarvis_devices` | id, name, token_hash, registered_by, registered_at, revoked_by, revoked_at |
 | `note_confirm_tokens` | token, username, issued_at, used_at |
 | `note_reviews` | id, origin, status, patient_id, codice_fiscale, staged_dir, original_path, original_name, original_sha256, extraction, extraction_error, attempts, visit_id, confirmed_fields, edited, created_by, created_at, decided_by, decided_at, decision_reason |
 | `ops_health_samples` | id, at, all_up, alerts, checks |

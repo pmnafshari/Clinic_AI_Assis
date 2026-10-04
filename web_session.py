@@ -70,6 +70,30 @@ def load_session(conn, token, now=None):
     }
 
 
+def token_hash(token):
+    return _hash_token(token)
+
+
+def session_alive(conn, token_hash_value, now=None):
+    """-> {username, role} if the session is live, without touching it (Jarvis J00).
+
+    load_session slides the idle window on every read; a delegated device must not keep a
+    staff session alive, so this reads the same rule and changes nothing.
+    """
+    if now is None:
+        now = clinic_time.now_utc()
+    row = conn.execute(
+        "SELECT s.username, u.role, s.last_seen_at FROM sessions s JOIN users u ON u.username = s.username"
+        " WHERE s.token_hash = ? AND u.active = 1",
+        (token_hash_value,),
+    ).fetchone()
+    if row is None:
+        return None
+    if now - clinic_time.read_instant(row["last_seen_at"]) > timedelta(minutes=SESSION_IDLE_MINUTES):
+        return None
+    return {"username": row["username"], "role": row["role"]}
+
+
 def destroy_session(conn, token):
     conn.execute("DELETE FROM sessions WHERE token_hash = ?", (_hash_token(token),))
     conn.commit()

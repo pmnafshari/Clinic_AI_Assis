@@ -150,7 +150,7 @@ def _seed(db_path, root):
             "invoice_id": invoice_id, "payment_id": payment_id, "action": "pay",
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
-            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid, "bid": bid,
+            "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid, "bid": bid, "device_id": 1, "delegation_id": 1,
             "username": "rb_target", "filename": "app.css"}
 
 

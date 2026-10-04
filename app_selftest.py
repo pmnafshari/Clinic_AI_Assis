@@ -220,8 +220,10 @@ def selftest():
         # 10b. the whitelist grew by exactly one named endpoint. a prefix
         # match here would open every route starting with the same letters.
         from app import WHITELIST_ENDPOINTS
-        assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login"}, \
-            "10b: the no-session whitelist must hold exactly static, shared and login"
+        # Jarvis J00 (2026-10-04): the device API carries a device credential, not a staff cookie, and checks it
+        # itself (jarvis_selftest 3: unknown, revoked or missing credentials get 401 and are audited)
+        assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "jarvis.api_whoami"}, \
+            "10b: the no-session whitelist must hold exactly static, shared, login and the Jarvis device API"
         assert app.test_client().get("/patients").status_code == 302, \
             "10b: every other route must still redirect to login without a session"
 
@@ -744,7 +746,8 @@ def selftest():
         # and Change password and Sign out are in the sidebar foot, Sign out a POST form.
         side_links = re.findall(rb'class="app-side-link[^"]*" href="([^"]+)"', shell.data)
         # P25 adds Legacy import, P24 Ask clinic guides, P27 Imaging tasks: 17
-        assert len(side_links) == 17, f"20: a dentist should see 17 sidebar links, got {len(side_links)}"
+        # 18 since Jarvis J00 added "Jarvis" (2026-10-04)
+        assert len(side_links) == 18, f"20: a dentist should see 18 sidebar links, got {len(side_links)}"
         assert b"/data-requests" in side_links, f"20: a dentist is offered Data requests: {side_links}"
         foot = shell.data.split(b'data-ux="account"', 1)[1]
         assert b"Change password" in foot and b'action="/logout"' in foot and b"Sign out" in foot, \
