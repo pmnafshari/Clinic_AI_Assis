@@ -35,7 +35,7 @@ def _detector():
     from jarvis.wake import MODEL, Detector, WakeModel
     try:
         return Detector(WakeModel(MODEL), Features())
-    except (FileNotFoundError, OSError, KeyError) as e:
+    except (OSError, KeyError, ValueError) as e:      # missing, damaged or not the expected network
         raise listen.EngineMissing(f"{type(e).__name__}: {e}") from None
 
 

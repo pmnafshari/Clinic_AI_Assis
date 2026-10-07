@@ -2,9 +2,9 @@
 
 The classifier is this project's own (trained locally on licensed and synthetic audio; provenance in
 .planning/plans/JARVIS.md §9). It returns a score; the detector wants two chunks in a row over the threshold and then
-rests for 2 s, so one utterance wakes Jarvis once. While the whole window is at the room's noise floor no phrase can be
-in it, so the costly embedding is skipped; when sound returns the skipped ones are rebuilt exactly, so every score that
-is computed is the same as with no skipping.
+rests for 2 s, so one utterance wakes Jarvis once. Features are computed for two chunks at a time (half the cost of
+waking up every 80 ms), then each chunk is judged on its own, so a wake is reported at most one chunk later. While the
+whole window is at the room's noise floor no phrase can be in it, so the classifier is skipped.
 """
 import json
 from collections import deque
@@ -18,6 +18,7 @@ HITS = 2                # consecutive chunks over the threshold
 REST_CHUNKS = 25        # 2 s after a wake
 FLOOR_CHUNKS = 125      # the room's noise floor: the quietest tenth of the last 10 s
 QUIET_FACTOR = 1.5
+BATCH = 2               # chunks per feature computation
 
 
 class WakeModel:
@@ -40,6 +41,7 @@ class Detector:
         self.reset()
 
     def reset(self):
+        self.pending = []
         self.window = deque(maxlen=WINDOW)
         self.levels = deque(maxlen=FLOOR_CHUNKS)
         self.quiet_run = 0
@@ -49,25 +51,28 @@ class Detector:
         self.last_score = 0.0
 
     def feed(self, chunk):
-        """-> True when the wake phrase has just been heard."""
-        self.features.add_mel(chunk)
+        """One 80 ms chunk -> True when the wake phrase has just been heard."""
+        self.pending.append(chunk)
+        if len(self.pending) < BATCH:
+            return False
+        chunks, self.pending = self.pending, []
+        woke = False
+        for c, e in zip(chunks, self.features.add(np.concatenate(chunks))):
+            woke = self._judge(c, e) or woke
+        return woke
+
+    def _judge(self, chunk, embedding):
         level = float(np.sqrt(np.mean(np.asarray(chunk, np.float32) ** 2)))
         self.levels.append(level)
         floor = float(np.percentile(self.levels, 10))
         quiet = len(self.levels) >= WINDOW and level <= floor * QUIET_FACTOR
         self.quiet_run = self.quiet_run + 1 if quiet else 0
         self.skipped = self.quiet_run >= WINDOW
+        self.window.append(embedding)
         if self.skipped:
-            self.window.append(None)
             self.hits, self.last_score = 0, 0.0
             self.rest = max(0, self.rest - 1)
             return False
-        if len(self.window) == WINDOW:
-            self.window.popleft()          # leaves anyway; never rebuilt
-        for i, e in enumerate(self.window):
-            if e is None:
-                self.window[i] = self.features.embedding(back=len(self.window) - i)
-        self.window.append(self.features.embedding())
         if len(self.window) < WINDOW:
             return False
         self.last_score = self.model.score(self.window)

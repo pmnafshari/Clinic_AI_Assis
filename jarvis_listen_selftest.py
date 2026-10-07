@@ -202,56 +202,270 @@ def login_items():
         assert [c[1] for c in calls[-2:]] == ["bootout", "bootout"], "11: and unloads both"
 
 
+# The embedding network's layer shapes (openWakeWord's speech_embedding): (kind, kernel time, kernel freq, freq pad) or
+# (pool, time). Random small weights stand in for the real ones; no model file is read.
+SHAPES = [("conv", 3, 3, 1), ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("pool", 2),
+          ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("pool", 1),
+          ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("pool", 2),
+          ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("pool", 1),
+          ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("conv", 1, 3, 1), ("conv", 3, 1, 0), ("pool", 2),
+          ("last", 3, 1, 0)]
+
+
+def tiny_layers(seed=0, width=3, out=6):
+    rng = np.random.default_rng(seed)
+    layers, cin = [], 1
+    for k in SHAPES:
+        if k[0] == "pool":
+            layers.append(("pool", k[1]))
+            continue
+        cout = out if k[0] == "last" else width
+        w = (rng.standard_normal((cout, cin, k[1], k[2])) * 0.6).astype(np.float32)
+        b = (rng.standard_normal(cout) * 0.1).astype(np.float32) if k[0] != "last" else np.zeros(cout, np.float32)
+        layers.append(("conv", w, b, k[3], k[0] != "last"))
+        cin = cout
+    return layers
+
+
+def window_embedding(layers, window):
+    """The plain per-window computation, written independently of jarvis.embedding: [76, 32] -> [out]."""
+    x = np.asarray(window, np.float64)[:, :, None]                     # time, freq, channels
+    for layer in layers:
+        if layer[0] == "pool":
+            t, f, c = x.shape
+            kt = layer[1]
+            x = x[:t - t % kt].reshape(t // kt, kt, f // 2, 2, c).max(axis=(1, 3))
+            continue
+        _, w, b, pf, act = layer
+        cout, cin, kt, kf = w.shape
+        xp = np.pad(x, ((0, 0), (pf, pf), (0, 0)))
+        t, f = xp.shape[0] - kt + 1, xp.shape[1] - kf + 1
+        y = np.zeros((t, f, cout)) + b
+        for a in range(kt):
+            for c in range(kf):
+                y += np.einsum("tfi,oi->tfo", xp[a:a + t, c:c + f], w[:, :, a, c])
+        if act:
+            y = np.maximum(np.where(y > 0, y, 0.2 * y), -0.4)
+        x = y
+    assert x.shape[:2] == (1, 1), x.shape
+    return x.reshape(-1)
+
+
+class FakeMel:
+    """10 ms frames from the samples after the 480-sample context: 8 frames per 80 ms chunk, like the real one."""
+
+    def run(self, _o, feed):
+        x = feed["input"][0][480:].reshape(-1, 160)
+        return [np.repeat(np.abs(x).mean(1, keepdims=True) / 500, 32, 1)[None, None]]
+
+
 def quiet_gate():
-    # 12. idle CPU: the costly embedding is skipped while the whole window is at the noise floor, and recomputed exactly
-    #     from kept melspectrogram frames when sound returns - every score that is computed equals the always-on one
+    # 12. idle CPU: the quiet gate skips only while the whole window is at the room's noise floor, and every score that
+    #     is computed equals the always-on computation (J01 follow-up: the embedding is now cheap and always computed,
+    #     so the gate skips the classifier; its decisions are unchanged)
+    from jarvis.embedding import Stream
     from jarvis.features import Features
     from jarvis.wake import Detector as RealDetector, WINDOW
-
-    class Mel:
-        def run(self, _o, feed):
-            x = feed["input"][0][-1280:].reshape(8, 160)
-            return [np.repeat(np.abs(x).mean(1, keepdims=True), 32, 1)[None, None]]
-
-    class Emb:
-        def __init__(self):
-            self.calls = 0
-
-        def run(self, _o, feed):
-            self.calls += 1
-            w = feed["input_1"][0, :, :, 0]
-            return [np.concatenate([w.mean(0), w.max(0), w[-8:].mean(0)])[None, None, None]]
 
     class Model:
         threshold = 0.99
 
         def score(self, window):
-            return float(np.tanh(np.asarray(window, np.float32).mean() / 500))
+            return float(np.tanh(np.asarray(window, np.float32).mean() * 3))
 
     rng = np.random.default_rng(3)
     loud = lambda: (rng.standard_normal(1280) * 3000).astype(np.int16)  # noqa: E731
     quiet = lambda: (rng.standard_normal(1280) * 20).astype(np.int16)  # noqa: E731
     script = [quiet() for _ in range(130)] + [loud() for _ in range(30)] + [quiet() for _ in range(80)] + \
         [loud() for _ in range(5)] + [quiet() for _ in range(40)]
-    ref_f, ref = Features(sessions=(Mel(), Emb())), []
+    layers = tiny_layers()
+    ref_f = Features(mel=FakeMel(), stream=Stream(layers))
     from collections import deque
-    win = deque(maxlen=WINDOW)
+    win, ref = deque(maxlen=WINDOW), []
     for c in script:
-        win.append(ref_f.feed(c))
+        win.append(ref_f.add(c)[0])
         ref.append(Model().score(win) if len(win) == WINDOW else None)
-    emb = Emb()
-    det = RealDetector(Model(), Features(sessions=(Mel(), emb)))
-    calls, skipped = [], []
+    det = RealDetector(Model(), Features(mel=FakeMel(), stream=Stream(layers)))
+    skipped, scored = [], 0
     for i, c in enumerate(script):
         det.feed(c)
-        calls.append(emb.calls)
         skipped.append(det.skipped)
-        if not det.skipped and ref[i] is not None:
-            assert abs(det.last_score - ref[i]) < 1e-9, f"12: score {i} differs from the always-on computation"
-    assert not any(skipped[130:160]) and not any(skipped[240:245]), "12: never skipped while there is sound"
-    assert sum(skipped[160:240]) >= 80 - WINDOW - 1, f"12: the quiet stretch is skipped ({sum(skipped[160:240])})"
-    assert calls[239] - calls[160 + WINDOW] <= 1, "12: no embedding work during a long quiet stretch"
-    assert calls[-1] < len(script) * 0.6, f"12: much less embedding work overall ({calls[-1]} of {len(script)})"
+        if i % 2 == 1 and not det.skipped and ref[i] is not None:
+            assert abs(det.last_score - ref[i]) < 1e-6, f"12: score {i} differs from the always-on computation"
+            scored += 1
+    assert scored >= 40, f"12: scores were compared ({scored})"
+    assert not any(skipped[131:160]) and not any(skipped[241:245]), "12: never skipped while there is sound"
+    assert sum(skipped[160:240]) >= 80 - WINDOW - 2, f"12: the quiet stretch is skipped ({sum(skipped[160:240])})"
+
+
+def streaming_embedding():
+    # 13. the embedding is computed as a stream: each 80 ms window's result equals the plain per-window computation of
+    #     the same network, and each block costs only its new frames - never the whole 76-frame window again
+    from jarvis import embedding
+    from jarvis.embedding import HOP, WINDOW_FRAMES, Stream
+
+    layers = tiny_layers(seed=1)
+    rng = np.random.default_rng(13)
+    frames = (rng.standard_normal((WINDOW_FRAMES + HOP * 70, 32)) * 1.5 + 1).astype(np.float32)
+    first_rows = []
+    real_conv = embedding.conv
+
+    def counting_conv(x, layer):
+        if x.shape[2] == 1:                       # the first convolution: one input channel
+            first_rows.append(x.shape[0])
+        return real_conv(x, layer)
+    embedding.conv = counting_conv
+    try:
+        st = Stream(layers)
+        got = [st.reset(frames[:WINDOW_FRAMES])]
+        assert got[0].shape == (6,), f"13: one embedding for the priming window ({got[0].shape})"
+        for k in range(30):                       # blocks of two chunks (16 frames)
+            a = WINDOW_FRAMES + 2 * HOP * k
+            first_rows.clear()
+            out = st.push(frames[a:a + 2 * HOP])
+            assert out.shape == (2, 6), f"13: two embeddings per 16 frames ({out.shape})"
+            assert sum(first_rows) <= 2 * HOP + 2, f"13: block {k} recomputed {sum(first_rows)} rows, not just its new ones"
+            got += list(out)
+        mid = len(got)
+        st.reset(frames[HOP * mid: HOP * mid + WINDOW_FRAMES])   # a reset starts a new stream at any window
+        got2 = []
+        for k in range(5):
+            a = HOP * mid + WINDOW_FRAMES + HOP * k
+            got2 += list(st.push(frames[a:a + HOP]))
+    finally:
+        embedding.conv = real_conv
+    for i, e in enumerate(got):
+        ref = window_embedding(layers, frames[HOP * i: HOP * i + WINDOW_FRAMES])
+        assert np.abs(e - ref).max() < 1e-4, f"13: window {i} differs from the per-window computation"
+    for i, e in enumerate(got2):
+        ref = window_embedding(layers, frames[HOP * (mid + 1 + i): HOP * (mid + 1 + i) + WINDOW_FRAMES])
+        assert np.abs(e - ref).max() < 1e-4, f"13: window {i} after a reset differs"
+
+    # Features carries the melspectrogram's context and the stream from one call to the next (added after mutation
+    # run 1: M24, restarting both on every call, survived)
+    from jarvis.features import Features
+
+    class ContextMel:
+        """640-sample frames every 160 samples, reading into the 480-sample context like the real one."""
+
+        def run(self, _o, feed):
+            x = np.abs(feed["input"][0])
+            n = (len(x) - 640) // 160 + 1
+            return [np.repeat(np.array([x[j * 160:j * 160 + 640].mean() for j in range(n)])[:, None] / 500, 32, 1)[None, None]]
+    audio = (rng.standard_normal(1280 * 12) * 2000).astype(np.int16)
+    f = Features(mel=ContextMel(), stream=Stream(layers))
+    got3 = np.concatenate([f.add(audio[k * 2560:(k + 1) * 2560]) for k in range(6)])
+    whole = ContextMel().run(None, {"input": np.concatenate([np.zeros(480), audio])[None]})[0].reshape(-1, 32) / 10 + 2
+    whole = np.concatenate([np.ones((WINDOW_FRAMES, 32)), whole])
+    for i, e in enumerate(got3):
+        ref = window_embedding(layers, whole[HOP * (i + 1): HOP * (i + 1) + WINDOW_FRAMES])
+        assert np.abs(e - ref).max() < 1e-4, f"13: chunk {i} lost the context or the stream between calls"
+
+
+def batching():
+    # 14. features are computed for two chunks at a time: the detector wakes on the same chunk or one later than when
+    #     fed one chunk at a time, never misses or adds a wake, and a reset drops a half-filled batch
+    from jarvis import wake
+    from jarvis.embedding import Stream
+    from jarvis.features import Features
+
+    class Model:
+        threshold = 0.6
+
+        def score(self, window):
+            return float(np.asarray(window, np.float32)[-3:].mean() > 0.0)
+
+    rng = np.random.default_rng(14)
+    script = []
+    for gap in (40, 41, 37, 44, 39, 42):           # bursts start on odd and even chunks
+        script += [(rng.standard_normal(1280) * 30).astype(np.int16) for _ in range(gap)]
+        script += [(rng.standard_normal(1280) * 4000).astype(np.int16) for _ in range(4)]
+    layers = tiny_layers(seed=2, out=1)
+    layers[-1] = ("conv", np.abs(layers[-1][1]), layers[-1][2], 0, False)
+
+    def fired(batch):
+        old = wake.BATCH
+        wake.BATCH = batch
+        try:
+            det = wake.Detector(Model(), Features(mel=FakeMel(), stream=Stream(layers)))
+            return [i for i, c in enumerate(script) if det.feed(c)]
+        finally:
+            wake.BATCH = old
+    one, two = fired(1), fired(2)
+    assert len(one) >= 4, f"14: the script wakes the per-chunk detector ({one})"
+    assert {i % 2 for i in one} == {0, 1}, f"14: wakes fall on both halves of a batch ({one})"
+    assert len(two) == len(one), f"14: same number of wakes batched ({two} vs {one})"
+    assert all(b - a in (0, 1) for a, b in zip(one, two)), f"14: a batched wake is at most one chunk late ({two} vs {one})"
+
+    # the melspectrogram is still computed one chunk per call: the real model floors each call at its own loudest
+    # frame - 80 dB, so one call over two chunks changes the quieter one (added after E1 found exactly this)
+    class FloorMel:
+        def run(self, _o, feed):
+            x = np.abs(feed["input"][0])
+            n = (len(x) - 640) // 160 + 1
+            db = 10 * np.log10(np.array([np.mean(x[j * 160:j * 160 + 640] ** 2) for j in range(n)]) + 1e-10)
+            return [np.repeat(np.maximum(db, db.max() - 80)[:, None], 32, 1)[None, None]]
+    quiet_then_loud = np.concatenate([(rng.standard_normal(1280) * 2).astype(np.int16),
+                                      (rng.standard_normal(1280) * 20000).astype(np.int16)])
+    together = Features(mel=FloorMel(), stream=Stream(layers)).add(quiet_then_loud)
+    apart = Features(mel=FloorMel(), stream=Stream(layers))
+    apart = np.concatenate([apart.add(quiet_then_loud[:1280]), apart.add(quiet_then_loud[1280:])])
+    assert np.abs(together - apart).max() < 1e-4, "14: a chunk's features depend on the chunk computed with it"
+
+    class Recorder:
+        def __init__(self):
+            self.sizes = []
+
+        def reset(self):
+            pass
+
+        def add(self, samples):
+            self.sizes.append(len(samples))
+            return np.zeros((len(samples) // 1280, 6), np.float32)
+    rec = Recorder()
+    det = wake.Detector(Model(), rec)
+    det.feed(script[0])
+    det.reset()
+    det.feed(script[1])
+    assert rec.sizes == [], "14: a half batch is not computed early"
+    det.feed(script[2])
+    assert rec.sizes == [2 * 1280], f"14: a reset drops the pending half batch ({rec.sizes})"
+
+
+def damaged_model():
+    # 15. the embedding weights are read from the model file at start: a damaged or different file makes Jarvis
+    #     DEGRADED with the reason (engine missing), never a crash loop and never a wrong network run
+    import jarvis.features
+    import jarvis_run
+    from jarvis import onnx_layers
+    with tempfile.TemporaryDirectory() as tmp:
+        bad = Path(tmp) / "embedding_model.onnx"
+        for content in (b"", b"not a model at all", bytes(range(256)) * 40, b"\x3a\x05\x0a\x03abc",
+                        b"\x08\x80"):
+            bad.write_bytes(content)
+            try:
+                onnx_layers.layers(bad)
+            except ValueError:
+                pass
+            except Exception as e:
+                raise AssertionError(f"15: a damaged model file escaped as {type(e).__name__}") from None
+            else:
+                raise AssertionError(f"15: a damaged model file was accepted ({content[:12]!r})")
+    real = jarvis.features.Features
+
+    def wrong_network():
+        raise ValueError("embedding model is not the expected network: test")
+    jarvis.features.Features = wrong_network
+    try:
+        jarvis_run._detector()
+    except listen.EngineMissing as e:
+        assert "not the expected network" in str(e), f"15: the reason is shown ({e})"
+    except Exception as e:
+        raise AssertionError(f"15: a wrong network escaped as {type(e).__name__}, not engine missing") from None
+    else:
+        raise AssertionError("15: a wrong network did not make the engine missing")
+    finally:
+        jarvis.features.Features = real
 
 
 def selftest():
@@ -262,6 +476,9 @@ def selftest():
     link_and_indicator()
     login_items()
     quiet_gate()
+    streaming_embedding()
+    batching()
+    damaged_model()
     print("jarvis_listen_selftest: ok")
 
 
