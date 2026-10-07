@@ -1,8 +1,8 @@
 """Always-ready listening (J01): microphone -> wake phrase -> one exchange -> back to READY.
 
 READY is reported only after real sound has been processed. Idle audio lives in a 2 s ring buffer and is discarded;
-the request heard after the wake phrase is held only until the exchange ends (J02 will hand it to local STT), then
-dropped. Nothing is written to disk or sent anywhere. macOS delivers digital silence when the microphone is denied or
+the request heard after the wake phrase is held only until the exchange ends (since J02 it is handed to the exchange:
+local speech to text, then the clinic guides), then dropped. Nothing is written to disk or sent anywhere. macOS delivers digital silence when the microphone is denied or
 muted, so a run of exact zeros means DEGRADED, never READY.
 """
 import queue
@@ -36,8 +36,9 @@ def rms(chunk):
 
 
 class Listener:
-    def __init__(self, machine, make_detector, make_source, cue=None, mono=time.monotonic, wall=time.time):
+    def __init__(self, machine, make_detector, make_source, cue=None, mono=time.monotonic, wall=time.time, on_request=None):
         self.machine, self.make_detector, self.make_source = machine, make_detector, make_source
+        self.on_request = on_request       # the exchange (J02); without one the request is discarded, as in J01
         self.cue, self.mono, self.wall = cue or (lambda: None), mono, wall
         self.buffer = deque(maxlen=int(round(BUFFER_SECONDS / CHUNK_SECONDS)))
         self.request = []
@@ -160,8 +161,14 @@ class Listener:
         if rms(chunk) > max(2.5 * self.floor, 300.0):
             self.last_speech = now
         if self.last_speech is not None and now - self.last_speech >= SILENCE_SECONDS:
-            spoken = len(self.request) * CHUNK_SECONDS
-            return self.back_to_ready(f"request heard ({spoken:.1f} s) and discarded - answers arrive in J02")
+            if self.on_request is None:
+                spoken = len(self.request) * CHUNK_SECONDS
+                return self.back_to_ready(f"request heard ({spoken:.1f} s) and discarded - answers arrive in J02")
+            reason = self.on_request(np.concatenate(self.request))
+            drain = getattr(self.source, "drain", None)
+            if drain:
+                drain()                        # what was heard while answering is not fed to the wake detector later
+            return self.back_to_ready(reason)
         if self.last_speech is None and now - self.active_since >= IDLE_SECONDS:
             return self.back_to_ready("nothing was said after the wake phrase")
         if now - self.active_since >= MAX_ACTIVE_SECONDS:
@@ -205,6 +212,13 @@ class SoundDeviceSource:
             return self.q.get(timeout=timeout)
         except queue.Empty:
             return None
+
+    def drain(self):
+        while True:
+            try:
+                self.q.get_nowait()
+            except queue.Empty:
+                return
 
     def close(self):
         try:

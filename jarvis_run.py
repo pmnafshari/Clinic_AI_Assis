@@ -1,4 +1,5 @@
-"""Jarvis, the clinic's local voice companion - the background service (J00, listening since J01).
+"""Jarvis, the clinic's local voice companion - the background service (J00, listening since J01, clinic-guide
+answers on its page since J02).
 
     .venv/bin/python jarvis_run.py                     run the service: page and status on http://127.0.0.1:5020
     .venv/bin/python jarvis_run.py --store-token       save this device's credential (from Admin > Jarvis devices), 600
@@ -16,7 +17,7 @@ import sys
 import threading
 from pathlib import Path
 
-from jarvis import launchd, listen, runtime, states
+from jarvis import answer, launchd, listen, runtime, states, stt
 from jarvis.clinic import DEFAULT_KEY, ClinicLink, store_key
 from jarvis.web import PORT, create_app
 
@@ -54,7 +55,8 @@ def serve():
             stop.wait(CHECK_SECONDS)
 
     def listening():
-        lst = listen.Listener(machine, _detector, listen.SoundDeviceSource, cue=listen.chime)
+        exchange = answer.Exchange(machine, stt.transcribe, _link)
+        lst = listen.Listener(machine, _detector, listen.SoundDeviceSource, cue=listen.chime, on_request=exchange)
         try:
             lst.run(stop)
         except Exception as e:  # a fault is a state with its reason, then a crash so launchd restarts us

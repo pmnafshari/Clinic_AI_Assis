@@ -22,6 +22,8 @@ PAGE = """<!doctype html>
   .READY { color: var(--ok); } .ACTIVE, .CONFIRMING { color: var(--info); } .AUTH_REQUIRED { color: var(--warn); }
   .DEGRADED { color: var(--bad); } .STARTING { color: var(--muted); }
   .muted { color: var(--muted); } ol { padding-left: 1.2rem; } code { font-size: 14px; }
+  blockquote { margin: 12px 0; padding: 8px 14px; border-left: 4px solid var(--info); background: var(--bg); }
+  .warn { color: var(--warn); font-weight: 600; }
 </style></head>
 <body><main>
   <p class="muted">Jarvis · local voice companion · this page only shows it; Jarvis keeps running when it is closed</p>
@@ -33,6 +35,21 @@ PAGE = """<!doctype html>
     <p class="muted">Clinic link: <span id="clinic">{{ s.clinic.detail }}</span>
       (needed for answers and anything about a patient, not for listening)</p>
   </section>
+  {% set a = s.answer %}
+  <section class="card" id="answer" aria-live="polite"{% if not a %} hidden{% endif %}>
+    <h2>Last question</h2>
+    <p class="muted">Answers are shown here on screen, not spoken. They stay for two minutes and are kept nowhere.</p>
+    <div id="answer-body">{% if a %}
+      {% if a.heard %}<p><strong>Heard:</strong> {{ a.heard }}</p>{% endif %}
+      {% if a.asked_as and a.asked_as != a.heard %}<p><strong>Asked as:</strong> {{ a.asked_as }}</p>{% endif %}
+      {% for c in a.citations %}<blockquote>{{ c.passage }}</blockquote>
+      <p class="muted">{{ c.title }}{% if c.edition %}, edition {{ c.edition }}{% endif %}, page {{ c.page }} - verified against the page</p>{% endfor %}
+      {% for w in a.warnings %}<p class="warn">{{ w.text }} (page {{ w.page }})</p>{% endfor %}
+      {% if a.message %}<p>{{ a.message }}</p>{% endif %}
+      {% if a.escalation %}<p class="muted">{{ a.escalation }}</p>{% endif %}
+      {% if a.devices %}<p>Say which one, for example: {% for d in a.devices %}{{ d.make }} {{ d.model }} ({{ d.room }}){% if not loop.last %}; {% endif %}{% endfor %}</p>{% endif %}
+    {% endif %}</div>
+  </section>
   <section class="card">
     <h2>How Jarvis works</h2>
     <p>Jarvis starts when you log in to this computer and listens only for its wake phrase. You never click to talk.
@@ -41,7 +58,8 @@ PAGE = """<!doctype html>
     <ol class="muted">
       <li>STARTING - opening the microphone and the wake engine; READY only once real sound is being heard</li>
       <li>READY - only the wake phrase is listened for; nothing is recorded or sent</li>
-      <li>ACTIVE - one request after a short tone; then back to READY (answers arrive in a later step)</li>
+      <li>ACTIVE - one request after a short tone; a clinic-guide answer appears on this page with the document and page it
+        comes from (nothing is spoken back); then back to READY</li>
       <li>AUTH_REQUIRED - needs a delegated staff session; nothing protected is said</li>
       <li>CONFIRMING - a spoken confirmation of an action that is already authorised</li>
       <li>DEGRADED - not available, with the reason (asleep, microphone denied or muted, engine missing, fault)</li>
@@ -58,7 +76,33 @@ PAGE = """<!doctype html>
     document.getElementById("reason").textContent = s.reason;
     document.getElementById("since").textContent = s.since;
     document.getElementById("clinic").textContent = s.clinic.detail;
+    showAnswer(s.answer);
   };
+  // text only: what was heard and what the guides say are never treated as markup
+  function line(tag, text, cls) {
+    const el = document.createElement(tag);
+    el.textContent = text;
+    if (cls) el.className = cls;
+    return el;
+  }
+  function showAnswer(a) {
+    const card = document.getElementById("answer"), body = document.getElementById("answer-body");
+    card.hidden = !a;
+    body.replaceChildren();
+    if (!a) return;
+    if (a.heard) body.append(line("p", "Heard: " + a.heard));
+    if (a.asked_as && a.asked_as !== a.heard) body.append(line("p", "Asked as: " + a.asked_as));
+    for (const c of a.citations || []) {
+      body.append(line("blockquote", c.passage));
+      body.append(line("p", c.title + (c.edition ? ", edition " + c.edition : "") + ", page " + c.page +
+                       " - verified against the page", "muted"));
+    }
+    for (const w of a.warnings || []) body.append(line("p", w.text + " (page " + w.page + ")", "warn"));
+    if (a.message) body.append(line("p", a.message));
+    if (a.escalation) body.append(line("p", a.escalation, "muted"));
+    if (a.devices) body.append(line("p", "Say which one, for example: " +
+                                    a.devices.map((d) => d.make + " " + d.model + " (" + d.room + ")").join("; ")));
+  }
 </script>
 </body></html>"""
 
@@ -95,9 +139,9 @@ def create_app(machine):
             yield f"data: {json.dumps(snap)}\n\n"
             while True:
                 nxt = machine.wait_change(snap["version"], HEARTBEAT_SECONDS)
-                if nxt["version"] == snap["version"]:
+                if nxt["version"] == snap["version"] and nxt["answer"] == snap["answer"]:
                     yield ": keep-alive\n\n"
-                    continue
+                    continue                   # (an answer that has just expired is sent, so the page drops it)
                 snap = nxt
                 yield f"data: {json.dumps(snap)}\n\n"
         return Response(stream(), mimetype="text/event-stream")

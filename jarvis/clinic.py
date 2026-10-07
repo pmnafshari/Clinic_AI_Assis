@@ -53,3 +53,18 @@ class ClinicLink:
             raise LinkDown(f"clinic app answered {e.code}") from None
         except (urllib.error.URLError, OSError):
             raise LinkDown("clinic app unreachable") from None
+
+    def ask_guides(self, question):
+        """A clinic-guide question under this device's guide scope (J02) -> the answer or refusal."""
+        req = urllib.request.Request(f"{self.base_url}/api/jarvis/guides/ask", data=json.dumps({"question": question}).encode(),
+                                     headers={"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"},
+                                     method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                raise LinkRefused("device not registered or revoked") from None
+            raise LinkDown(f"clinic app answered {e.code}") from None
+        except (urllib.error.URLError, OSError):
+            raise LinkDown("clinic app unreachable") from None

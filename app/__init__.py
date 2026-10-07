@@ -18,8 +18,8 @@ from . import db
 # page needs it before any session exists, which is the same reason "static"
 # is here. named explicitly - a prefix match would open anything starting
 # with "s".
-# jarvis.api_whoami carries a device credential, not a staff cookie; it checks it itself (J00)
-WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami"}
+# the Jarvis device routes carry a device credential, not a staff cookie; they check it themselves (J00, J02)
+WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask"}
 
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave
@@ -70,7 +70,7 @@ def create_app():
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
     app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
-    CSRFProtect(app)
+    csrf = CSRFProtect(app)
 
     # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
@@ -140,6 +140,8 @@ def create_app():
     app.register_blueprint(guides_bp)
     app.register_blueprint(imaging_bp)
     app.register_blueprint(jarvis_bp)
+    # the one route exempt from CSRF: it reads no cookie, only a device credential in a header
+    csrf.exempt(app.view_functions["jarvis.api_guides_ask"])
     app.register_blueprint(similar_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)

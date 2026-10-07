@@ -1,4 +1,5 @@
-"""Jarvis (J00) in the clinic app: device registration (admin), session delegation (staff), and the device API."""
+"""Jarvis (J00) in the clinic app: device registration (admin), session delegation (staff), and the device API
+(whoami since J00, clinic-guide questions since J02)."""
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 import jarvis_link as jl
@@ -6,6 +7,7 @@ import web_session
 from auth import authorize, log_audit
 
 from .db import get_db
+from .guides_routes import gconn
 
 jarvis_bp = Blueprint("jarvis", __name__)
 
@@ -88,5 +90,29 @@ def api_whoami():
         return jsonify({"error": "not a registered Jarvis device"}), 401
     log_audit(conn, f"jarvis-device:{info['device_id']}", "device", "jarvis_api", "whoami", allowed=1)
     resp = jsonify(info)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@jarvis_bp.route("/api/jarvis/guides/ask", methods=["POST"])
+def api_guides_ask():
+    """A device's spoken clinic-guide question (J02). Device credential only, no staff cookie, so no CSRF token: the
+    request carries nothing a browser would send by itself. Audited without the question."""
+    conn = get_db()
+    header = request.headers.get("Authorization", "")
+    try:
+        device = jl.authenticate(conn, header[7:] if header.startswith("Bearer ") else "")
+    except jl.LinkError:
+        log_audit(conn, "jarvis-device", "device", "jarvis_api", "guides_ask", allowed=0)
+        return jsonify({"error": "not a registered Jarvis device"}), 401
+    actor = f"jarvis-device:{device['id']}"
+    body = request.get_json(silent=True)
+    question = body.get("question") if isinstance(body, dict) else None
+    if not isinstance(question, str) or not question.strip():
+        log_audit(conn, actor, "device", "jarvis_api", "guides_ask", allowed=0)
+        return jsonify({"error": "send {\"question\": \"...\"}"}), 400
+    result = jl.ask_guides(gconn(), device, question)
+    log_audit(conn, actor, "device", "jarvis_api", "guides_ask", allowed=1)
+    resp = jsonify(result)
     resp.headers["Cache-Control"] = "no-store"
     return resp

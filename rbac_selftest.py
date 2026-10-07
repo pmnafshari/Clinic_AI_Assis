@@ -498,7 +498,10 @@ def selftest():
                     continue
                 before = _state(db_path, root)
                 method, resp = _request(client, rule, "POST", args)
-                assert resp.status_code == 400, \
+                # J02 (2026-10-07): the Jarvis device route reads no cookie, only a device credential, so it is exempt
+                # from CSRF; a staff session without that credential must still be refused (401) and change nothing
+                expected = 401 if rule.endpoint == "jarvis.api_guides_ask" else 400
+                assert resp.status_code == expected, \
                     f"6d: POST {rule.rule} as {role} without a csrf token got {resp.status_code}"
                 assert _state(db_path, root) == before, f"6d: POST {rule.rule} changed state"
                 csrf_checked += 1

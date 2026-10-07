@@ -221,9 +221,10 @@ def selftest():
         # match here would open every route starting with the same letters.
         from app import WHITELIST_ENDPOINTS
         # Jarvis J00 (2026-10-04): the device API carries a device credential, not a staff cookie, and checks it
-        # itself (jarvis_selftest 3: unknown, revoked or missing credentials get 401 and are audited)
-        assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "jarvis.api_whoami"}, \
-            "10b: the no-session whitelist must hold exactly static, shared, login and the Jarvis device API"
+        # itself (jarvis_selftest 3: unknown, revoked or missing credentials get 401 and are audited). J02 (2026-10-07)
+        # adds the device's clinic-guide question, checked the same way (jarvis_guides_selftest 1)
+        assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask"}, \
+            "10b: the no-session whitelist must hold exactly static, shared, login and the two Jarvis device routes"
         assert app.test_client().get("/patients").status_code == 302, \
             "10b: every other route must still redirect to login without a session"
 

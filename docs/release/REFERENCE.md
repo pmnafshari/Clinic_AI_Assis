@@ -17,6 +17,7 @@ this file is stale.
 | POST | `/agent/dictate` | `agent.dictate_command` |
 | GET,POST | `/agent/edit` | `agent.edit_page` |
 | POST | `/agent/undo` | `agent.undo_change` |
+| POST | `/api/jarvis/guides/ask` | `jarvis.api_guides_ask` |
 | GET | `/api/jarvis/whoami` | `jarvis.api_whoami` |
 | GET | `/appointments` | `appointments.index` |
 | POST | `/appointments/<int:appointment_id>/cancel` | `appointments.cancel` |

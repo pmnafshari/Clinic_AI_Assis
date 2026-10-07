@@ -1,10 +1,12 @@
-"""The clinic side of Jarvis (J00): registered devices and staff sessions delegated to them.
+"""The clinic side of Jarvis (J00): registered devices and staff sessions delegated to them; since J02 also the device's
+own clinic-guide questions.
 
 A Jarvis device proves only that it is a device the admin registered: a random credential, shown once, stored on the
 device and kept here as a hash, sent over loopback. Anything protected also needs a staff member who is signed in to
 the clinic app right now and has delegated *that* session to *that* device. The device never decides access: every
 check is here, every call is audited, and voice plays no part in it.
 """
+import re
 import secrets
 from datetime import timedelta
 
@@ -13,6 +15,10 @@ import web_session
 from auth import authorize, log_audit
 
 DELEGATION_HOURS = 8          # a delegation never outlives this, even if the staff session stays alive
+# a device asks clinic guides as reception does - the least-privileged role that may read them. A delegation never
+# widens this in J02: dentist-only and restricted pages are refused through Jarvis whoever has delegated a session.
+GUIDE_ROLE = "assistant"
+MAX_QUESTION = 500
 LAST_SHOWN_TOKEN = None       # the credential of the last registration, for the one page that shows it (and tests)
 
 SCHEMA = """
@@ -159,3 +165,72 @@ def current_delegation(conn, device_id, now=None):
 def whoami(conn, bearer, now=None):
     device = authenticate(conn, bearer)
     return {"device": device["name"], "device_id": device["id"], "delegation": current_delegation(conn, device["id"], now)}
+
+
+# --- clinic-guide questions (J02) ---------------------------------------------------------------------------
+
+NUMBER_WORDS = {"zero": "0", "oh": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6",
+                "seven": "7", "eight": "8", "nine": "9", "ten": "10", "hundred": "00",
+                "uno": "1", "due": "2", "tre": "3", "quattro": "4", "cinque": "5", "sei": "6", "sette": "7",
+                "otto": "8", "nove": "9", "dieci": "10", "cento": "00"}
+WORD = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
+MAX_SPAN = 4
+
+
+def _bare(code):
+    return code.replace("-", "").upper()
+
+
+def library_codes(gconn):
+    """{code without hyphens: code} for registered device models and the codes on approved pages - letters with a digit
+    or a hyphen (B-PROG, E05, AX-300). A form two codes share is left out: it could not be matched safely."""
+    import clinic_guides as cg
+    found = [d["model"] for d in cg.devices(gconn)]
+    for row in gconn.execute("SELECT p.text, p.ocr_text FROM pages p JOIN sources s ON s.id = p.source_id"
+                             " WHERE s.status = 'approved'"):
+        found += WORD.findall(f"{row['text'] or ''} {row['ocr_text'] or ''}")
+    codes, clash = {}, set()
+    for code in found:
+        code = code.upper()
+        if not re.search(r"[A-Z]", code) or not re.search(r"[0-9-]", code):
+            continue
+        if codes.get(_bare(code), code) != code:
+            clash.add(_bare(code))
+        codes[_bare(code)] = code
+    return {bare: code for bare, code in codes.items() if bare not in clash}
+
+
+def match_codes(text, codes):
+    """A spoken code split by speech to text ("A X 300", "B prog", "E zero five") becomes the library's own code.
+    Only spans that join to a library code are touched; every other word stays exactly as heard."""
+    words = list(WORD.finditer(text))
+    out, at, i = [], 0, 0
+    while i < len(words):
+        for n in range(min(MAX_SPAN, len(words) - i), 0, -1):
+            span = words[i:i + n]
+            if any(text[a.end():b.start()].strip() for a, b in zip(span, span[1:])):
+                continue                                  # a comma or a full stop between them: not one code
+            joined = "".join(NUMBER_WORDS.get(w.group().lower(), w.group()) for w in span)
+            code = codes.get(_bare(joined))
+            if code and (n > 1 or span[0].group() != code):
+                out.append(text[at:span[0].start()] + code)
+                at, i = span[-1].end(), i + n
+                break
+        else:
+            i += 1
+    return "".join(out) + text[at:]
+
+
+def ask_guides(gconn, device, spoken):
+    """An authenticated device's spoken question -> clinic_guides' answer or refusal under the device's guide scope.
+    The question is never stored here (clinic_guides logs the outcome and citations only)."""
+    import clinic_guides as cg
+    question = match_codes(" ".join(spoken.split())[:MAX_QUESTION], library_codes(gconn))
+    result = cg.ask(gconn, question, GUIDE_ROLE, actor=f"jarvis-device:{device['id']}")
+    keep = ("outcome", "reason", "message", "escalation", "citations", "warnings", "conflicting", "see")
+    out = {"asked_as": question, **{k: result[k] for k in keep if k in result}}
+    d = result.get("device")
+    out["device"] = {"make": d["make"], "model": d["model"], "room": d["room"]} if d else None
+    if result["reason"] == "ask_device":
+        out["devices"] = [{"make": r["make"], "model": r["model"], "room": r["room"]} for r in cg.devices(gconn)]
+    return out

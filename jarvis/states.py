@@ -1,5 +1,6 @@
 """The six states and the only moves between them (JARVIS plan §2). One source for the service, the page and tests."""
 import threading
+import time
 from collections import deque
 
 import clinic_time
@@ -41,6 +42,7 @@ class Machine:
         self.version = 0
         self.clinic = {"ok": False, "detail": "not checked yet"}
         self.history = deque([{"state": self.state, "reason": self.reason, "at": self.since}], maxlen=20)
+        self._answer = None        # (what to show, monotonic expiry, the clock it is measured on) - memory only (J02)
 
     def go(self, state, reason):
         if not reason:
@@ -50,6 +52,8 @@ class Machine:
                 return
             if state != self.state and not allowed(self.state, state):
                 raise BadTransition(f"{self.state} -> {state} is not allowed")
+            if state == "ACTIVE" and self.state != "ACTIVE":
+                self._answer = None    # a new request: the last answer goes
             self.state, self.reason = state, reason
             self.since = clinic_time.to_storage(clinic_time.now_utc())
             self.version += 1
@@ -65,10 +69,24 @@ class Machine:
                 self.version += 1
                 self._lock.notify_all()
 
+    def show(self, answer, seconds, clock=time.monotonic):
+        """An answer (or refusal) for the page, for `seconds`. Never in the history."""
+        with self._lock:
+            self._answer = (answer, clock() + seconds, clock)
+            self.version += 1
+            self._lock.notify_all()
+
+    def _shown(self):
+        if self._answer is None:
+            return None
+        answer, until, clock = self._answer
+        return answer if clock() < until else None
+
     def snapshot(self):
         with self._lock:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
-                    "version": self.version, "history": list(self.history), "clinic": dict(self.clinic)}
+                    "version": self.version, "history": list(self.history), "clinic": dict(self.clinic),
+                    "answer": self._shown()}
 
     def wait_change(self, version, timeout):
         """Block until the state changes from `version` or the timeout passes. -> snapshot."""
