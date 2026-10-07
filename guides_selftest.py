@@ -224,6 +224,14 @@ def verification(conn, ids, devices):
         assert r["outcome"] == "abstain" and r["reason"] == "clinical", f"4: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
     assert cg.ask(conn, "The dentist has already ordered an OPG. What does reception do next?",
                   "assistant")["outcome"] == "answer", "4: a question about an order already written still answers"
+    # J02 (2026-10-07): speech to text writes "X ray" with a space; "Which X ray does a new patient need?" was answered
+    # with the referral steps instead of the clinical refusal. However it is spelled, it is the same question
+    for q in ("Which x ray does a new patient need?", "Which X ray does a new patient need?",
+              "Which xray does a new patient need?", "Does a new patient need an x ray?",
+              "Should Mario Rossi have an x ray?", "Can I book an X ray without an order from the dentist?"):
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] in ("clinical", "patient_data"), \
+            f"4: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
     # P24 follow-up (B06): the quoted line is the one that answers, not the one sharing the most common words
     for q, want in (("The dentist ordered an OPG: what do I give the patient?", "preparation sheet"),
                     ("Il dentista ha prescritto la OPG: cosa devo consegnare al paziente?", "foglio di preparazione")):

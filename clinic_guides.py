@@ -475,22 +475,23 @@ MODEL_SHAPE = re.compile(r"\b[A-Z]{1,4}-\d{1,4}[A-Z]?\b")
 EDITION_ASKED = re.compile(r"\b(edition|edizione|version|versione|ed\.)\s*(\d+)|\b(19[89]\d|20[0-4]\d)\b", re.IGNORECASE)
 # case matters for the names: "patient Rossi" names someone, "patient need" does not
 PATIENT = re.compile(r"\b(?i:patient|paziente|pz)\s+[A-Z][a-z]+|\b[A-Z][a-z]+\s+[A-Z][a-z]+'s\s+(?i:phone|number|"
-                     r"address|appointment|record|x-?ray|opg|invoice|bill)|\b(?i:phone|telephone|numero di telefono|"
+                     r"address|appointment|record|x[- ]?ray|opg|invoice|bill)|\b(?i:phone|telephone|numero di telefono|"
                      r"address|indirizzo|codice fiscale|tax code|fiscal code|date of birth|birth date|data di nascita|e-?mail)"
                      r"\s+(?i:number\s+)?(?i:of|di|del|della)\s+[A-Z]")
 PATIENT_WORDS = re.compile(r"\b(prossimo appuntamento|next appointment|medical history|anamnesi|his|her|suo|sua)\b"
                            r".*\b(patient|paziente)\b|\b(patient|paziente)\b.*\b(appuntamento|appointment|phone|"
                            r"telefono|record|cartella)\b", re.IGNORECASE)
-CLINICAL = re.compile(r"\b(should|dovrebbe|deve|devo)\b.*\b(have|get|fare|avere|give|dare|x-?ray|opg|radiograf\w*|"
-                      r"image|imaging|scan|tac|cbct)\b|\b(need|needs|bisogno|necessit\w*)\b.*\b(x-?ray|opg|"
-                      r"radiograf\w*|image|imaging|scan|tac|cbct|antibiotic\w*|antibiotic)\b|\bwhich\s+(x-?ray|image|"
+CLINICAL = re.compile(r"\b(should|dovrebbe|deve|devo)\b.*\b(have|get|fare|avere|give|dare|x[- ]?ray|opg|radiograf\w*|"
+                      r"image|imaging|scan|tac|cbct)\b|\b(need|needs|bisogno|necessit\w*)\b.*\b(x[- ]?ray|opg|"
+                      r"radiograf\w*|image|imaging|scan|tac|cbct|antibiotic\w*|antibiotic)\b|\bwhich\s+(x[- ]?ray|image|"
                       r"scan|radiograph)\b|\bquale\s+(radiografia|esame|opg)\b|\b(dose|dosage|dosaggio|posologia|"
                       r"prescribe|prescrivere|diagnos\w*)\b|\b(antibiotic\w*|antibiotic[oi]|medicin\w*|medication\w*|farmac\w*|drug|"
                       r"drugs|painkiller\w*|analgesic\w*|antidolorific\w*|anaesthe\w*|anesthe\w*|anestesi\w*|"
                       r"adrenalin\w*|aspirin\w*|anticoagula\w*)\b", re.IGNORECASE)
+# "x-ray", "xray" and "x ray" are one word here: speech to text writes the last (J02, 2026-10-07)
 # imaging or treatment with no dentist order behind it: reception may never decide, add or book it (P24 follow-up:
 # "the dentist forgot the order, can I book the OPG anyway?" was answered with the booking steps)
-IMAGING = r"(opg|ortopanoramic\w*|x-?rays?|radiograf\w*|radiograph\w*|bitewing\w*|imaging|scan|cbct|tac)"
+IMAGING = r"(opg|ortopanoramic\w*|x[- ]?rays?|radiograf\w*|radiograph\w*|bitewing\w*|imaging|scan|cbct|tac)"
 # a spoken or reported claim is not an order either (P26): only a request the dentist recorded counts
 CLAIM = r"told me|tells me|said|says|asked me|mi ha detto|ha detto|dice che|detto che|according to|secondo"
 NO_ORDER = re.compile(r"\b(" + CLAIM + r"|decide|decides|deciding|decidere|decido|forgot|forgotten|dimentic\w*|without|senza|anyway|"
