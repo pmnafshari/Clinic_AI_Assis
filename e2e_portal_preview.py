@@ -28,6 +28,10 @@ def main():
         now = _ct.stamp()
         pid = patient_id.seed_patient(conn, CF, "Elena Martini", "3337778888")
         soon = date.today() + timedelta(days=4)
+        # the demo cohort books most weekdays: take the first day whose 10:30 is free (a fixed offset collided on 2026-10-08)
+        while conn.execute("SELECT 1 FROM appointments WHERE dentist = 'dentist' AND starts_at = ?",
+                           (_ct.to_utc_text(_ct.parse(f"{soon}T10:30:00")),)).fetchone():
+            soon += timedelta(days=1)
         booked_at = _ct.to_utc_text(_ct.parse(f"{soon}T10:30:00"))
         conn.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, note, created_at, updated_at)"
                      " VALUES (?,?,?,?,?,?,?,?)", (pid, "dentist", booked_at, 30, "booked", None, now, now))
