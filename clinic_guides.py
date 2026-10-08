@@ -474,7 +474,7 @@ TOKEN = re.compile(r"[A-Za-z0-9À-ÿ]+(?:[-'][A-Za-z0-9À-ÿ]+)*")
 MODEL_SHAPE = re.compile(r"\b[A-Z]{1,4}-\d{1,4}[A-Z]?\b")
 EDITION_ASKED = re.compile(r"\b(edition|edizione|version|versione|ed\.)\s*(\d+)|\b(19[89]\d|20[0-4]\d)\b", re.IGNORECASE)
 # case matters for the names: "patient Rossi" names someone, "patient need" does not
-PATIENT = re.compile(r"\b(?i:patient|paziente|pz)\s+[A-Z][a-z]+|\b[A-Z][a-z]+\s+[A-Z][a-z]+'s\s+(?i:phone|number|"
+PATIENT = re.compile(r"\b(?i:patient|paziente|pz)[\s,:;]+[A-Z][a-z]+|\b[A-Z][a-z]+\s+[A-Z][a-z]+'s\s+(?i:phone|number|"
                      r"address|appointment|record|x[- ]?ray|opg|invoice|bill)|\b(?i:phone|telephone|numero di telefono|"
                      r"address|indirizzo|codice fiscale|tax code|fiscal code|date of birth|birth date|data di nascita|e-?mail)"
                      r"\s+(?i:number\s+)?(?i:of|di|del|della)\s+[A-Z]")
@@ -858,12 +858,23 @@ def ask(conn, question, role, device_id=None, actor=None, model=None):
     return result
 
 
+def _guarded(question):
+    """The question as the refusal rules read it: letters spelled out ("O.P.G.", "O P G") and a hyphen between letters
+    ("anti-biotics") joined, so they cannot slip past (J02 follow-up, 2026-10-08). Retrieval keeps the original."""
+    question = SPELLED.sub(lambda m: re.sub(r"[.\s]", "", m.group()), question)
+    return re.sub(r"(?<=[A-Za-z])-(?=[A-Za-z])", "", question)
+
+
+SPELLED = re.compile(r"\b(?:[A-Za-z][.\s]\s*){2,}[A-Za-z]\b\.?")
+
+
 def _ask(conn, question, role, device_id, model):
     if QUESTION_INJECTION.search(question):
         return _abstain("not_found")
-    if CF_SHAPE.search(question.upper()) or PATIENT.search(question) or PATIENT_WORDS.search(question):
+    guarded = _guarded(question)
+    if CF_SHAPE.search(question.upper()) or PATIENT.search(guarded) or PATIENT_WORDS.search(guarded):
         return _abstain("patient_data")
-    if CLINICAL.search(question) or NO_ORDER.search(question):
+    if CLINICAL.search(guarded) or NO_ORDER.search(guarded):
         return _abstain("clinical")
     device, problem = _resolve_device(conn, question, device_id)
     if problem:

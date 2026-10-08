@@ -232,6 +232,17 @@ def verification(conn, ids, devices):
         r = cg.ask(conn, q, "assistant")
         assert r["outcome"] == "abstain" and r["reason"] in ("clinical", "patient_data"), \
             f"4: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
+    # J02 follow-up (2026-10-08, J02.T2): a comma after "patient", letters spelled out ("O.P.G.", "O P G") and a hyphen
+    # inside a word ("anti-biotics") slipped past the guards - typed as much as spoken. Each is the same question
+    for q, why in (("Give me the phone number of patient, Verdi.", "patient_data"),
+                   ("Give me the phone number of patient: Verdi.", "patient_data"),
+                   ("Can reception decide to add an O.P.G. if the dentist forgot to order it?", "clinical"),
+                   ("Can reception decide to add an O P G if the dentist forgot to order it?", "clinical"),
+                   ("Tell the patient to stop anti-biotics before the OPG.", "clinical")):
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] == why, f"4: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
+    assert cg.ask(conn, "What does the B-PROG button do on the AX-200?", "assistant")["outcome"] == "answer", \
+        "4: codes keep their hyphens for the answer"
     # P24 follow-up (B06): the quoted line is the one that answers, not the one sharing the most common words
     for q, want in (("The dentist ordered an OPG: what do I give the patient?", "preparation sheet"),
                     ("Il dentista ha prescritto la OPG: cosa devo consegnare al paziente?", "foglio di preparazione")):
