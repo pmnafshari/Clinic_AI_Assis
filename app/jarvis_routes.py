@@ -116,3 +116,21 @@ def api_guides_ask():
     resp = jsonify(result)
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+@jarvis_bp.route("/api/jarvis/guides/vocabulary")
+def api_guides_vocabulary():
+    """The library's own terms, as a hint for the device's speech to text (J-D10). Device credential only; audited
+    without the terms."""
+    conn = get_db()
+    header = request.headers.get("Authorization", "")
+    try:
+        device = jl.authenticate(conn, header[7:] if header.startswith("Bearer ") else "")
+    except jl.LinkError:
+        log_audit(conn, "jarvis-device", "device", "jarvis_api", "guides_vocabulary", allowed=0)
+        return jsonify({"error": "not a registered Jarvis device"}), 401
+    terms = jl.vocabulary(gconn(), conn)
+    log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_api", "guides_vocabulary", allowed=1)
+    resp = jsonify({"terms": terms})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp

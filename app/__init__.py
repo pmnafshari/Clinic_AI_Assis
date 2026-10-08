@@ -19,7 +19,8 @@ from . import db
 # is here. named explicitly - a prefix match would open anything starting
 # with "s".
 # the Jarvis device routes carry a device credential, not a staff cookie; they check it themselves (J00, J02)
-WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask"}
+WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
+                       "jarvis.api_guides_vocabulary"}
 
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave

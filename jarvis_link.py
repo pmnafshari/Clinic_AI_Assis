@@ -221,6 +221,34 @@ def match_codes(text, codes):
     return "".join(out) + text[at:]
 
 
+MAX_TERMS = 80
+
+
+def vocabulary(gconn, conn, role=GUIDE_ROLE):
+    """The speech-to-text hint (J-D10): codes and capital-letter labels from the current, approved pages this role may
+    read - never a superseded, withdrawn or pending document, a page for another audience, a restricted page or an
+    unreadable page's OCR. Anything shaped like a codice fiscale and any word of a patient's name are left out (the
+    names are read only for that and never leave this function). Computed on every call."""
+    import clinic_guides as cg
+    sql = ("SELECT p.text, p.ocr_text, p.readable FROM pages p JOIN sources s ON s.id = p.source_id"
+           " WHERE s.status = 'approved'")
+    if role != "dentist":
+        sql += " AND s.audience = 'staff' AND p.restricted = 0"
+    found = set()
+    for row in gconn.execute(sql):
+        text = row["text"] + (" " + row["ocr_text"] if row["readable"] else "")
+        for word in WORD.findall(text):
+            if re.search(r"[A-Za-z]", word) and re.search(r"[0-9-]", word):
+                found.add(word.upper())                 # a code, whole: AX-300, E05, B-PROG
+            elif len(word) > 1 and word.isalpha() and word.isupper():
+                found.add(word)                         # a label printed in capitals: DRY, MODE
+    names = set()
+    for (name,) in conn.execute("SELECT patient_name FROM patients"):
+        names.update(w.upper() for w in re.findall(r"[^\W\d_]{3,}", name or ""))
+    terms = sorted(t for t in found if t not in names and not cg.CF_SHAPE.search(t))
+    return terms[:MAX_TERMS]
+
+
 def ask_guides(gconn, device, spoken):
     """An authenticated device's spoken question -> clinic_guides' answer or refusal under the device's guide scope.
     The question is never stored here (clinic_guides logs the outcome and citations only)."""

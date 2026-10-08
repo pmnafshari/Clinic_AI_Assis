@@ -1,4 +1,5 @@
 """The six states and the only moves between them (JARVIS plan §2). One source for the service, the page and tests."""
+import secrets
 import threading
 import time
 from collections import deque
@@ -43,6 +44,7 @@ class Machine:
         self.clinic = {"ok": False, "detail": "not checked yet"}
         self.history = deque([{"state": self.state, "reason": self.reason, "at": self.since}], maxlen=20)
         self._answer = None        # (what to show, monotonic expiry, the clock it is measured on) - memory only (J02)
+        self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision} (J-D10)
 
     def go(self, state, reason):
         if not reason:
@@ -54,6 +56,7 @@ class Machine:
                 raise BadTransition(f"{self.state} -> {state} is not allowed")
             if state == "ACTIVE" and self.state != "ACTIVE":
                 self._answer = None    # a new request: the last answer goes
+                self._pending = None   # and so does anything still waiting for confirmation
             self.state, self.reason = state, reason
             self.since = clinic_time.to_storage(clinic_time.now_utc())
             self.version += 1
@@ -75,6 +78,47 @@ class Machine:
             self._answer = (answer, clock() + seconds, clock)
             self.version += 1
             self._lock.notify_all()
+
+    def offer(self, heard, seconds, clock=time.monotonic):
+        """Put what was heard on screen for confirmation (J-D10). -> its id, which only the page can read."""
+        with self._lock:
+            pid = secrets.token_urlsafe(16)
+            self._pending = {"id": pid, "decision": None}
+            self._answer = ({"outcome": "confirm", "heard": heard, "id": pid, "seconds": seconds}, clock() + seconds, clock)
+            self.version += 1
+            self._lock.notify_all()
+            return pid
+
+    def decide(self, pid, decision):
+        """The person's choice on the page. -> True only for the first "ask" or "discard" on what is waiting now;
+        anything else is refused, and a second choice or an unknown word makes the waiting transcript ambiguous."""
+        with self._lock:
+            p = self._pending
+            if p is None or p["id"] != pid:
+                if p is not None:
+                    p["decision"] = "ambiguous"
+                    self._lock.notify_all()
+                return False
+            if p["decision"] is not None or decision not in ("ask", "discard"):
+                p["decision"] = "ambiguous"
+                self._lock.notify_all()
+                return False
+            p["decision"] = decision
+            self._lock.notify_all()
+            return True
+
+    def await_decision(self, pid, timeout):
+        """Wait for the choice on `pid`. -> "ask", "discard", "ambiguous" or "timeout"; what was waiting is then gone."""
+        with self._lock:
+            def decided():
+                p = self._pending
+                return p is None or p["id"] != pid or p["decision"] is not None
+            self._lock.wait_for(decided, timeout=timeout)
+            p = self._pending
+            if p is None or p["id"] != pid:
+                return "ambiguous"
+            self._pending = None
+            return p["decision"] or "timeout"
 
     def _shown(self):
         if self._answer is None:

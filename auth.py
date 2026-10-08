@@ -163,6 +163,7 @@ ROUTE_POLICY = {
     "jarvis.revoke_delegation": "use_jarvis",
     "jarvis.api_whoami": "public",
     "jarvis.api_guides_ask": "public",
+    "jarvis.api_guides_vocabulary": "public",
     "imports.drive_auto": "read_clinical",
     # P24: asking and reading approved guides is dentist and reception; managing is the dentist's. The decision
     # routes are open to asking staff because a named administrative approver (a reception account) may approve
