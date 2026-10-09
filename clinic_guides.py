@@ -520,6 +520,19 @@ NUMBER_WORDS.update(zip("zero uno due tre quattro cinque sei sette otto nove die
 SPOKEN_NUMBER = re.compile(r"\b(programs?|programmes?|programm[ai]|prog|errors?|errore|errori|steps?|pass[oi]|"
                            r"editions?|edizion[ei]|versions?|version[ei]|pages?|pagin[ae])\s+(" + "|".join(NUMBER_WORDS) +
                            r")\b", re.IGNORECASE)
+# an edition by its order or its year in words: "first edition", "prima edizione", "twenty nineteen", "two thousand
+# and nineteen" ("twenty one minutes" is not a year)
+ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5,
+            "5th": 5, "prima": 1, "primo": 1, "seconda": 2, "secondo": 2, "terza": 3, "terzo": 3, "quarta": 4,
+            "quarto": 4, "quinta": 5, "quinto": 5}
+ORDINAL_EDITION = re.compile(r"\b(" + "|".join(ORDINALS) + r")\s+(edition|edizione|version|versione)\b", re.IGNORECASE)
+TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
+UNIT = r"(?:one|two|three|four|five|six|seven|eight|nine)"
+TEEN = r"(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)"
+SPOKEN_YEAR = re.compile(r"\b(?:(nineteen|twenty)[\s-]+((?:oh|zero)[\s-]+" + UNIT + "|" + TEEN +
+                         r"|(?:" + "|".join(TENS) + r")(?:[\s-]+" + UNIT + r")?)"
+                         r"|two thousand(?:\s+and)?\s+(" + UNIT + "|" + TEEN + r"|(?:" + "|".join(TENS) + r")(?:[\s-]+" + UNIT +
+                         r")?))\b", re.IGNORECASE)
 # "program 1" is one term: the 3 of "3.5 minutes" is not program 3
 NUMBERED = re.compile(r"\b(programs?|programmes?|programm[ai]|prog|errors?|errore|errori|steps?|pass[oi])\s+(\d{1,3})\b",
                       re.IGNORECASE)
@@ -604,6 +617,8 @@ def _library_form(conn, question):
     numbered is a number ("program one" -> "program 1"), and a hyphen is the library's ("auto-clave" -> "autoclave",
     "bprog" -> "B-PROG"). Nothing else is rewritten (P24 follow-up 2, 2026-10-09)."""
     labels, words, hyphenated = _library_terms(conn)
+    question = SPOKEN_YEAR.sub(_year, question)
+    question = ORDINAL_EDITION.sub(lambda m: f"{m.group(2)} {ORDINALS[m.group(1).lower()]}", question)
     question = SPOKEN_NUMBER.sub(lambda m: f"{m.group(1)} {NUMBER_WORDS[m.group(2).lower()]}", question)
     shouted = question.upper() == question      # typed in capitals: the case says nothing about which word is a label
 
@@ -620,6 +635,17 @@ def _library_form(conn, question):
             tok = tok.lower()
         return head + ("'" if head else "") + tok
     return TOKEN.sub(term, question)
+
+
+def _year(m):
+    """A year said in words -> its digits, as a person would type it."""
+    def value(words):
+        return sum(TENS.get(w, NUMBER_WORDS.get(w, 0)) for w in re.split(r"[\s-]+", words.lower()))
+    if m.group(3):
+        year = 2000 + value(m.group(3))
+    else:
+        year = (19 if m.group(1).lower() == "nineteen" else 20) * 100 + value(m.group(2))
+    return str(year)
 
 
 def _stem(word):

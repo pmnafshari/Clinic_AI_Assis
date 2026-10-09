@@ -335,6 +335,24 @@ def same_question(conn, ids, devices):
     old = same(("In edition 1 of the manual, what does B-PROG do?", "In edition one of the manual, what does B-PROG do?"),
                device=devices["ax200"])
     assert old[:2] == ("abstain", "old_edition"), f"9: HARD FAIL - an old edition asked in words answered {old}"
+    # an edition named by its order or its year in words is the same edition (found writing J02.T4, 2026-10-09)
+    old = same(("In the 2019 manual, what does B-PROG do on the AX-200?",
+                "In the first edition of the manual, what does B-PROG do on the AX-200?",
+                "In the 1st edition of the manual, what does B-PROG do on the AX-200?",
+                "Nella prima edizione del manuale, cosa fa B-PROG sull'AX-200?",
+                "In the twenty nineteen manual, what does B-PROG do on the AX-200?",
+                "In the two thousand nineteen manual, what does B-PROG do on the AX-200?",
+                "In the two thousand and nineteen manual, what does B-PROG do on the AX-200?"))
+    assert old[:2] == ("abstain", "old_edition"), f"9: HARD FAIL - an old edition asked in words answered {old}"
+    cur = same(("In edition 2 of the manual, what does B-PROG do on the AX-200?",
+                "In the second edition of the manual, what does B-PROG do on the AX-200?"))
+    assert cur[0] == "answer", f"9: the current edition asked in words is refused {cur}"
+    same(("In the 2023 manual, what does B-PROG do on the AX-200?",
+          "In the twenty twenty three manual, what does B-PROG do on the AX-200?"))
+    assert cg._library_form(conn, "Does it take twenty one minutes or two thousand?") == \
+        "Does it take twenty one minutes or two thousand?", "9: a number that is not a year became one"
+    assert cg._library_form(conn, "the nineteen ninety-eight, twenty twenty-three or two thousand and nine manual") == \
+        "the 1998, 2023 or 2009 manual", "9: a year in words is not the year typed in digits"
     held = same(("What happens if I hold DRY and STANDBY for 10 seconds?", "What happens if I hold dry and standby for "
                  "ten seconds?"), device=devices["ax200"])
     assert held[0] == "abstain" and held[1] in ("restricted", "servicing"), f"9: HARD FAIL - restricted page {held}"
