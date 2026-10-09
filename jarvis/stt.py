@@ -23,6 +23,7 @@ TIMEOUT = 20
 NO_SPEECH = 0.6           # Whisper's own defaults for "nothing was said" and "not sure what was said"
 LOW_LOGPROB = -1.0
 LANGUAGES = ("it", "en")
+BEAM = 5                  # Whisper's default; greedy (1) heard less on development audio (J02 follow-up 4)
 
 
 class Unclear(Exception):
@@ -78,7 +79,7 @@ def child():
     model = WhisperModel(str(MODEL_DIR), device="cpu", compute_type="int8", cpu_threads=4, local_files_only=True)
     _lang, _p, probs = model.detect_language(pcm)
     language = pick_language(dict(probs))
-    segments, _info = model.transcribe(pcm, language=language, beam_size=1, temperature=0.0, vad_filter=False,
+    segments, _info = model.transcribe(pcm, language=language, beam_size=BEAM, temperature=0.0, vad_filter=False,
                                        condition_on_previous_text=False, without_timestamps=True, max_new_tokens=96,
                                        initial_prompt=prompt_for(hint))
     segments = list(segments)

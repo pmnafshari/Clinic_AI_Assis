@@ -599,6 +599,9 @@ def stt_hint():
             assert used == want, f"9: the child gives Whisper the library's terms ({used!r}, wanted {want!r})"
             assert np.allclose(FakeModel.seen["audio"], pcm / 32768), "9: and the audio it was sent"
             assert json.loads(out.getvalue())["text"].strip() == "What does DRY do?", "9: one JSON line back"
+            # J02 follow-up 4: Whisper's default beam, not greedy - measured on development audio, 0.59 -> 0.63 first
+            # pass with no trial lost, about 0.3 s more at p90
+            assert FakeModel.seen.get("beam_size") == 5, f"9: decoded with a beam ({FakeModel.seen.get('beam_size')})"
     finally:
         if saved[0] is None:
             sys.modules.pop("faster_whisper", None)
