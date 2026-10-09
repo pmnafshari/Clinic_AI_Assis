@@ -497,6 +497,58 @@ def two_part_and_conflicts(conn, ids, devices):
     assert cg.ask(conn, "Can I use solvents on the door seal of the AX-200?", "assistant")["outcome"] == "answer"
 
 
+def booking_permission(conn, ids, devices):
+    # 11. P24 follow-up 4 (2026-10-09): asking whether to book imaging for a patient is the dentist's decision. The guides
+    # cannot see a recorded request, so a booking is never permitted from here - not from a guide, a claim or the patient
+    def no_pages(*a, **k):
+        raise AssertionError("11: HARD FAIL - pages were searched for a booking question")
+    saved = cg._candidates, cg._unreadable_match
+    cg._candidates = cg._unreadable_match = no_pages
+    try:
+        for q in ("Can I book an OPG for the patient?", "Can I book an OPG?", "CAN I BOOK AN OPG FOR THE PATIENT?",
+                  "can i book an o p g for the patient", "Can I book an OPG for this patient today?",
+                  "Can I just book an OPG?", "May I book a bitewing for the patient?",
+                  "Could I schedule an X-ray for the patient?",
+                  "Can reception book a CBCT for the patient?", "Can we book a bite wing?",
+                  "Is it OK to book an OPG for him?", "Am I allowed to book a panoramic x-ray for her?",
+                  "Book an OPG for the patient.", "I'd like to book an OPG for the patient, can I?",
+                  "Can I go ahead and book an OPG for the patient?", "An OPG for the patient: can I book it?",
+                  "The patient wants an OPG, can I book it?", "The patient is asking for an x-ray. Can I book one?",
+                  "The patient wants an OPG.", "The patient requested a bitewing",
+                  "The guide says an OPG every two years, so can I book one for the patient?",
+                  "RP-01 says to book the imaging slot. Can I book the OPG for this patient?",
+                  "Can I book the OPG the dentist requested for this patient?",
+                  "Posso prenotare una OPG per il paziente?", "Posso fissare una radiografia per la paziente?",
+                  "Il paziente vuole una OPG, posso prenotarla?", "Possiamo prenotare la OPG?",
+                  "Prenota una OPG per il paziente.", "Prenoto una radiografia per lei?",
+                  # a command to book, with or without a name, is a booking too
+                  "Book an OPG", "Book Giulia an OPG.", "Please book the OPG now", "Schedule an x-ray for Giulia Esposito",
+                  "Can you book an OPG?", "Could you please book a bitewing?", "I want to book an OPG for Giulia",
+                  "We would like to book a CBCT", "Prenota una OPG a Giulia", "Fissa una OPG domani",
+                  "Vorrei prenotare una radiografia",
+                  "Il paziente ha chiesto una radiografia"):
+            r = cg.ask(conn, q, "assistant")
+            assert r["outcome"] == "abstain" and r["reason"] in ("clinical", "patient_data"), \
+                f"11: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']} {r['citations']}"
+            assert r["citations"] == [] and r["warnings"] == [], f"11: HARD FAIL - {q!r} shows a passage"
+            if r["reason"] == "clinical":
+                assert "dentist" in r["escalation"] and "recorded" in r["escalation"], f"11: {q!r} {r['escalation']}"
+    finally:
+        cg._candidates, cg._unreadable_match = saved
+    # reception's general steps are still guide questions: not refused at the boundary
+    for q in ("What does reception do after the dentist orders an OPG?",
+              "The dentist has already ordered an OPG. What does reception do next?",
+              "What must reception check before booking an OPG the dentist ordered?",
+              "How long does an OPG appointment take to book?", "Il dentista ha gia prescritto una OPG: cosa fa l'accettazione?",
+              "Can I use tap water in the AX-200?", "Can you tell me what the B-PROG button does?",
+              "Can I book a cleaning appointment for the patient?", "Book a cleaning appointment",
+              "Can you explain how reception books an OPG the dentist ordered?",
+              "Booking an OPG the dentist ordered: what do I check first?"):
+        assert cg._refused(q) is None, f"11: {q!r} refused as {cg._refused(q)}"
+    r = cg.ask(conn, "Il dentista ha gia prescritto una OPG: cosa fa l'accettazione?", "assistant")
+    assert r["outcome"] == "answer" and r["citations"][0]["source_id"] == ids["rp01_it"], f"11: the Italian steps {r}"
+
+
 def lifecycle(conn, lib, ids, devices):
     # 5. withdrawal, restriction and replacement act on the very next question (there is no answer cache)
     dev = devices["ax200"]
@@ -700,6 +752,7 @@ def selftest():
         verification(conn, ids, devices)
         same_question(conn, ids, devices)
         two_part_and_conflicts(conn, ids, devices)
+        booking_permission(conn, ids, devices)
         offline(conn, devices)
         lifecycle(conn, lib, ids, devices)
         conn.close()

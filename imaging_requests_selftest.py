@@ -234,6 +234,14 @@ def guidance(conn, pids, gids, bw):
         r = cg.ask(g, q, "assistant")
         assert r["outcome"] == "abstain" and r["reason"] == "clinical", f"C14: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
         assert "recorded" in r["escalation"], "C14: the refusal says only a recorded request counts"
+    # P24 follow-up 4: asking the guides whether to book is never permission - only the request page books, and only
+    # for an active request; the page's own fixed question is a general step question and is not refused
+    for q in ("Can I book an OPG for the patient?", "Posso prenotare una OPG per il paziente?",
+              "The patient wants an OPG, can I book it?"):
+        r = cg.ask(g, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] == "clinical" and "recorded" in r["escalation"], \
+            f"C14: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
+    assert all(cg._refused(q) is None for q in ir.GUIDE_QUESTIONS.values()), "C04: the page's fixed question is refused"
     g.close()
 
 

@@ -501,6 +501,32 @@ NO_ORDER = re.compile(r"\b(" + CLAIM + r"|decide|decides|deciding|decidere|decid
                       r"\b.*\b(" + CLAIM + r"|decide|decides|decidere|forgot|forgotten|dimentic\w*|without|senza|anyway|comunque|"
                       r"not ordered|hasn'?t ordered|has not ordered|didn'?t order|did not order|no order|"
                       r"non (?:l'?)?ha prescritt\w*|non (?:l'?)?ha richiest\w*)\b", re.IGNORECASE)
+# asking whether to book imaging, a command to book it, booking it for a patient, or what the patient wants: the guides
+# cannot see a recorded request, so they never give booking steps as permission (P24 follow-up 4: "Posso prenotare
+# una OPG per il paziente?" and "Il paziente vuole una OPG, posso prenotarla?" got RP-01's steps). Only the request page
+# books, and only for an active request.
+BOOK = r"(book|books|booking|schedul\w*|arrange|prenot\w*|fissa\w*)"
+MAY_BOOK = re.compile(r"\b(?:(?:can|could|may|might|shall)\s+(?:i|we|reception|the receptionist|the front desk|front desk)|"
+                      r"(?:i|we)(?:\s+(?:want|would like|wish)|'d like)\s+to|(?:ok|okay|alright|fine|allowed)\s+to|"
+                      r"go ahead and|posso|possiamo|potrei|potremmo|si pu[oò]|voglio|vorrei|vorremmo)"
+                      r"\b(?:\s+\w+){0,3}?\s+" + BOOK + r"\b", re.IGNORECASE)
+# a command: "Book an OPG", "Can you book Giulia an OPG?", "Prenota una OPG a Giulia"
+COMMAND = re.compile(r"^\W*(?:(?:please|per favore)\s+)?(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?"
+                     r"(?:book|schedule|arrange|prenot[aie]|prenotate|fiss[ai])\b", re.IGNORECASE)
+FOR_PATIENT = re.compile(r"\b(?:for|per)\s+(?:(?:the|this|that|a|my|il|la|lo|questo|questa|quel|quella)\s+)?"
+                         r"(?:patient|paziente|him|her|them|lui|lei)\b", re.IGNORECASE)
+PATIENT_WANTS = re.compile(r"\b(patient|paziente)\b.*\b(wants?|wanted|would like|asks? for|asking for|asked for|requests?|"
+                           r"requested|requesting|vuole|vorrebbe|chiede|ha chiesto|richiede|ha richiesto)\b.*\b" + IMAGING +
+                           r"\b", re.IGNORECASE)
+
+
+def _booking(guarded):
+    if not re.search(r"\b" + IMAGING + r"\b", guarded, re.IGNORECASE):
+        return False
+    return bool(MAY_BOOK.search(guarded) or COMMAND.search(guarded) or PATIENT_WANTS.search(guarded)
+                or (re.search(r"\b" + BOOK + r"\b", guarded, re.IGNORECASE) and FOR_PATIENT.search(guarded)))
+
+
 # a person named with a title, or "her OPG", is a question about a patient whatever the case or punctuation, and
 # whether or not the clinic knows the name (P24 follow-up 2: "Has Mrs Ricci had her OPG yet?" got the reception steps)
 TITLED = re.compile(r"(?<!\d)(?<!\d )\b(?:(?i:mrs|mr|ms|signora|signorina|signor|sig\.ra|sig)|Miss|MISS)\b\.?[\s,.:;]+"
@@ -1033,7 +1059,7 @@ def _refused(question):
     if (CF_SHAPE.search(question.upper()) or PATIENT.search(guarded) or PATIENT_WORDS.search(guarded)
             or TITLED.search(guarded) or POSSESSED.search(guarded)):
         return "patient_data"
-    if CLINICAL.search(guarded) or NO_ORDER.search(guarded):
+    if CLINICAL.search(guarded) or NO_ORDER.search(guarded) or _booking(guarded):
         return "clinical"
     return None
 
