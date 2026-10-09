@@ -500,6 +500,11 @@ NO_ORDER = re.compile(r"\b(" + CLAIM + r"|decide|decides|deciding|decidere|decid
                       r"\b.*\b(" + CLAIM + r"|decide|decides|decidere|forgot|forgotten|dimentic\w*|without|senza|anyway|comunque|"
                       r"not ordered|hasn'?t ordered|has not ordered|didn'?t order|did not order|no order|"
                       r"non (?:l'?)?ha prescritt\w*|non (?:l'?)?ha richiest\w*)\b", re.IGNORECASE)
+# a person named with a title, or "her OPG", is a question about a patient whatever the case or punctuation, and
+# whether or not the clinic knows the name (P24 follow-up 2: "Has Mrs Ricci had her OPG yet?" got the reception steps)
+TITLED = re.compile(r"(?<!\d)(?<!\d )\b(?:(?i:mrs|mr|ms|signora|signorina|signor|sig\.ra|sig)|Miss|MISS)\b\.?[\s,.:;]+"
+                    r"(?!(?i:a|an|the|il|la|lo|un|una)\b)[^\W\d_]{2,}")
+POSSESSED = re.compile(r"\b(his|her|suo|sua)\s+(?:\w+\s+)?" + IMAGING + r"\b", re.IGNORECASE)
 SERVICING = re.compile(r"service menu|menu di servizio|calibrat\w*|taratur\w*|\brepair\w*|ripar\w*|firmware|"
                        r"\b(raise|increase|lower|change|alzare|aumentare|cambiare|modificare)\b.*\b(temperature|"
                        r"temperatura|pressure|pressione|setting|impostazion\w*)\b", re.IGNORECASE)
@@ -507,6 +512,17 @@ QUESTION_INJECTION = re.compile(r"\b(ignore|disregard|ignora)\b.*\b(rules|instru
                                 re.IGNORECASE)
 PAGE_LINK = re.compile(r"\b(?:page|pagina|pag\.)\s*(\d{1,3})\b", re.IGNORECASE)
 NUMBER = re.compile(r"\d+(?:[.,]\d+)?")
+NUMBER_WORDS = dict(zip("zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
+                        "sixteen seventeen eighteen nineteen twenty".split(), range(21)))
+NUMBER_WORDS.update(zip("zero uno due tre quattro cinque sei sette otto nove dieci undici dodici tredici quattordici "
+                        "quindici sedici diciassette diciotto diciannove venti".split(), range(21)))
+# a number word is a number only after something numbered: "program one", not "which one"
+SPOKEN_NUMBER = re.compile(r"\b(programs?|programmes?|programm[ai]|prog|errors?|errore|errori|steps?|pass[oi]|"
+                           r"editions?|edizion[ei]|versions?|version[ei]|pages?|pagin[ae])\s+(" + "|".join(NUMBER_WORDS) +
+                           r")\b", re.IGNORECASE)
+# "program 1" is one term: the 3 of "3.5 minutes" is not program 3
+NUMBERED = re.compile(r"\b(programs?|programmes?|programm[ai]|prog|errors?|errore|errori|steps?|pass[oi])\s+(\d{1,3})\b",
+                      re.IGNORECASE)
 
 ESCALATE = {
     "ask_device": "Choose the device from the list, then ask again.",
@@ -546,8 +562,9 @@ def _norm(text):
 
 def _terms(question, drop=()):
     """(code terms, word terms). Codes are button labels and codes: with a digit, a hyphen, or in capitals."""
-    codes, words = [], []
-    for tok in TOKEN.findall(question):
+    codes = [f"{m.group(1)} {m.group(2)}".upper() for m in NUMBERED.finditer(question)]
+    words = []
+    for tok in TOKEN.findall(NUMBERED.sub(" ", question)):
         low = tok.lower().split("'")[-1]
         if low in STOP or low in GENERIC or tok in drop or (len(low) < 2 and not low.isdigit()):
             continue
@@ -558,12 +575,60 @@ def _terms(question, drop=()):
     return list(dict.fromkeys(codes)), list(dict.fromkeys(words))
 
 
+def _library_terms(conn):
+    """(labels, words, hyphenated) of the approved library: words printed in capitals (DRY, TIMER), every word in
+    lower case, and each hyphenated term keyed by its letters alone ("bprog" -> "B-PROG"). Read on every question."""
+    found = []
+    for d in devices(conn):
+        found += [d["model"]] + TOKEN.findall(d["type"] or "")
+    for r in conn.execute("SELECT p.text, p.ocr_text, p.readable FROM pages p JOIN sources s ON s.id = p.source_id"
+                          " WHERE s.status = 'approved'"):
+        found += TOKEN.findall(r["text"] + (" " + r["ocr_text"] if r["readable"] else ""))
+    labels, words, hyphenated, clash = set(), set(), {}, set()
+    for tok in found:
+        tok = tok.split("'")[-1]
+        if tok.isalpha() and tok.isupper() and len(tok) >= 3:
+            labels.add(tok)
+        words.add(tok.lower())
+        if "-" in tok:
+            bare = tok.replace("-", "").lower()
+            if hyphenated.get(bare, tok).lower() != tok.lower():
+                clash.add(bare)
+            hyphenated[bare] = tok
+    return labels, words, {b: t for b, t in hyphenated.items() if b not in clash}
+
+
+def _library_form(conn, question):
+    """The question in the approved library's own terms, so the same question gets the same answer however it is typed
+    or heard: a word the pages print in capitals is read in capitals ("timer" -> TIMER), a number word after something
+    numbered is a number ("program one" -> "program 1"), and a hyphen is the library's ("auto-clave" -> "autoclave",
+    "bprog" -> "B-PROG"). Nothing else is rewritten (P24 follow-up 2, 2026-10-09)."""
+    labels, words, hyphenated = _library_terms(conn)
+    question = SPOKEN_NUMBER.sub(lambda m: f"{m.group(1)} {NUMBER_WORDS[m.group(2).lower()]}", question)
+    shouted = question.upper() == question      # typed in capitals: the case says nothing about which word is a label
+
+    def term(m):
+        head, _, tok = m.group().rpartition("'")
+        bare = tok.replace("-", "").lower()
+        if bare in hyphenated:
+            tok = hyphenated[bare]
+        elif "-" in tok and bare in words:
+            tok = bare
+        elif tok.upper() in labels:
+            tok = tok.upper()
+        elif shouted and tok.isalpha():
+            tok = tok.lower()
+        return head + ("'" if head else "") + tok
+    return TOKEN.sub(term, question)
+
+
 def _stem(word):
     return word[:5] if len(word) > 5 else word
 
 
 def _has_code(text, code):
-    return re.search(r"(?<![A-Za-z0-9])" + re.escape(code) + r"(?![A-Za-z0-9])", text, re.IGNORECASE) is not None
+    return re.search(r"(?<![A-Za-z0-9])" + re.escape(code).replace(r"\ ", r"\s+") + r"(?![A-Za-z0-9])", text,
+                     re.IGNORECASE) is not None
 
 
 def _has_word(words_in_text, word):
@@ -709,6 +774,7 @@ def _similarities(conn, question, page_ids, method):
 
 def retrieve(conn, question, device_id=None, embed=None):
     """Ranked (source id, page) for the question's scope, before any role or answer rule. For measuring."""
+    question = _library_form(conn, question)
     device, _problem = _resolve_device(conn, question, device_id)
     codes, words = _terms(question, drop={device["model"]} if device else set())
     codes = [c for c in codes if not device or c != device["model"].upper()]
@@ -849,7 +915,11 @@ def ask(conn, question, role, device_id=None, actor=None, model=None):
     """One staff question -> an answer made of verified passages, or an abstention with where to go."""
     _require(role, ASK)
     started = time.monotonic()
-    result = _ask(conn, (question or "")[:500], role, device_id, model)
+    question = (question or "")[:500]
+    result = _ask(conn, question, role, device_id, model)
+    why = _refused(question)
+    if result["outcome"] == "answer" and why:
+        result = _abstain(why)                      # checked again before anything is shown
     cited = [[c["source_id"], c["page"]] for c in result["citations"]]
     conn.execute("INSERT INTO asks (at, actor, role, outcome, reason, device_id, cited, ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                  (_now(), actor, role, result["outcome"], result["reason"], (result["device"] or {}).get("id"),
@@ -868,14 +938,24 @@ def _guarded(question):
 SPELLED = re.compile(r"\b(?:[A-Za-z][.\s]\s*){2,}[A-Za-z]\b\.?")
 
 
+def _refused(question):
+    """'patient_data', 'clinical' or None: the boundary reception never crosses, read from the question alone."""
+    guarded = _guarded(question)
+    if (CF_SHAPE.search(question.upper()) or PATIENT.search(guarded) or PATIENT_WORDS.search(guarded)
+            or TITLED.search(guarded) or POSSESSED.search(guarded)):
+        return "patient_data"
+    if CLINICAL.search(guarded) or NO_ORDER.search(guarded):
+        return "clinical"
+    return None
+
+
 def _ask(conn, question, role, device_id, model):
     if QUESTION_INJECTION.search(question):
         return _abstain("not_found")
-    guarded = _guarded(question)
-    if CF_SHAPE.search(question.upper()) or PATIENT.search(guarded) or PATIENT_WORDS.search(guarded):
-        return _abstain("patient_data")
-    if CLINICAL.search(guarded) or NO_ORDER.search(guarded):
-        return _abstain("clinical")
+    why = _refused(question)                        # before any page is read
+    if why:
+        return _abstain(why)
+    question = _library_form(conn, question)
     device, problem = _resolve_device(conn, question, device_id)
     if problem:
         return _abstain(problem, device)

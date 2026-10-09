@@ -259,6 +259,108 @@ def verification(conn, ids, devices):
         "4: a flagged instruction never reaches the model"
 
 
+def same_question(conn, ids, devices):
+    # 9. P24 follow-up 2 (2026-10-09, found by J02.T3 in typed questions): a named person's question is refused before
+    # any page is read, and a question gets the same outcome however it is typed - letter case, a number word, a hyphen
+    def no_pages(*a, **k):
+        raise AssertionError("9: HARD FAIL - pages were searched for a question about a person")
+    saved = cg._candidates, cg._unreadable_match
+    cg._candidates = cg._unreadable_match = no_pages
+    try:
+        for q in ("Has Mrs Ricci had her OPG yet?", "has mrs ricci had her opg yet?", "HAS MRS RICCI HAD HER OPG YET?",
+                  "Has Mrs. Ricci had her OPG yet?", "Has Mrs, Ricci had her OPG yet?", "Has  Mrs   Ricci had her OPG yet?",
+                  "Has Mrs Zqxwvy had her OPG yet?", "Did Mr Bianchi get his X-ray?", "Has Ms Gallo had the OPG?",
+                  "Is Miss Conti booked for the OPG?", "What is Mrs Ricci's phone number?", "Show me Mr. Bianchi's record",
+                  "Does Mrs Ricci need an OPG?", "La signora Ricci ha fatto la OPG?", "Il sig. Bianchi ha fatto la radiografia?",
+                  "Has she had her OPG yet?", "Did he get his x ray?",
+                  # the title alone, with nothing else a guard would read (mutation run 1: "her OPG" masked it)
+                  "Is MRS RICCI booked for Tuesday?", "is mrs. ricci booked for tuesday?", "Is Mrs, Ricci booked?",
+                  "Is MR BIANCHI booked?", "Is Ms: Gallo booked?", "Is Mr.Bianchi booked?"):
+            r = cg.ask(conn, q, "assistant")
+            assert r["outcome"] == "abstain" and r["reason"] in ("patient_data", "clinical"), \
+                f"9: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
+            assert r["citations"] == [] and r["warnings"] == [], f"9: HARD FAIL - {q!r} shows a passage"
+    finally:
+        cg._candidates, cg._unreadable_match = saved
+    # and again before anything is shown: an answer that reached ask() for such a question is never returned
+    real = cg._ask
+    cg._ask = lambda c, q, role, dev, model: {"outcome": "answer", "reason": None, "message": "", "escalation": "",
+                                              "device": None, "citations": [{"source_id": 1, "page": 2, "passage": "x"}],
+                                              "warnings": [], "explanation": None}
+    try:
+        r = cg.ask(conn, "Has Mrs Ricci had her OPG yet?", "assistant")
+        assert r["outcome"] == "abstain" and r["citations"] == [], "9: HARD FAIL - shown without the second check"
+        assert cg.ask(conn, "What does the DRY button do?", "assistant")["outcome"] == "answer", "9: the check is narrow"
+    finally:
+        cg._ask = real
+    for q in ("Is the beep 500 ms long on the CL-5?", "What if I miss a step when starting the AX-200?",
+              "WHAT IF I MISS A STEP WHEN STARTING THE AX-200?", "WHAT IF I MISS THE DRYING PHASE ON THE AX-200?",
+              "What does reception do after the dentist orders an OPG?", "What do I give the patient for their OPG?"):
+        assert cg.ask(conn, q, "assistant")["reason"] != "patient_data", f"9: {q!r} read as a person"
+
+    def same(forms, device=None, role="assistant"):
+        got = []
+        for q in forms:
+            r = cg.ask(conn, q, role, device_id=device)
+            got.append((r["outcome"], r["reason"], [(c["source_id"], c["page"], c["passage"], c["edition"], c["version"])
+                                                     for c in r["citations"]], [w["text"] for w in r["warnings"]]))
+        assert all(g == got[0] for g in got), f"9: {forms[0]!r} differs by how it is typed: {got}"
+        return got[0]
+
+    timer = same(("On the curing light, what does the TIMER button do?", "On the curing light, what does the timer button do?",
+                  "On the curing light, what does the Timer button do?"))
+    assert timer[0] == "answer" and "TIMER" in timer[2][0][2], f"9: timer {timer}"
+    p1 = same(("How long does program 1 run on the AX-300?", "How long does program one run on the AX-300?",
+               "How long does Program One run on the AX-300?", "HOW LONG DOES PROGRAM ONE RUN ON THE AX-300?"))
+    assert p1[0] == "answer" and "program 1" in p1[2][0][2], f"9: program 1 {p1}"
+    p2 = same(("How long does program 2 run on the AX-300?", "How long does program two run on the AX-300?"))
+    assert p2[0] == "answer" and "program 2" in p2[2][0][2] and p2[2] != p1[2], f"9: program 2 merged with 1 {p2}"
+    assert cg._has_code("selects program\n1 for", "PROGRAM 1") and not cg._has_code("program 12", "PROGRAM 1"), \
+        "9: a numbered term is the words and the number, across a line break, and no other number"
+    p3 = same(("How long does program 3 run on the AX-300?", "How long does program three run on the AX-300?"))
+    assert p3[0] == "abstain" and p3[1] == "not_found", f"9: HARD FAIL - a program the manual lacks answered {p3}"
+    auto = same(("What does the DRY button do on the autoclave?", "What does the DRY button do on the auto-clave?",
+                 "What does the dry button do on the autoclave?", "What does the DRY button do on the AUTO-CLAVE?"))
+    assert auto[:2] == ("abstain", "ask_device"), f"9: autoclave {auto}"
+    dry = same(("On the AX-200, how long does DRY run?", "On the AX-200, how long does dry run?",
+                "On the ax-200, how long does Dry run?"))
+    assert dry[:2] == ("abstain", "conflict"), f"9: HARD FAIL - a conflict hidden by letter case {dry}"
+    stand = same(("What does the STANDBY button do on the AX-200?", "What does the standby button do on the AX-200?"))
+    assert stand[0] == "answer" and stand[2][0][2].startswith("STANDBY"), f"9: standby {stand}"
+    bprog = same(("What does the B-PROG button do on the AX-200?", "What does the b-prog button do on the AX-200?",
+                  "What does the BPROG button do on the AX-200?"))
+    assert bprog[0] == "answer" and bprog[2][0][0] == ids["ax200_v2"], f"9: b-prog {bprog}"
+    assert same(("What does the B-PROG button do on the AX300?", "What does the B-PROG button do on the AX-300?"))[1] \
+        != "wrong_model", "9: AX300 is the registered AX-300"
+    old = same(("In edition 1 of the manual, what does B-PROG do?", "In edition one of the manual, what does B-PROG do?"),
+               device=devices["ax200"])
+    assert old[:2] == ("abstain", "old_edition"), f"9: HARD FAIL - an old edition asked in words answered {old}"
+    held = same(("What happens if I hold DRY and STANDBY for 10 seconds?", "What happens if I hold dry and standby for "
+                 "ten seconds?"), device=devices["ax200"])
+    assert held[0] == "abstain" and held[1] in ("restricted", "servicing"), f"9: HARD FAIL - restricted page {held}"
+    assert same(("What does the DRY button do on the AX-200?", "What does the dry button do on the AX-200?"),
+                role="dentist")[0] == "abstain", "9: the dentist sees the same conflict"
+    for q in ("What does the TURBO button do on the curing light?", "What does the turbo button do on the curing light?",
+              "What does program 9 do on the AX-200?", "What does program nine do on the AX-200?"):
+        assert cg.ask(conn, q, "assistant")["outcome"] == "abstain", f"9: HARD FAIL - {q!r} answered from a near match"
+    # two library terms with the same letters ("QX-12", "Q-X12") are ambiguous: neither is written in for "qx12"
+    mem = sqlite3.connect(":memory:")
+    mem.row_factory = sqlite3.Row
+    mem.executescript(cg.SCHEMA)
+    for model in ("QX-12", "Q-X12", "ZB-7"):
+        mem.execute("INSERT INTO devices (make, model, room, type, created_by, created_at) VALUES ('Demo', ?, '1', '',"
+                    " 'x', 'now')", (model,))
+    assert cg._library_form(mem, "What does the qx12 do on the zb7?") == "What does the qx12 do on the ZB-7?", \
+        "9: an ambiguous library term was written in"
+    mem.close()
+    # only the approved library's own terms: a label printed only in a pending document is not one
+    pend = gf.pdf([gf.page("DemoMed AX-200 Autoclave - Quick card", gf.MARK), gf.page("Panel", "ZAPPO clears the log.")])
+    cg.ingest(conn, pend, "ax200-card.pdf", *D, title="DemoMed AX-200 card", kind="device", device_id=devices["ax200"],
+              edition="Card 1", language="en", version="1", owner="practice manager", audience="staff", effective="2026-09-01")
+    assert "ZAPPO" not in cg._library_terms(conn)[0], "9: a pending document's label is used"
+    assert "TIMER" in cg._library_terms(conn)[0], "9: an approved label is missing"
+
+
 def lifecycle(conn, lib, ids, devices):
     # 5. withdrawal, restriction and replacement act on the very next question (there is no answer cache)
     dev = devices["ax200"]
@@ -460,6 +562,7 @@ def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         conn, lib, ids, devices = evaluation(tmp)
         verification(conn, ids, devices)
+        same_question(conn, ids, devices)
         offline(conn, devices)
         lifecycle(conn, lib, ids, devices)
         conn.close()
