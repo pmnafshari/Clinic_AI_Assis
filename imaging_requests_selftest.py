@@ -193,6 +193,12 @@ def guidance(conn, pids, gids, bw):
     opg, _w = ir.create_draft(conn, pa, "opg", "", "", *D, token="t-g1")
     ir.activate(conn, opg, pa, 1, *D)
     g = cg.connect()
+    # P24 follow-up 3: RP-01's steps end with "confirm by phone 2 days before", which the front desk handbook gives as
+    # 1 day - no step another approved document contradicts is shown, so with both approved there are no steps
+    got = ir.guidance(g, "opg", "assistant")
+    assert got["citation"] is None and got["why"] == cg.MESSAGES["conflict"], \
+        f"C04: HARD FAIL - steps shown while two approved documents disagree: {got}"
+    cg.withdraw(g, gids["handbook"], "replaced by RP-01", *D)
     got = ir.guidance(g, "opg", "assistant")
     c = got["citation"]
     assert c and c["page"] == 2 and "Book the imaging slot" in c["passage"] and \

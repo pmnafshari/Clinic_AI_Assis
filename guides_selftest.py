@@ -222,8 +222,15 @@ def verification(conn, ids, devices):
               "Can I book an X-ray without an order from the dentist?", "Can reception decide which image to take?"):
         r = cg.ask(conn, q, "assistant")
         assert r["outcome"] == "abstain" and r["reason"] == "clinical", f"4: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
-    assert cg.ask(conn, "The dentist has already ordered an OPG. What does reception do next?",
-                  "assistant")["outcome"] == "answer", "4: a question about an order already written still answers"
+    # an order already written is not a clinical question. Since P24 follow-up 3 the English steps it shows include
+    # "confirm ... 2 days before", which the handbook gives as 1 day, so it is the conflict refusal; the Italian steps
+    # have no such line and are answered
+    r = cg.ask(conn, "The dentist has already ordered an OPG. What does reception do next?", "assistant")
+    assert (r["outcome"], r["reason"]) == ("abstain", "conflict") and \
+        {c["source_id"] for c in r["conflicting"]} == {ids["rp01_en"], ids["handbook"]}, \
+        f"4: a question about an order already written got {r['outcome']}/{r['reason']}"
+    assert cg.ask(conn, "Il dentista ha gia prescritto una OPG: cosa fa l'accettazione?", "assistant")["outcome"] == \
+        "answer", "4: a question about an order already written still answers"
     # J02 (2026-10-07): speech to text writes "X ray" with a space; "Which X ray does a new patient need?" was answered
     # with the referral steps instead of the clinical refusal. However it is spelled, it is the same question
     for q in ("Which x ray does a new patient need?", "Which X ray does a new patient need?",
@@ -244,11 +251,18 @@ def verification(conn, ids, devices):
     assert cg.ask(conn, "What does the B-PROG button do on the AX-200?", "assistant")["outcome"] == "answer", \
         "4: codes keep their hyphens for the answer"
     # P24 follow-up (B06): the quoted line is the one that answers, not the one sharing the most common words
-    for q, want in (("The dentist ordered an OPG: what do I give the patient?", "preparation sheet"),
-                    ("Il dentista ha prescritto la OPG: cosa devo consegnare al paziente?", "foglio di preparazione")):
-        r = cg.ask(conn, q, "assistant")
-        assert r["outcome"] == "answer" and want in r["citations"][0]["passage"], \
-            f"4: the passage does not answer {q!r}: {r['citations'][0]['passage'] if r['citations'] else r['reason']}"
+    # (since P24 follow-up 3 the English line is followed by step 3, which the handbook contradicts, so it is checked on
+    # the page here and refused as a conflict when asked; the Italian page has no step 3)
+    q = "The dentist ordered an OPG: what do I give the patient?"
+    page = conn.execute("SELECT * FROM pages WHERE source_id = ? AND page = 2", (ids["rp01_en"],)).fetchone()
+    passage = cg._passage(page, *cg._terms(cg._library_form(conn, q)))[1]
+    assert passage.startswith("2. Book the imaging slot and give the patient the preparation sheet"), \
+        f"4: the passage does not answer {q!r}: {passage}"
+    assert cg.ask(conn, q, "assistant")["reason"] == "conflict", f"4: {q!r} shows a step the handbook contradicts"
+    q = "Il dentista ha prescritto la OPG: cosa devo consegnare al paziente?"
+    r = cg.ask(conn, q, "assistant")
+    assert r["outcome"] == "answer" and "foglio di preparazione" in r["citations"][0]["passage"], \
+        f"4: the passage does not answer {q!r}: {r['citations'][0]['passage'] if r['citations'] else r['reason']}"
     prompt_seen = []
 
     def spy(prompt, **k):
@@ -377,6 +391,110 @@ def same_question(conn, ids, devices):
               edition="Card 1", language="en", version="1", owner="practice manager", audience="staff", effective="2026-09-01")
     assert "ZAPPO" not in cg._library_terms(conn)[0], "9: a pending document's label is used"
     assert "TIMER" in cg._library_terms(conn)[0], "9: an approved label is missing"
+
+
+def two_part_and_conflicts(conn, ids, devices):
+    # 10. P24 follow-up 3 (2026-10-09, found by J02.T4): an imaging word in two parts is the same word to the clinical
+    # boundary, and a conflict between approved sources is found whatever their retrieval scores
+    def no_pages(*a, **k):
+        raise AssertionError("10: HARD FAIL - pages were searched for a clinical question")
+    saved = cg._candidates, cg._unreadable_match
+    cg._candidates = cg._unreadable_match = no_pages
+    try:
+        for q in ("The dentist said the patient needs a bite wing. Can I book it?",
+                  "The dentist said the patient needs a bite-wing, can I book it?",
+                  "The dentist said the patient needs a bitewing, can I book it?",
+                  "The dentist said the patient needs bite wings, can I book them?",
+                  "THE DENTIST SAID THE PATIENT NEEDS A BITE WING. CAN I BOOK IT?",
+                  "The dentist told me the patient needs bite-wing x-rays",
+                  "The dentist forgot to order the bite wing, can I book it anyway?",
+                  "Does the patient need a bite wing?", "Does the patient need bitewings?",
+                  "Should the patient in chair 2 get a bite wing?",
+                  "Il paziente ha bisogno di una bitewing?",
+                  "Il dentista ha detto che il paziente ha bisogno di una bite wing, posso prenotarla?",
+                  "The dentist said the patient needs a cone beam CT", "Has Mrs Ricci had her bite wing?"):
+            r = cg.ask(conn, q, "assistant")
+            assert r["outcome"] == "abstain" and r["reason"] in ("clinical", "patient_data"), \
+                f"10: HARD FAIL - {q!r} got {r['outcome']}/{r['reason']}"
+            assert r["citations"] == [] and r["warnings"] == [], f"10: HARD FAIL - {q!r} shows a passage"
+    finally:
+        cg._candidates, cg._unreadable_match = saved
+    # the words alone are not a patient or an order: guide questions about bite wings are still answered or not found
+    forms = []
+    for q in ("What does reception do after the dentist orders a bite wing?",
+              "What does reception do after the dentist orders a bitewing?",
+              "Where is the bite wing holder kept?", "What does reception do after the dentist orders an OPG?"):
+        r = cg.ask(conn, q, "assistant")
+        assert r["reason"] not in ("clinical", "patient_data"), f"10: {q!r} refused as {r['reason']}"
+        forms.append((r["outcome"], [(c["source_id"], c["page"], c["passage"]) for c in r["citations"]]))
+    assert forms[0] == forms[1], f"10: bite wing and bitewing differ {forms[:2]}"
+    assert forms[3][0] == "answer" and forms[3][1][0][0] == ids["rp01_en"], f"10: the ordered OPG question {forms[3]}"
+
+    def conflict(q, role="assistant", device=None):
+        r = cg.ask(conn, q, role, device_id=device)
+        assert r["outcome"] == "abstain" and r["reason"] == "conflict", \
+            f"10: HARD FAIL - a conflict resolved by ranking: {q!r} got {r['outcome']}/{r['reason']} {r['citations']}"
+        assert r["citations"] == [] and "dentist" in r["escalation"] and "owner" in r["escalation"], f"10: {q!r} {r}"
+        for c in r["conflicting"]:
+            assert cg.verify_quote(conn, c["source_id"], c["page"], c["passage"], role), f"10: unverified quote {c}"
+        return {(c["source_id"], c["page"]) for c in r["conflicting"]}, " ".join(c["passage"] for c in r["conflicting"])
+
+    days = {(ids["rp01_en"], 2), (ids["handbook"], 1)}
+    for q in ("How many days before the visit does reception phone to confirm it?",     # V15: RP-01 ranks first
+              "How many days before does the front desk confirm by phone?",              # the handbook ranks first
+              "When does reception phone to confirm the OPG appointment?",               # only RP-01 has OPG
+              "When do I confirm the appointment by phone?",                             # G41, a tie
+              # the steps shown after the best line carry the conflicting one (G39, H09 showed "2 days before")
+              "The dentist has already ordered an OPG. What does reception do next?",
+              "Once the dentist has ordered an OPG, what do I hand the patient?",
+              "What must reception check before booking an OPG the dentist ordered?"):
+        got, said = conflict(q)
+        assert got == days and "2 days before" in said and "1 day before" in said, f"10: {q!r} cited {got} {said!r}"
+    got, said = conflict("On the AX-200, how long does DRY run?")
+    assert got == {(ids["ax200_v2"], 2), (ids["ax200_quick"], 1)}, f"10: DRY {got}"
+    # sources that agree, an old edition, another device's manual and another language are not conflicts
+    for q, dev, sid in (("How quickly should reception answer the clinic phone?", None, ids["handbook"]),
+                        ("What does the B-PROG button do?", devices["ax200"], ids["ax200_v2"]),
+                        ("What does the STANDBY button do?", devices["ax200"], ids["ax200_v2"]),
+                        ("How many minutes does program 2 take on the AX-300?", None, ids["ax300"]),
+                        ("Il dentista ha gia prescritto una OPG: cosa fa l'accettazione?", None, ids["rp01_it"])):
+        r = cg.ask(conn, q, "assistant", device_id=dev)
+        assert r["outcome"] == "answer" and r["citations"][0]["source_id"] == sid, f"10: {q!r} got {r['reason']}"
+
+    def add(name, audience, lines, restricted=()):
+        data = gf.pdf([gf.page(f"{name}, version 1 (2026)", gf.MARK), gf.page(f"{name} (page 2)", *lines)])
+        sid = cg.ingest(conn, data, name.lower().replace(" ", "-") + ".pdf", *D, title=name, kind="admin", device_id=None,
+                        edition="", language="en", version="1", owner="practice manager", audience=audience,
+                        effective="2026-09-01")
+        cg.approve(conn, sid, *D)
+        if restricted:
+            cg.restrict_pages(conn, sid, restricted, *D)
+        return sid
+    # the handbook ranks first here (the other two do not say "answer"), so the conflict search itself must leave out
+    # what reception may not read (a dentist-only page ranked first is refused as not_for_role before any conflict)
+    ring = "How quickly should I answer the phone?"
+    hidden = add("Dentist phone notes", "dentist", ["Pick up the phone within four rings."])
+    locked = add("Phone service notes", "staff", ["Pick up the phone within five rings."], restricted=[2])
+    r = cg.ask(conn, ring, "assistant")
+    assert r["outcome"] == "answer" and r["citations"][0]["source_id"] == ids["handbook"], \
+        f"10: a page reception may not read changed reception's answer: {r['reason']}"
+    assert "four" not in json.dumps(r) and "five" not in json.dumps(r), "10: HARD FAIL - a hidden page was shown"
+    got, said = conflict(ring, role="dentist")
+    assert {(ids["handbook"], 1), (hidden, 2), (locked, 2)} <= got, f"10: the dentist's conflict {got}"
+    card = add("Reception phone card", "staff", ["Answer the phone within two rings."])
+    for q in (ring, "How quickly does the reception phone card say to answer the phone?"):
+        got, said = conflict(q)
+        assert got == {(ids["handbook"], 1), (card, 2)}, f"10: {q!r} cited {got}"
+        assert "four" not in said and "five" not in said, f"10: HARD FAIL - a hidden page explained a conflict {said!r}"
+    cg.withdraw(conn, card, "replaced", *D)
+    assert cg.ask(conn, ring, "assistant")["outcome"] == "answer", "10: a withdrawn document still conflicts"
+    # a negation on one side only is a conflict too, here between a procedure and the device manual
+    seal = add("Cleaning card", "staff", ["Use solvents on the door seal."])
+    got, said = conflict("Can I use solvents on the door seal of the AX-200?")
+    assert got == {(ids["ax200_v2"], 7), (seal, 2)}, f"10: solvents {got}"
+    for sid in (hidden, locked, seal):
+        cg.withdraw(conn, sid, "test over", *D)
+    assert cg.ask(conn, "Can I use solvents on the door seal of the AX-200?", "assistant")["outcome"] == "answer"
 
 
 def lifecycle(conn, lib, ids, devices):
@@ -581,6 +699,7 @@ def selftest():
         conn, lib, ids, devices = evaluation(tmp)
         verification(conn, ids, devices)
         same_question(conn, ids, devices)
+        two_part_and_conflicts(conn, ids, devices)
         offline(conn, devices)
         lifecycle(conn, lib, ids, devices)
         conn.close()

@@ -481,17 +481,18 @@ PATIENT = re.compile(r"\b(?i:patient|paziente|pz)[\s,:;]+[A-Z][a-z]+|\b[A-Z][a-z
 PATIENT_WORDS = re.compile(r"\b(prossimo appuntamento|next appointment|medical history|anamnesi|his|her|suo|sua)\b"
                            r".*\b(patient|paziente)\b|\b(patient|paziente)\b.*\b(appuntamento|appointment|phone|"
                            r"telefono|record|cartella)\b", re.IGNORECASE)
-CLINICAL = re.compile(r"\b(should|dovrebbe|deve|devo)\b.*\b(have|get|fare|avere|give|dare|x[- ]?ray|opg|radiograf\w*|"
-                      r"image|imaging|scan|tac|cbct)\b|\b(need|needs|bisogno|necessit\w*)\b.*\b(x[- ]?ray|opg|"
-                      r"radiograf\w*|image|imaging|scan|tac|cbct|antibiotic\w*|antibiotic)\b|\bwhich\s+(x[- ]?ray|image|"
-                      r"scan|radiograph)\b|\bquale\s+(radiografia|esame|opg)\b|\b(dose|dosage|dosaggio|posologia|"
+# "x-ray", "xray" and "x ray" are one word here: speech to text writes the last (J02, 2026-10-07); so are "bite wing",
+# "bite-wing" and "bitewing", and "cone beam" (J02.T4, 2026-10-09: "needs a bite wing. Can I book it?" was answered).
+# One list for every clinical rule below.
+IMAGING = r"(opg|ortopanoramic\w*|x[- ]?rays?|radiograf\w*|radiograph\w*|bite[\s-]?wings?|cone[\s-]?beam|imaging|scan|cbct|tac)"
+CLINICAL = re.compile(r"\b(should|dovrebbe|deve|devo)\b.*\b(have|get|fare|avere|give|dare|image|" + IMAGING + r")\b|"
+                      r"\b(need|needs|bisogno|necessit\w*)\b.*\b(image|antibiotic\w*|" + IMAGING + r")\b|"
+                      r"\bwhich\s+(image|" + IMAGING + r")\b|\bquale\s+(radiografia|esame|opg)\b|\b(dose|dosage|dosaggio|posologia|"
                       r"prescribe|prescrivere|diagnos\w*)\b|\b(antibiotic\w*|antibiotic[oi]|medicin\w*|medication\w*|farmac\w*|drug|"
                       r"drugs|painkiller\w*|analgesic\w*|antidolorific\w*|anaesthe\w*|anesthe\w*|anestesi\w*|"
                       r"adrenalin\w*|aspirin\w*|anticoagula\w*)\b", re.IGNORECASE)
-# "x-ray", "xray" and "x ray" are one word here: speech to text writes the last (J02, 2026-10-07)
 # imaging or treatment with no dentist order behind it: reception may never decide, add or book it (P24 follow-up:
 # "the dentist forgot the order, can I book the OPG anyway?" was answered with the booking steps)
-IMAGING = r"(opg|ortopanoramic\w*|x[- ]?rays?|radiograf\w*|radiograph\w*|bitewing\w*|imaging|scan|cbct|tac)"
 # a spoken or reported claim is not an order either (P26): only a request the dentist recorded counts
 CLAIM = r"told me|tells me|said|says|asked me|mi ha detto|ha detto|dice che|detto che|according to|secondo"
 NO_ORDER = re.compile(r"\b(" + CLAIM + r"|decide|decides|deciding|decidere|decido|forgot|forgotten|dimentic\w*|without|senza|anyway|"
@@ -842,6 +843,68 @@ def _passage(row, codes, words):
     return field, _norm(" ".join(chosen))
 
 
+NEGATION = re.compile(r"\b(not|never|no|don'?t|doesn'?t|non|mai)\b", re.IGNORECASE)
+AMOUNT = re.compile(r"(?<![\w.-])\d+(?:[.,]\d+)?(?![\w-])")      # 134, 3.5 - not the 200 of AX-200 or the 05 of E05
+LIST_MARK = re.compile(r"^\s*\d+[.)]\s+")
+
+
+def _instruction(line):
+    """(content words, amounts, says not) of one line, to tell whether two lines give the same instruction differently."""
+    line = LIST_MARK.sub("", line)
+    amounts = set(AMOUNT.findall(line))
+    words = set()
+    for tok in TOKEN.findall(line):
+        low = tok.lower().split("'")[-1]
+        if low in NUMBER_WORDS:
+            amounts.add(str(NUMBER_WORDS[low]))
+        elif low not in STOP and not NEGATION.fullmatch(low) and len(low) >= 3 and not low.isdigit():
+            words.add(low[:-1] if low.endswith("s") and len(low) > 3 else low)
+    return words, amounts, bool(NEGATION.search(line))
+
+
+def _disagree(a, b):
+    """The same instruction (at least three content words and three quarters of the shorter line's) with another
+    amount or the opposite."""
+    (wa, na, nota), (wb, nb, notb) = a, b
+    shared = wa & wb
+    if len(shared) < 3 or len(shared) < 0.75 * min(len(wa), len(wb)):
+        return False
+    return (na and nb and na != nb) or nota != notb
+
+
+def _conflicts(conn, best, field, passage, device, role):
+    """Lines of other current approved documents the asker may read that give a shown instruction differently, whatever
+    their retrieval score (P24 follow-up 3: "how many days before ... confirm" quoted RP-01's 2 days while the handbook
+    says 1 day, because only pages that tied were compared). Superseded, withdrawn and pending documents and other
+    devices' manuals are never sources, so an old edition is not a conflict. -> verified [{source_id, page, passage}]."""
+    shown = [line for line in _clean_lines(best[field]) if _norm(line) and _norm(line) in passage]
+    mine = [(line, _instruction(line)) for line in shown]
+    words = sorted({w for _l, (ws, _n, _x) in mine for w in ws if w.isalpha()})
+    if not words:
+        return []
+    sql = ("SELECT p.*, s.id AS sid FROM page_index JOIN pages p ON p.id = page_index.rowid"
+           " JOIN sources s ON s.id = p.source_id WHERE page_index MATCH ? AND s.status = 'approved' AND s.id != ?")
+    args = [_fts_query([], words), best["sid"]]
+    if device is not None:
+        sql += " AND (s.kind != 'device' OR s.device_id = ?)"
+        args.append(device["id"])
+    if role != "dentist":
+        sql += " AND s.audience = 'staff' AND p.restricted = 0"
+    found = []
+    for other in conn.execute(sql + " LIMIT 40", args):
+        for line in _clean_lines(other["text"]):
+            theirs = _instruction(line)
+            for my_line, my in mine:
+                if _disagree(my, theirs):
+                    found.append({"source_id": best["sid"], "page": best["page"], "passage": _norm(my_line)})
+                    found.append({"source_id": other["sid"], "page": other["page"], "passage": _norm(line)})
+    out = []
+    for c in found:
+        if c not in out and verify_quote(conn, c["source_id"], c["page"], c["passage"], role):
+            out.append(c)
+    return out
+
+
 def _warnings(conn, row, role, passage_text):
     """Warning lines of the cited page and of the pages it points to, verbatim."""
     wanted = {row["page"]} | {int(n) for n in PAGE_LINK.findall(row["text"] + " " + row["ocr_text"])}
@@ -996,7 +1059,7 @@ def _ask(conn, question, role, device_id, model):
     drop = {device["model"]} if device else set()
     codes, words = _terms(question, drop=drop)
     codes = [c for c in codes if not device or c != device["model"].upper()]
-    ranked, cover = _candidates(conn, codes, words, device, embed=RETRIEVAL_EMBED, question=question)
+    ranked, _cover = _candidates(conn, codes, words, device, embed=RETRIEVAL_EMBED, question=question)
     if not ranked:
         blurred = _unreadable_match(conn, codes, words, device)
         if blurred:
@@ -1011,17 +1074,10 @@ def _ask(conn, question, role, device_id, model):
         return _abstain("restricted", device, {"see": {"source_id": best["sid"], "page": best["page"]}})
     if not best["readable"] or (not _accepted(best["text"], codes, words)[0] and best["ocr_conf"] < READABLE_AT):
         return _abstain("unreadable", device, {"see": {"source_id": best["sid"], "page": best["page"]}})
-    # every page as good as the best, from another approved document: do they say the same numbers?
-    ties = [r for r in ranked[1:] if cover[r["id"]] >= cover[best["id"]] - 1e-9 and r["sid"] != best["sid"]
-            and (r["audience"] == "staff" or role == "dentist") and not (r["restricted"] and role != "dentist")]
     field, passage = _passage(best, codes, words)
-    for other in ties:
-        _f, other_passage = _passage(other, codes, words)
-        mine, theirs = set(NUMBER.findall(passage)), set(NUMBER.findall(other_passage))
-        if mine and theirs and mine != theirs:
-            return _abstain("conflict", device, {"conflicting": [
-                {"source_id": best["sid"], "page": best["page"], "passage": passage},
-                {"source_id": other["sid"], "page": other["page"], "passage": other_passage}]})
+    conflicting = _conflicts(conn, best, field, passage, device, role)
+    if conflicting:
+        return _abstain("conflict", device, {"conflicting": conflicting})
     if not verify_quote(conn, best["sid"], best["page"], passage, role):
         return _abstain("not_found", device)
     citation = {"source_id": best["sid"], "title": best["title"], "edition": best["edition"],
