@@ -26,7 +26,8 @@ func answers() -> Bool {
     } == 0
 }
 
-guard let folder = UserDefaults(suiteName: "local.clinicdemo.clinic-service")?.string(forKey: "clinicFolder") else {
+// Bundle.main is Clinic Service.app, so these are the settings Clinic Service saved
+guard let folder = UserDefaults.standard.string(forKey: "clinicFolder") else {
     log("no clinic folder chosen in Clinic Service - nothing started")
     exit(0)
 }
