@@ -47,7 +47,7 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
     func show() {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        if profile == nil {
+        if profile == nil && !SelfTest.active {          // a test chooses its environment itself
             switchProfile(to: app.settings.profile ?? chooseProfile(), confirm: false)
         }
     }
