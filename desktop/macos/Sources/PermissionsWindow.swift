@@ -110,7 +110,9 @@ final class PermissionsWindow: NSObject {
         case .enabled: text = "on"
         case .notRegistered: text = "off"
         case .requiresApproval: text = "waiting for your approval in System Settings > General > Login Items"
-        case .notFound: text = "unavailable for this copy of the app (install it in Applications first)"
+        case .notFound:      // macOS also says this for an item never switched on
+            text = Bundle.main.bundlePath.hasPrefix("/Applications/")
+                ? "off" : "unavailable for this copy of the app (install it in Applications first)"
         @unknown default: text = "unknown"
         }
         set("login", text, button: s == .enabled ? "Switch off" : "Switch on")

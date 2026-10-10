@@ -18,7 +18,10 @@ enum ClinicService {
         case .notRegistered: return "off - the connected clinic works whenever the clinic app is running (browser " +
                                     "version as before, or this login item)"
         case .requiresApproval: return "waiting for your approval in System Settings > General > Login Items"
-        case .notFound: return "unavailable for this copy of the app"
+        case .notFound:      // macOS also says this for an item never switched on
+            return Bundle.main.bundlePath.hasPrefix("/Applications/")
+                ? "off - the connected clinic works whenever the clinic app is running (browser version as before, " +
+                  "or this login item)" : "unavailable for this copy of the app (install it in Applications first)"
         @unknown default: return "unknown"
         }
     }

@@ -155,7 +155,11 @@ final class SelfTest {
                 UserDefaults.standard.synchronize()
             }
             do { if on { try ClinicService.service.register() } else { try ClinicService.service.unregister() } }
-            catch { return done(["ok": false, "error": error.localizedDescription, "status": ClinicService.status().rawValue]) }
+            catch {
+                let e = error as NSError
+                return done(["ok": false, "error": e.localizedDescription, "domain": e.domain, "code": e.code,
+                             "status": ClinicService.status().rawValue])
+            }
             return done(["ok": true, "status": ClinicService.status().rawValue])
         }
         if step["login_state"] != nil { return done(["ok": true, "status": SMAppService.mainApp.status.rawValue]) }
