@@ -7,7 +7,7 @@ import web_session
 from auth import authorize, log_audit
 
 from .db import get_db
-from .guides_routes import gconn
+from .guides_routes import REASON_TITLES, gconn
 
 jarvis_bp = Blueprint("jarvis", __name__)
 
@@ -89,6 +89,7 @@ def api_whoami():
         log_audit(conn, "jarvis-device", "device", "jarvis_api", "whoami", allowed=0)
         return jsonify({"error": "not a registered Jarvis device"}), 401
     log_audit(conn, f"jarvis-device:{info['device_id']}", "device", "jarvis_api", "whoami", allowed=1)
+    info["approved_guides"] = jl.approved_guides(gconn())       # the Jarvis page says when there is nothing to ask
     resp = jsonify(info)
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -112,6 +113,7 @@ def api_guides_ask():
         log_audit(conn, actor, "device", "jarvis_api", "guides_ask", allowed=0)
         return jsonify({"error": "send {\"question\": \"...\"}"}), 400
     result = jl.ask_guides(gconn(), device, question)
+    result["title"] = REASON_TITLES.get(result.get("reason"))     # the same title the staff page gives a refusal
     log_audit(conn, actor, "device", "jarvis_api", "guides_ask", allowed=1)
     resp = jsonify(result)
     resp.headers["Cache-Control"] = "no-store"

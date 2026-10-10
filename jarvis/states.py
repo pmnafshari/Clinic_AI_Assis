@@ -57,6 +57,22 @@ def cancelled_card(why, sent):
     return {"outcome": "cancelled", "heard": None, "message": message, "citations": [], "warnings": []}
 
 
+def readiness(state, reason, answers):
+    """The page's one overall line (J02 UI review): ready for the demo only while listening is READY and every
+    clinic-guide prerequisite holds; otherwise what is missing, from the answers line, which says who can fix it."""
+    if not answers.get("demo"):
+        return {"ok": False, "text": "Clinic-guide answers are switched off on this computer - Jarvis only listens "
+                                     "for its wake phrase (J02 is not accepted for use)."}
+    if not answers["on"]:
+        return {"ok": False, "text": "Not ready for the demo: " + answers.get("missing", answers["detail"]) + "."}
+    if state in ("ACTIVE", "WAITING_FOR_CONFIRMATION"):
+        return {"ok": True, "text": "A question is in progress."}
+    if state != "READY":
+        return {"ok": False, "text": f"Not ready for the demo: listening is {state} ({reason})."}
+    return {"ok": True, "text": 'Ready for the controlled demo - say "Hey Jarvis", then a question about the synthetic '
+                                "clinic guides."}
+
+
 class Machine:
     """The companion's state. Thread-safe; waiters are woken on every change (the page's live stream)."""
 
@@ -67,7 +83,7 @@ class Machine:
         self.state, self.reason, self.since = "STARTING", "starting up", clinic_time.to_storage(clinic_time.now_utc())
         self.version = 0
         self.clinic = {"ok": False, "detail": "not checked yet"}
-        self.answers = {"on": False, "detail": "not checked yet"}
+        self.answers = {"on": False, "detail": "not checked yet", "demo": False}
         self.history = deque([{"state": self.state, "reason": self.reason, "at": self.since}], maxlen=20)
         self.turn = 0              # the interaction in progress; 0 = none
         self._turns = 0
@@ -138,9 +154,14 @@ class Machine:
             return True
 
     def cancel(self, turn, why):
-        """End interaction `turn` if it is still the current one (a refused device, a changed delegation)."""
+        """End interaction `turn` if it is still the current one (a refused device, a changed delegation), and go back
+        to READY: nothing waits any more. (Without the move the state stayed WAITING_FOR_CONFIRMATION until the next
+        wake - the exchange's own finish() is ignored once its turn is no longer current; found by the J02 UI review.)"""
         with self._lock:
-            return bool(turn) and turn == self.turn and self._cancel(why)
+            if not (bool(turn) and turn == self.turn and self._cancel(why)):
+                return False
+            self._move("READY", f"cancelled - {why}")
+            return True
 
     def sending(self, turn):
         """The one moment the current interaction's question may go to the clinic guides - once. -> may it go."""
@@ -159,10 +180,13 @@ class Machine:
                 self.clinic = new
                 self._changed()
 
-    def set_answers(self, on, detail):
-        """Whether clinic-guide answers are switched on and can be given here - apart from listening (R2)."""
+    def set_answers(self, on, detail, demo=False, missing=None):
+        """Whether clinic-guide answers are switched on (`demo`) and can be given here (`on`) - apart from listening
+        (R2); `missing` says what stops them and who can fix it."""
         with self._lock:
-            new = {"on": bool(on), "detail": detail}
+            new = {"on": bool(on), "detail": detail, "demo": bool(demo)}
+            if missing:
+                new["missing"] = missing
             if new != self.answers:
                 self.answers = new
                 self._changed()
@@ -244,13 +268,19 @@ class Machine:
         if self._answer is None:
             return None
         answer, until = self._answer
-        return answer if self.clock() < until else None
+        left = until - self.clock()
+        if left <= 0:
+            return None
+        if answer["outcome"] == "confirm":     # a page opened late must say the real time left, not the full 30 s
+            return {**answer, "left": max(1, round(left))}
+        return answer
 
     def snapshot(self):
         with self._lock:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
                     "version": self.version, "history": list(self.history), "clinic": dict(self.clinic),
-                    "answers": dict(self.answers), "answer": self._shown()}
+                    "answers": dict(self.answers), "answer": self._shown(),
+                    "ready": readiness(self.state, self.reason, self.answers)}
 
     def wait_change(self, version, timeout):
         """Block until the state changes from `version` or the timeout passes. -> snapshot."""

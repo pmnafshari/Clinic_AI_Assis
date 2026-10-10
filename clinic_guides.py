@@ -866,6 +866,8 @@ def _passage(row, codes, words):
             chosen.append(line)
         else:
             break
+    if best == 0 and len(chosen) == 1:
+        return field, ""            # the page's title alone answers nothing (J02 UI review: "User error codes (page 4)")
     return field, _norm(" ".join(chosen))
 
 
@@ -1101,6 +1103,8 @@ def _ask(conn, question, role, device_id, model):
     if not best["readable"] or (not _accepted(best["text"], codes, words)[0] and best["ocr_conf"] < READABLE_AT):
         return _abstain("unreadable", device, {"see": {"source_id": best["sid"], "page": best["page"]}})
     field, passage = _passage(best, codes, words)
+    if not passage:
+        return _abstain("not_found", device)
     conflicting = _conflicts(conn, best, field, passage, device, role)
     if conflicting:
         return _abstain("conflict", device, {"conflicting": conflicting})

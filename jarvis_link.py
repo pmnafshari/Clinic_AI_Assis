@@ -276,4 +276,17 @@ def ask_guides(gconn, device, spoken):
     out["device"] = {"make": d["make"], "model": d["model"], "room": d["room"]} if d else None
     if result["reason"] == "ask_device":
         out["devices"] = [{"make": r["make"], "model": r["model"], "room": r["room"]} for r in cg.devices(gconn)]
+        out["escalation"] = "Say the wake phrase and ask again, naming the device."    # by voice there is no list
+    if out.get("conflicting"):
+        # each document that disagrees, named so the page can link it; nothing is chosen between them
+        out["conflicting"] = [{**x, "title": (cg.source(gconn, x["source_id"]) or {"title": None})["title"]}
+                              for x in out["conflicting"]]
     return out
+
+
+def approved_guides(gconn, role=GUIDE_ROLE):
+    """How many approved documents this device's questions can be answered from (the Jarvis page's readiness)."""
+    audiences = ("staff", "dentist") if role == "dentist" else ("staff",)
+    marks = ",".join("?" * len(audiences))
+    return gconn.execute(f"SELECT COUNT(*) FROM sources WHERE status = 'approved' AND audience IN ({marks})",
+                         audiences).fetchone()[0]

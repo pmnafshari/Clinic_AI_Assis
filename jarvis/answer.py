@@ -111,7 +111,7 @@ class Exchange:
         if result["outcome"] == "answer":
             c = result["citations"][0]
             return f"answered on screen ({c['title']}, page {c['page']})"
-        return f"a refusal is on screen ({result['reason']})"
+        return f"a refusal is on screen ({result.get('title') or result['reason']})"
 
     def call(self, turn, fn):
         """A clinic call before anything was heard; a refusal or an outage ends the interaction with its card."""

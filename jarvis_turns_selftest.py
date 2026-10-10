@@ -343,6 +343,9 @@ def revocation_and_delegation():
         assert time.monotonic() - t0 < 1, f"5: {label} noticed at the next recheck"
         assert m.decide(card["id"], "ask") == "gone" and link.asked == [], f"5: HARD FAIL - asked after {label}"
         t.join(3)
+        # nothing waits any more, so the state says so at once (the J02 UI review found WAITING_FOR_CONFIRMATION left on
+        # the page after a revocation until the next wake: the exchange's finish() is ignored once its turn is over)
+        assert m.state == "READY" and "cancelled" in m.reason, f"5: HARD FAIL - {m.state} left after {label} ({m.reason})"
     # the running service rechecks every RECHECK_SECONDS; with the loopback call it must stay within 5 s (the injected
     # run on the running service measured 5.08 s with 5 s - JARVIS §18)
     assert answer.RECHECK_SECONDS <= 4, f"5: recheck every {answer.RECHECK_SECONDS} s cannot notice within 5 s"
@@ -583,20 +586,87 @@ def answers_switch():
     plist = inspect.getsource(__import__("jarvis.launchd", fromlist=["plist"]))
     assert "JARVIS_GUIDE_ANSWERS" not in plist, "11: HARD FAIL - the login item switches answers on"
 
-    class Ok:
+    class Ok:      # the clinic app counts the approved documents since the J02 UI review (none -> not available)
         def whoami(self):
-            return {"device": "Reception Mac", "device_id": 1, "delegation": None}
+            return {"device": "Reception Mac", "device_id": 1, "delegation": None, "approved_guides": 11}
 
     class Refused:
         def whoami(self):
             raise LinkRefused("device not registered or revoked")
-    for on, link, want_on, words in ((False, Ok(), False, "switched off"), (True, None, False, "no device credential"),
+    for on, link, want_on, words in ((False, Ok(), False, "switched off"), (True, None, False, "not registered"),
                                      (True, Refused(), False, "refused this computer"), (True, Ok(), True, "SYNTHETIC DEMO")):
         m = machine()
         runtime.check_link(m, link, on)
         a = m.snapshot()["answers"]
         assert a["on"] is want_on and words in a["detail"], f"11: answers line ({on}, {a})"
         assert m.state == "READY", "11: the answers line never changes the listening state"
+
+
+def ui_review_findings():
+    # 13. the J02 UI review (JARVIS §19; each found in Chromium on e5735ba): the page says one overall readiness, and
+    #     never "ready" with a prerequisite missing - an empty guide library included - naming the next step and who
+    #     takes it; a missing delegation is not presented as needed for guide answers; a page opened late says the real
+    #     time left; only the readiness, the state and its meaning are announced, each line written only when it
+    #     changes and the answer card only when the answer changes; a click keeps the focus on the card; a cited answer
+    #     names its device and links its page in the clinic app; conflicting documents are named and linked
+    from jarvis import runtime
+
+    class Ok:
+        def __init__(self, guides=11, delegation=None):
+            self.who = {"device": "Reception Mac", "device_id": 1, "delegation": delegation, "approved_guides": guides}
+
+        def whoami(self):
+            return self.who
+
+    class Down:
+        def whoami(self):
+            raise LinkDown("clinic app unreachable")
+    for link, who_may in ((None, "an admin"), (Down(), "start the clinic staff app"), (Ok(guides=0), "a dentist")):
+        m = machine()
+        runtime.check_link(m, link, True)
+        s = m.snapshot()
+        assert not s["answers"]["on"] and not s["ready"]["ok"], f"13: HARD FAIL - shown as ready without {who_may} ({s})"
+        assert who_may in s["ready"]["text"] and "Not ready" in s["ready"]["text"], f"13: next step and who ({s['ready']})"
+    m = machine()
+    runtime.check_link(m, Ok(), True)
+    s = m.snapshot()
+    assert s["ready"]["ok"] and "Ready for the controlled demo" in s["ready"]["text"], f"13: ready when set up ({s})"
+    assert "not needed for clinic-guide answers" in s["clinic"]["detail"], f"13: delegation wording ({s['clinic']})"
+    m.go("DEGRADED", "no microphone available")
+    assert not m.snapshot()["ready"]["ok"] and "DEGRADED" in m.snapshot()["ready"]["text"], \
+        "13: HARD FAIL - ready while listening is DEGRADED"
+    m = machine()
+    runtime.check_link(m, Ok(), False)
+    assert not m.snapshot()["ready"]["ok"] and "switched off" in m.snapshot()["ready"]["text"], "13: switched off"
+    # the time left on a card, as a page opened late reads it
+    clock = [100.0]
+    m = states.Machine(clock=lambda: clock[0])
+    m.go("READY", "listening for the wake phrase")
+    turn = m.begin("heard the wake phrase - listening to the request")
+    m.offer(turn, "what does the B prog button do", 30)
+    clock[0] += 12
+    assert m.snapshot()["answer"].get("left") == 18, f"13: time left after 12 s ({m.snapshot()['answer']})"
+    # the page
+    app = create_app(machine(), "http://127.0.0.1:5000")
+    html = app.test_client().get("/", base_url=BASE).data.decode()
+    code = _code_only(html)
+    assert '<div aria-live="polite" aria-atomic="true">' in html, "13: the announced lines are grouped on their own"
+    assert 'class="card" aria-live' not in html, "13: the status card as a whole (its timestamp) is not announced"
+    live = html[html.index('<div aria-live="polite" aria-atomic="true">'):]
+    live = live[:live.index("</div>")]
+    assert 'id="ready"' in live and 'id="state"' in live and 'id="since"' not in live and 'id="reason"' not in live, \
+        "13: only readiness, state and meaning are announced"
+    assert "textContent !== text" in _fn_body(code, "setText") and "setText(" in _fn_body(code, "render"), \
+        "13: a line is written only when it changes"
+    assert "=== shown" in _fn_body(code, "showAnswer"), "13: the answer card is rebuilt only when the answer changes"
+    assert "focus()" in _fn_body(code, "decide"), "13: a click keeps the focus on the card"
+    body = _fn_body(code, "showAnswer")
+    assert "a.device" in body and "sourceLink(c.source_id" in body and "a.conflicting" in body, \
+        "13: device, source link and conflicting documents on the card"
+    assert "d.make" in body and "d.model" in body and "d.room" in body, "13: the cited answer names its device"
+    assert "a.left" in body, "13: the card says the real time left"
+    assert 'data-clinic="http://127.0.0.1:5000"' in html and "/guides/sources/" in _fn_body(code, "sourceLink"), \
+        "13: links go to the clinic app's own page view"
 
 
 def selftest():
@@ -619,6 +689,7 @@ def selftest():
     page_says_what_is_true()
     resources_are_released()
     answers_switch()
+    ui_review_findings()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"

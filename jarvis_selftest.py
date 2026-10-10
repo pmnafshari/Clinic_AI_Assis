@@ -193,8 +193,11 @@ def boot(tmp):
             return self.outcome
     for outcome, ok, detail in ((LinkDown("clinic app unreachable"), False, "clinic app unreachable"),
                                 (LinkRefused("device not registered or revoked"), False, "device not registered or revoked"),
+                                # since the J02 UI review a missing delegation says it does not stop guide answers
                                 ({"device": "Reception Mac", "delegation": None}, True,
-                                 "connected as Reception Mac; no staff session delegated")):
+                                 "connected as Reception Mac; no staff session delegated (not needed for clinic-guide "
+                                 "answers; a staff member delegates their own session under Jarvis in the clinic "
+                                 "sidebar)")):
         m = states.Machine()
         runtime.check_link(m, FakeLink(outcome))
         assert m.state == "STARTING" and m.snapshot()["clinic"] == {"ok": ok, "detail": detail}, \

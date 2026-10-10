@@ -549,6 +549,21 @@ def booking_permission(conn, ids, devices):
     assert r["outcome"] == "answer" and r["citations"][0]["source_id"] == ids["rp01_it"], f"11: the Italian steps {r}"
 
 
+def title_alone(conn, ids, devices):
+    # 12. J02 UI review (2026-10-10): a question that finds only a page's title line is not answered with that title.
+    # "What does error E nine nine mean on the AX-200?" (a code no document has, as speech to text writes it) quoted
+    # "User error codes (page 4)" as the answer. A title followed by its numbered steps is still an answer.
+    for q in ("What does error E nine nine mean on the AX-200?", "What does the error mean on the AX-200?"):
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] == "not_found" and not r["citations"], \
+            f"12: a page title alone answered {q!r} ({r['outcome']} {[c['passage'] for c in r['citations']]})"
+    r = cg.ask(conn, "What does error E05 mean on the AX-200?", "assistant")
+    assert r["outcome"] == "answer" and r["citations"][0]["passage"].startswith("E05"), "12: the code's own line"
+    r = cg.ask(conn, "Quando il dentista ha gia prescritto una OPG, cosa fa l'accettazione?", "assistant")
+    assert r["outcome"] == "answer" and r["citations"][0]["passage"].startswith("Quando") and \
+        "1. Verificare" in r["citations"][0]["passage"], f"12: a title with its numbered steps is kept ({r})"
+
+
 def lifecycle(conn, lib, ids, devices):
     # 5. withdrawal, restriction and replacement act on the very next question (there is no answer cache)
     dev = devices["ax200"]
@@ -753,6 +768,7 @@ def selftest():
         same_question(conn, ids, devices)
         two_part_and_conflicts(conn, ids, devices)
         booking_permission(conn, ids, devices)
+        title_alone(conn, ids, devices)
         offline(conn, devices)
         lifecycle(conn, lib, ids, devices)
         conn.close()

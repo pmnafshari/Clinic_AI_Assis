@@ -22,9 +22,13 @@ from pathlib import Path
 
 from jarvis import answer, launchd, listen, runtime, states, stt
 from jarvis.clinic import DEFAULT_KEY, ClinicLink, store_key
-from jarvis.web import PORT, create_app
+from jarvis.web import CLINIC_URL, PORT, create_app
 
 CHECK_SECONDS = 30
+
+
+def clinic_url():
+    return os.environ.get("JARVIS_CLINIC_URL", CLINIC_URL)
 
 
 def answers_on(env):
@@ -33,7 +37,7 @@ def answers_on(env):
 
 def _link():
     try:
-        return ClinicLink(os.environ.get("JARVIS_CLINIC_URL", "http://127.0.0.1:5000"), DEFAULT_KEY)
+        return ClinicLink(clinic_url(), DEFAULT_KEY)
     except FileNotFoundError:
         return None
 
@@ -76,7 +80,7 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
             os._exit(1)
     threading.Thread(target=checks, name="jarvis-checks", daemon=True).start()
     threading.Thread(target=listening, name="jarvis-listen", daemon=True).start()
-    server = make_server("127.0.0.1", PORT, create_app(machine), threaded=True)
+    server = make_server("127.0.0.1", PORT, create_app(machine, clinic_url()), threaded=True)
     signal.signal(signal.SIGTERM, lambda *a: (stop.set(), threading.Thread(target=server.shutdown).start()))
     print(f"jarvis: page and status on http://127.0.0.1:{PORT}; clinic-guide answers "
           f"{'ON - synthetic demo mode' if enabled else 'off'}", flush=True)

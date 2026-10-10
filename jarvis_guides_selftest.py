@@ -727,6 +727,36 @@ def hint_order_and_budget(tmp):
     gconn.close()
 
 
+def ui_review_route(tmp):
+    # 12. the J02 UI review (JARVIS §19, found in Chromium on e5735ba): whoami says how many approved documents the
+    #     device can be answered from (none -> the Jarvis page is not ready), a refusal carries the staff page's own
+    #     title, the documents that disagree are named (nothing chosen between them), and "which device?" tells a
+    #     voice user to name it - there is no list to choose from
+    gconn, ids, devices = library(tmp)
+    app, conn, db_path, admin, token, device = clinic(tmp)
+    anon = app.test_client()
+    bearer = {"Authorization": f"Bearer {token}"}
+    want = gconn.execute("SELECT COUNT(*) FROM sources WHERE status = 'approved' AND audience = 'staff'").fetchone()[0]
+    who = anon.get("/api/jarvis/whoami", headers=bearer).get_json()
+    assert want > 0 and who["approved_guides"] == want, f"12: approved documents counted for the device ({who}, {want})"
+    d = ask(anon, token, "When do I confirm the appointment by phone?").get_json()
+    assert d["reason"] == "conflict" and d["title"] == "Approved documents disagree", f"12: the conflict's title ({d})"
+    assert {x.get("title") for x in d["conflicting"]} == {"RP-01 Imaging referrals (reception)", "Front desk handbook"}, \
+        f"12: the documents that disagree are named ({d['conflicting']})"
+    assert not d["citations"] and all(set(x) == {"source_id", "page", "passage", "title"} for x in d["conflicting"]), \
+        "12: HARD FAIL - a conflict carries an answer"
+    d = ask(anon, token, "What does the autoclave's P1 button do?").get_json()
+    assert d["title"] == "Which device?" and "naming the device" in d["escalation"], f"12: name it by voice ({d})"
+    d = ask(anon, token, "What does the B-PROG button do on the AX-200?").get_json()
+    assert d["outcome"] == "answer" and d["title"] is None and d["device"]["model"] == "AX-200", f"12: an answer ({d})"
+    gconn.execute("UPDATE sources SET status = 'withdrawn' WHERE status = 'approved'")
+    gconn.commit()
+    who = anon.get("/api/jarvis/whoami", headers=bearer).get_json()
+    assert who["approved_guides"] == 0, f"12: nothing approved is counted as nothing ({who})"
+    conn.close()
+    gconn.close()
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         route(Path(tmp))
@@ -743,6 +773,8 @@ def selftest():
     confirm_page()
     with tempfile.TemporaryDirectory() as tmp:
         hint_order_and_budget(Path(tmp))
+    with tempfile.TemporaryDirectory() as tmp:
+        ui_review_route(Path(tmp))
     print("jarvis_guides_selftest: ok")
 
 
