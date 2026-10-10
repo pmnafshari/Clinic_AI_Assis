@@ -177,6 +177,9 @@ class Link:
         self.result, self.error, self.asked = result, error, []
         self.terms, self.vocab_error, self.calls = list(terms), vocab_error, []
 
+    def whoami(self):
+        return {"device": "Reception Mac", "device_id": 1, "delegation": None}
+
     def vocabulary(self):
         self.calls.append("vocabulary")
         if self.vocab_error:
@@ -203,12 +206,12 @@ def confirm_card(m, timeout=5.0):
     return None
 
 
-def run_exchange(ex, pcm, m, decide=None):
+def run_exchange(ex, pcm, m, turn, decide=None):
     """One exchange in its own thread, as the listener runs it; `decide(card)` plays the person at the screen.
     -> (the reason it returned, the confirmation card it showed or None)."""
     import threading
     out = {}
-    t = threading.Thread(target=lambda: out.setdefault("reason", ex(pcm)), daemon=True)   # a hung wait fails, not hangs
+    t = threading.Thread(target=lambda: out.setdefault("reason", ex(pcm, turn)), daemon=True)   # a hung wait fails
     t.start()
     card = confirm_card(m, timeout=3.0)
     if card is not None and decide is not None:
@@ -231,21 +234,21 @@ def exchange():
     #    unclear transcript is never asked; a refusal or a link fault is shown as it is, never an invented answer; no
     #    transcript in history (J02; since J-D10 the question is asked only after "Yes, ask this" - §12)
     clock = Clock()
-    m = states.Machine()
+    m = states.Machine(clock=clock)
     m.go("READY", "listening for the wake phrase")
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
+    turn = m.begin("heard the wake phrase - listening to the request")
     heard = []
 
-    def stt_ok(pcm, hint=None):
+    def stt_ok(pcm, hint=None, cancelled=None):
         heard.append(pcm)
         return "what does the B prog button do", "en"
 
     def yes(card):
-        assert m.decide(card["id"], "ask"), "3: the confirmation is accepted"
+        assert m.decide(card["id"], "ask") == "taken", "3: the confirmation is accepted"
     link = Link(ANSWER)
-    ex = answer.Exchange(m, stt_ok, lambda: link, clock=clock, confirm_seconds=3)
+    ex = answer.Exchange(m, stt_ok, lambda: link, confirm_seconds=3)
     pcm = (np.sin(np.arange(16000) / 5) * 3000).astype(np.int16)
-    reason, _card = run_exchange(ex, pcm, m, yes)
+    reason, _card = run_exchange(ex, pcm, m, turn, yes)
     assert link.asked == ["what does the B prog button do"], f"3: the transcript is what is asked ({link.asked})"
     snap = m.snapshot()
     a = snap["answer"]
@@ -253,49 +256,51 @@ def exchange():
     assert a["citations"][0]["page"] == 2 and a["citations"][0]["verified"] and a["warnings"], "3: with its citation and warnings"
     assert "B prog" not in reason and "B-PROG" not in reason, f"3: the state's reason carries no speech ({reason})"
     assert all("prog" not in h["reason"] for h in snap["history"]), "3: HARD FAIL - speech in the state history"
-    m.go("READY", reason)
+    m.finish(turn, reason)
     clock.t += answer.ANSWER_SECONDS - 1
     assert m.snapshot()["answer"] is not None, "3: the answer stays on screen for a while"
     clock.t += 2
     assert m.snapshot()["answer"] is None, "3: and then it is gone - held in memory only"
     # the next wake clears the old answer at once
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
-    run_exchange(ex, pcm, m, yes)
-    m.go("READY", "answered")
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
+    turn = m.begin("heard the wake phrase - listening to the request")
+    run_exchange(ex, pcm, m, turn, yes)
+    m.finish(turn, "answered")
+    turn = m.begin("heard the wake phrase - listening to the request")
     assert m.snapshot()["answer"] is None, "3: a new wake clears the previous answer"
     # unclear: not asked
     link2 = Link(ANSWER)
 
-    def unclear(pcm, hint=None):
+    def unclear(pcm, hint=None, cancelled=None):
         raise stt.Unclear("could not make out what was said")
-    reason = answer.Exchange(m, unclear, lambda: link2, clock=clock, confirm_seconds=3)(pcm)
+    reason = answer.Exchange(m, unclear, lambda: link2, confirm_seconds=3)(pcm, turn)
     assert link2.asked == [] and m.snapshot()["answer"]["outcome"] == "unclear", "3: an unclear transcript is not asked"
     # refusals and faults are shown, never turned into an answer
     for error, outcome in ((LinkDown("clinic app unreachable"), "unavailable"),
                            (LinkRefused("device not registered or revoked"), "unavailable")):
-        m.go("READY", reason)
-        m.go("ACTIVE", "heard the wake phrase - listening to the request")
-        reason, _card = run_exchange(answer.Exchange(m, stt_ok, lambda: Link(error=error), clock=clock, confirm_seconds=3),
-                                     pcm, m, yes)
+        m.finish(turn, reason)
+        turn = m.begin("heard the wake phrase - listening to the request")
+        reason, _card = run_exchange(answer.Exchange(m, stt_ok, lambda: Link(error=error), confirm_seconds=3),
+                                     pcm, m, turn, yes)
         a = m.snapshot()["answer"]
         assert a["outcome"] == outcome and a["citations"] == [] and str(error) in a["message"], \
             f"3: a link fault is shown as it is ({a})"
-    m.go("READY", reason)
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
-    answer.Exchange(m, stt_ok, lambda: None, clock=clock, confirm_seconds=3)(pcm)
+    m.finish(turn, reason)
+    turn = m.begin("heard the wake phrase - listening to the request")
+    answer.Exchange(m, stt_ok, lambda: None, confirm_seconds=3)(pcm, turn)
     assert m.snapshot()["answer"]["outcome"] == "unavailable", "3: no device credential on this machine is said plainly"
     refusal = {**ANSWER, "outcome": "abstain", "reason": "clinical", "message": "The assistant does not make clinical decisions.",
                "escalation": "This is a clinical decision for the dentist.", "citations": [], "warnings": []}
-    m.go("READY", "x")
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
-    run_exchange(answer.Exchange(m, stt_ok, lambda: Link(refusal), clock=clock, confirm_seconds=3), pcm, m, yes)
+    m.finish(turn, "x")
+    turn = m.begin("heard the wake phrase - listening to the request")
+    run_exchange(answer.Exchange(m, stt_ok, lambda: Link(refusal), confirm_seconds=3), pcm, m, turn, yes)
     a = m.snapshot()["answer"]
     assert a["outcome"] == "abstain" and a["reason"] == "clinical" and a["escalation"], "3: P24's refusal shown with where to go"
 
 
 def listener_hands_over():
     # 4. the listener hands the heard request to the exchange, returns to READY with its reason, and keeps no audio
+    #    (since J02 follow-up 6 the exchange runs in its own thread: the listener keeps reading meanwhile, so nothing
+    #    queues up to be dropped afterwards - the old "drained once" check went with the queue; jarvis_turns_selftest 1)
     clock = type("C", (), {"mono": 1000.0, "wall": 1_800_000_000.0})()
 
     def mono():
@@ -320,7 +325,7 @@ def listener_hands_over():
 
     class Src:
         def __init__(self, script):
-            self.script, self.drained = list(script), 0
+            self.script = list(script)
 
         def open(self):
             pass
@@ -335,22 +340,22 @@ def listener_hands_over():
         def close(self):
             pass
 
-        def drain(self):
-            self.drained += 1
-
     got = []
 
-    def on_request(pcm):
+    def on_request(pcm, turn):
         got.append(pcm.copy())
         return "answered on screen (DemoMed AX-200 User manual, page 2)"
     m = states.Machine()
     src = Src([quiet] * 30 + [speech] * 15 + [quiet] * 25)
     lst = listen.Listener(m, Det, lambda: src, mono=mono, wall=wall, on_request=on_request)
     lst.run(type("E", (), {"is_set": lambda self: False})())
+    import time
+    end = time.monotonic() + 3
+    while m.state != "READY" and time.monotonic() < end:
+        time.sleep(0.01)
     assert len(got) == 1 and len(got[0]) >= 15 * 1280, f"4: the whole request is handed over ({[len(g) for g in got]})"
     assert m.state == "READY" and "answered on screen" in m.reason, f"4: back to READY with the exchange's reason ({m.reason})"
     assert lst.request == [] and lst.heard_bytes == 0, "4: no request audio kept after the exchange"
-    assert src.drained == 1, "4: audio queued while answering is dropped, not fed to the wake detector later"
 
 
 def stt_child():
@@ -377,13 +382,16 @@ def stt_child():
     assert np.array_equal(got_pcm, pcm) and got_hint == [] and call["timeout"] and \
         not any(str(a).endswith((".wav", ".raw", ".pcm")) for a in call["cmd"]), "5: audio over the pipe only"
     assert call["cmd"][1:3] == ["-m", "jarvis.stt"], f"5: a separate child process ({call['cmd']})"
-    for out, why in (({"text": "", "language": "en", "segments": []}, "empty"),
-                     ({"text": "uh", "language": "en", "segments": [{"no_speech_prob": 0.9, "avg_logprob": -0.3}]}, "no speech"),
-                     ({"text": "blah blah", "language": "it", "segments": [{"no_speech_prob": 0.1, "avg_logprob": -1.4}]}, "low"),
-                     ("timeout", "time"), ("crash", "crash")):
+    # since J02 follow-up 6 (R2) a child that is too slow or crashes is a speech-to-text failure, not "unclear"
+    for out, why, kind in (({"text": "", "language": "en", "segments": []}, "empty", stt.Unclear),
+                           ({"text": "uh", "language": "en", "segments": [{"no_speech_prob": 0.9, "avg_logprob": -0.3}]},
+                            "no speech", stt.Unclear),
+                           ({"text": "blah blah", "language": "it", "segments": [{"no_speech_prob": 0.1, "avg_logprob": -1.4}]},
+                            "low", stt.Unclear),
+                           ("timeout", "time", stt.Failed), ("crash", "crash", stt.Failed)):
         try:
             stt.transcribe(pcm, run=fake_run(out))
-        except stt.Unclear:
+        except kind:
             pass
         else:
             raise AssertionError(f"5: {why} was accepted as a question")
@@ -453,7 +461,7 @@ def vocabulary_route(tmp):
                         ("ROSSI", "a patient's name"), ("MARIO", "a patient's name"),
                         ("BNCLRA85M41F205X", "codice-fiscale-shaped text")):
         assert absent not in terms, f"7: HARD FAIL - {absent} from {why} is in the hint"
-    assert terms == sorted(terms) and len(set(terms)) == len(terms), "7: sorted, each term once"
+    assert len(set(terms)) == len(terms), "7: each term once"
     # a code is one term, never also its pieces (added after development run 1 hinted AX, CL, CP, RP and PROG)
     assert not {"AX", "CL", "CP", "RP", "PROG", "LOW", "POWER"} & set(terms), f"7: pieces of codes in the hint ({terms})"
     for bearer in (None, "nope", "x" * 43):
@@ -486,28 +494,26 @@ def exchange_confirm():
     # 8. J-D10: the library's terms go to speech to text; what was heard waits on screen and nothing is asked until
     #    "Yes, ask this"; no, a timeout or anything ambiguous discards it unasked
     import time
-    clock = Clock()
     pcm = (np.sin(np.arange(16000) / 5) * 3000).astype(np.int16)
     hints = []
 
-    def stt_ok(pcm, hint=None):
+    def stt_ok(pcm, hint=None, cancelled=None):
         hints.append(hint)
         return "what does the B prog button do", "en"
 
     def fresh():
-        m = states.Machine()
+        m = states.Machine(clock=time.monotonic)
         m.go("READY", "listening for the wake phrase")
-        m.go("ACTIVE", "heard the wake phrase - listening to the request")
-        return m
-    m, link, seen = fresh(), Link(ANSWER), {}
+        return m, m.begin("heard the wake phrase - listening to the request")
+    (m, turn), link, seen = fresh(), Link(ANSWER), {}
 
     def look_then_yes(card):
         seen["asked_before"] = list(link.asked)
-        assert m.decide(card["id"], "ask"), "8: the confirmation is accepted"
-    reason, card = run_exchange(answer.Exchange(m, stt_ok, lambda: link, clock=clock, confirm_seconds=3), pcm, m,
+        assert m.decide(card["id"], "ask") == "taken", "8: the confirmation is accepted"
+    reason, card = run_exchange(answer.Exchange(m, stt_ok, lambda: link, confirm_seconds=3), pcm, m, turn,
                                 look_then_yes)
     assert hints == [["AX-200", "B-PROG", "DRY"]] and link.calls[0] == "vocabulary", \
-        f"8: the library's terms are fetched first and handed to speech to text ({hints}, {link.calls})"
+        f"8: the library's terms are fetched before anything is transcribed and handed to it ({hints}, {link.calls})"
     assert card is not None and seen["asked_before"] == [], "8: HARD FAIL - the guides were asked before the confirmation"
     assert card["heard"] == "what does the B prog button do" and not card.get("citations"), "8: the exact transcript, alone"
     assert isinstance(card["id"], str) and len(card["id"]) >= 20, "8: an unguessable id for this one transcript"
@@ -519,9 +525,9 @@ def exchange_confirm():
                                    ("a timeout", None, 0.3),
                                    ("a wrong id", lambda mm, c: mm.decide("not-" + c["id"], "ask"), 3),
                                    ("an unknown decision", lambda mm, c: mm.decide(c["id"], "yes"), 3)):
-        m, link = fresh(), Link(ANSWER)
+        (m, turn), link = fresh(), Link(ANSWER)
         t0 = time.monotonic()
-        reason, card = run_exchange(answer.Exchange(m, stt_ok, lambda: link, clock=clock, confirm_seconds=seconds), pcm, m,
+        reason, card = run_exchange(answer.Exchange(m, stt_ok, lambda: link, confirm_seconds=seconds), pcm, m, turn,
                                     (lambda c, d=decide, mm=m: d(mm, c)) if decide else None)
         took = time.monotonic() - t0
         a = m.snapshot()["answer"]
@@ -530,24 +536,23 @@ def exchange_confirm():
         assert a["outcome"] == "discarded" and not a.get("heard") and "Nothing was asked" in a["message"], \
             f"8: {label} discards what was heard ({a})"
         assert decide is None or took < 2, f"8: {label} ends the wait at once ({took:.1f} s)"
-        assert m.decide(card["id"], "ask") is False and link.asked == [], f"8: HARD FAIL - a decision after {label} acted on"
+        assert m.decide(card["id"], "ask") != "taken" and link.asked == [], f"8: HARD FAIL - a decision after {label} acted on"
         assert "prog" not in reason, "8: the reason carries no speech"
     # a second decision on one transcript is ambiguous; a new wake drops what was waiting
-    m = fresh()
-    pid = m.offer("what does the B prog button do", 3)
-    assert m.decide(pid, "ask") is True and m.decide(pid, "ask") is False, "8: one decision per transcript"
-    assert m.await_decision(pid, 0.1) == "ambiguous", "8: HARD FAIL - a second decision did not make it ambiguous"
-    m = fresh()
-    pid = m.offer("what does the B prog button do", 3)
-    m.go("READY", "back to listening")
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
-    assert m.decide(pid, "ask") is False and m.await_decision(pid, 0.1) != "ask", "8: a new wake discards the old transcript"
+    m, turn = fresh()
+    pid = m.offer(turn, "what does the B prog button do", 3)
+    assert m.decide(pid, "ask") == "taken" and m.decide(pid, "ask") == "ambiguous", "8: one decision per transcript"
+    assert m.await_decision(pid) == "ambiguous", "8: HARD FAIL - a second decision did not make it ambiguous"
+    m, turn = fresh()
+    pid = m.offer(turn, "what does the B prog button do", 3)
+    m.begin("heard the wake phrase - listening to the request")
+    assert m.decide(pid, "ask") == "gone" and m.await_decision(pid) == "cancelled", "8: a new wake discards the old transcript"
     # no terms (no credential, link down, refused): nothing is transcribed and nothing asked
     for make in (lambda: Link(ANSWER, vocab_error=LinkDown("clinic app unreachable")),
                  lambda: Link(ANSWER, vocab_error=LinkRefused("device not registered or revoked")), lambda: None):
-        m, hints[:] = fresh(), []
+        (m, turn), hints[:] = fresh(), []
         lk = make()
-        answer.Exchange(m, stt_ok, lambda: lk, clock=clock, confirm_seconds=3)(pcm)
+        answer.Exchange(m, stt_ok, lambda: lk, confirm_seconds=3)(pcm, turn)
         assert hints == [] and (lk is None or lk.asked == []), "8: without the library's terms nothing is transcribed"
         assert m.snapshot()["answer"]["outcome"] == "unavailable", "8: and the page says the guides cannot be reached"
 
@@ -589,7 +594,9 @@ def stt_hint():
     saved = (sys.modules.get("faster_whisper"), sys.stdin, dict(os.environ))
     try:
         sys.modules["faster_whisper"] = types.SimpleNamespace(WhisperModel=FakeModel)
-        for hint, want in ((["AX-300", "DRY"], stt.prompt_for(["AX-300", "DRY"])), ([], None)):
+        big = [f"ZZ-{i}" for i in range(100)]
+        fitted = stt.fit_hint(big, stt.token_counter())
+        for hint, want in ((["AX-300", "DRY"], stt.prompt_for(["AX-300", "DRY"])), ([], None), (big, stt.prompt_for(fitted))):
             FakeModel.seen.clear()
             sys.stdin = types.SimpleNamespace(buffer=io.BytesIO(stt.frame(pcm, hint)))
             out = io.StringIO()
@@ -599,6 +606,9 @@ def stt_hint():
             assert used == want, f"9: the child gives Whisper the library's terms ({used!r}, wanted {want!r})"
             assert np.allclose(FakeModel.seen["audio"], pcm / 32768), "9: and the audio it was sent"
             assert json.loads(out.getvalue())["text"].strip() == "What does DRY do?", "9: one JSON line back"
+            # R4 (§18): an oversized hint is fitted to the engine's budget in the child, and the child says how much it used
+            assert json.loads(out.getvalue())["hint_used"] == (len(fitted) if hint is big else len(hint)), \
+                "9: the child reports how many terms went into the prompt"
             # J02 follow-up 4: Whisper's default beam, not greedy - measured on development audio, 0.59 -> 0.63 first
             # pass with no trial lost, about 0.3 s more at p90
             assert FakeModel.seen.get("beam_size") == 5, f"9: decoded with a beam ({FakeModel.seen.get('beam_size')})"
@@ -617,8 +627,8 @@ def confirm_page():
     #     decision taken only from this page's own origin, as JSON, for the id on screen
     m = states.Machine()
     m.go("READY", "listening")
-    m.go("ACTIVE", "heard the wake phrase - listening to the request")
-    pid = m.offer("<b>what</b> does the B prog button do", 30)
+    turn = m.begin("heard the wake phrase - listening to the request")
+    pid = m.offer(turn, "<b>what</b> does the B prog button do", 30)
     c = jarvis_app(m).test_client()
     base = "http://127.0.0.1:5020"
     html = c.get("/", base_url=base).data.decode()
@@ -638,12 +648,83 @@ def confirm_page():
         assert r.status_code in (400, 403, 415), f"10: HARD FAIL - {label} accepted ({r.status_code})"
     r = post(good)
     assert r.status_code == 204, f"10: the page's own request is taken ({r.status_code})"
-    assert m.await_decision(pid, 0.1) == "ask", "10: HARD FAIL - a refused request had already registered a decision"
+    assert m.await_decision(pid) == "ask", "10: HARD FAIL - a refused request had already registered a decision"
     assert post(json.dumps({"id": pid, "decision": "ask"})).status_code == 409, "10: nothing waits any more"
     # "No, discard" from the page is what is acted on (added after mutation run 1: N28 - every choice taken as yes - survived)
-    pid = m.offer("what does the B prog button do", 30)
+    pid = m.offer(turn, "what does the B prog button do", 30)
     assert post(json.dumps({"id": pid, "decision": "discard"})).status_code == 204, "10: the page's no is taken"
-    assert m.await_decision(pid, 0.1) == "discard", "10: HARD FAIL - the page's no was not what the exchange saw"
+    assert m.await_decision(pid) == "discard", "10: HARD FAIL - the page's no was not what the exchange saw"
+
+
+def on_pages(gconn, term):
+    """How many approved, staff, unrestricted, readable pages carry `term` as a whole word, in any case - a code is
+    hinted in capitals whatever case the page prints it in (counted here, apart from the code under test)."""
+    import re
+    pattern = re.compile(r"(?<![\w-])" + re.escape(term) + r"(?![\w-])", re.IGNORECASE if "-" in term or
+                         any(ch.isdigit() for ch in term) else 0)
+    rows = gconn.execute("SELECT p.text || ' ' || COALESCE(p.ocr_text, '') AS t FROM pages p JOIN sources s"
+                         " ON s.id = p.source_id WHERE s.status = 'approved' AND s.audience = 'staff'"
+                         " AND p.restricted = 0 AND p.readable = 1").fetchall()
+    return sum(1 for r in rows if pattern.search(r["t"]))
+
+
+def hint_order_and_budget(tmp):
+    # 11. R4 (§18): the hint keeps the same terms whatever their letters - the registered device models first, then the
+    #     terms more approved pages carry, then alphabetically; a page full of codes cannot push the library's own out
+    #     (the old alphabetical cut kept AA-0..AA-79 and lost AX-200); accented capital labels are whole words; a
+    #     restriction acts on the next call; the speech child fits the terms, in that order, to the prompt budget of the
+    #     installed engine, measured with its own tokenizer, so faster-whisper never cuts the prompt itself
+    gconn, ids, devices = library(tmp)
+    app, conn, db_path, admin, token, device = clinic(tmp)
+    anon = app.test_client()
+    models = {"AX-200", "AX-300", "CL-5"}
+    first = vocab(anon, token).get_json()
+    terms = first["terms"]
+    assert set(terms[:3]) == models, f"11: the device models come first ({terms[:5]})"
+    rest = [(-on_pages(gconn, t), t) for t in terms[3:]]
+    assert rest == sorted(rest), f"11: then by the pages that carry them, then alphabetically ({rest[:6]})"
+    assert vocab(anon, token).get_json()["terms"] == terms and first["dropped"] == 0, "11: the same every time; none cut"
+    # Italian labels with accents are one word each, never a fragment
+    plant(gconn, ids["cl5"], 2, "Premere PIÙ o GIÙ, poi ASCIUGATURA")
+    terms = vocab(anon, token).get_json()["terms"]
+    assert {"PIÙ", "GIÙ", "ASCIUGATURA"} <= set(terms), f"11: accented capital labels kept whole ({terms})"
+    assert "PI" not in terms and "GI" not in terms, "11: HARD FAIL - a fragment of an accented word in the hint"
+    # a restriction acts on the next call
+    plant(gconn, ids["ax300"], 2, "RSKEY-9")
+    assert "RSKEY-9" in vocab(anon, token).get_json()["terms"], "setup: the planted code is hinted"
+    cg.restrict_pages(gconn, ids["ax300"], [2], *D)
+    assert "RSKEY-9" not in vocab(anon, token).get_json()["terms"], "11: HARD FAIL - a page restricted now is still hinted"
+    cg.restrict_pages(gconn, ids["ax300"], [], *D)
+    # an oversized library: 120 codes on one page, every one sorting before the library's own
+    keep = [t for t in vocab(anon, token).get_json()["terms"] if t in models or on_pages(gconn, t) >= 2]
+    plant(gconn, ids["ax300"], 1, " ".join(f"AA-{i}" for i in range(120)))
+    big = vocab(anon, token).get_json()
+    assert len(big["terms"]) == jl.MAX_TERMS and big["dropped"] > 0, f"11: capped, and how many were cut is said ({big['dropped']})"
+    lost = [t for t in keep if t not in big["terms"]]
+    assert not lost, f"11: HARD FAIL - the device models or terms on several pages lost to the cut ({lost})"
+    # the speech child's side: the real tokenizer and the installed engine's budget
+    import faster_whisper
+    src = (Path(faster_whisper.__file__).parent / "transcribe.py").read_text()
+    assert "self.max_length = 448" in src and "previous_tokens[-(self.max_length // 2 - 1) :]" in src, \
+        "11: the installed engine no longer keeps the last 223 prompt tokens - measure the budget again"
+    assert stt.PROMPT_BUDGET == 448 // 2 - 1, stt.PROMPT_BUDGET
+    count = stt.token_counter()
+    long_label = "X" * 400
+    ranked = big["terms"][:3] + [long_label] + big["terms"][3:]
+    fitted = stt.fit_hint(ranked, count)
+    assert count(stt.prompt_for(fitted)) <= stt.PROMPT_BUDGET, "11: HARD FAIL - the prompt is over the engine's budget"
+    assert fitted[:3] == big["terms"][:3] and long_label not in fitted, "11: the models kept; a label too long to fit skipped"
+    it = iter(ranked)
+    assert all(t in it for t in fitted), "11: the order is kept"
+    assert len(fitted) < len(ranked) - 1, "setup: the oversized hint does not fit whole"
+    for i, t in enumerate(ranked):
+        if t not in fitted:
+            before = [x for x in fitted if ranked.index(x) < i]
+            assert count(stt.prompt_for(before + [t])) > stt.PROMPT_BUDGET, f"11: {t[:12]} left out although it fitted"
+    assert stt.fit_hint(first["terms"], count) == first["terms"], "11: today's library fits whole - nothing dropped"
+    assert stt.fit_hint(ranked, count) == fitted, "11: the same every time"
+    conn.close()
+    gconn.close()
 
 
 def selftest():
@@ -660,6 +741,8 @@ def selftest():
     exchange_confirm()
     stt_hint()
     confirm_page()
+    with tempfile.TemporaryDirectory() as tmp:
+        hint_order_and_budget(Path(tmp))
     print("jarvis_guides_selftest: ok")
 
 

@@ -7,7 +7,10 @@ answers on its page since J02).
     .venv/bin/python jarvis_run.py --install-agents    start Jarvis and its menu-bar indicator at login (this user only)
     .venv/bin/python jarvis_run.py --uninstall-agents  stop them and remove both login items
 
-    JARVIS_CLINIC_URL   the clinic staff app (default http://127.0.0.1:5000)
+    JARVIS_CLINIC_URL     the clinic staff app (default http://127.0.0.1:5000)
+    JARVIS_GUIDE_ANSWERS  "demo" switches clinic-guide answers on for the synthetic demo walkthrough (J02 follow-up 6);
+                          anything else, or nothing, keeps them off - J02 is not accepted for use. The service's
+                          LaunchAgent never sets it; a credential alone never turns answers on.
 """
 import getpass
 import logging
@@ -22,6 +25,10 @@ from jarvis.clinic import DEFAULT_KEY, ClinicLink, store_key
 from jarvis.web import PORT, create_app
 
 CHECK_SECONDS = 30
+
+
+def answers_on(env):
+    return env.get("JARVIS_GUIDE_ANSWERS") == "demo"
 
 
 def _link():
@@ -40,23 +47,26 @@ def _detector():
         raise listen.EngineMissing(f"{type(e).__name__}: {e}") from None
 
 
-def serve():
+def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
+    """The service. `make_source` and `cue` are the microphone and the tone; an integration harness swaps them for
+    injected audio and silence (labelled as such) - nothing else."""
     from werkzeug.serving import make_server
     logging.getLogger("werkzeug").setLevel(logging.WARNING)
     machine = states.Machine()
     stop = threading.Event()
+    enabled = answers_on(os.environ)
 
     def checks():
         while not stop.is_set():
             try:
-                runtime.check_link(machine, _link())
+                runtime.check_link(machine, _link(), enabled)
             except Exception as e:
                 machine.set_clinic(False, f"link check fault ({type(e).__name__})")
             stop.wait(CHECK_SECONDS)
 
     def listening():
-        exchange = answer.Exchange(machine, stt.transcribe, _link)
-        lst = listen.Listener(machine, _detector, listen.SoundDeviceSource, cue=listen.chime, on_request=exchange)
+        exchange = answer.Exchange(machine, stt.transcribe, _link, enabled=enabled)
+        lst = listen.Listener(machine, _detector, make_source, cue=cue, on_request=exchange)
         try:
             lst.run(stop)
         except Exception as e:  # a fault is a state with its reason, then a crash so launchd restarts us
@@ -68,7 +78,8 @@ def serve():
     threading.Thread(target=listening, name="jarvis-listen", daemon=True).start()
     server = make_server("127.0.0.1", PORT, create_app(machine), threaded=True)
     signal.signal(signal.SIGTERM, lambda *a: (stop.set(), threading.Thread(target=server.shutdown).start()))
-    print(f"jarvis: page and status on http://127.0.0.1:{PORT}", flush=True)
+    print(f"jarvis: page and status on http://127.0.0.1:{PORT}; clinic-guide answers "
+          f"{'ON - synthetic demo mode' if enabled else 'off'}", flush=True)
     server.serve_forever()
     return 0
 

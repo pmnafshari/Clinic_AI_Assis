@@ -1,5 +1,9 @@
 """Jarvis's own page and status API on 127.0.0.1:5020. Loopback only. The page shows the truth; it never starts a
-conversation (Jarvis is hands-free) and closing it changes nothing."""
+conversation (Jarvis is hands-free) and closing it changes nothing.
+
+Since J02 follow-up 6 the stream sends a heartbeat every HEARTBEAT_SECONDS, so the page can tell a quiet service from a
+lost one: an error on the stream, or STALE_MS without anything, replaces the state with "not reachable" instead of
+leaving the last one up. A click on the confirmation is answered with what became of it, and the page says so."""
 import json
 
 from flask import Flask, Response, abort, jsonify, render_template_string, request
@@ -8,7 +12,7 @@ PORT = 5020
 HOSTS = {"127.0.0.1", "localhost", f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
 LOOPBACK = {"127.0.0.1", "::1"}
-HEARTBEAT_SECONDS = 15
+HEARTBEAT_SECONDS = 2
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -20,8 +24,11 @@ PAGE = """<!doctype html>
   main { max-width: 44rem; margin: 0 auto; padding: 24px 16px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
   .state { font-size: 28px; font-weight: 700; letter-spacing: .02em; }
-  .READY { color: var(--ok); } .ACTIVE, .CONFIRMING { color: var(--info); } .AUTH_REQUIRED { color: var(--warn); }
-  .DEGRADED { color: var(--bad); } .STARTING { color: var(--muted); }
+  .READY { color: var(--ok); } .ACTIVE, .CONFIRMING, .WAITING_FOR_CONFIRMATION { color: var(--info); }
+  .AUTH_REQUIRED { color: var(--warn); } .DEGRADED, .UNREACHABLE { color: var(--bad); } .STARTING { color: var(--muted); }
+  .WAITING_FOR_CONFIRMATION { font-size: 22px; overflow-wrap: anywhere; }
+  #confirm-status:empty { display: none; }
+  #confirm-status { font-weight: 600; }
   .muted { color: var(--muted); } ol { padding-left: 1.2rem; } code { font-size: 14px; }
   blockquote { margin: 12px 0; padding: 8px 14px; border-left: 4px solid var(--info); background: var(--bg); }
   .warn { color: var(--warn); font-weight: 600; }
@@ -36,18 +43,21 @@ PAGE = """<!doctype html>
 <body><main>
   <p class="muted">Jarvis · local voice companion · this page only shows it; Jarvis keeps running when it is closed</p>
   <section class="card" aria-live="polite" aria-atomic="true">
+    <p class="muted">Listening:</p>
     <h1 class="state {{ s.state }}" id="state">{{ s.state }}</h1>
     <p id="meaning">{{ s.meaning }}</p>
     <p><strong>Why:</strong> <span id="reason">{{ s.reason }}</span></p>
     <p class="muted">Since <span id="since">{{ s.since }}</span> (UTC)</p>
+    <p><strong>Clinic-guide answers:</strong> <span id="answers">{{ s.answers.detail }}</span></p>
     <p class="muted">Clinic link: <span id="clinic">{{ s.clinic.detail }}</span>
       (needed for answers and anything about a patient, not for listening)</p>
   </section>
+  <p id="confirm-status" class="card" role="status" aria-live="polite"></p>
   {% set a = s.answer %}
   <section class="card" id="answer" aria-live="polite"{% if not a %} hidden{% endif %}>
     <h2>Last question</h2>
     <p class="muted">Answers are shown here on screen, not spoken. They stay for two minutes and are kept nowhere.</p>
-    <div id="answer-body">{% if a and a.outcome == "confirm" %}
+    <div id="answer-body">{% if a and a.title %}<h3>{{ a.title }}</h3>{% endif %}{% if a and a.outcome == "confirm" %}
       <h3>Did I hear you right?</h3>
       <p class="heard">{{ a.heard }}</p>
       <p class="muted">Nothing is asked until you confirm. If you do not, it is discarded after {{ a.seconds }} seconds.</p>
@@ -72,9 +82,10 @@ PAGE = """<!doctype html>
     <ol class="muted">
       <li>STARTING - opening the microphone and the wake engine; READY only once real sound is being heard</li>
       <li>READY - only the wake phrase is listened for; nothing is recorded or sent</li>
-      <li>ACTIVE - one request after a short tone; what was heard appears here first, and nothing is asked until you
-        press <em>Yes, ask this</em>; then the clinic-guide answer appears with the document and page it comes from
-        (nothing is spoken back); then back to READY</li>
+      <li>ACTIVE - one request after a short tone (at most 15 seconds), then worked out on this computer</li>
+      <li>WAITING_FOR_CONFIRMATION - what was heard appears here, and nothing is asked until you press <em>Yes, ask
+        this</em>; nothing is recorded meanwhile, and saying the wake phrase again starts over; then the clinic-guide
+        answer appears with the document and page it comes from (nothing is spoken back); then back to READY</li>
       <li>AUTH_REQUIRED - needs a delegated staff session; nothing protected is said</li>
       <li>CONFIRMING - a spoken confirmation of an action that is already authorised</li>
       <li>DEGRADED - not available, with the reason (asleep, microphone denied or muted, engine missing, fault)</li>
@@ -82,17 +93,41 @@ PAGE = """<!doctype html>
   </section>
 </main>
 <script>
+  const STALE_MS = 4000;           // two heartbeats missed: with the 1 s check below, a frozen service shows within 5 s
   const es = new EventSource("/events");
-  es.onmessage = (e) => {
-    const s = JSON.parse(e.data);
+  let lastSeen = Date.now(), lost = false;
+  function seen() {
+    lastSeen = Date.now();
+    if (!lost) return;
+    lost = false;                  // back after a freeze: a heartbeat carries no state, so read the whole state again
+    fetch("/status").then((r) => r.json()).then(render).catch(() => {});
+  }
+  function unreachable(why) {
+    if (lost) return;
+    lost = true;
+    const h = document.getElementById("state");
+    h.textContent = "NOT REACHABLE"; h.className = "state UNREACHABLE";
+    document.getElementById("meaning").textContent = "Jarvis is not reachable - the state shown is unknown";
+    document.getElementById("reason").textContent = why + " at " + new Date().toLocaleTimeString() +
+      "; this page keeps trying";
+    document.getElementById("answers").textContent = "unknown while Jarvis is not reachable";
+    document.getElementById("clinic").textContent = "unknown while Jarvis is not reachable";
+    showAnswer(null);
+  }
+  es.onmessage = (e) => { seen(); render(JSON.parse(e.data)); };
+  function render(s) {
     const h = document.getElementById("state");
     h.textContent = s.state; h.className = "state " + s.state;
     document.getElementById("meaning").textContent = s.meaning;
     document.getElementById("reason").textContent = s.reason;
     document.getElementById("since").textContent = s.since;
+    document.getElementById("answers").textContent = s.answers.detail;
     document.getElementById("clinic").textContent = s.clinic.detail;
     showAnswer(s.answer);
-  };
+  }
+  es.addEventListener("ping", seen);
+  es.onerror = () => unreachable("this page lost its connection to the Jarvis service");
+  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Jarvis service"); }, 1000);
   // text only: what was heard and what the guides say are never treated as markup
   function line(tag, text, cls) {
     const el = document.createElement(tag);
@@ -100,10 +135,30 @@ PAGE = """<!doctype html>
     if (cls) el.className = cls;
     return el;
   }
+  const REFUSED = {
+    expired: "Too late: the time to confirm had passed, so nothing was asked. Say the wake phrase and ask again.",
+    gone: "This question is no longer waiting (cancelled, or already decided) - nothing was asked.",
+    ambiguous: "More than one choice reached Jarvis, so nothing was asked. Say the wake phrase and ask again.",
+  };
   function decide(id, decision, box) {
+    const status = document.getElementById("confirm-status");
     for (const b of box.querySelectorAll("button")) b.disabled = true;
+    status.textContent = "Sending your choice...";
     fetch("/confirm", {method: "POST", headers: {"Content-Type": "application/json"},
-                       body: JSON.stringify({id: id, decision: decision})});
+                       body: JSON.stringify({id: id, decision: decision})})
+      .then((r) => {
+        if (r.status === 204) {
+          status.textContent = decision === "ask" ? "Confirmed - asking the clinic guides." : "Discarded - nothing was asked.";
+          return;
+        }
+        return r.json().catch(() => ({})).then((body) => {
+          status.textContent = REFUSED[body.result] || "Jarvis did not take your choice - nothing was asked.";
+        });
+      })
+      .catch(() => {
+        status.textContent = "Your choice did not reach Jarvis - nothing was asked. Check that Jarvis is running.";
+        for (const b of box.querySelectorAll("button")) b.disabled = false;
+      });
   }
   function choices(id) {
     const box = line("div", "", "choices");
@@ -126,7 +181,9 @@ PAGE = """<!doctype html>
     shownId = a && a.outcome === "confirm" ? a.id : null;
     body.replaceChildren();
     if (!a) return;
+    if (a.title) body.append(line("h3", a.title));
     if (a.outcome === "confirm") {
+      document.getElementById("confirm-status").textContent = "";
       body.append(line("h3", "Did I hear you right?"), line("p", a.heard, "heard"),
                   line("p", "Nothing is asked until you confirm. If you do not, it is discarded after " + a.seconds +
                        " seconds.", "muted"), choices(a.id));
@@ -179,7 +236,8 @@ def create_app(machine):
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("id"), str) or not isinstance(body.get("decision"), str):
             abort(400)
-        return ("", 204) if machine.decide(body["id"], body["decision"]) else ("", 409)
+        result = machine.decide(body["id"], body["decision"])
+        return ("", 204) if result == "taken" else (jsonify({"result": result}), 409)
 
     @app.route("/status")
     def status():
@@ -193,7 +251,7 @@ def create_app(machine):
             while True:
                 nxt = machine.wait_change(snap["version"], HEARTBEAT_SECONDS)
                 if nxt["version"] == snap["version"] and nxt["answer"] == snap["answer"]:
-                    yield ": keep-alive\n\n"
+                    yield "event: ping\ndata: \n\n"   # the page's proof the service is still there
                     continue                   # (an answer that has just expired is sent, so the page drops it)
                 snap = nxt
                 yield f"data: {json.dumps(snap)}\n\n"

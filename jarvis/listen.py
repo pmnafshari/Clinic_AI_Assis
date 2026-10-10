@@ -1,11 +1,17 @@
 """Always-ready listening (J01): microphone -> wake phrase -> one exchange -> back to READY.
 
 READY is reported only after real sound has been processed. Idle audio lives in a 2 s ring buffer and is discarded;
-the request heard after the wake phrase is held only until the exchange ends (since J02 it is handed to the exchange:
-local speech to text, then the clinic guides), then dropped. Nothing is written to disk or sent anywhere. macOS delivers digital silence when the microphone is denied or
-muted, so a run of exact zeros means DEGRADED, never READY.
+the request heard after the wake phrase is held only until it is handed to the exchange (since J02: local speech to
+text, then the clinic guides), then dropped. Nothing is written to disk or sent anywhere. macOS delivers digital silence
+when the microphone is denied or muted, so a run of exact zeros means DEGRADED, never READY.
+
+Since J02 follow-up 6 the exchange runs in its own thread and the listener never waits for it: the wake phrase is still
+listened for, and the microphone and sleep still watched, while what was said is worked out, confirmed and asked. A new
+wake starts a new interaction (the machine cancels the old one); DEGRADED cancels it too.
 """
+import logging
 import queue
+import threading
 import time
 from collections import deque
 
@@ -42,6 +48,8 @@ class Listener:
         self.cue, self.mono, self.wall = cue or (lambda: None), mono, wall
         self.buffer = deque(maxlen=int(round(BUFFER_SECONDS / CHUNK_SECONDS)))
         self.request = []
+        self.recording = False             # the request after a wake, its own limits; not the machine's state
+        self.turn = 0
         self.detector = self.source = None
         self.good = self.zeros = self.starved = 0
         self.retry_at = 0.0
@@ -55,9 +63,10 @@ class Listener:
     def degrade(self, reason):
         self.request.clear()
         self.buffer.clear()
+        self.recording = False
         self.good = 0
         if self.machine.state != "DEGRADED" or self.machine.reason != reason:
-            self.machine.go("DEGRADED", reason)
+            self.machine.go("DEGRADED", reason)     # cancels the interaction in progress, if any
 
     def become_ready(self, reason):
         if self.machine.state == "DEGRADED":
@@ -65,12 +74,27 @@ class Listener:
         if self.machine.state == "STARTING":
             self.machine.go("READY", reason)
 
-    def back_to_ready(self, reason):
+    def end_recording(self, reason=None):
+        """The request is over: hand it to the exchange, or (J01, no exchange, too long, nothing said) end the
+        interaction with `reason`. Either way its audio leaves the listener here."""
+        pcm = np.concatenate(self.request) if self.request and reason is None else None
         self.request.clear()
         self.buffer.clear()
+        self.recording = False
         if self.detector:
             self.detector.reset()
-        self.machine.go("READY", reason)
+        if pcm is None:
+            return self.machine.finish(self.turn, reason)
+        turn, exchange = self.turn, self.on_request
+
+        def work():
+            try:
+                reason = exchange(pcm, turn)
+            except Exception as e:                 # a fault ends this interaction, never the listening
+                logging.exception("exchange fault")
+                reason = f"the exchange failed ({type(e).__name__}) - nothing more is shown for it"
+            self.machine.finish(turn, reason)
+        threading.Thread(target=work, name=f"jarvis-exchange-{turn}", daemon=True).start()
 
     # --- lifecycle -----------------------------------------------------------------------------------------
     def start(self):
@@ -138,9 +162,9 @@ class Listener:
                 self.degrade("the microphone is muted or access denied (macOS delivers silence)")
             return
         self.zeros = 0
+        if self.recording:
+            return self._record(chunk)
         state = self.machine.state
-        if state == "ACTIVE":
-            return self._active(chunk)
         self.buffer.append(chunk)
         woke = self.detector.feed(chunk)
         if state in ("STARTING", "DEGRADED"):
@@ -148,14 +172,16 @@ class Listener:
             if self.good * CHUNK_SECONDS >= READY_AFTER_SECONDS:
                 self.become_ready("listening for the wake phrase")
             return
-        if state == "READY" and woke:
+        # READY, or an exchange working or waiting for its confirmation: a wake starts a new interaction
+        if woke and state in ("READY", "ACTIVE", "WAITING_FOR_CONFIRMATION"):
             self.floor = float(np.median([rms(c) for c in self.buffer])) if self.buffer else 0.0
             self.buffer.clear()
-            self.machine.go("ACTIVE", "heard the wake phrase - listening to the request")
+            self.turn = self.machine.begin("heard the wake phrase - listening to the request")
+            self.recording = True
             self.cue()
             self.active_since, self.last_speech = self.mono(), None
 
-    def _active(self, chunk):
+    def _record(self, chunk):
         now = self.mono()
         self.request.append(chunk)
         if rms(chunk) > max(2.5 * self.floor, 300.0):
@@ -163,16 +189,12 @@ class Listener:
         if self.last_speech is not None and now - self.last_speech >= SILENCE_SECONDS:
             if self.on_request is None:
                 spoken = len(self.request) * CHUNK_SECONDS
-                return self.back_to_ready(f"request heard ({spoken:.1f} s) and discarded - answers arrive in J02")
-            reason = self.on_request(np.concatenate(self.request))
-            drain = getattr(self.source, "drain", None)
-            if drain:
-                drain()                        # what was heard while answering is not fed to the wake detector later
-            return self.back_to_ready(reason)
+                return self.end_recording(f"request heard ({spoken:.1f} s) and discarded - answers arrive in J02")
+            return self.end_recording()
         if self.last_speech is None and now - self.active_since >= IDLE_SECONDS:
-            return self.back_to_ready("nothing was said after the wake phrase")
+            return self.end_recording("nothing was said after the wake phrase")
         if now - self.active_since >= MAX_ACTIVE_SECONDS:
-            return self.back_to_ready("request too long - stopped listening")
+            return self.end_recording("request too long - stopped listening")
 
     def run(self, stop):
         self.start()
@@ -212,13 +234,6 @@ class SoundDeviceSource:
             return self.q.get(timeout=timeout)
         except queue.Empty:
             return None
-
-    def drain(self):
-        while True:
-            try:
-                self.q.get_nowait()
-            except queue.Empty:
-                return
 
     def close(self):
         try:

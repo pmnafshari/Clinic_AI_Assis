@@ -40,8 +40,12 @@ def state_model():
     allowed = {("STARTING", "READY"), ("STARTING", "DEGRADED"), ("READY", "ACTIVE"), ("READY", "DEGRADED"),
                ("ACTIVE", "READY"), ("ACTIVE", "AUTH_REQUIRED"), ("ACTIVE", "CONFIRMING"), ("ACTIVE", "DEGRADED"),
                ("AUTH_REQUIRED", "READY"), ("AUTH_REQUIRED", "DEGRADED"), ("CONFIRMING", "READY"),
-               ("CONFIRMING", "DEGRADED"), ("DEGRADED", "STARTING")}
-    assert set(states.STATES) == {"STARTING", "READY", "ACTIVE", "AUTH_REQUIRED", "CONFIRMING", "DEGRADED"}
+               ("CONFIRMING", "DEGRADED"), ("DEGRADED", "STARTING"),
+               # J02 follow-up 6 (owner decision D6, JARVIS §18): waiting for the on-screen confirmation is its own state
+               ("ACTIVE", "WAITING_FOR_CONFIRMATION"), ("WAITING_FOR_CONFIRMATION", "ACTIVE"),
+               ("WAITING_FOR_CONFIRMATION", "READY"), ("WAITING_FOR_CONFIRMATION", "DEGRADED")}
+    assert set(states.STATES) == {"STARTING", "READY", "ACTIVE", "WAITING_FOR_CONFIRMATION", "AUTH_REQUIRED",
+                                  "CONFIRMING", "DEGRADED"}
     for a in states.STATES:
         for b in states.STATES:
             if a == b:

@@ -129,8 +129,9 @@ def api_guides_vocabulary():
     except jl.LinkError:
         log_audit(conn, "jarvis-device", "device", "jarvis_api", "guides_vocabulary", allowed=0)
         return jsonify({"error": "not a registered Jarvis device"}), 401
-    terms = jl.vocabulary(gconn(), conn)
+    ranked = jl.ranked_terms(gconn(), conn)
+    terms = ranked[:jl.MAX_TERMS]
     log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_api", "guides_vocabulary", allowed=1)
-    resp = jsonify({"terms": terms})
+    resp = jsonify({"terms": terms, "dropped": len(ranked) - len(terms)})
     resp.headers["Cache-Control"] = "no-store"
     return resp

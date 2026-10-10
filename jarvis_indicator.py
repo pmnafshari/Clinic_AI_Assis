@@ -6,7 +6,8 @@ import sys
 import urllib.request
 
 STATUS = "http://127.0.0.1:5020/status"
-MARK = {"STARTING": "◌", "READY": "●", "ACTIVE": "◉", "AUTH_REQUIRED": "◆", "CONFIRMING": "◇", "DEGRADED": "✕"}
+MARK = {"STARTING": "◌", "READY": "●", "ACTIVE": "◉", "WAITING_FOR_CONFIRMATION": "◎", "AUTH_REQUIRED": "◆",
+        "CONFIRMING": "◇", "DEGRADED": "✕"}
 
 
 def label(status):

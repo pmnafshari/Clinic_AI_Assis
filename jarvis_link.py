@@ -6,6 +6,7 @@ device and kept here as a hash, sent over loopback. Anything protected also need
 the clinic app right now and has delegated *that* session to *that* device. The device never decides access: every
 check is here, every call is audited, and voice plays no part in it.
 """
+import collections
 import re
 import secrets
 from datetime import timedelta
@@ -222,31 +223,45 @@ def match_codes(text, codes):
 
 
 MAX_TERMS = 80
+TERM = re.compile(r"[^\W_]+(?:-[^\W_]+)*")      # WORD in any alphabet: a label printed as PIÙ stays one word
 
 
-def vocabulary(gconn, conn, role=GUIDE_ROLE):
-    """The speech-to-text hint (J-D10): codes and capital-letter labels from the current, approved pages this role may
-    read - never a superseded, withdrawn or pending document, a page for another audience, a restricted page or an
-    unreadable page's OCR. Anything shaped like a codice fiscale and any word of a patient's name are left out (the
-    names are read only for that and never leave this function). Computed on every call."""
+def ranked_terms(gconn, conn, role=GUIDE_ROLE):
+    """The speech-to-text hint (J-D10), every term in its order (J02 follow-up 6, R4): codes and capital-letter labels
+    from the current, approved pages this role may read - never a superseded, withdrawn or pending document, a page for
+    another audience, a restricted page or an unreadable page's OCR. Anything shaped like a codice fiscale and any word
+    of a patient's name are left out (the names are read only for that and never leave this function). Computed on
+    every call.
+
+    Order, so a cap keeps the same terms whatever their letters: the registered device models first, then the terms
+    more approved pages carry (a term asked about is likely on several), then alphabetically."""
     import clinic_guides as cg
     sql = ("SELECT p.text, p.ocr_text, p.readable FROM pages p JOIN sources s ON s.id = p.source_id"
            " WHERE s.status = 'approved'")
     if role != "dentist":
         sql += " AND s.audience = 'staff' AND p.restricted = 0"
-    found = set()
+    pages = collections.Counter()
     for row in gconn.execute(sql):
         text = row["text"] + (" " + row["ocr_text"] if row["readable"] else "")
-        for word in WORD.findall(text):
-            if re.search(r"[A-Za-z]", word) and re.search(r"[0-9-]", word):
+        found = set()
+        for word in TERM.findall(text):
+            if re.search(r"[^\W\d_]", word) and re.search(r"[0-9-]", word):
                 found.add(word.upper())                 # a code, whole: AX-300, E05, B-PROG
             elif len(word) > 1 and word.isalpha() and word.isupper():
-                found.add(word)                         # a label printed in capitals: DRY, MODE
+                found.add(word)                         # a label printed in capitals: DRY, MODE, PIÙ
+        pages.update(found)
     names = set()
     for (name,) in conn.execute("SELECT patient_name FROM patients"):
         names.update(w.upper() for w in re.findall(r"[^\W\d_]{3,}", name or ""))
-    terms = sorted(t for t in found if t not in names and not cg.CF_SHAPE.search(t))
-    return terms[:MAX_TERMS]
+    models = {d["model"].upper() for d in cg.devices(gconn)}
+    terms = [t for t in pages if t not in names and not cg.CF_SHAPE.search(t)]
+    return sorted(terms, key=lambda t: (t not in models, -pages[t], t))
+
+
+def vocabulary(gconn, conn, role=GUIDE_ROLE):
+    """The hint as sent to the device: the first MAX_TERMS of ranked_terms. The device fits them to its speech
+    engine's prompt budget in the same order (jarvis/stt.py)."""
+    return ranked_terms(gconn, conn, role)[:MAX_TERMS]
 
 
 def ask_guides(gconn, device, spoken):
