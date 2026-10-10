@@ -5,7 +5,9 @@
 import Foundation
 
 let logs = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Logs/clinic-service.log")
-FileManager.default.createFile(atPath: logs.path, contents: nil)
+if !FileManager.default.fileExists(atPath: logs.path) {    // createFile would empty an existing log
+    FileManager.default.createFile(atPath: logs.path, contents: nil)
+}
 if let h = FileHandle(forWritingAtPath: logs.path) {
     h.seekToEndOfFile()
     dup2(h.fileDescriptor, 1)
