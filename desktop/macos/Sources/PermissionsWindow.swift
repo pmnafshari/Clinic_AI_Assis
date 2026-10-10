@@ -33,7 +33,7 @@ final class PermissionsWindow: NSObject {
         addRow("files", "Files and folders", nil)
         addRow("notify", "Notifications", button("Ask macOS", #selector(askNotifications)))
         addRow("login", "Open Clinic Workspace at login", button("Switch", #selector(toggleLogin)))
-        addRow("service", "Clinic service at login (connected clinic)", button("Switch", #selector(toggleService)))
+        addRow("service", "Clinic app at login (connected clinic)", button("Open Clinic Service", #selector(toggleService)))
         addRow("demo", "Isolated demo backend", button("Restart", #selector(restartDemo)))
         addRow("network", "Network", nil)
         grid.translatesAutoresizingMaskIntoConstraints = false
@@ -119,8 +119,9 @@ final class PermissionsWindow: NSObject {
     }
 
     private func serviceState() {
-        let s = ClinicService.status()
-        set("service", ClinicService.describe(s), button: s == .enabled ? "Switch off" : "Switch on")
+        set("service", "checking...", button: ClinicService.appURL == nil ? "Not installed" : "Open Clinic Service")
+        rows["service"]?.1?.isEnabled = ClinicService.appURL != nil
+        ClinicService.answers { [weak self] ok in self?.set("service", ClinicService.describe(answers: ok)) }
     }
 
     private func demoState() {
@@ -190,8 +191,7 @@ final class PermissionsWindow: NSObject {
     }
 
     @objc private func toggleService() {
-        let result = ClinicService.toggle(window: window)
-        if let r = result { set("service", r) } else { serviceState() }
+        ClinicService.open()
     }
 
     @objc private func restartDemo() {

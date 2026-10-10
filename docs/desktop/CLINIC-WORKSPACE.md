@@ -23,10 +23,15 @@ Distribution to other Macs needs a Developer ID and notarization (not available 
 4. The coloured bar at the top always says which environment is open (**ISOLATED DEMO** / **CONNECTED CLINIC**).
    Switch with the **Environment** menu (unsaved form changes are asked about first).
 
-The connected clinic needs the clinic app running. Start it as before, or let the app start it at login:
-**Settings and Permissions > Clinic service at login > Switch on**, choose the clinic folder (the one with `run.py`
-and `.venv`), then approve it in System Settings > General > Login Items. If the clinic app is already running, the
-login item does nothing - there is never a second one.
+The connected clinic needs the clinic app running. Start it as before, or let **Clinic Service** start it at login:
+drag **Clinic Service** from the disk image to Applications too, open it, **Choose clinic folder...** (the one with
+`run.py` and `.venv`), **Switch on**, and approve it in System Settings > General > Login Items (macOS may also ask
+once whether it may open that folder). If the clinic app is already running it does nothing - there is never a second
+one. **Switch off** stops the clinic app it started. Its log: `~/Library/Logs/clinic-service.log`.
+
+Why a second app: Clinic Workspace is sandboxed, and macOS refuses a sandboxed app an unsandboxed login item (tested:
+`SMAppService` "Operation not permitted"); a sandboxed one could not run the clinic's own code with its own folder and
+workers. Clinic Service is small, unsandboxed (hardened runtime, no entitlements) and does only this.
 
 ## Everyday use
 - Close the window: the app stays in the Dock (the demo backend keeps running); click the Dock icon to reopen.
@@ -43,7 +48,8 @@ login item does nothing - there is never a second one.
 ## Settings and Permissions
 Shows, for the open environment: who is signed in and what the clinic lets that role do; writes from this app (on/
 off); the microphone (this app never records - Jarvis's own service holds that permission); files (one pick at a
-time); notifications (asked only when you press the button); open at login; clinic service at login; the demo
+time); notifications (asked only when you press the button); open at login; whether the clinic app is running
+and whether Clinic Service is installed (it opens Clinic Service; it cannot switch it); the demo
 backend's state and data folder. A state macOS controls is never changed silently - the app asks macOS or opens
 System Settings.
 
@@ -59,8 +65,8 @@ are in the app's container, not in the app). To roll back, install the older `.d
 format between these builds.
 
 ## Uninstall
-1. In Settings and Permissions switch off "Open at login" and "Clinic service at login" (if on).
-2. Quit the app and move **Clinic Workspace** from Applications to the Bin.
+1. In Settings and Permissions switch off "Open at login"; in Clinic Service press **Switch off** (if used).
+2. Quit the apps and move **Clinic Workspace** (and **Clinic Service**) from Applications to the Bin.
 The clinic's data, the web version and Jarvis are untouched. The demo's own synthetic data stays in
 `~/Library/Containers/local.clinicdemo.workspace` until you delete that folder yourself (it holds only the demo).
 
@@ -69,7 +75,8 @@ The clinic's backups are unchanged (`backup.py`, see the operations guide). The 
 deleting its folder starts it again from the bundled snapshot.
 
 ## Troubleshooting
-- "The clinic service is not running": start the clinic app (browser version as before) or the login item.
+- "The clinic app is not running": start it as before, or switch on Clinic Service; its log is
+  `~/Library/Logs/clinic-service.log`.
 - "The isolated demo could not start": Settings and Permissions shows the demo backend's state and its log folder;
   press Restart. "Another copy of Clinic Workspace is running the demo": quit the other copy.
 - Sign-in page appears again: your session ended (idle, sign-out, or the app was quit) - sign in again.

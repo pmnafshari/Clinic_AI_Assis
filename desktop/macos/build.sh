@@ -20,14 +20,20 @@ APP="$WORK/$APP_NAME.app"
 C="$APP/Contents"
 R="$C/Resources"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$C/MacOS" "$R" "$C/Library/LaunchAgents" "$OUT"
+SVC="$WORK/Clinic Service.app"
+mkdir -p "$C/MacOS" "$R" "$SVC/Contents/MacOS" "$SVC/Contents/Library/LaunchAgents" "$OUT"
 echo "== Clinic Workspace $VERSION ($BUILD, $COMMIT)"
 
 echo "== native code"
 swiftc -O -target arm64-apple-macos14.0 desktop/macos/Sources/*.swift -o "$C/MacOS/ClinicWorkspace"
-swiftc -O -target arm64-apple-macos14.0 desktop/macos/Helper/ClinicServiceHelper.swift -o "$C/MacOS/ClinicServiceHelper"
 sed -e "s/@VERSION@/$VERSION/" -e "s/@BUILD@/$BUILD/" -e "s/@COMMIT@/$COMMIT/" desktop/macos/Info.plist > "$C/Info.plist"
-cp desktop/macos/local.clinicdemo.workspace.clinic-service.plist "$C/Library/LaunchAgents/"
+# Clinic Service.app: the unsandboxed login item that starts the clinic's own run.py (a sandboxed app may not own one)
+swiftc -O -target arm64-apple-macos14.0 desktop/macos/ClinicService/main.swift -o "$SVC/Contents/MacOS/ClinicService"
+swiftc -O -target arm64-apple-macos14.0 desktop/macos/ClinicService/ClinicServiceHelper.swift \
+    -o "$SVC/Contents/MacOS/ClinicServiceHelper"
+sed -e "s/@VERSION@/$VERSION/" -e "s/@BUILD@/$BUILD/" -e "s/@COMMIT@/$COMMIT/" desktop/macos/ClinicService/Info.plist \
+    > "$SVC/Contents/Info.plist"
+cp desktop/macos/ClinicService/local.clinicdemo.clinic-service.plist "$SVC/Contents/Library/LaunchAgents/"
 
 echo "== python $PYVER (python-build-standalone via uv)"
 uv python install "$PYVER" >/dev/null
@@ -69,15 +75,18 @@ done
 codesign --force --sign - --timestamp=none --options runtime \
     --entitlements desktop/macos/entitlements/python.entitlements "$R/python/bin/python3.12"
 codesign --force --sign - --timestamp=none --options runtime \
-    --entitlements desktop/macos/entitlements/helper.entitlements "$C/MacOS/ClinicServiceHelper"
-codesign --force --sign - --timestamp=none --options runtime \
     --entitlements desktop/macos/entitlements/app.entitlements "$APP"
 codesign --verify --strict --deep "$APP"
+for f in "$SVC/Contents/MacOS/ClinicServiceHelper" "$SVC"; do
+    codesign --force --sign - --timestamp=none --options runtime \
+        --entitlements desktop/macos/entitlements/clinic-service.entitlements "$f"
+done
+codesign --verify --strict --deep "$SVC"
 
 echo "== disk image"
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-cp -R "$APP" "$STAGE/"
+cp -R "$APP" "$SVC" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 cp desktop/macos/README-INSTALL.txt "$STAGE/READ ME FIRST.txt"
 NAME="ClinicWorkspace-$VERSION-$BUILD-local"
