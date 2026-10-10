@@ -60,6 +60,9 @@ final class PermissionsWindow: NSObject {
         if let t = button { rows[key]?.1?.title = t }
     }
 
+    /// Each row as it reads on screen (for the installed-app test).
+    var texts: [String: String] { rows.mapValues { $0.0.stringValue } }
+
     func show() {
         window.makeKeyAndOrderFront(nil)
         refresh()

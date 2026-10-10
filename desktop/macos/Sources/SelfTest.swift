@@ -142,6 +142,22 @@ final class SelfTest {
             catch { return done(["ok": false, "error": error.localizedDescription]) }
             return done(["ok": true])
         }
+        if step["permissions"] != nil {                  // the Settings and Permissions rows as they read
+            app.showPermissions(nil)
+            return DispatchQueue.main.asyncAfter(deadline: .now() + 3) { [self] in
+                done(["ok": app.permissions != nil, "rows": app.permissions?.texts ?? [:]])
+            }
+        }
+        if let on = step["clinic_service"] as? Bool {    // the clinic-service login item, folder given by the test
+            if let folder = step["folder"] as? String {
+                if folder.isEmpty { UserDefaults.standard.removeObject(forKey: "clinicFolder") }
+                else { UserDefaults.standard.set(folder, forKey: "clinicFolder") }
+                UserDefaults.standard.synchronize()
+            }
+            do { if on { try ClinicService.service.register() } else { try ClinicService.service.unregister() } }
+            catch { return done(["ok": false, "error": error.localizedDescription, "status": ClinicService.status().rawValue]) }
+            return done(["ok": true, "status": ClinicService.status().rawValue])
+        }
         if step["login_state"] != nil { return done(["ok": true, "status": SMAppService.mainApp.status.rawValue]) }
         if step["overflow"] != nil {                     // the page fits its window at the current size and zoom
             return evaluate("return [document.documentElement.scrollWidth, document.documentElement.clientWidth];") { v, e in
