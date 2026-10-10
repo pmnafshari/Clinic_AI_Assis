@@ -8,6 +8,8 @@ hook, `desktop/macos/`); this file covers what the clinic backend gives it and h
 2. run.py can be imported without starting a server, and run.main(port) is the one startup both backends use
 3. the demo backend (desktop/macos/backend/workspace_backend.py) refuses to run in the clinic's own folder or without
    the demo profile - it can never open the clinic's real database
+4. the demo backend ends itself when the app that started it is gone (a crash or a force-quit leaves no backend
+   holding the demo's port)
 """
 import json
 import os
@@ -74,11 +76,37 @@ def demo_backend_refuses():
         assert r.returncode == 2 and "5000" in r.stderr, "3: never the clinic's own port"
 
 
+def follows_its_parent():
+    # 4.
+    sys.path.insert(0, str(BACKEND.parent))
+    import workspace_backend as wb
+    ppids = iter([111, 111, 1])
+    ended = []
+    wb.watch_parent(111, getppid=lambda: next(ppids), end=lambda: ended.append(True), interval=0)
+    assert ended == [True], "4: HARD FAIL - the backend outlived the app"
+    code = ("import sys, subprocess, time; sys.path.insert(0, %r); import workspace_backend as wb;"
+            " import os, threading; p = os.getppid(); threading.Thread(target=wb.watch_parent, args=(p,),"
+            " kwargs={'interval': 0.1}, daemon=True).start(); time.sleep(30)") % str(BACKEND.parent)
+    parent = subprocess.Popen([sys.executable, "-c", f"import subprocess, sys; subprocess.Popen([sys.executable, '-c', {code!r}]); import time; time.sleep(0.5)"])
+    parent.wait(10)
+    import time
+    deadline = time.monotonic() + 5
+    leftover = True
+    while time.monotonic() < deadline:
+        r = subprocess.run(["pgrep", "-f", "watch_parent, args"], capture_output=True, text=True)
+        if not r.stdout.strip():
+            leftover = False
+            break
+        time.sleep(0.2)
+    assert not leftover, "4: HARD FAIL - a real child kept running after its parent ended"
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         session_endpoint(tmp)
     run_imports_quietly()
     demo_backend_refuses()
+    follows_its_parent()
     print(json.dumps({"workspace_selftest": "ok"}))
 
 

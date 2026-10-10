@@ -113,5 +113,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
+// SIGTERM (logout, `kill`): stop the demo backend this app owns, then end - never a dialog here
+signal(SIGTERM, SIG_IGN)
+let terminate = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+terminate.setEventHandler {
+    delegate.demo.stop()
+    exit(0)
+}
+terminate.resume()
 app.setActivationPolicy(.regular)
 app.run()
