@@ -79,6 +79,14 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
         pause.title = paused ? "Resume listening" : "Pause listening"
     }
 
+    /// The strip as a person reads it (for the installed-app test).
+    var stripText: [String: Any] {
+        ["listening": listening.stringValue, "answers": answers.stringValue, "actions": actions.stringValue,
+         "pause_button": pause.title, "pause_enabled": pause.isEnabled, "page": web.url?.absoluteString ?? ""]
+    }
+
+    func setPaused(_ on: Bool) { if on != paused { togglePause(nil) } }
+
     @objc private func togglePause(_ sender: Any?) {
         var req = URLRequest(url: Self.origin.appendingPathComponent("listening"), timeoutInterval: 3)
         req.httpMethod = "POST"

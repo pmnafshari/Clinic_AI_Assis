@@ -134,6 +134,9 @@ final class SelfTest {
                          "banner": ws?.bannerText ?? "", "status": ws?.statusText ?? ""])
         }
         if step["jarvis"] != nil { app.showJarvis(nil); return done(["ok": true]) }
+        if step["jarvis_state"] != nil { return done(["ok": app.jarvis != nil, "strip": app.jarvis?.stripText ?? [:]]) }
+        if let on = step["jarvis_pause"] as? Bool { app.jarvis?.setPaused(on); return done(["ok": app.jarvis != nil]) }
+        if step["close_jarvis"] != nil { app.jarvis?.window.performClose(nil); return done(["ok": true]) }
         if step["quit"] != nil {
             done(["ok": true])
             return DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
