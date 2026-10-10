@@ -9,11 +9,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var workspace: WorkspaceWindow?
     var jarvis: JarvisWindow?
     var permissions: PermissionsWindow?
+    var selfTest: SelfTest?                         // kept for the whole run (a test runner released early stalls)
 
     func applicationDidFinishLaunching(_ note: Notification) {
         buildMenu()
         if let script = SelfTest.requestedScript() {      // test hook: only a script inside this app's own container
-            SelfTest(app: self, script: script).start()
+            selfTest = SelfTest(app: self, script: script)
+            selfTest?.start()
             return
         }
         openWorkspace()
