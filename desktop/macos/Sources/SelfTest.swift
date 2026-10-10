@@ -103,6 +103,13 @@ final class SelfTest {
                 done(["ok": ok])
             }
         }
+        if step["reload"] != nil { web?.reload(); return done(["ok": true]) }
+        if step["clear_store"] != nil, let w = web {        // a test's sign-ins leave nothing behind in this environment
+            let store = w.configuration.websiteDataStore
+            return store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
+                done(["ok": true])
+            }
+        }
         if let z = step["zoom"] as? Double { web?.pageZoom = z; return done(["ok": true]) }
         if let size = step["resize"] as? [Double], size.count == 2, let w = app.workspace?.window {
             w.setContentSize(NSSize(width: size[0], height: size[1]))
