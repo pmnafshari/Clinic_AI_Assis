@@ -1,4 +1,5 @@
 import AppKit
+import ServiceManagement
 import WebKit
 
 /// The installed-app test hook. `ClinicWorkspace --selftest NAME` reads steps from this app's own container
@@ -136,6 +137,18 @@ final class SelfTest {
         if step["jarvis"] != nil { app.showJarvis(nil); return done(["ok": true]) }
         if step["jarvis_state"] != nil { return done(["ok": app.jarvis != nil, "strip": app.jarvis?.stripText ?? [:]]) }
         if let on = step["jarvis_pause"] as? Bool { app.jarvis?.setPaused(on); return done(["ok": app.jarvis != nil]) }
+        if let on = step["login_item"] as? Bool {      // the app's own "open at login" (SMAppService.mainApp)
+            do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
+            catch { return done(["ok": false, "error": error.localizedDescription]) }
+            return done(["ok": true])
+        }
+        if step["login_state"] != nil { return done(["ok": true, "status": SMAppService.mainApp.status.rawValue]) }
+        if step["overflow"] != nil {                     // the page fits its window at the current size and zoom
+            return evaluate("return [document.documentElement.scrollWidth, document.documentElement.clientWidth];") { v, e in
+                let a = v as? [Int] ?? []
+                done(["ok": e == nil && a.count == 2 && a[0] <= a[1] + 1, "widths": a])
+            }
+        }
         if step["close_jarvis"] != nil { app.jarvis?.window.performClose(nil); return done(["ok": true]) }
         if step["quit"] != nil {
             done(["ok": true])

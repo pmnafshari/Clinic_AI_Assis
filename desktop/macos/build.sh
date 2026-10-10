@@ -82,7 +82,8 @@ ln -s /Applications "$STAGE/Applications"
 cp desktop/macos/README-INSTALL.txt "$STAGE/READ ME FIRST.txt"
 NAME="ClinicWorkspace-$VERSION-$BUILD-local"
 rm -f "$OUT/$NAME.dmg"
-hdiutil create -quiet -volname "Clinic Workspace $VERSION" -srcfolder "$STAGE" -format UDZO "$OUT/$NAME.dmg"
+hdiutil create -quiet -volname "Clinic Workspace $VERSION" -srcfolder "$STAGE" -format UDZO "$OUT/$NAME.dmg" \
+    || { sleep 5; hdiutil create -quiet -volname "Clinic Workspace $VERSION" -srcfolder "$STAGE" -format UDZO "$OUT/$NAME.dmg"; }
 (cd "$OUT" && shasum -a 256 "$NAME.dmg" > "$NAME.dmg.sha256")
 cat > "$OUT/$NAME.build.json" <<EOF
 {"version": "$VERSION", "build": $BUILD, "commit": "$COMMIT", "python": "$PYVER", "arch": "arm64",
