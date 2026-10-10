@@ -277,6 +277,11 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
 
     func webView(_ webView: WKWebView, decidePolicyFor response: WKNavigationResponse,
                  decisionHandler: @escaping (WKNavigationResponsePolicy) -> Void) {
+        let mime = response.response.mimeType ?? ""
+        if response.isForMainFrame, mime.hasPrefix("image/"), let url = response.response.url, sameOrigin(url) {
+            _ = ImagePreview(url: url, store: webView.configuration.websiteDataStore)   // the page stays where it was
+            return decisionHandler(.cancel)
+        }
         let disposition = (response.response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Disposition") ?? ""
         if !response.canShowMIMEType || disposition.lowercased().hasPrefix("attachment") {
             return decisionHandler(.download)

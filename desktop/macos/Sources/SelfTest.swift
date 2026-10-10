@@ -104,6 +104,10 @@ final class SelfTest {
             }
         }
         if step["reload"] != nil { web?.reload(); return done(["ok": true]) }
+        if step["previews"] != nil {
+            return done(["ok": true, "urls": ImagePreview.open.map { $0.url.absoluteString },
+                         "titles": ImagePreview.open.map { $0.window.title }])
+        }
         if step["page"] != nil {                           // what the window shows, read natively (no page script)
             return done(["ok": web != nil, "url": web?.url?.absoluteString ?? NSNull(), "title": web?.title ?? ""])
         }
