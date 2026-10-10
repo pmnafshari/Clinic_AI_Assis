@@ -10,6 +10,8 @@ hook, `desktop/macos/`); this file covers what the clinic backend gives it and h
    the demo profile - it can never open the clinic's real database
 4. the demo backend ends itself when the app that started it is gone (a crash or a force-quit leaves no backend
    holding the demo's port)
+5. inside the App Sandbox the backend reads no host configuration file: Python's MIME table is its built-in one (the
+   installed app's first start crashed reading /etc/apache2/mime.types, which the sandbox refuses)
 """
 import json
 import os
@@ -101,12 +103,21 @@ def follows_its_parent():
     assert not leftover, "4: HARD FAIL - a real child kept running after its parent ended"
 
 
+def no_host_files():
+    # 5.
+    code = ("import sys; sys.path.insert(0, %r); import workspace_backend, mimetypes; "
+            "print(mimetypes.knownfiles == [] and mimetypes.guess_type('a.pdf')[0])") % str(BACKEND.parent)
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert r.stdout.strip() == "application/pdf", f"5: the backend must not read host MIME files ({r.stdout} {r.stderr[-200:]})"
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         session_endpoint(tmp)
     run_imports_quietly()
     demo_backend_refuses()
     follows_its_parent()
+    no_host_files()
     print(json.dumps({"workspace_selftest": "ok"}))
 
 

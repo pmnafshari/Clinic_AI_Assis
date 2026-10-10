@@ -50,8 +50,8 @@ final class SelfTest {
 
     private func next() {
         guard index < steps.count else {
-            record(["step": "end", "ok": true])
-            return
+            record(["step": "end", "ok": true])     // a test run always ends the app
+            return DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { NSApp.terminate(nil) }
         }
         let step = steps[index]
         index += 1
@@ -81,8 +81,9 @@ final class SelfTest {
             web?.load(URLRequest(url: URL(string: path, relativeTo: origin)!))
             return done(["ok": true])
         }
-        if let code = step["wait_js"] as? String {
-            return poll(code, until: Date().addingTimeInterval(step["timeout"] as? Double ?? 30), done)
+        if let code = step["wait_js"] as? String {      // an expression, polled until true
+            let seconds = (step["timeout"] as? NSNumber)?.doubleValue ?? 30
+            return poll("return (\(code));", until: Date().addingTimeInterval(seconds), tries: 0, done)
         }
         if let code = step["js"] as? String {
             return evaluate(code) { value, error in
@@ -136,11 +137,19 @@ final class SelfTest {
         }
     }
 
-    private func poll(_ code: String, until: Date, _ done: @escaping ([String: Any]) -> Void) {
+    private func poll(_ code: String, until: Date, tries: Int, _ done: @escaping ([String: Any]) -> Void) {
         evaluate(code) { [weak self] v, e in
-            if let b = v as? Bool, b { return done(["ok": true]) }
-            if Date() > until { return done(["ok": false, "value": v ?? NSNull(), "error": e ?? "timed out"]) }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self?.poll(code, until: until, done) }
+            guard let self = self else { return }
+            if let b = v as? Bool, b { return done(["ok": true, "tries": tries + 1]) }
+            let url = self.web?.url?.absoluteString ?? "none"
+            if Date() > until {
+                return done(["ok": false, "value": v ?? NSNull(), "error": e ?? "timed out", "url": url, "tries": tries + 1])
+            }
+            let progress: [String: Any] = ["tries": tries + 1, "url": url, "error": e ?? "", "demo": self.app.demo.state.text]
+            if let d = try? JSONSerialization.data(withJSONObject: progress) {
+                try? d.write(to: self.dir.appendingPathComponent("\(self.name).progress.json"))
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { self.poll(code, until: until, tries: tries + 1, done) }
         }
     }
 

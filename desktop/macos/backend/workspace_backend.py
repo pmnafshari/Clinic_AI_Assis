@@ -6,11 +6,16 @@ which this process inherits, so the clinic's real database is not even readable 
 
 It refuses to run in the clinic's own folder, without the demo profile, or on a port the clinic or its other apps use.
 """
+import mimetypes
 import os
 import sys
 import threading
 import time
 from pathlib import Path
+
+# inside the App Sandbox a host file such as /etc/apache2/mime.types is visible but not readable, and Python's
+# mimetypes does not expect that (the installed app's first demo start crashed on it): use the built-in table only
+mimetypes.knownfiles = []
 
 CLINIC_PORTS = {5000, 5001, 5002, 5020}       # staff, patient portal, public site, Jarvis
 
