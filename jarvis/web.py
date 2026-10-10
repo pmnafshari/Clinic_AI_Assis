@@ -37,7 +37,7 @@ PAGE = """<!doctype html>
   .WAITING_FOR_CONFIRMATION { font-size: 22px; overflow-wrap: anywhere; }
   #confirm-status:empty { display: none; }
   .ready-line { font-weight: 600; margin-top: 0; } .ready-line.ok { color: var(--ok); } .ready-line.no { color: var(--warn); }
-  .source { margin: 4px 0 12px; } .source a { color: var(--info); }
+  .source { margin: 4px 0 12px; } .source a { color: var(--info); display: inline-block; min-height: 24px; padding: 2px 0; }
   #confirm-status { font-weight: 600; }
   .muted { color: var(--muted); } ol { padding-left: 1.2rem; } code { font-size: 14px; }
   blockquote { margin: 12px 0; padding: 8px 14px; border-left: 4px solid var(--info); background: var(--bg); }
@@ -108,7 +108,8 @@ PAGE = """<!doctype html>
 </main>
 <script>
   const CLINIC = document.querySelector("main").dataset.clinic;
-  const STALE_MS = 4000;           // two heartbeats missed: with the 1 s check below, a frozen service shows within 5 s
+  const STALE_MS = 4000;           // two heartbeats missed
+  const CHECK_MS = 250;            // a frozen service shows within STALE_MS + CHECK_MS (4.25 s; a 1 s check reached 4.96 s)
   const es = new EventSource("/events");
   let lastSeen = Date.now(), lost = false;
   function seen() {
@@ -153,7 +154,7 @@ PAGE = """<!doctype html>
   }
   es.addEventListener("ping", seen);
   es.onerror = () => unreachable("this page lost its connection to the Jarvis service");
-  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Jarvis service"); }, 1000);
+  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Jarvis service"); }, CHECK_MS);
   // text only: what was heard and what the guides say are never treated as markup
   function line(tag, text, cls) {
     const el = document.createElement(tag);

@@ -665,6 +665,16 @@ def ui_review_findings():
         "13: device, source link and conflicting documents on the card"
     assert "d.make" in body and "d.model" in body and "d.room" in body, "13: the cited answer names its device"
     assert "a.left" in body, "13: the card says the real time left"
+    # a frozen service is noticed within 5 s with room to spare: the stale limit plus one check interval is the worst
+    # case (the review measured 4.94-4.96 s with a 1 s check - right at the bound)
+    import re
+    stale = int(re.search(r"const STALE_MS = (\d+);", code).group(1))
+    check = re.search(r"const CHECK_MS = (\d+);", code)
+    assert check and stale + int(check.group(1)) <= 4500 and "}, CHECK_MS);" in code, \
+        f"13: a frozen service may show after {stale} ms + the check interval"
+    # a link on its own line is a target of its own: at least 24 px tall (found at 768 and 1024 px in run 2)
+    assert re.search(r"\.source a \{[^}]*display: inline-block;[^}]*min-height: 24px;", html), \
+        "13: the source links are at least 24 px tall"
     assert 'data-clinic="http://127.0.0.1:5000"' in html and "/guides/sources/" in _fn_body(code, "sourceLink"), \
         "13: links go to the clinic app's own page view"
 
