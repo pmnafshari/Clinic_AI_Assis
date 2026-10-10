@@ -289,6 +289,17 @@ def create_app(machine, clinic_url=CLINIC_URL):
         result = machine.decide(body["id"], body["decision"])
         return ("", 204) if result == "taken" else (jsonify({"result": result}), 409)
 
+    @app.route("/listening", methods=["POST"])
+    def listening():
+        # pause or resume listening (P28, the Clinic Workspace app); the same checks as /confirm
+        if request.headers.get("Origin") not in ORIGINS:
+            abort(403)
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get("paused"), bool):
+            abort(400)
+        machine.set_paused(body["paused"])
+        return "", 204
+
     @app.route("/status")
     def status():
         return jsonify(machine.snapshot())

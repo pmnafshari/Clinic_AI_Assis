@@ -61,7 +61,7 @@ class Feed:
     """A microphone the test speaks into, one chunk at a time; 'error' = the device fails."""
 
     def __init__(self, clock):
-        self.q, self.clock, self.read_count = queue.Queue(), clock, 0
+        self.q, self.clock, self.read_count, self.closes = queue.Queue(), clock, 0, 0
 
     def open(self):
         pass
@@ -87,7 +87,7 @@ class Feed:
         return self.q.empty()
 
     def close(self):
-        pass
+        self.closes += 1
 
 
 class Detector:
@@ -679,6 +679,46 @@ def ui_review_findings():
         "13: links go to the clinic app's own page view"
 
 
+def pause_listening():
+    # 14. P28 (Clinic Workspace): listening can be paused through Jarvis's own page API (loopback, the same Host and
+    #     Origin checks as /confirm). Paused: the microphone is closed, the state says so (DEGRADED with its reason),
+    #     anything in progress is cancelled and nothing is heard; resumed: the microphone opens again and READY returns
+    #     on real sound
+    svc = Service(on_request=lambda pcm, turn: "answered on screen (DemoMed AX-200 User manual, page 2)")
+    try:
+        svc.ready()
+        svc.m.set_paused(True)
+        assert until(lambda: svc.m.state == "DEGRADED" and "paused" in svc.m.reason, 3), \
+            f"14: paused is a state with its reason ({svc.m.state} {svc.m.reason})"
+        assert until(lambda: svc.feed.closes >= 1 and svc.lst.source is None, 3), "14: the microphone is closed while paused"
+        reads, wakes = svc.feed.read_count, svc.wakes()
+        svc.feed.put(WAKE, *[SPEECH] * 4)
+        time.sleep(0.8)
+        assert svc.feed.read_count == reads and svc.wakes() == wakes and svc.m.state == "DEGRADED", \
+            "14: HARD FAIL - something was heard while paused"
+        assert svc.m.snapshot()["paused"] is True, "14: the page is told it is paused"
+        svc.feed.q = queue.Queue()                # what was said while paused is not in the microphone
+        svc.m.set_paused(False)
+        svc.ready()
+        assert svc.m.snapshot()["paused"] is False, "14: resumed"
+        svc.ask()
+        assert until(lambda: svc.wakes() == wakes + 1), "14: the wake phrase is heard again after resume"
+    finally:
+        svc.close()
+    m = machine()
+    c = create_app(m).test_client()
+
+    def post(body, origin=BASE):
+        return c.post("/listening", data=json.dumps(body), content_type="application/json",
+                      headers={"Origin": origin} if origin else {}, base_url=BASE)
+    assert post({"paused": True}, origin=None).status_code == 403, "14: HARD FAIL - paused without an Origin"
+    assert post({"paused": True}, origin="http://evil.test").status_code == 403, "14: HARD FAIL - a foreign origin paused it"
+    assert post({"paused": "yes"}).status_code == 400 and post({}).status_code == 400, "14: only a true/false is taken"
+    assert post({"paused": True}).status_code == 204 and m.snapshot()["paused"] is True, "14: paused from the page API"
+    assert post({"paused": False}).status_code == 204 and m.snapshot()["paused"] is False, "14: resumed from the page API"
+    assert c.get("/listening", base_url=BASE).status_code == 405, "14: only POST"
+
+
 def selftest():
     # an exception in a worker thread, or an exchange fault the listener logged, fails the suite (added after a
     # KeyError in a cancelled exchange's thread went unnoticed by every assertion during development)
@@ -700,6 +740,7 @@ def selftest():
     resources_are_released()
     answers_switch()
     ui_review_findings()
+    pause_listening()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"

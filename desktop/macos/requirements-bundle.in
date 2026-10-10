@@ -1,0 +1,22 @@
+pydantic==2.13.4
+watchdog==4.0.1
+chromadb==1.3.7
+openpyxl==3.1.5
+werkzeug==3.1.8
+flask==3.1.3
+flask-wtf==1.3.0
+pyyaml==6.0.3
+# imported directly by the selftests (escape), not only through flask
+markupsafe==3.0.3
+# local speech-to-text (P14.01). the model itself is not a package: it is
+# fetched once into models/stt/ at setup, pinned by revision and sha256 (see
+# THIRD_PARTY_NOTICES.md), and loaded only from there - never downloaded at runtime
+onnxruntime==1.27.0
+# document text (P15). BSD-3-Clause, pure Python; only ever run inside the
+# sandboxed document_worker.py
+pypdf==6.19.0
+# jarvis (J01): microphone capture through PortAudio (MIT), the menu-bar
+# indicator (BSD) on PyObjC (MIT); numpy is imported directly by the listener.
+# the wake model files live in models/jarvis/ (sha256 in models/jarvis/SHA256SUMS,
+# provenance in THIRD_PARTY_NOTICES.md); openwakeword itself is not installed
+numpy==2.5.0

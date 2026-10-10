@@ -20,6 +20,7 @@ this file is stale.
 | POST | `/api/jarvis/guides/ask` | `jarvis.api_guides_ask` |
 | GET | `/api/jarvis/guides/vocabulary` | `jarvis.api_guides_vocabulary` |
 | GET | `/api/jarvis/whoami` | `jarvis.api_whoami` |
+| GET | `/api/session` | `auth.session` |
 | GET | `/appointments` | `appointments.index` |
 | POST | `/appointments/<int:appointment_id>/cancel` | `appointments.cancel` |
 | POST | `/appointments/<int:appointment_id>/confirm` | `appointments.confirm` |

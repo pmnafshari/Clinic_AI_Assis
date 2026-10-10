@@ -68,6 +68,7 @@ ROUTE_POLICY = {
     "auth.login": "public",
     "auth.logout": "login",
     "auth.change_password": "login",
+    "auth.session": "login",
     "dashboard.index": "login",
     "admin.users_view": "manage_users",
     "admin.create": "manage_users",
