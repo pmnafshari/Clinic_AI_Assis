@@ -41,6 +41,10 @@ def main(argv):
     port = int(argv[0]) if argv and argv[0].isdigit() else 0
     if port < 1024 or port in CLINIC_PORTS:
         refuse(f"port {port} belongs to the clinic or is not a valid port")
+    # D-P28-1: inside the App Sandbox `fdesetup status` reports FileVault Off even when it is On, so the disk guard
+    # (D-14 control 3) cannot verify encryption here. This backend holds only the bundled synthetic snapshot, in this
+    # app's container on the same disk; the guard is disarmed for it alone. The clinic's own run.py keeps it armed.
+    os.environ["DISK_GUARD_DISARMED"] = "1"
     threading.Thread(target=watch_parent, args=(os.getppid(),), name="watch-app", daemon=True).start()
     import run
     run.main(port=port)

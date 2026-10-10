@@ -12,6 +12,8 @@ hook, `desktop/macos/`); this file covers what the clinic backend gives it and h
    holding the demo's port)
 5. inside the App Sandbox the backend reads no host configuration file: Python's MIME table is its built-in one (the
    installed app's first start crashed reading /etc/apache2/mime.types, which the sandbox refuses)
+6. the disk guard (D-14 control 3) is disarmed for the synthetic demo only - fdesetup reports FileVault Off inside the
+   sandbox although it is On (decision D-P28-1); the clinic's own run.py keeps it armed
 """
 import json
 import os
@@ -111,6 +113,19 @@ def no_host_files():
     assert r.stdout.strip() == "application/pdf", f"5: the backend must not read host MIME files ({r.stdout} {r.stderr[-200:]})"
 
 
+def guard_only_for_demo():
+    # 6.
+    src = BACKEND.read_text()
+    assert 'os.environ["DISK_GUARD_DISARMED"] = "1"' in src, "6: the demo launcher disarms the guard itself"
+    i = src.index("def main(argv):")
+    body = src[i:]
+    assert body.index('"CLINIC_WORKSPACE_PROFILE") != "demo"') < body.index("DISK_GUARD_DISARMED"), \
+        "6: HARD FAIL - disarmed before the demo profile is checked"
+    run_src = (ROOT / "run.py").read_text()
+    assert "disk_guard.guard_or_exit()" in run_src and "DISK_GUARD_DISARMED" not in run_src, \
+        "6: HARD FAIL - the clinic's own startup must keep the guard armed"
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         session_endpoint(tmp)
@@ -118,6 +133,7 @@ def selftest():
     demo_backend_refuses()
     follows_its_parent()
     no_host_files()
+    guard_only_for_demo()
     print(json.dumps({"workspace_selftest": "ok"}))
 
 

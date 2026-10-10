@@ -83,7 +83,7 @@ final class SelfTest {
         }
         if let code = step["wait_js"] as? String {      // an expression, polled until true
             let seconds = (step["timeout"] as? NSNumber)?.doubleValue ?? 30
-            return poll("return (\(code));", until: Date().addingTimeInterval(seconds), tries: 0, done)
+            return poll(code, until: Date().addingTimeInterval(seconds), tries: 0, done)
         }
         if let code = step["js"] as? String {
             return evaluate(code) { value, error in
@@ -138,7 +138,9 @@ final class SelfTest {
     }
 
     private func poll(_ code: String, until: Date, tries: Int, _ done: @escaping ([String: Any]) -> Void) {
-        evaluate(code) { [weak self] v, e in
+        guard let w = web else { return done(["ok": false, "error": "no page"]) }
+        w.evaluateJavaScript(code) { [weak self] v, err in
+            let e = err?.localizedDescription
             guard let self = self else { return }
             if let b = v as? Bool, b { return done(["ok": true, "tries": tries + 1]) }
             let url = self.web?.url?.absoluteString ?? "none"
