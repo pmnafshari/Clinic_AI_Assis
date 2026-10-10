@@ -257,7 +257,9 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
         if url.scheme == "about" { return decisionHandler(.allow) }
         if sameOrigin(url) {
             let method = action.request.httpMethod ?? "GET"
-            if method != "GET", let p = profile, !app.settings.writesAllowed(p) {
+            // signing in and out is never a clinic-record write: allowed whatever the writes setting says
+            let session = ["/login", "/logout"].contains(url.path)
+            if method != "GET", !session, let p = profile, !app.settings.writesAllowed(p) {
                 notice = "a write was refused: writes from this app are switched off for this clinic"
                 refreshStatus()
                 NSSound.beep()
