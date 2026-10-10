@@ -15,7 +15,7 @@ from jarvis.stt import Cancelled, Failed, Unclear
 
 ANSWER_SECONDS = 120
 CONFIRM_SECONDS = 30
-RECHECK_SECONDS = 5
+RECHECK_SECONDS = 4          # + the whoami call itself: a revoked device or ended delegation is noticed within 5 s
 AGAIN = "Say the wake phrase and ask again."
 WORKING = "working out what was asked (on this computer) - not recording"
 ASKING = "asking the approved clinic guides - not recording"

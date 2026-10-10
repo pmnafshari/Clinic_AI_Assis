@@ -343,6 +343,9 @@ def revocation_and_delegation():
         assert time.monotonic() - t0 < 1, f"5: {label} noticed at the next recheck"
         assert m.decide(card["id"], "ask") == "gone" and link.asked == [], f"5: HARD FAIL - asked after {label}"
         t.join(3)
+    # the running service rechecks every RECHECK_SECONDS; with the loopback call it must stay within 5 s (the injected
+    # run on the running service measured 5.08 s with 5 s - JARVIS §18)
+    assert answer.RECHECK_SECONDS <= 4, f"5: recheck every {answer.RECHECK_SECONDS} s cannot notice within 5 s"
     # an old interaction's recheck never cancels a newer one (found in development: cancel() once took no number)
     m, link = machine(), Link()
     old = m.begin("heard the wake phrase - listening to the request")
