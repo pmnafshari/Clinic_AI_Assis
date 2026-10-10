@@ -104,6 +104,9 @@ final class SelfTest {
             }
         }
         if step["reload"] != nil { web?.reload(); return done(["ok": true]) }
+        if step["page"] != nil {                           // what the window shows, read natively (no page script)
+            return done(["ok": web != nil, "url": web?.url?.absoluteString ?? NSNull(), "title": web?.title ?? ""])
+        }
         if step["clear_store"] != nil, let w = web {        // a test's sign-ins leave nothing behind in this environment
             let store = w.configuration.websiteDataStore
             return store.removeData(ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(), modifiedSince: .distantPast) {
