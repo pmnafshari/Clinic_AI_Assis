@@ -19,6 +19,8 @@ this file is stale.
 | POST | `/agent/undo` | `agent.undo_change` |
 | POST | `/api/jarvis/guides/ask` | `jarvis.api_guides_ask` |
 | GET | `/api/jarvis/guides/vocabulary` | `jarvis.api_guides_vocabulary` |
+| POST | `/api/jarvis/login` | `jarvis.api_login` |
+| POST | `/api/jarvis/logout` | `jarvis.api_logout` |
 | POST | `/api/jarvis/notes/commit` | `jarvis.api_note_commit` |
 | POST | `/api/jarvis/notes/draft` | `jarvis.api_note_draft` |
 | GET | `/api/jarvis/whoami` | `jarvis.api_whoami` |
@@ -228,7 +230,7 @@ this file is stale.
 | `inventory_job_runs` | id, started_at, finished_at, checked, opened, resolved, status |
 | `inventory_movements` | id, item_id, kind, delta, counted, reason, idempotency_key, actor, actor_role, ts |
 | `invoices` | id, patient_id, visit_id, line_index, amount, description, amount_cents |
-| `jarvis_delegations` | id, device_id, username, session_hash, created_at, expires_at, revoked_by, revoked_at |
+| `jarvis_delegations` | id, device_id, username, session_hash, created_at, expires_at, revoked_by, revoked_at, kind |
 | `jarvis_devices` | id, name, token_hash, registered_by, registered_at, revoked_by, revoked_at |
 | `note_confirm_tokens` | token, username, issued_at, used_at |
 | `note_reviews` | id, origin, status, patient_id, codice_fiscale, staged_dir, original_path, original_name, original_sha256, extraction, extraction_error, attempts, visit_id, confirmed_fields, edited, created_by, created_at, decided_by, decided_at, decision_reason |

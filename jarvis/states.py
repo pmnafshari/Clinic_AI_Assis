@@ -111,6 +111,7 @@ class Machine:
         self._answer = None        # (what to show, expiry on self.clock) - memory only (J02)
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
         self.paused = False
+        self.access = None         # the doctor this device acts for, as the clinic says (2026-10-11), or None
         self.mic_level = 0.0       # the microphone's loudness now (0-1), for the page's animation only - not a state        # listening switched off by the owner (Clinic Workspace, P28) until resumed
 
     # --- moves ------------------------------------------------------------------------------------------------
@@ -211,6 +212,14 @@ class Machine:
                 new["missing"] = missing
             if new != self.answers:
                 self.answers = new
+                self._changed()
+
+    def set_access(self, who):
+        """Who the clinic says this device acts for - {username, role, expires_at} - or None (signed out, 00:00)."""
+        with self._lock:
+            new = {k: who.get(k) for k in ("username", "role", "expires_at", "kind")} if who else None
+            if new != self.access:
+                self.access = new
                 self._changed()
 
     def set_paused(self, on):
@@ -323,7 +332,7 @@ class Machine:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
                     "version": self.version, "history": list(self.history), "clinic": dict(self.clinic),
                     "answers": dict(self.answers), "answer": self._shown(), "paused": self.paused,
-                    "status": status_words(self.state, self.reason, self.paused),
+                    "status": status_words(self.state, self.reason, self.paused), "access": self.access,
                     "ready": readiness(self.state, self.reason, self.answers)}
 
     def wait_change(self, version, timeout):

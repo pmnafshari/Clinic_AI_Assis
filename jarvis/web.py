@@ -48,6 +48,17 @@ PAGE = """<!doctype html>
   .qa .line:has(span:not(.who):empty) { display: none; }
   .qa:not(:has(.line span:not(.who):not(:empty))) { display: none; }
   .cite { font-size: 15px; color: var(--muted); } .cite p { margin: 2px 0; }
+  .access { max-width: 40rem; margin: 0 auto 16px; padding: 12px 18px; border-radius: 12px; border: 1px solid var(--line);
+            background: rgba(0, 0, 0, .5); text-align: center; }
+  .access-title { font-weight: 700; color: var(--glow); margin: 0 0 8px; }
+  .access label { display: inline-flex; flex-direction: column; text-align: left; margin: 0 6px 8px; color: var(--muted); }
+  .access input[type=text], .access input:not([type]), .access input[type=password] { font: inherit; padding: 8px 10px;
+            border-radius: 8px; border: 1px solid var(--line); background: #0d0f14; color: var(--ink); min-width: 12rem; }
+  .access input[type=submit] { font: inherit; font-weight: 600; padding: 8px 18px; border-radius: 10px; cursor: pointer;
+            border: 2px solid var(--glow); background: var(--glow); color: #1a0d00; min-height: 24px; }
+  #signout input[type=submit] { background: transparent; color: var(--info); margin-left: 8px; }
+  .access input:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .access p { margin: 0; } #signin-error:empty { display: none; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .more { margin-top: 8px; } .more summary { cursor: pointer; color: var(--muted); min-height: 24px; padding: 4px 0; }
   .more[open] summary { margin-bottom: 12px; }
@@ -82,6 +93,19 @@ PAGE = """<!doctype html>
     <h1 id="status" class="status {{ s.status.word }}">{{ s.status.word }}</h1>
     <p id="status-why" class="why">{{ s.status.why }}</p>
   </div></div>
+  {% set u = s.access %}
+  <form id="signin" class="access"{% if u %} hidden{% endif %}>
+    <p class="access-title">Sign in to Jarvis - doctors only</p>
+    <label>Username <input name="username" autocomplete="username" required></label>
+    <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+    <input type="submit" value="Sign in">
+    <p id="signin-error" class="warn" role="alert"></p>
+  </form>
+  <form id="signout" class="access"{% if not u %} hidden{% endif %}>
+    <p>Signed in as <strong id="access-who">{{ u.username if u else "" }}</strong> - <span id="access-until">{% if u
+      and u.kind != "web" %}until 00:00{% elif u %}until the staff session ends{% endif %}</span>
+      <input type="submit" value="Sign out"></p>
+  </form>
   {% set a = s.answer %}
   <section id="qa" class="qa" aria-label="Question and answer">
     <p class="line"><span class="who">You</span><span id="cc-you">{{ a.heard if a and a.heard else "" }}</span></p>
@@ -277,7 +301,34 @@ PAGE = """<!doctype html>
     setText("ready", r.text);
     document.getElementById("ready").className = "ready-line " + (r.ok ? "ok" : "no");
   }
+  // --- a doctor signs Jarvis in (2026-10-11): the page passes the username and password to Jarvis, which passes
+  //     them to the clinic; nothing is kept in the page either - the password field is cleared at once
+  const SIGNIN = {credentials: "Wrong username or password.", not_doctor: "Only a doctor can sign Jarvis in.",
+                  password_change: "Change your password in the clinic app first.",
+                  clinic: "The clinic app is not reachable - is it running?"};
+  function setAccess(u) {
+    document.getElementById("signin").hidden = !!u;
+    document.getElementById("signout").hidden = !u;
+    setText("access-who", u ? u.username : "");
+    setText("access-until", !u ? "" : u.kind === "web" ? "until the staff session ends" : "until 00:00");
+  }
+  document.getElementById("signin").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = e.target, err = document.getElementById("signin-error");
+    const body = JSON.stringify({username: f.username.value, password: f.password.value});
+    f.password.value = "";
+    err.textContent = "";
+    fetch("/signin", {method: "POST", headers: {"Content-Type": "application/json"}, body: body})
+      .then((r) => r.ok ? r.json().then(setAccess) :
+            r.json().catch(() => ({})).then((b) => { err.textContent = SIGNIN[b.error] || "Not signed in."; }))
+      .catch(() => { err.textContent = "Jarvis is not reachable."; });
+  });
+  document.getElementById("signout").addEventListener("submit", (e) => {
+    e.preventDefault();
+    fetch("/signout", {method: "POST"}).then(() => setAccess(null)).catch(() => {});
+  });
   function render(s) {
+    setAccess(s.access);
     setText("status", s.status.word);
     document.getElementById("status").className = "status " + s.status.word;
     setText("status-why", s.status.why);
@@ -420,7 +471,7 @@ PAGE = """<!doctype html>
 </body></html>"""
 
 
-def create_app(machine, clinic_url=CLINIC_URL, speaker=None):
+def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
     app = Flask(__name__)
 
     @app.before_request
@@ -462,6 +513,39 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None):
         if not isinstance(body, dict) or not isinstance(body.get("paused"), bool):
             abort(400)
         machine.set_paused(body["paused"])
+        return "", 204
+
+    @app.route("/signin", methods=["POST"])
+    def signin():
+        # a doctor signs Jarvis in (owner, 2026-10-11): only this page may (Origin, as /confirm); the username and
+        # password go straight to the clinic and are kept nowhere here
+        if request.headers.get("Origin") not in ORIGINS:
+            abort(403)
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict) or not isinstance(body.get("username"), str) or \
+                not isinstance(body.get("password"), str) or access is None:
+            abort(400)
+        from jarvis.clinic import LinkDown, LinkRefused, Refused
+        try:
+            who = access.signin(body["username"].strip(), body["password"])
+        except Refused as e:
+            return jsonify({"error": e.code, "message": str(e)}), 403
+        except (LinkRefused, LinkDown) as e:
+            return jsonify({"error": "clinic", "message": str(e)}), 503
+        machine.set_access(who)
+        return jsonify({"username": who["username"], "expires_at": who["expires_at"]})
+
+    @app.route("/signout", methods=["POST"])
+    def signout():
+        if request.headers.get("Origin") not in ORIGINS:
+            abort(403)
+        if access is not None:
+            from jarvis.clinic import LinkDown, LinkRefused
+            try:
+                access.signout()
+            except (LinkRefused, LinkDown):
+                pass
+        machine.set_access(None)
         return "", 204
 
     @app.route("/live")

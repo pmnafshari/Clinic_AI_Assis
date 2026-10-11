@@ -216,6 +216,7 @@ def init_db(db_path):
     # Jarvis (J00): registered devices and staff sessions delegated to them - no audio, no transcripts
     import jarvis_link
     conn.executescript(jarvis_link.SCHEMA)
+    jarvis_link.ensure_columns(conn)
 
     # similar cases (P16). a dentist's verdicts and removals, append-only
     from similar_cases import SCHEMA as SIMILAR_SCHEMA

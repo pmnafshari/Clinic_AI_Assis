@@ -167,6 +167,8 @@ ROUTE_POLICY = {
     "jarvis.api_guides_vocabulary": "public",
     "jarvis.api_note_draft": "public",          # J03: the device credential + a delegated live session decide
     "jarvis.api_note_commit": "public",
+    "jarvis.api_login": "public",               # the device credential + the doctor's own password decide
+    "jarvis.api_logout": "public",
     "imports.drive_auto": "read_clinical",
     # P24: asking and reading approved guides is dentist and reception; managing is the dentist's. The decision
     # routes are open to asking staff because a named administrative approver (a reception account) may approve

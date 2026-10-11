@@ -21,7 +21,7 @@ import threading
 from pathlib import Path
 
 from jarvis import answer, launchd, listen, runtime, speech, states, stt
-from jarvis.clinic import DEFAULT_KEY, ClinicLink, store_key
+from jarvis.clinic import DEFAULT_KEY, ClinicLink, LinkRefused, store_key
 from jarvis.web import CLINIC_URL, PORT, create_app
 
 CHECK_SECONDS = 30
@@ -46,6 +46,34 @@ def notes_for(answers):
     2026-10-11); the clinic still decides every note: a delegated live session, its role, the patient picked on
     screen."""
     return bool(answers)
+
+
+def start_signed_out(link):
+    """Jarvis starting again forgets who it acted for: a doctor signs it in again (owner, 2026-10-11)."""
+    if link is None:
+        return
+    try:
+        link.logout("restarted")
+    except Exception:
+        pass                    # the clinic app is down: its own 00:00 limit still holds
+
+
+class Access:
+    """The page's sign-in and sign-out, passed straight to the clinic."""
+
+    def __init__(self, link_factory):
+        self.link_factory = link_factory
+
+    def signin(self, username, password):
+        link = self.link_factory()
+        if link is None:
+            raise LinkRefused("no device credential on this machine")
+        return link.login(username, password)
+
+    def signout(self):
+        link = self.link_factory()
+        if link is not None:
+            link.logout("signed_out")
 
 
 def speaker_for(answers):
@@ -77,6 +105,7 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
     machine = states.Machine()
     stop = threading.Event()
     enabled = answers_on(os.environ)
+    start_signed_out(_link())             # a doctor signs Jarvis in again after every start
 
     def checks():
         while not stop.is_set():
@@ -102,7 +131,7 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
         threading.Thread(target=speech.watch, args=(machine, speaker, stop), name="jarvis-speech", daemon=True).start()
     threading.Thread(target=checks, name="jarvis-checks", daemon=True).start()
     threading.Thread(target=listening, name="jarvis-listen", daemon=True).start()
-    server = make_server("127.0.0.1", PORT, create_app(machine, clinic_url(), speaker=speaker), threaded=True)
+    server = make_server("127.0.0.1", PORT, create_app(machine, clinic_url(), speaker=speaker, access=Access(_link)), threaded=True)
     signal.signal(signal.SIGTERM, lambda *a: (stop.set(), threading.Thread(target=server.shutdown).start()))
     print(f"jarvis: page and status on http://127.0.0.1:{PORT}; clinic-guide answers "
           f"{'ON - synthetic demo mode' if enabled else 'off'}", flush=True)

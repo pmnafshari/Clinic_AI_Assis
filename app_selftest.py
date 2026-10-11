@@ -225,11 +225,11 @@ def selftest():
         # adds the device's clinic-guide question, checked the same way (jarvis_guides_selftest 1); J-D10 (2026-10-08)
         # the device's speech-to-text hint, checked the same way (jarvis_guides_selftest 7); J03 (2026-10-11) the
         # device's note draft and save - the device credential plus a delegated live session and its role decide
-        # (jarvis_notes_selftest 1, 5, 6)
+        # (jarvis_notes_selftest 1, 5, 6); 2026-10-11 a doctor signing the device in and out (jarvis_notes_selftest 7)
         assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
                                        "jarvis.api_guides_vocabulary", "jarvis.api_note_draft",
-                                       "jarvis.api_note_commit"}, \
-            "10b: the no-session whitelist must hold exactly static, shared, login and the five Jarvis device routes"
+                                       "jarvis.api_note_commit", "jarvis.api_login", "jarvis.api_logout"}, \
+            "10b: the no-session whitelist must hold exactly static, shared, login and the seven Jarvis device routes"
         assert app.test_client().get("/patients").status_code == 302, \
             "10b: every other route must still redirect to login without a session"
 
