@@ -32,7 +32,7 @@ D, A, ADM = ("drossi", "dentist"), ("aassist", "assistant"), ("anadmin", "admin"
 PATIENTS = [("SNTGLI51R49D612Y", "Giulia Santoro"), ("RSSP850010150900", "Paola Rossi"),
             ("RSPS850010150900", "Paola Rossi"), ("GLLMRC67A11F839U", "Marco Gallo")]
 WORDS = "patient reports sensitivity on the lower left molar, review in two weeks"
-PASSWORD = "jarvis-test-pass-1"
+PASSWORD = "jarvis-test-pass-1"  # pragma: allowlist secret (a made-up test password)
 
 
 def refused(fn, code):
