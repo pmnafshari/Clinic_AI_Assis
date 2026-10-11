@@ -1000,12 +1000,13 @@ def doctor_signin():
     #     restart signs it out) and after 00:00; the page passes them straight to the clinic and keeps nothing;
     #     only this page may sign in or out (Origin); the page shows who it acts for and until when
     from jarvis.clinic import Refused
+    RIGHT = "right"  # pragma: allowlist secret (a made-up test value)
     calls = []
 
     class Access:
         def signin(self, username, password):
             calls.append(("in", username, password))
-            if password != "right":
+            if password != RIGHT:
                 raise Refused("credentials", "wrong username or password")
             return {"username": username, "role": "dentist", "expires_at": "2026-10-11T22:00:00+00:00"}
 
@@ -1019,14 +1020,14 @@ def doctor_signin():
         "20: not signed in - the page asks for the doctor's username and password"
     assert "<button" not in top.lower(), "20: still no click-to-talk"
     ok = {"Origin": BASE}
-    assert c.post("/signin", json={"username": "drossi", "password": "right"}, base_url=BASE).status_code == 403, \
+    assert c.post("/signin", json={"username": "drossi", "password": RIGHT}, base_url=BASE).status_code == 403, \
         "20: HARD FAIL - a sign-in without this page's Origin"
     assert c.post("/signin", json={"username": "drossi"}, headers=ok, base_url=BASE).status_code == 400
     r = c.post("/signin", json={"username": "drossi", "password": "nope"}, headers=ok, base_url=BASE)
     assert r.status_code == 403 and r.get_json()["error"] == "credentials", "20: a refusal says why"
-    r = c.post("/signin", json={"username": "drossi", "password": "right"}, headers=ok, base_url=BASE)
+    r = c.post("/signin", json={"username": "drossi", "password": RIGHT}, headers=ok, base_url=BASE)
     assert r.status_code == 200 and m.snapshot()["access"]["username"] == "drossi", "20: signed in, shown"
-    assert "right" not in json.dumps(m.snapshot()) and "right" not in c.get("/status", base_url=BASE).data.decode(), \
+    assert RIGHT not in json.dumps(m.snapshot()) and RIGHT not in c.get("/status", base_url=BASE).data.decode(), \
         "20: HARD FAIL - the password kept by Jarvis"
     html = c.get("/", base_url=BASE).data.decode()
     top = html[html.index("<main"):html.index('<details id="more"')]

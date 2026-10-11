@@ -304,7 +304,7 @@ PAGE = """<!doctype html>
   // --- a doctor signs Jarvis in (2026-10-11): the page passes the username and password to Jarvis, which passes
   //     them to the clinic; nothing is kept in the page either - the password field is cleared at once
   const SIGNIN = {credentials: "Wrong username or password.", not_doctor: "Only a doctor can sign Jarvis in.",
-                  password_change: "Change your password in the clinic app first.",
+                  password_change: "Change your password in the clinic app first.",  // pragma: allowlist secret
                   clinic: "The clinic app is not reachable - is it running?"};
   function setAccess(u) {
     document.getElementById("signin").hidden = !!u;
