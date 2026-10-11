@@ -719,6 +719,61 @@ def pause_listening():
     assert c.get("/listening", base_url=BASE).status_code == 405, "14: only POST"
 
 
+def spoken_replies():
+    # 15. Owner decision 2026-10-11 (P14-D2 / POL-13, for the synthetic demo only): the built-in macOS voice reads the
+    #     card shown after an exchange - once, after it is over (READY); a new wake, a pause or DEGRADED stops it at
+    #     once; an Italian passage is not read with an English voice; with answers switched off nothing is wired to speak
+    import jarvis_run
+    from jarvis import speech
+    said, stopped = [], []
+
+    class Proc:
+        def __init__(self, cmd, **kw):
+            said.append(cmd)
+            self.done = False
+
+        def poll(self):
+            return 0 if self.done else None
+
+        def terminate(self):
+            stopped.append(True)
+            self.done = True
+    m = machine()
+    sp = speech.Speaker(popen=Proc)
+    halt = threading.Event()
+    threading.Thread(target=speech.watch, args=(m, sp, halt), name="speech-test", daemon=True).start()
+    try:
+        turn = m.begin("heard the wake phrase - listening to the request")
+        m.show_for(turn, {**ANSWER, "heard": "what does b prog do"}, 120)
+        time.sleep(0.3)
+        assert not said, "15: HARD FAIL - spoken while the exchange was still going on"
+        m.finish(turn, "answered on screen (DemoMed AX-200 User manual, page 2)")
+        assert until(lambda: len(said) == 1, 3), f"15: the answer is spoken once the exchange is over ({said})"
+        assert said[0][0] == "/usr/bin/say" and "B-PROG selects program B." in said[0][-1] \
+            and "page 2" in said[0][-1], f"15: the verified passage and its page are read ({said[0]})"
+        m.set_clinic(True, "connected")                       # another change: the same card is not read again
+        time.sleep(0.3)
+        assert len(said) == 1, f"15: a card is read once ({said})"
+        m.begin("heard the wake phrase - listening to the request")
+        assert until(lambda: len(stopped) == 1, 3), "15: HARD FAIL - a new wake phrase does not stop the voice"
+        turn = m.turn
+        m.show_for(turn, {"outcome": "refused", "reason": "which_device", "title": "Which device?",
+                          "message": "Say the wake phrase and ask again, naming the device.", "citations": [],
+                          "warnings": []}, 120)
+        m.finish(turn, "a refusal is on screen (Which device?)")
+        assert until(lambda: len(said) == 2, 3) and "Which device?" in said[1][-1], f"15: a refusal is read ({said})"
+        m.set_paused(True)
+        assert until(lambda: len(stopped) == 2, 3), "15: HARD FAIL - pausing does not stop the voice"
+    finally:
+        halt.set()
+    italian = {**ANSWER, "citations": [{**ANSWER["citations"][0], "passage": "Il programma B.", "language": "it"}]}
+    assert "Il programma B." not in speech.words(italian) and "Italian" in speech.words(italian), \
+        "15: an Italian passage is not read with an English voice"
+    assert speech.words({"outcome": "confirm", "heard": "x", "id": "1"}) is None, "15: the confirmation card is not read"
+    assert jarvis_run.speaker_for(False) is None and isinstance(jarvis_run.speaker_for(True), speech.Speaker), \
+        "15: HARD FAIL - something speaks with clinic-guide answers switched off"
+
+
 def selftest():
     # an exception in a worker thread, or an exchange fault the listener logged, fails the suite (added after a
     # KeyError in a cancelled exchange's thread went unnoticed by every assertion during development)
@@ -741,6 +796,7 @@ def selftest():
     answers_switch()
     ui_review_findings()
     pause_listening()
+    spoken_replies()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"
