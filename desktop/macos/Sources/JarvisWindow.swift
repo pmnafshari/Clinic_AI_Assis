@@ -2,19 +2,12 @@ import AppKit
 import WebKit
 
 /// Jarvis's own page in a window of its own. Jarvis keeps its own lifecycle: its login service is the only listener
-/// on this Mac; this app never opens the microphone. Closing this window changes nothing; Pause asks Jarvis itself to
-/// close the microphone until Resume.
+/// on this Mac; this app never opens the microphone. Closing this window changes nothing. Listening is switched on and
+/// off with the switch in the middle of the page's orb (owner, 2026-10-11), which asks Jarvis itself.
 final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     static let origin = URL(string: "http://127.0.0.1:5020")!
     let window: NSWindow
     private let web: WKWebView
-    private let listening = NSTextField(labelWithString: "Listening: checking...")
-    private let answers = NSTextField(labelWithString: "")
-    private let actions = NSTextField(labelWithString: "Actions by voice: none - not built (J03 not started); voice " +
-                                                       "is never proof of identity")
-    private let pause = NSButton(title: "Pause listening", target: nil, action: nil)
-    private var timer: Timer?
-    private var paused = false
     /// Set in Jarvis.app: a link to a clinic page opens in its own Clinic tab instead of the browser.
     var openClinicPage: ((URL) -> Void)?
 
@@ -33,77 +26,32 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
         web.navigationDelegate = self
         web.uiDelegate = self
         web.setAccessibilityLabel("Jarvis page")
-        pause.target = self
-        pause.action = #selector(togglePause(_:))
-        let strip = NSStackView(views: [listening, answers, actions, pause])
-        strip.orientation = .vertical
-        strip.alignment = .leading
-        strip.edgeInsets = NSEdgeInsets(top: 8, left: 12, bottom: 8, right: 12)
-        for l in [listening, answers, actions] { l.lineBreakMode = .byTruncatingTail; l.isSelectable = true }
-        listening.font = .systemFont(ofSize: 13, weight: .semibold)
-        let stack = NSStackView(views: [strip, web])
-        stack.orientation = .vertical
-        stack.spacing = 0
-        web.translatesAutoresizingMaskIntoConstraints = false
-        window.contentView = stack
-        web.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        window.contentView = web
     }
 
     func show() {
         window.makeKeyAndOrderFront(nil)
         web.load(URLRequest(url: Self.origin))
-        poll()
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.poll() }
     }
 
-    private func poll() {
-        guard window.isVisible else { return }
+    /// Jarvis's own status, as its page reads it (for the installed-app test).
+    func status(_ done: @escaping ([String: Any]) -> Void) {
+        let page = web.url?.absoluteString ?? ""
         URLSession.shared.dataTask(with: URLRequest(url: Self.origin.appendingPathComponent("status"), timeoutInterval: 2)) {
-            [weak self] data, _, _ in
-            let s = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-            DispatchQueue.main.async { self?.render(s) }
+            data, _, _ in
+            let s = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+            DispatchQueue.main.async { done(["page": page, "status": s]) }
         }.resume()
     }
 
-    private func render(_ s: [String: Any]?) {
-        guard let s = s else {
-            listening.stringValue = "Listening: Jarvis is not running (it starts at login on its own; this app does not start it)"
-            answers.stringValue = ""
-            pause.isEnabled = false
-            return
-        }
-        let state = s["state"] as? String ?? "?"
-        let reason = s["reason"] as? String ?? ""
-        paused = s["paused"] as? Bool ?? false
-        listening.stringValue = "Listening: \(state) - \(reason)"
-        let a = s["answers"] as? [String: Any]
-        answers.stringValue = "Clinic-guide answers: \(a?["detail"] as? String ?? "unknown")"
-        pause.isEnabled = s["paused"] != nil              // an older Jarvis without pause support
-        pause.title = paused ? "Resume listening" : "Pause listening"
-    }
-
-    /// The strip as a person reads it (for the installed-app test).
-    var stripText: [String: Any] {
-        ["listening": listening.stringValue, "answers": answers.stringValue, "actions": actions.stringValue,
-         "pause_button": pause.title, "pause_enabled": pause.isEnabled, "page": web.url?.absoluteString ?? ""]
-    }
-
-    func setPaused(_ on: Bool) { if on != paused { togglePause(nil) } }
-
-    @objc private func togglePause(_ sender: Any?) {
+    /// Pause or resume listening, as the page's switch does (for the installed-app test).
+    func setPaused(_ on: Bool) {
         var req = URLRequest(url: Self.origin.appendingPathComponent("listening"), timeoutInterval: 3)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue(Self.origin.absoluteString, forHTTPHeaderField: "Origin")
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["paused": !paused])
-        URLSession.shared.dataTask(with: req) { [weak self] _, resp, _ in
-            let ok = (resp as? HTTPURLResponse)?.statusCode == 204
-            DispatchQueue.main.async {
-                if !ok { self?.listening.stringValue = "Listening: Jarvis did not take the request - nothing changed" }
-                self?.poll()
-            }
-        }.resume()
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["paused": on])
+        URLSession.shared.dataTask(with: req).resume()
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
