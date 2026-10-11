@@ -31,21 +31,27 @@ PAGE = """<!doctype html>
   body { margin: 0; font: 16px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink);
          background: radial-gradient(ellipse at 50% 18%, #1a0f05 0%, var(--bg) 60%) fixed var(--bg); }
   main { max-width: 46rem; margin: 0 auto; padding: 16px 16px 32px; }
-  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
-         border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
   .brand { font-weight: 700; letter-spacing: .35em; color: var(--glow); margin: 0; font-size: 15px; }
-  .cc-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; min-height: 24px; }
-  .cc-switch input { width: 18px; height: 18px; accent-color: var(--glow); }
   .hud { position: relative; margin: 8px auto 4px; max-width: 480px; }
   .hud::before, .hud::after { content: ""; position: absolute; left: 4%; right: 4%; height: 3px; border-radius: 2px;
          background: linear-gradient(90deg, rgba(255,140,40,.7), rgba(255,140,40,.08) 60%, rgba(255,140,40,.5)); }
   .hud::before { top: 0; } .hud::after { bottom: 0; }
   #orb { display: block; width: 100%; aspect-ratio: 1 / 1; }
-  .cc { min-height: 3.2em; margin: 0 auto 16px; max-width: 40rem; padding: 10px 16px; border-radius: 10px;
-        background: rgba(0, 0, 0, .72); border: 1px solid var(--line); font-size: 19px; line-height: 1.45; }
-  .cc p { margin: 0; } .cc .who { color: var(--glow); font-weight: 700; margin-right: 6px; }
-  .cc:not(:has(span:not(:empty)))::before { content: "Captions appear here when Jarvis hears you or speaks.";
-        color: var(--muted); font-size: 16px; }
+  .brand { text-align: center; }
+  .status-block { text-align: center; margin: 4px 0 14px; }
+  .status { font-size: 44px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0; }
+  .status.Ready { color: var(--ok); } .status.Active { color: var(--glow); } .status.Sleep { color: var(--muted); }
+  .why { margin: 2px 0 0; color: var(--muted); font-size: 17px; }
+  .qa { max-width: 40rem; margin: 0 auto 18px; padding: 14px 18px; border-radius: 12px; background: rgba(0, 0, 0, .6);
+        border: 1px solid var(--line); font-size: 20px; line-height: 1.45; min-height: 3.2em; }
+  .qa .line { margin: 0 0 6px; } .qa .who { color: var(--glow); font-weight: 700; margin-right: 10px; }
+  .qa .line:has(span:not(.who):empty) { display: none; }
+  .qa:not(:has(.line span:not(.who):not(:empty)))::before { content: 'Say "Hey Jarvis", then your question.';
+        color: var(--muted); font-size: 17px; }
+  .cite { font-size: 15px; color: var(--muted); } .cite p { margin: 2px 0; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .more { margin-top: 8px; } .more summary { cursor: pointer; color: var(--muted); min-height: 24px; padding: 4px 0; }
+  .more[open] summary { margin-bottom: 12px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
   .state { font-size: 28px; font-weight: 700; letter-spacing: .08em; margin: 0; }
   .READY { color: var(--ok); } .ACTIVE, .CONFIRMING, .WAITING_FOR_CONFIRMATION { color: var(--info); }
@@ -66,28 +72,30 @@ PAGE = """<!doctype html>
   .choices button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 10px; cursor: pointer;
                     border: 2px solid var(--glow); }
   .choices .yes { background: var(--glow); color: #1a0d00; } .choices .no { background: transparent; color: var(--info); }
-  .choices button:focus-visible, .cc-switch input:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .choices button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .choices button:disabled { opacity: .6; cursor: default; }
   @media (prefers-reduced-motion: reduce) { .hud::before, .hud::after { opacity: .6; } }
 </style></head>
 <body><main data-clinic="{{ clinic_url }}">
-  <div class="top">
-    <p class="brand">JARVIS</p>
-    <label class="cc-switch"><input type="checkbox" id="cc-on" checked> Captions (CC)</label>
-  </div>
-  <p class="muted">Local voice companion · this page only shows it; Jarvis keeps running when it is closed</p>
+  <p class="brand">JARVIS</p>
   <div class="hud"><canvas id="orb" aria-hidden="true"></canvas></div>
-  <div id="cc" class="cc" aria-hidden="true">
-    <p><span class="who" id="cc-you-who"></span><span id="cc-you"></span></p>
-    <p><span class="who" id="cc-jarvis-who"></span><span id="cc-jarvis"></span></p>
-  </div>
-  <section class="card status">
-    <div aria-live="polite" aria-atomic="true">
+  <div class="status-block"><div aria-live="polite" aria-atomic="true">
+    <h1 id="status" class="status {{ s.status.word }}">{{ s.status.word }}</h1>
+    <p id="status-why" class="why">{{ s.status.why }}</p>
+  </div></div>
+  {% set a = s.answer %}
+  <section id="qa" class="qa" aria-label="Question and answer">
+    <p class="line"><span class="who">You</span><span id="cc-you">{{ a.heard if a and a.heard else "" }}</span></p>
+    <p class="line"><span class="who">Jarvis</span><span id="cc-jarvis" aria-hidden="true"></span></p>
+    <div id="qa-cite" class="cite"></div>
+    <p id="qa-said" class="sr-only" aria-live="polite"></p>
+  </section>
+  <details id="more" class="more"><summary>Details</summary>
+  <section class="card">
     <p id="ready" class="ready-line {{ 'ok' if s.ready.ok else 'no' }}">{{ s.ready.text }}</p>
     <p class="muted">Listening:</p>
-    <h1 class="state {{ s.state }}" id="state">{{ s.state }}</h1>
+    <p class="state {{ s.state }}" id="state">{{ s.state }}</p>
     <p id="meaning">{{ s.meaning }}</p>
-    </div>
     <p><strong>Why:</strong> <span id="reason">{{ s.reason }}</span></p>
     <p class="muted">Since <span id="since">{{ s.since }}</span> (UTC)</p>
     <p><strong>Clinic-guide answers:</strong> <span id="answers">{{ s.answers.detail }}</span></p>
@@ -95,12 +103,11 @@ PAGE = """<!doctype html>
       <span id="clinic">{{ s.clinic.detail }}</span></p>
   </section>
   <p id="confirm-status" class="card" role="status" aria-live="polite"></p>
-  {% set a = s.answer %}
-  <section class="card" id="answer" aria-live="polite"{% if not a %} hidden{% endif %}>
+  <section class="card" id="answer"{% if not a %} hidden{% endif %}>
     <h2 id="answer-title" tabindex="-1">Last question</h2>
-    <p class="muted">{% if s.answers.demo %}Answers are shown here and read aloud by this Mac's voice (synthetic demo only;
-      a new "Hey Jarvis" or Pause stops it).{% else %}Answers are shown here on screen, not spoken.{% endif %} They stay
-      for two minutes and are kept nowhere.</p>
+    <p class="muted">{% if s.answers.demo %}Answers are shown and read aloud by this Mac's voice (synthetic demo only; a
+      new "Hey Jarvis" or Pause stops it).{% else %}Answers are shown on screen, not spoken.{% endif %} They stay for two
+      minutes and are kept nowhere.</p>
     <div id="answer-body">{% if a and a.title %}<h3>{{ a.title }}</h3>{% endif %}{% if a and a.outcome == "confirm" %}
       <h3>Did I hear you right?</h3>
       <p class="heard">{{ a.heard }}</p>
@@ -138,6 +145,7 @@ PAGE = """<!doctype html>
       <li>DEGRADED - not available, with the reason (asleep, microphone denied or muted, engine missing, fault)</li>
     </ol>
   </section>
+  </details>
 </main>
 <script>
   const CLINIC = document.querySelector("main").dataset.clinic;
@@ -190,26 +198,43 @@ PAGE = """<!doctype html>
     window.requestAnimationFrame(frame);
   }
   window.requestAnimationFrame(frame);
-  // --- captions (CC): what Jarvis heard, then what it says, word by word as the voice goes; on unless switched off
-  const ccBox = document.getElementById("cc"), ccOn = document.getElementById("cc-on");
-  try { ccOn.checked = localStorage.getItem("jarvis-cc") !== "off"; } catch (e) {}
-  ccBox.hidden = !ccOn.checked;
-  ccOn.addEventListener("change", () => {
-    ccBox.hidden = !ccOn.checked;
-    try { localStorage.setItem("jarvis-cc", ccOn.checked ? "on" : "off"); } catch (e) {}
-  });
+  // --- the question and the answer (the captions): what Jarvis heard, then what it says, word by word with its voice
+  let fullAnswer = "", speakingId = null;
   function caption(who, text) {
-    document.getElementById("cc-" + who + "-who").textContent = text ? (who === "you" ? "You:" : "Jarvis:") : "";
-    document.getElementById("cc-" + who).textContent = text || "";
+    const el = document.getElementById("cc-" + who);
+    if (el.textContent !== text) el.textContent = text || "";
+  }
+  function spoken(a) {          // the same words as the voice (jarvis/speech.py words())
+    if (!a || a.outcome === "confirm") return "";
+    if (a.outcome === "answer") {
+      const parts = [];
+      for (const c of a.citations || []) parts.push(c.language && c.language !== "en" ? "The answer is on screen, in " +
+                                                     (c.language === "it" ? "Italian." : "another language.") : c.passage);
+      for (const w of a.warnings || []) parts.push("Warning: " + w.text);
+      return parts.join(" ");
+    }
+    if (a.title && a.message && a.message.startsWith(a.title)) return a.message;
+    return [a.title, a.message].filter(Boolean).join(" ");
+  }
+  function qa(a) {
+    caption("you", a && a.heard ? a.heard : "");
+    fullAnswer = spoken(a);
+    caption("jarvis", speakingId === null ? fullAnswer : "");
+    const cite = document.getElementById("qa-cite");
+    cite.replaceChildren();
+    for (const c of (a && a.citations) || []) cite.append(sourceLink(c.source_id, c.page, c.title + ", page " + c.page));
+    document.getElementById("qa-said").textContent = fullAnswer;      // read once by a screen reader
   }
   function live() {
     fetch("/live").then((r) => r.json()).then((v) => {
       mood = lost ? "UNREACHABLE" : (v.paused ? "PAUSED" : v.state);
       if (v.voice) {
+        speakingId = v.voice.id;
         target = v.voice.level;
-        const words = v.voice.text.split(" ");
+        const words = fullAnswer.split(" ");
         caption("jarvis", words.slice(0, Math.ceil(words.length * Math.min(1, v.voice.progress + .06))).join(" "));
       } else {
+        if (speakingId !== null) { speakingId = null; caption("jarvis", fullAnswer); }
         target = Math.min(1, v.mic * 2.5);
       }
     }).catch(() => { target = 0; mood = "UNREACHABLE"; });
@@ -230,6 +255,8 @@ PAGE = """<!doctype html>
     lost = true;
     const h = document.getElementById("state");
     h.textContent = "NOT REACHABLE"; h.className = "state UNREACHABLE";
+    setText("status", "Sleep"); document.getElementById("status").className = "status Sleep";
+    setText("status-why", "Jarvis is not running");
     setReady({ok: false, text: "Not ready: Jarvis is not reachable."});
     document.getElementById("meaning").textContent = "Jarvis is not reachable - the state shown is unknown";
     document.getElementById("reason").textContent = why + " at " + new Date().toLocaleTimeString() +
@@ -249,6 +276,9 @@ PAGE = """<!doctype html>
     document.getElementById("ready").className = "ready-line " + (r.ok ? "ok" : "no");
   }
   function render(s) {
+    setText("status", s.status.word);
+    document.getElementById("status").className = "status " + s.status.word;
+    setText("status-why", s.status.why);
     setReady(s.ready);
     setText("state", s.state);
     document.getElementById("state").className = "state " + s.state;
@@ -326,11 +356,11 @@ PAGE = """<!doctype html>
     if (now === shown) return;      // the same answer or card: not rebuilt, so not announced again
     shown = now;
     body.replaceChildren();
-    caption("you", a && a.heard ? a.heard : "");
-    caption("jarvis", "");
+    qa(a);
     if (!a) return;
     if (a.title) body.append(line("h3", a.title));
     if (a.outcome === "confirm") {
+      document.getElementById("more").open = true;      // the Yes/No card is under Details: show it
       document.getElementById("confirm-status").textContent = "";
       const left = a.left || a.seconds;
       const at = new Date(Date.now() + left * 1000).toLocaleTimeString();
