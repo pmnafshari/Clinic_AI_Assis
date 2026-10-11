@@ -728,18 +728,24 @@ def spoken_replies():
     said, stopped = [], []
 
     class Proc:
-        def __init__(self, cmd, **kw):
-            said.append(cmd)
-            self.done = False
+        def __init__(self):
+            self.done = threading.Event()
 
         def poll(self):
-            return 0 if self.done else None
+            return 0 if self.done.is_set() else None
 
         def terminate(self):
             stopped.append(True)
-            self.done = True
+            self.done.set()
+
+        def wait(self):
+            self.done.wait(30)
+
+    def synth(text, path):
+        said.append(text)
+        return [0.2, 0.9, 0.4], 0.04
     m = machine()
-    sp = speech.Speaker(popen=Proc)
+    sp = speech.Speaker(synth=synth, play=lambda path: Proc())
     halt = threading.Event()
     threading.Thread(target=speech.watch, args=(m, sp, halt), name="speech-test", daemon=True).start()
     try:
@@ -749,19 +755,21 @@ def spoken_replies():
         assert not said, "15: HARD FAIL - spoken while the exchange was still going on"
         m.finish(turn, "answered on screen (DemoMed AX-200 User manual, page 2)")
         assert until(lambda: len(said) == 1, 3), f"15: the answer is spoken once the exchange is over ({said})"
-        assert said[0][0] == "/usr/bin/say" and "B-PROG selects program B." in said[0][-1] \
-            and "page 2" in said[0][-1], f"15: the verified passage and its page are read ({said[0]})"
+        assert "B-PROG selects program B." in said[0] and "page 2" in said[0], f"15: the passage and its page ({said})"
+        assert until(lambda: sp.live() is not None, 3) and "B-PROG" in sp.live()["text"], "15: what is being said is known"
         m.set_clinic(True, "connected")                       # another change: the same card is not read again
         time.sleep(0.3)
         assert len(said) == 1, f"15: a card is read once ({said})"
         m.begin("heard the wake phrase - listening to the request")
         assert until(lambda: len(stopped) == 1, 3), "15: HARD FAIL - a new wake phrase does not stop the voice"
+        assert until(lambda: sp.live() is None, 3), "15: a stopped voice is no longer shown as speaking"
         turn = m.turn
         m.show_for(turn, {"outcome": "refused", "reason": "which_device", "title": "Which device?",
                           "message": "Say the wake phrase and ask again, naming the device.", "citations": [],
                           "warnings": []}, 120)
         m.finish(turn, "a refusal is on screen (Which device?)")
-        assert until(lambda: len(said) == 2, 3) and "Which device?" in said[1][-1], f"15: a refusal is read ({said})"
+        assert until(lambda: len(said) == 2, 3) and "Which device?" in said[1], f"15: a refusal is read ({said})"
+        assert until(lambda: sp.live() is not None, 3)
         m.set_paused(True)
         assert until(lambda: len(stopped) == 2, 3), "15: HARD FAIL - pausing does not stop the voice"
     finally:
@@ -772,6 +780,76 @@ def spoken_replies():
     assert speech.words({"outcome": "confirm", "heard": "x", "id": "1"}) is None, "15: the confirmation card is not read"
     assert jarvis_run.speaker_for(False) is None and isinstance(jarvis_run.speaker_for(True), speech.Speaker), \
         "15: HARD FAIL - something speaks with clinic-guide answers switched off"
+
+
+def asks_without_confirmation():
+    # 16. Owner decision 2026-10-11 (J-D10 amended for the synthetic demo only): with answers on for the demo, what was
+    #     heard is asked at once - no Yes/No card - and the answer card says what was heard; everywhere else the
+    #     confirmation stays (the default)
+    import jarvis_run
+    asked = []
+
+    class Link:
+        def whoami(self):
+            return {"device_id": 1, "delegation": None}
+
+        def vocabulary(self):
+            return []
+
+        def ask_guides(self, q):
+            asked.append(q)
+            return dict(ANSWER)
+    m = machine()
+    ex = answer.Exchange(m, lambda pcm, terms, cancelled: ("what does b prog do", "en"), Link, confirm=False)
+    reason = ex(b"pcm", m.begin("heard the wake phrase - listening to the request"))
+    card = m.snapshot()["answer"]
+    assert asked == ["what does b prog do"] and "answered on screen" in reason, f"16: asked at once ({asked} {reason})"
+    assert card["outcome"] == "answer" and card["heard"] == "what does b prog do", "16: the card says what was heard"
+    assert not any(h["state"] == "WAITING_FOR_CONFIRMATION" for h in m.snapshot()["history"]), "16: no confirmation"
+    m = machine()
+    ex = answer.Exchange(m, lambda pcm, terms, cancelled: ("what does b prog do", "en"), Link, confirm_seconds=0.3)
+    t = threading.Thread(target=ex, args=(b"pcm", m.begin("heard the wake phrase - listening to the request")))
+    t.start()
+    assert until(lambda: m.state == "WAITING_FOR_CONFIRMATION", 3), "16: HARD FAIL - the default still asks first"
+    t.join(5)
+    assert asked == ["what does b prog do"], "16: HARD FAIL - an unconfirmed question was asked"
+    assert jarvis_run.confirm_for(False) is True and jarvis_run.confirm_for(True) is False, \
+        "16: HARD FAIL - the confirmation is dropped outside the demo"
+
+
+def live_levels():
+    # 17. The page's animation follows the sound: the listener keeps the microphone level (a number, nothing else);
+    #     /live gives it and, while Jarvis speaks, its own voice level and caption - loopback only, never cached; a
+    #     real offline synthesis (written to a file, not played) gives one level per 40 ms
+    from jarvis import speech
+    svc = Service(on_request=lambda pcm, turn: "answered on screen (DemoMed AX-200 User manual, page 2)")
+    try:
+        svc.ready()
+        assert until(lambda: svc.m.mic_level > 0, 3), f"17: the microphone level is kept ({svc.m.mic_level})"
+        assert 0 <= svc.m.mic_level <= 1, "17: a level is between 0 and 1"
+        assert "mic_level" not in json.dumps(svc.m.snapshot()), "17: the level stays out of the state stream"
+    finally:
+        svc.close()
+
+    class Voice:
+        def live(self):
+            return {"id": 3, "text": "B-PROG selects program B.", "level": 0.7, "progress": 0.5}
+    m = machine()
+    m.mic_level = 0.25
+    c = create_app(m, speaker=Voice()).test_client()
+    r = c.get("/live", base_url=BASE)
+    body = r.get_json()
+    assert r.status_code == 200 and body["mic"] == 0.25 and body["voice"]["text"].startswith("B-PROG") \
+        and body["state"] == "READY" and "no-store" in r.headers["Cache-Control"], f"17: /live ({body})"
+    assert c.get("/live", base_url="http://evil.example").status_code == 403, "17: HARD FAIL - /live off this machine"
+    assert create_app(machine()).test_client().get("/live", base_url=BASE).get_json()["voice"] is None, \
+        "17: no voice without a speaker"
+    import tempfile
+    import os
+    with tempfile.TemporaryDirectory() as tmp:
+        levels, step = speech.synthesize("Program B.", os.path.join(tmp, "x.wav"))
+    assert step == 0.04 and len(levels) > 5 and max(levels) > 0.3 and all(0 <= x <= 1 for x in levels), \
+        f"17: real levels from the voice ({len(levels)}, {max(levels) if levels else None})"
 
 
 def selftest():
@@ -797,6 +875,8 @@ def selftest():
     ui_review_findings()
     pause_listening()
     spoken_replies()
+    asks_without_confirmation()
+    live_levels()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"

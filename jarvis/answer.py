@@ -54,9 +54,10 @@ def identity(who):
 
 class Exchange:
     def __init__(self, machine, transcribe, link_factory, enabled=True, confirm_seconds=CONFIRM_SECONDS,
-                 recheck_seconds=RECHECK_SECONDS):
+                 recheck_seconds=RECHECK_SECONDS, confirm=True):
         self.machine, self.transcribe, self.link_factory = machine, transcribe, link_factory
         self.enabled, self.confirm_seconds, self.recheck_seconds = enabled, confirm_seconds, recheck_seconds
+        self.confirm = confirm      # False only for the synthetic demo (owner decision 2026-10-11): asked at once
 
     def __call__(self, pcm, turn):
         """-> the reason for going back to READY (the caller ends the interaction with it)."""
@@ -85,10 +86,12 @@ class Exchange:
         except Failed as e:
             return self.problem(turn, "speech_to_text", str(e))
         self.recheck(turn, link, given)
-        pid = m.offer(turn, heard, self.confirm_seconds)
-        if pid is None:
-            return "cancelled"
-        decision = self.wait(turn, pid, link, given)
+        decision = "ask"
+        if self.confirm:
+            pid = m.offer(turn, heard, self.confirm_seconds)
+            if pid is None:
+                return "cancelled"
+            decision = self.wait(turn, pid, link, given)
         if decision == "cancelled":
             return "cancelled"
         if decision != "ask":

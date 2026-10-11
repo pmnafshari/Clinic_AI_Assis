@@ -35,6 +35,12 @@ def answers_on(env):
     return env.get("JARVIS_GUIDE_ANSWERS") == "demo"
 
 
+def confirm_for(answers):
+    """Whether what was heard is confirmed on screen first (J-D10). Only the synthetic demo asks at once (owner
+    decision 2026-10-11); its answer card and voice say what was heard."""
+    return not answers
+
+
 def speaker_for(answers):
     """The voice for spoken replies - only with answers on for the synthetic demo (owner decision 2026-10-11)."""
     return speech.Speaker() if answers else None
@@ -74,7 +80,7 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
             stop.wait(CHECK_SECONDS)
 
     def listening():
-        exchange = answer.Exchange(machine, stt.transcribe, _link, enabled=enabled)
+        exchange = answer.Exchange(machine, stt.transcribe, _link, enabled=enabled, confirm=confirm_for(enabled))
         lst = listen.Listener(machine, _detector, make_source, cue=cue, on_request=exchange)
         try:
             lst.run(stop)
@@ -88,7 +94,7 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
         threading.Thread(target=speech.watch, args=(machine, speaker, stop), name="jarvis-speech", daemon=True).start()
     threading.Thread(target=checks, name="jarvis-checks", daemon=True).start()
     threading.Thread(target=listening, name="jarvis-listen", daemon=True).start()
-    server = make_server("127.0.0.1", PORT, create_app(machine, clinic_url()), threaded=True)
+    server = make_server("127.0.0.1", PORT, create_app(machine, clinic_url(), speaker=speaker), threaded=True)
     signal.signal(signal.SIGTERM, lambda *a: (stop.set(), threading.Thread(target=server.shutdown).start()))
     print(f"jarvis: page and status on http://127.0.0.1:{PORT}; clinic-guide answers "
           f"{'ON - synthetic demo mode' if enabled else 'off'}", flush=True)

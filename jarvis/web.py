@@ -26,33 +26,61 @@ PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Jarvis</title>
 <style>
-  :root { --bg: #f6f8fc; --ink: #142036; --muted: #4a5568; --card: #fff; --line: #d9e1ec;
-          --ok: #1f7a45; --warn: #9a5b00; --bad: #a3261b; --info: #2453d4; }
-  body { margin: 0; font: 16px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; background: var(--bg); color: var(--ink); }
-  main { max-width: 44rem; margin: 0 auto; padding: 24px 16px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-  .state { font-size: 28px; font-weight: 700; letter-spacing: .02em; }
+  :root { --bg: #05060a; --ink: #f4ead9; --muted: #c4b096; --card: rgba(17, 19, 26, .92); --line: rgba(255, 150, 60, .28);
+          --glow: #ff9a3c; --ok: #7ee2a8; --warn: #ffd27a; --bad: #ff8a7a; --info: #ffb468; }
+  body { margin: 0; font: 16px/1.5 -apple-system, "Helvetica Neue", Arial, sans-serif; color: var(--ink);
+         background: radial-gradient(ellipse at 50% 18%, #1a0f05 0%, var(--bg) 60%) fixed var(--bg); }
+  main { max-width: 46rem; margin: 0 auto; padding: 16px 16px 32px; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+         border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+  .brand { font-weight: 700; letter-spacing: .35em; color: var(--glow); margin: 0; font-size: 15px; }
+  .cc-switch { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; min-height: 24px; }
+  .cc-switch input { width: 18px; height: 18px; accent-color: var(--glow); }
+  .hud { position: relative; margin: 8px auto 4px; max-width: 480px; }
+  .hud::before, .hud::after { content: ""; position: absolute; left: 4%; right: 4%; height: 3px; border-radius: 2px;
+         background: linear-gradient(90deg, rgba(255,140,40,.7), rgba(255,140,40,.08) 60%, rgba(255,140,40,.5)); }
+  .hud::before { top: 0; } .hud::after { bottom: 0; }
+  #orb { display: block; width: 100%; aspect-ratio: 1 / 1; }
+  .cc { min-height: 3.2em; margin: 0 auto 16px; max-width: 40rem; padding: 10px 16px; border-radius: 10px;
+        background: rgba(0, 0, 0, .72); border: 1px solid var(--line); font-size: 19px; line-height: 1.45; }
+  .cc p { margin: 0; } .cc .who { color: var(--glow); font-weight: 700; margin-right: 6px; }
+  .cc:not(:has(span:not(:empty))) { opacity: .55; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
+  .state { font-size: 28px; font-weight: 700; letter-spacing: .08em; margin: 0; }
   .READY { color: var(--ok); } .ACTIVE, .CONFIRMING, .WAITING_FOR_CONFIRMATION { color: var(--info); }
   .AUTH_REQUIRED { color: var(--warn); } .DEGRADED, .UNREACHABLE { color: var(--bad); } .STARTING { color: var(--muted); }
   .WAITING_FOR_CONFIRMATION { font-size: 22px; overflow-wrap: anywhere; }
+  .status { text-align: center; } .status p { margin: 4px 0; }
   #confirm-status:empty { display: none; }
   .ready-line { font-weight: 600; margin-top: 0; } .ready-line.ok { color: var(--ok); } .ready-line.no { color: var(--warn); }
   .source { margin: 4px 0 12px; } .source a { color: var(--info); display: inline-block; min-height: 24px; padding: 2px 0; }
+  a { color: var(--info); }
   #confirm-status { font-weight: 600; }
   .muted { color: var(--muted); } ol { padding-left: 1.2rem; } code { font-size: 14px; }
-  blockquote { margin: 12px 0; padding: 8px 14px; border-left: 4px solid var(--info); background: var(--bg); }
+  h2 { color: var(--glow); font-size: 18px; letter-spacing: .06em; }
+  blockquote { margin: 12px 0; padding: 8px 14px; border-left: 4px solid var(--glow); background: rgba(255,140,40,.08); }
   .warn { color: var(--warn); font-weight: 600; }
   .heard { font-size: 20px; font-weight: 600; }
   .choices { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
   .choices button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 10px; cursor: pointer;
-                    border: 2px solid var(--info); }
-  .choices .yes { background: var(--info); color: #fff; } .choices .no { background: var(--card); color: var(--info); }
-  .choices button:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
+                    border: 2px solid var(--glow); }
+  .choices .yes { background: var(--glow); color: #1a0d00; } .choices .no { background: transparent; color: var(--info); }
+  .choices button:focus-visible, .cc-switch input:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .choices button:disabled { opacity: .6; cursor: default; }
+  @media (prefers-reduced-motion: reduce) { .hud::before, .hud::after { opacity: .6; } }
 </style></head>
 <body><main data-clinic="{{ clinic_url }}">
-  <p class="muted">Jarvis · local voice companion · this page only shows it; Jarvis keeps running when it is closed</p>
-  <section class="card">
+  <div class="top">
+    <p class="brand">JARVIS</p>
+    <label class="cc-switch"><input type="checkbox" id="cc-on" checked> Captions (CC)</label>
+  </div>
+  <p class="muted">Local voice companion · this page only shows it; Jarvis keeps running when it is closed</p>
+  <div class="hud"><canvas id="orb" aria-hidden="true"></canvas></div>
+  <div id="cc" class="cc" aria-hidden="true">
+    <p><span class="who" id="cc-you-who"></span><span id="cc-you"></span></p>
+    <p><span class="who" id="cc-jarvis-who"></span><span id="cc-jarvis"></span></p>
+  </div>
+  <section class="card status">
     <div aria-live="polite" aria-atomic="true">
     <p id="ready" class="ready-line {{ 'ok' if s.ready.ok else 'no' }}">{{ s.ready.text }}</p>
     <p class="muted">Listening:</p>
@@ -100,7 +128,8 @@ PAGE = """<!doctype html>
       <li>READY - only the wake phrase is listened for; nothing is recorded or sent</li>
       <li>ACTIVE - one request after a short tone (at most 15 seconds), then worked out on this computer</li>
       <li>WAITING_FOR_CONFIRMATION - what was heard appears here, and nothing is asked until you press <em>Yes, ask
-        this</em>; nothing is recorded meanwhile, and saying the wake phrase again starts over; then the clinic-guide
+        this</em> (in the synthetic demo it is asked at once, and the answer says what was heard); nothing is recorded
+        meanwhile, and saying the wake phrase again starts over; then the clinic-guide
         answer appears with the document and page it comes from (read aloud only in the synthetic demo); then back to
         READY</li>
       <li>AUTH_REQUIRED - needs a delegated staff session; nothing protected is said</li>
@@ -111,6 +140,80 @@ PAGE = """<!doctype html>
 </main>
 <script>
   const CLINIC = document.querySelector("main").dataset.clinic;
+  // --- the orb: particles on rings and a core, moving with the sound (the microphone while listening, Jarvis's own
+  //     voice while it speaks); calm when READY, dim when DEGRADED or paused; less motion if the viewer asks for it
+  const orb = document.getElementById("orb"), ctx = orb.getContext("2d");
+  const REDUCE = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const MOODS = {READY: [255, 140, 40, .6], ACTIVE: [255, 190, 90, 1], WAITING_FOR_CONFIRMATION: [255, 170, 70, .85],
+                 CONFIRMING: [255, 170, 70, .85], AUTH_REQUIRED: [255, 200, 110, .6], STARTING: [170, 110, 60, .35],
+                 DEGRADED: [150, 70, 60, .22], UNREACHABLE: [90, 90, 90, .18], PAUSED: [150, 70, 60, .22]};
+  let level = 0, target = 0, mood = "STARTING";
+  const PARTS = [];
+  for (let i = 0; i < 720; i++) {
+    const ring = Math.random() < .6 ? 1 : (Math.random() < .55 ? .66 : .38);
+    PARTS.push({a: Math.random() * 6.283, r: ring * (.88 + Math.random() * .24), s: (Math.random() - .5) * (2.2 - ring),
+                l: 1 + Math.random() * 7, w: Math.random()});
+  }
+  function fit() {
+    const d = window.devicePixelRatio || 1, w = orb.clientWidth || 360;
+    orb.width = w * d; orb.height = w * d; ctx.setTransform(d, 0, 0, d, 0, 0);
+  }
+  window.addEventListener("resize", fit); fit();
+  function frame(t) {
+    level += (target - level) * .22;
+    const w = orb.clientWidth || 360, c = w / 2, R = w * .38, amp = level;
+    const [r, g, b, glow] = MOODS[mood] || MOODS.READY;
+    const motion = REDUCE ? .15 : 1;
+    ctx.globalCompositeOperation = "source-over";
+    ctx.fillStyle = "rgba(5, 6, 10, 0.3)"; ctx.fillRect(0, 0, w, w);
+    ctx.globalCompositeOperation = "lighter";
+    for (const p of PARTS) {
+      p.a += p.s * .003 * motion * (1 + amp * 5);
+      const rr = R * p.r * (1 + amp * .32 * Math.sin(t / 170 + p.w * 14) * motion);
+      const x = c + Math.cos(p.a) * rr, y = c + Math.sin(p.a) * rr, len = p.l * (1 + amp * 3);
+      ctx.strokeStyle = "rgba(" + r + "," + g + "," + b + "," + ((.2 + .65 * p.w) * glow) + ")";
+      ctx.lineWidth = .8 + amp * 1.6 * p.w;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - Math.sin(p.a) * len, y + Math.cos(p.a) * len); ctx.stroke();
+    }
+    for (let k = 0; k < 3; k++) {
+      const s0 = (t / (800 + k * 350)) * motion + k * 2.1;
+      ctx.strokeStyle = "rgba(255, 205, 130," + (.22 * glow + amp * .35) + ")"; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.arc(c, c, R * (.42 + k * .13) * (1 + amp * .18), s0, s0 + 1.5 + amp * 2.2); ctx.stroke();
+    }
+    const core = R * (.16 + amp * .24);
+    const grad = ctx.createRadialGradient(c, c, 0, c, c, core * 2.3);
+    grad.addColorStop(0, "rgba(255, 236, 180," + Math.min(1, .5 * glow + amp * .45) + ")");
+    grad.addColorStop(.4, "rgba(" + r + "," + g + "," + b + "," + (.35 * glow + amp * .2) + ")");
+    grad.addColorStop(1, "rgba(0, 0, 0, 0)");
+    ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(c, c, core * 2.3, 0, 6.283); ctx.fill();
+    window.requestAnimationFrame(frame);
+  }
+  window.requestAnimationFrame(frame);
+  // --- captions (CC): what Jarvis heard, then what it says, word by word as the voice goes; on unless switched off
+  const ccBox = document.getElementById("cc"), ccOn = document.getElementById("cc-on");
+  try { ccOn.checked = localStorage.getItem("jarvis-cc") !== "off"; } catch (e) {}
+  ccBox.hidden = !ccOn.checked;
+  ccOn.addEventListener("change", () => {
+    ccBox.hidden = !ccOn.checked;
+    try { localStorage.setItem("jarvis-cc", ccOn.checked ? "on" : "off"); } catch (e) {}
+  });
+  function caption(who, text) {
+    document.getElementById("cc-" + who + "-who").textContent = text ? (who === "you" ? "You:" : "Jarvis:") : "";
+    document.getElementById("cc-" + who).textContent = text || "";
+  }
+  function live() {
+    fetch("/live").then((r) => r.json()).then((v) => {
+      mood = lost ? "UNREACHABLE" : (v.paused ? "PAUSED" : v.state);
+      if (v.voice) {
+        target = v.voice.level;
+        const words = v.voice.text.split(" ");
+        caption("jarvis", words.slice(0, Math.ceil(words.length * Math.min(1, v.voice.progress + .06))).join(" "));
+      } else {
+        target = Math.min(1, v.mic * 2.5);
+      }
+    }).catch(() => { target = 0; mood = "UNREACHABLE"; });
+  }
+  setInterval(live, 90);
   const STALE_MS = 4000;           // two heartbeats missed
   const CHECK_MS = 250;            // a frozen service shows within STALE_MS + CHECK_MS (4.25 s; a 1 s check reached 4.96 s)
   const es = new EventSource("/events");
@@ -222,6 +325,8 @@ PAGE = """<!doctype html>
     if (now === shown) return;      // the same answer or card: not rebuilt, so not announced again
     shown = now;
     body.replaceChildren();
+    caption("you", a && a.heard ? a.heard : "");
+    caption("jarvis", "");
     if (!a) return;
     if (a.title) body.append(line("h3", a.title));
     if (a.outcome === "confirm") {
@@ -259,7 +364,7 @@ PAGE = """<!doctype html>
 </body></html>"""
 
 
-def create_app(machine, clinic_url=CLINIC_URL):
+def create_app(machine, clinic_url=CLINIC_URL, speaker=None):
     app = Flask(__name__)
 
     @app.before_request
@@ -302,6 +407,13 @@ def create_app(machine, clinic_url=CLINIC_URL):
             abort(400)
         machine.set_paused(body["paused"])
         return "", 204
+
+    @app.route("/live")
+    def live():
+        # for the page's animation and captions: the microphone's loudness now and, while Jarvis speaks, its own
+        # voice's loudness, words and progress (polled several times a second; no history, nothing kept)
+        return jsonify({"state": machine.state, "paused": machine.paused, "mic": round(machine.mic_level, 3),
+                        "voice": speaker.live() if speaker else None})
 
     @app.route("/status")
     def status():

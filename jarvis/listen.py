@@ -123,6 +123,7 @@ class Listener:
             if self.source is not None:
                 self.source.close()
                 self.source = None
+            self.machine.mic_level = 0.0
             self.degrade(PAUSED)                   # cancels anything in progress
             self.retry_at = 0.0                    # reopen at once on resume
             time.sleep(0.25)
@@ -147,6 +148,7 @@ class Listener:
                 self.degrade("no audio is arriving from the microphone")
             return
         self.starved = 0
+        self.machine.mic_level = min(1.0, rms(chunk) / 6000.0)
         if self.detector is None:
             if self.mono() >= self.retry_at:
                 self._load_engine()
