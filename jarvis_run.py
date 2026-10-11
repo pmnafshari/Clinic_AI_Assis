@@ -41,6 +41,13 @@ def confirm_for(answers):
     return not answers
 
 
+def notes_for(answers):
+    """Notes by voice (J03, first slice) - only in the synthetic demo, on the synthetic dev data (owner decision
+    2026-10-11); the clinic still decides every note: a delegated live session, its role, the patient picked on
+    screen."""
+    return bool(answers)
+
+
 def speaker_for(answers):
     """The voice for spoken replies - only with answers on for the synthetic demo (owner decision 2026-10-11)."""
     return speech.Speaker() if answers else None
@@ -80,7 +87,8 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
             stop.wait(CHECK_SECONDS)
 
     def listening():
-        exchange = answer.Exchange(machine, stt.transcribe, _link, enabled=enabled, confirm=confirm_for(enabled))
+        exchange = answer.Exchange(machine, stt.transcribe, _link, enabled=enabled, confirm=confirm_for(enabled),
+                                   notes=notes_for(enabled))
         lst = listen.Listener(machine, _detector, make_source, cue=cue, on_request=exchange)
         try:
             lst.run(stop)

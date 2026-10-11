@@ -184,7 +184,7 @@ class Listener:
                 self.become_ready("listening for the wake phrase")
             return
         # READY, or an exchange working or waiting for its confirmation: a wake starts a new interaction
-        if woke and state in ("READY", "ACTIVE", "WAITING_FOR_CONFIRMATION"):
+        if woke and state in ("READY", "ACTIVE", "WAITING_FOR_CONFIRMATION", "CONFIRMING"):
             self.floor = float(np.median([rms(c) for c in self.buffer])) if self.buffer else 0.0
             self.buffer.clear()
             self.turn = self.machine.begin("heard the wake phrase - listening to the request")

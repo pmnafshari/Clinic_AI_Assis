@@ -10,7 +10,8 @@ while that interaction is current (a new wake, DEGRADED or a refused device ends
 checked again before what was heard is shown, every few seconds while it waits, and before it is asked; each kind of
 failure has its own card; and answers are given only when switched on (JARVIS_GUIDE_ANSWERS=demo, jarvis_run.py).
 """
-from jarvis.clinic import LinkDown, LinkRefused
+from jarvis import notes
+from jarvis.clinic import LinkDown, LinkRefused, NoteRefused
 from jarvis.stt import Cancelled, Failed, Unclear
 
 ANSWER_SECONDS = 120
@@ -31,6 +32,12 @@ PROBLEMS = {               # kind -> (the card's title, what to do next)
                 "Nothing was asked. An admin can register this computer again (Admin > Jarvis devices)."),
     "switched_off": ("Clinic-guide answers are switched off on this computer", "Nothing was transcribed or asked."),
 }
+NOTE_TITLES = {             # J03: why a note was not saved, as the card's title
+    "auth_required": "Sign-in needed", "role": "Not for this role", "empty": "No note was heard",
+    "no_match": "No patient by that name", "too_many": "Several patients match", "patient": "Not one of the patients",
+    "gone": "This note is no longer waiting", "unclear": "Say the note again",
+}
+NOTE_SAYING = 'Say: "add a note to" the patient\'s full name, then "saying" and the note.'
 DISCARDED = {
     "discard": "You pressed No. Nothing was asked. " + AGAIN,
     "timeout": "Not confirmed within {seconds} seconds. Nothing was asked. " + AGAIN,
@@ -54,10 +61,11 @@ def identity(who):
 
 class Exchange:
     def __init__(self, machine, transcribe, link_factory, enabled=True, confirm_seconds=CONFIRM_SECONDS,
-                 recheck_seconds=RECHECK_SECONDS, confirm=True):
+                 recheck_seconds=RECHECK_SECONDS, confirm=True, notes=False):
         self.machine, self.transcribe, self.link_factory = machine, transcribe, link_factory
         self.enabled, self.confirm_seconds, self.recheck_seconds = enabled, confirm_seconds, recheck_seconds
         self.confirm = confirm      # False only for the synthetic demo (owner decision 2026-10-11): asked at once
+        self.notes = notes          # notes by voice (J03), only in the synthetic demo
 
     def __call__(self, pcm, turn):
         """-> the reason for going back to READY (the caller ends the interaction with it)."""
@@ -86,6 +94,9 @@ class Exchange:
         except Failed as e:
             return self.problem(turn, "speech_to_text", str(e))
         self.recheck(turn, link, given)
+        command = notes.parse(heard) if self.notes else None
+        if command is not None:
+            return self.note(turn, link, given, heard, *command)
         decision = "ask"
         if self.confirm:
             pid = m.offer(turn, heard, self.confirm_seconds)
@@ -115,6 +126,62 @@ class Exchange:
             c = result["citations"][0]
             return f"answered on screen ({c['title']}, page {c['page']})"
         return f"a refusal is on screen ({result.get('title') or result['reason']})"
+
+    def note(self, turn, link, given, heard, patient, words):
+        """A note by voice (J03): drafted at the clinic, put on screen with the patients the name matches, saved only
+        when someone clicks one of them. The clinic decides everything; the reasons kept name nobody."""
+        m = self.machine
+        if patient is None:
+            return self.note_card(turn, heard, "unclear", NOTE_SAYING, "a note command could not be read")
+        if given[1] is None:                       # no staff session delegated: the clinic is not even asked
+            return self.note_card(turn, heard, "auth_required",
+                                  "A dentist or reception member must hand their signed-in session to this computer "
+                                  "first (Jarvis in the clinic app's sidebar). Nothing was written.",
+                                  "a note needs a delegated staff session - nothing written")
+        if not m.go_for(turn, "ACTIVE", "preparing the note - not recording"):
+            return "cancelled"
+        try:
+            draft = link.note_draft(patient, words)
+        except NoteRefused as e:
+            return self.note_card(turn, heard, e.code, f"{e} Nothing was written.", f"note not drafted ({e.code})")
+        except LinkRefused as e:
+            return self.problem(turn, "refused", str(e), heard)
+        except LinkDown as e:
+            return self.problem(turn, "clinic_down", str(e), heard)
+        pid = m.offer_note(turn, {"heard": heard, "patient_said": patient, "text": draft["text"],
+                                  "choices": draft["choices"], "citations": [], "warnings": []}, self.confirm_seconds * 2)
+        if pid is None:
+            return "cancelled"
+        decision = self.wait(turn, pid, link, given)
+        if decision == "cancelled":
+            return "cancelled"
+        if not decision.startswith("save:"):
+            message = {"discard": "You pressed Discard. Nothing was saved.",
+                       "timeout": "Not saved in time. Nothing was saved."}.get(
+                decision, "The choice was not clear. Nothing was saved.")
+            m.show_for(turn, {"outcome": "note_discarded", "title": "Not saved", "message": message, "heard": heard,
+                              "citations": [], "warnings": []}, ANSWER_SECONDS)
+            return "the note was not saved"
+        self.recheck(turn, link, given)
+        try:
+            out = link.note_commit(draft["draft"], decision[len("save:"):])
+        except NoteRefused as e:
+            return self.note_card(turn, heard, e.code, f"{e} Nothing was saved.", f"note not saved ({e.code})")
+        except LinkRefused as e:
+            return self.problem(turn, "refused", str(e), heard)
+        except LinkDown as e:
+            return self.problem(turn, "clinic_down", str(e), heard)
+        m.show_for(turn, {"outcome": "note_saved", "title": "Note saved",
+                          "message": f"Note saved to {out['name']}'s record.", "heard": heard,
+                          "patient": {"cf": out["cf"], "name": out["name"]}, "citations": [], "warnings": []},
+                   ANSWER_SECONDS)
+        return "a note was saved after it was picked on screen"
+
+    def note_card(self, turn, heard, code, message, reason):
+        self.machine.show_for(turn, {"outcome": "refused", "reason": code, "title": NOTE_TITLES.get(code, "Not saved"),
+                                     "message": message, "heard": heard, "citations": [], "warnings": []},
+                              ANSWER_SECONDS)
+        return reason
 
     def call(self, turn, fn):
         """A clinic call before anything was heard; a refusal or an outage ends the interaction with its card."""

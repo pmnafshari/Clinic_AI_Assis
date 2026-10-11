@@ -43,7 +43,9 @@ def state_model():
                ("CONFIRMING", "DEGRADED"), ("DEGRADED", "STARTING"),
                # J02 follow-up 6 (owner decision D6, JARVIS §18): waiting for the on-screen confirmation is its own state
                ("ACTIVE", "WAITING_FOR_CONFIRMATION"), ("WAITING_FOR_CONFIRMATION", "ACTIVE"),
-               ("WAITING_FOR_CONFIRMATION", "READY"), ("WAITING_FOR_CONFIRMATION", "DEGRADED")}
+               ("WAITING_FOR_CONFIRMATION", "READY"), ("WAITING_FOR_CONFIRMATION", "DEGRADED"),
+               # J03 (owner-authorised 2026-10-11): a new wake phrase cancels a note waiting on screen
+               ("CONFIRMING", "ACTIVE")}
     assert set(states.STATES) == {"STARTING", "READY", "ACTIVE", "WAITING_FOR_CONFIRMATION", "AUTH_REQUIRED",
                                   "CONFIRMING", "DEGRADED"}
     for a in states.STATES:

@@ -893,6 +893,108 @@ def live_levels():
     assert speech.pick_voice(["Alice (Premium)     it_IT    # Ciao"], {}) is None, "17: never a non-English voice"
 
 
+def voice_notes():
+    # 19. J03, first slice (owner-authorised 2026-10-11): "add a note to <patient> saying <words>". Fixed rules read
+    #     the command (no model); without a delegated staff session nothing is asked of the clinic; with one, the
+    #     matching patients and the words go on screen (CONFIRMING) and only a click on a patient saves - "discard", a
+    #     timeout, a new wake or a choice not offered saves nothing; the history never holds the patient or the words
+    from jarvis import notes
+    from jarvis.clinic import NoteRefused
+    assert notes.parse("Add a note to Giulia Santoro saying the patient reports sensitivity.") == \
+        ("Giulia Santoro", "the patient reports sensitivity.")
+    assert notes.parse("Please make a note for Paola Rossi: review in two weeks") == ("Paola Rossi", "review in two weeks")
+    assert notes.parse("write a note on Marco Gallo's record, allergic to latex") == ("Marco Gallo", "allergic to latex")
+    assert notes.parse("Add a note to Giulia Santoro") == (None, None), "19: a command without words asks again"
+    assert notes.parse("What does the B-PROG button do?") is None, "19: a guide question is not a note"
+    assert notes.parse("Which note is on the AX two hundred door?") is None
+
+    class Link:
+        def __init__(self, delegated=True, refuse=None):
+            self.delegated, self.refuse, self.drafts, self.commits = delegated, refuse, [], []
+
+        def whoami(self):
+            return {"device_id": 1, "delegation": {"username": "drossi", "role": "dentist", "expires_at": "x"}
+                    if self.delegated else None}
+
+        def vocabulary(self):
+            return []
+
+        def ask_guides(self, q):
+            raise AssertionError("19: HARD FAIL - a note command went to the clinic guides")
+
+        def note_draft(self, patient, text):
+            self.drafts.append((patient, text))
+            if self.refuse:
+                raise NoteRefused(self.refuse, "no patient matches that name - say the patient's full name")
+            return {"draft": "d1", "text": text, "seconds": 120,
+                    "choices": [{"cf": "RSSP850010150900", "name": "Paola Rossi"},
+                                {"cf": "RSPS850010150900", "name": "Paola Rossi"}]}
+
+        def note_commit(self, draft, cf):
+            self.commits.append((draft, cf))
+            return {"saved": True, "cf": cf, "name": "Paola Rossi", "status": "synced"}
+    said = "Add a note to Paola Rossi saying review in two weeks."
+
+    def run(link, decide=None, wake=False):
+        m = machine()
+        ex = answer.Exchange(m, lambda pcm, terms, cancelled: (said, "en"), lambda: link, confirm=False,
+                             notes=True, confirm_seconds=1.0)
+        t = threading.Thread(target=lambda: setattr(t, "reason", ex(b"pcm", m.begin("heard the wake phrase"))))
+        t.start()
+        if decide is not None or wake:
+            assert until(lambda: m.state == "CONFIRMING", 3), f"19: the note waits on screen ({m.state})"
+            card = m.snapshot()["answer"]
+            assert card["outcome"] == "note_confirm" and len(card["choices"]) == 2 and card["text"].startswith("review"), \
+                f"19: both same-name patients offered, the words shown ({card})"
+            if wake:
+                m.begin("heard the wake phrase - listening to the request")
+            else:
+                m.decide(card["id"], decide)
+        t.join(5)
+        hist = json.dumps(m.snapshot()["history"])
+        assert "Paola" not in hist and "review in two weeks" not in hist and "RSSP" not in hist, \
+            "19: HARD FAIL - the history holds the patient or the words"
+        return m, t.reason
+    link = Link(delegated=False)
+    m, reason = run(link)
+    assert not link.drafts and m.snapshot()["answer"]["reason"] == "auth_required", \
+        "19: HARD FAIL - without a delegated session the clinic was asked"
+    for decision in ("discard", "save:GLLMRC67A11F839U", None):
+        link = Link()
+        m, reason = run(link, decide=decision or "", wake=False) if decision else run(link, decide=None)
+        if decision is None:
+            assert link.drafts, "19: drafted"
+        assert not link.commits, f"19: HARD FAIL - saved on {decision!r}"
+    link = Link()
+    run(link, wake=True)
+    assert not link.commits, "19: HARD FAIL - saved after a new wake phrase"
+    link = Link()
+    m, reason = run(link, decide="save:RSSP850010150900")
+    card = m.snapshot()["answer"]
+    assert link.commits == [("d1", "RSSP850010150900")] and card["outcome"] == "note_saved" \
+        and card["patient"]["cf"] == "RSSP850010150900", f"19: saved on the patient clicked ({link.commits}, {card})"
+    assert "saved" in reason and "Paola" not in reason, "19: the reason says what happened, naming nobody"
+    link = Link(refuse="no_match")
+    m, reason = run(link)
+    assert m.snapshot()["answer"]["reason"] == "no_match" and not link.commits, "19: no match - asked to say the name again"
+    m = machine()
+    plain = Link()
+    plain.ask_guides = lambda q: dict(ANSWER)
+    ex = answer.Exchange(m, lambda pcm, terms, cancelled: (said, "en"), lambda: plain, confirm=False)
+    ex(b"pcm", m.begin("heard the wake phrase"))
+    assert not plain.drafts, "19: HARD FAIL - notes by voice without being switched on"
+    import inspect
+    assert '"CONFIRMING")' in inspect.getsource(listen.Listener._sound), "19: a new wake cancels a note on screen"
+    html = create_app(machine()).test_client().get("/", base_url=BASE).data.decode()
+    code = _code_only(html)
+    assert "noteChoices(a)" in _fn_body(code, "qa") and '"save:" + c.cf' in _fn_body(code, "noteChoices") \
+        and "decide(a.id" in _fn_body(code, "noteChoices"), "19: the page offers one Save per patient, through /confirm"
+    assert '"/patients/"' in _fn_body(code, "recordLink"), "19: a saved note links to the record in the clinic app"
+    import jarvis_run
+    assert jarvis_run.notes_for(True) is True and jarvis_run.notes_for(False) is False, \
+        "19: HARD FAIL - notes by voice outside the synthetic demo"
+
+
 def selftest():
     # an exception in a worker thread, or an exchange fault the listener logged, fails the suite (added after a
     # KeyError in a cancelled exchange's thread went unnoticed by every assertion during development)
@@ -919,6 +1021,7 @@ def selftest():
     asks_without_confirmation()
     simple_page()
     live_levels()
+    voice_notes()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"
