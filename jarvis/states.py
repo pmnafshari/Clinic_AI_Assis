@@ -57,6 +57,24 @@ def cancelled_card(why, sent):
     return {"outcome": "cancelled", "heard": None, "message": message, "citations": [], "warnings": []}
 
 
+BUSY = {"ACTIVE", "WAITING_FOR_CONFIRMATION", "CONFIRMING", "AUTH_REQUIRED"}
+
+
+def status_words(state, reason, paused):
+    """What the page shows in large type - Ready, Active or Sleep - and a few words under it."""
+    if paused:
+        return {"word": "Sleep", "why": "Paused"}
+    if state == "READY":
+        return {"word": "Ready", "why": 'Say "Hey Jarvis"'}
+    if state in BUSY:
+        if state == "WAITING_FOR_CONFIRMATION":
+            return {"word": "Active", "why": "Check what I heard"}
+        return {"word": "Active", "why": "Listening" if reason.startswith("heard the wake phrase") else "Working on it"}
+    if state == "STARTING":
+        return {"word": "Sleep", "why": "Starting up"}
+    return {"word": "Sleep", "why": reason}
+
+
 def readiness(state, reason, answers):
     """The page's one overall line (J02 UI review): ready for the demo only while listening is READY and every
     clinic-guide prerequisite holds; otherwise what is missing, from the answers line, which says who can fix it."""
@@ -289,6 +307,7 @@ class Machine:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
                     "version": self.version, "history": list(self.history), "clinic": dict(self.clinic),
                     "answers": dict(self.answers), "answer": self._shown(), "paused": self.paused,
+                    "status": status_words(self.state, self.reason, self.paused),
                     "ready": readiness(self.state, self.reason, self.answers)}
 
     def wait_change(self, version, timeout):

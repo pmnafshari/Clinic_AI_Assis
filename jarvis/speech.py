@@ -8,6 +8,7 @@ The voice is written to a temporary file first, so its loudness every 40 ms is k
 and shows the words as captions while they are said. The file is deleted when it has been played.
 """
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -21,6 +22,38 @@ SAY = "/usr/bin/say"
 AFPLAY = "/usr/bin/afplay"
 MAX_CHARS = 600
 STEP = 0.04
+RATE = 180                   # words a minute - a little calmer than the default
+LOCALES = ("en_GB", "en_US", "en_AU", "en_IE", "en_ZA", "en_IN")
+VOICE_LINE = re.compile(r"^(.+?)\s+([a-z]{2}_[A-Z]{2})\s+#")
+
+
+def pick_voice(listing, env):
+    """The most natural English voice installed (`say -v '?'` lines): Premium, then Enhanced, British first. None:
+    only compact voices - use the system voice (the one chosen in System Settings > Accessibility > Spoken Content).
+    JARVIS_VOICE pins one."""
+    if env.get("JARVIS_VOICE"):
+        return env["JARVIS_VOICE"]
+    best = None
+    for line in listing:
+        m = VOICE_LINE.match(line)
+        if not m or m.group(2) not in LOCALES:
+            continue
+        name = m.group(1).strip()
+        quality = 0 if "(Premium)" in name else 1 if "(Enhanced)" in name else None
+        if quality is None:
+            continue
+        rank = (quality, LOCALES.index(m.group(2)))
+        if best is None or rank < best[0]:
+            best = (rank, name)
+    return best[1] if best else None
+
+
+def installed_voice():
+    try:
+        out = subprocess.run([SAY, "-v", "?"], capture_output=True, text=True, timeout=10).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return pick_voice(out.splitlines(), os.environ)
 
 
 def words(card):
@@ -36,7 +69,7 @@ def words(card):
                              else "The answer is on screen, in another language.")
             else:
                 parts.append(c["passage"])
-            parts.append(f"From {c['title']}, page {c['page']}.")
+            parts.append(f"That is from the {c['title']}, page {c['page']}.")
         for w in card.get("warnings") or []:
             parts.append(f"Warning: {w['text']}")
         return " ".join(parts) or None
@@ -46,10 +79,12 @@ def words(card):
     return " ".join(x for x in (title, message) if x) or None
 
 
-def synthesize(text, path):
+def synthesize(text, path, voice=None):
     """The voice into a WAV file. -> (loudness 0-1 every STEP seconds, STEP)."""
-    subprocess.run([SAY, "-o", path, "--file-format=WAVE", "--data-format=LEI16@22050", "--", text],
-                   check=True, timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cmd = [SAY, "-r", str(RATE), "-o", path, "--file-format=WAVE", "--data-format=LEI16@22050"]
+    if voice:
+        cmd += ["-v", voice]
+    subprocess.run(cmd + ["--", text], check=True, timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     with wave.open(path) as w:
         rate = w.getframerate()
         pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16).astype(np.float32)
@@ -64,7 +99,10 @@ def playback(path):
 
 
 class Speaker:
-    def __init__(self, synth=synthesize, play=playback, clock=time.monotonic):
+    def __init__(self, synth=None, play=playback, clock=time.monotonic):
+        if synth is None:
+            voice = installed_voice()                  # chosen once, when Jarvis starts
+            synth = lambda text, path: synthesize(text, path, voice)  # noqa: E731
         self.synth, self.play, self.clock = synth, play, clock
         self.lock = threading.Lock()
         self.proc, self.now, self.gen = None, None, 0

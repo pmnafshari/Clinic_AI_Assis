@@ -654,8 +654,8 @@ def ui_review_findings():
     assert 'class="card" aria-live' not in html, "13: the status card as a whole (its timestamp) is not announced"
     live = html[html.index('<div aria-live="polite" aria-atomic="true">'):]
     live = live[:live.index("</div>")]
-    assert 'id="ready"' in live and 'id="state"' in live and 'id="since"' not in live and 'id="reason"' not in live, \
-        "13: only readiness, state and meaning are announced"
+    assert 'id="status"' in live and 'id="status-why"' in live and 'id="since"' not in live and 'id="reason"' not in live, \
+        "13: only the status word and its few words are announced (owner's simplified page, 2026-10-11)"
     assert "textContent !== text" in _fn_body(code, "setText") and "setText(" in _fn_body(code, "render"), \
         "13: a line is written only when it changes"
     assert "=== shown" in _fn_body(code, "showAnswer"), "13: the answer card is rebuilt only when the answer changes"
@@ -817,6 +817,35 @@ def asks_without_confirmation():
         "16: HARD FAIL - the confirmation is dropped outside the demo"
 
 
+def simple_page():
+    # 18. Owner request 2026-10-11: the page shows only the orb, one status word (Ready / Active / Sleep, decided by
+    #     the service) and the question and the answer; everything else is under Details - still there when something
+    #     is wrong; a Yes/No card opens Details itself; not reachable reads Sleep, "Jarvis is not running"
+    words = states.status_words
+    assert words("READY", "listening for the wake phrase", False)["word"] == "Ready"
+    assert words("ACTIVE", "heard the wake phrase - listening to the request", False) == {"word": "Active", "why": "Listening"}
+    assert words("ACTIVE", answer.ASKING, False) == {"word": "Active", "why": "Working on it"}
+    assert words("WAITING_FOR_CONFIRMATION", "x", False)["word"] == "Active"
+    assert words("DEGRADED", "no microphone available (PortAudioError)", False) == \
+        {"word": "Sleep", "why": "no microphone available (PortAudioError)"}, "18: asleep says why"
+    assert words("READY", "listening for the wake phrase", True) == {"word": "Sleep", "why": "Paused"}
+    assert words("STARTING", "opening the microphone", False)["word"] == "Sleep"
+    m = machine()
+    assert m.snapshot()["status"] == {"word": "Ready", "why": 'Say "Hey Jarvis"'}, "18: the status is the service's"
+    html = create_app(m).test_client().get("/", base_url=BASE).data.decode()
+    top = html[html.index("<main"):html.index('<details id="more"')]
+    for gone in ("Clinic-guide answers:", "Clinic link", "How Jarvis works", "Why:", "Since", "Listening:"):
+        assert gone not in top, f"18: '{gone}' is only under Details"
+    assert '<canvas id="orb"' in top and 'id="status"' in top and 'id="cc-you"' in top and 'id="cc-jarvis"' in top
+    assert "<button" not in top.lower(), "18: still no click-to-talk"
+    more = html[html.index('<details id="more"'):]
+    assert "Clinic-guide answers:" in more and "How Jarvis works" in more and 'id="answer"' in more
+    code = _code_only(html)
+    assert '"more").open = true' in _fn_body(code, "showAnswer"), "18: a Yes/No card is shown, not hidden under Details"
+    assert '"Jarvis is not running"' in _fn_body(code, "unreachable"), "18: not reachable reads Sleep"
+    assert "s.status.word" in _fn_body(code, "render"), "18: the page shows the service's status word"
+
+
 def live_levels():
     # 17. The page's animation follows the sound: the listener keeps the microphone level (a number, nothing else);
     #     /live gives it and, while Jarvis speaks, its own voice level and caption - loopback only, never cached; a
@@ -850,6 +879,18 @@ def live_levels():
         levels, step = speech.synthesize("Program B.", os.path.join(tmp, "x.wav"))
     assert step == 0.04 and len(levels) > 5 and max(levels) > 0.3 and all(0 <= x <= 1 for x in levels), \
         f"17: real levels from the voice ({len(levels)}, {max(levels) if levels else None})"
+    # the most natural English voice installed: Premium, then Enhanced, British first; none -> the system voice
+    listing = ["Daniel (English (UK)) en_GB    # Hello! My name is Daniel.",
+               "Samantha (English (US)) en_US    # Hello! My name is Samantha.",
+               "Ava (Enhanced)      en_US    # Hello! My name is Ava.",
+               "Jamie (Premium)     en_GB    # Hello! My name is Jamie.",
+               "Zoe (Premium)       en_US    # Hello! My name is Zoe.",
+               "Alice (Italian (Italy)) it_IT    # Ciao! Mi chiamo Alice."]
+    assert speech.pick_voice(listing, {}) == "Jamie (Premium)", "17: a Premium British voice first"
+    assert speech.pick_voice(listing[:3], {}) == "Ava (Enhanced)", "17: then an Enhanced one"
+    assert speech.pick_voice(listing[:2], {}) is None, "17: only compact voices -> the system voice (no -v)"
+    assert speech.pick_voice(listing, {"JARVIS_VOICE": "Samantha"}) == "Samantha", "17: the owner can pin a voice"
+    assert speech.pick_voice(["Alice (Premium)     it_IT    # Ciao"], {}) is None, "17: never a non-English voice"
 
 
 def selftest():
@@ -876,6 +917,7 @@ def selftest():
     pause_listening()
     spoken_replies()
     asks_without_confirmation()
+    simple_page()
     live_levels()
     exchange_fault(faults)
     time.sleep(0.3)
