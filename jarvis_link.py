@@ -369,8 +369,29 @@ def _fold(text):
     return re.findall(r"[a-z0-9]+", plain.casefold())
 
 
+SIMILAR = 0.8
+
+
+def _sound(word):
+    """A name as it sounds, so an English speech engine's spelling still finds the Italian one: Julia ~ Giulia,
+    Kiara ~ Chiara, Rosi ~ Rossi."""
+    w = re.sub(r"gi(?=[aeou])", "j", word)
+    w = re.sub(r"gli", "li", w)
+    w = w.replace("ch", "k").replace("gh", "g").replace("y", "i")
+    return re.sub(r"(.)\1+", r"\1", w)
+
+
+def _same_word(spoken, name_word):
+    a, b = _sound(spoken), _sound(name_word)
+    if a == b:
+        return True
+    import difflib
+    return min(len(a), len(b)) >= 4 and difflib.SequenceMatcher(None, a, b).ratio() >= SIMILAR
+
+
 def find_patients(conn, spoken):
-    """Patients whose name holds every spoken word (case and accents ignored). -> [{cf, name}]"""
+    """Patients whose name has a word for every spoken word - the same word, or one that sounds the same or nearly
+    (case and accents ignored). Only proposals: the doctor picks on screen. -> [{cf, name}]"""
     want = _fold(spoken)
     if not want:
         return []
@@ -378,7 +399,7 @@ def find_patients(conn, spoken):
     for row in conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE codice_fiscale IS NOT NULL"
                             " ORDER BY patient_name, codice_fiscale"):
         have = _fold(row["patient_name"])
-        if all(w in have for w in want):
+        if all(any(_same_word(w, h) for h in have) for w in want):
             found.append({"cf": row["codice_fiscale"], "name": row["patient_name"]})
     return found
 

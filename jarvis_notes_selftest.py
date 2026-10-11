@@ -186,6 +186,13 @@ def selftest():
             "3: HARD FAIL - same-name patients not both offered"
         refused(lambda: jl.draft_note(conn, device, "Nobody Here", WORDS), "no_match")
         refused(lambda: jl.draft_note(conn, device, "Giulia Rossi", WORDS), "no_match")    # every word must match
+        # a name as an English speech engine spells it (owner, 2026-10-11): Julia -> Giulia, Kiara -> Chiara; only
+        # proposals - the doctor still picks on screen - and a different name is still no match
+        assert [c["name"] for c in jl.find_patients(conn, "Julia Santoro")] == ["Giulia Santoro"], "3: Julia -> Giulia"
+        assert [c["name"] for c in jl.find_patients(conn, "Marco Galo")] == ["Marco Gallo"], "3: one letter short"
+        assert jl.find_patients(conn, "Julia Rossi") == [] and jl.find_patients(conn, "Marta Gallo") == [], \
+            "3: still strict - another name is no match"
+        assert jl.find_patients(conn, "Paul Santoro") == [], "3: HARD FAIL - a different first name matched"
         refused(lambda: jl.draft_note(conn, device, "Giulia Santoro", "   "), "empty")
         old, jl.MAX_MATCHES = jl.MAX_MATCHES, 1
         try:

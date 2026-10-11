@@ -905,6 +905,14 @@ def voice_notes():
     assert notes.parse("Please make a note for Paola Rossi: review in two weeks") == ("Paola Rossi", "review in two weeks")
     assert notes.parse("write a note on Marco Gallo's record, allergic to latex") == ("Marco Gallo", "allergic to latex")
     assert notes.parse("Add a note to Giulia Santoro") == (None, None), "19: a command without words asks again"
+    # the owner's own sentence (2026-10-11): ", saying" splits once; a spelled name replaces the misheard word and
+    # leaves the note; the spelling counts whether the letters come with hyphens or spaces
+    assert notes.parse("Add a note to Julia Santoro, saying test two. Julia G-I-U-L-I-A Santoro S-A-N-T-O-R-O.") == \
+        ("Giulia Santoro", "test two."), notes.parse("Add a note to Julia Santoro, saying test two. Julia "
+                                                       "G-I-U-L-I-A Santoro S-A-N-T-O-R-O.")
+    assert notes.parse("Add a note to Julia Santoro saying review. Julia G I U L I A") == ("Giulia Santoro", "review.")
+    assert notes.parse("Make a note for Mario Rossi, that he is allergic to latex") == \
+        ("Mario Rossi", "he is allergic to latex"), "19: a comma before the separator word"
     assert notes.parse("What does the B-PROG button do?") is None, "19: a guide question is not a note"
     assert notes.parse("Which note is on the AX two hundred door?") is None
 
