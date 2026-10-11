@@ -1,13 +1,23 @@
-from flask import Blueprint, g, redirect, render_template, request, url_for
+from flask import Blueprint, g, jsonify, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
 import web_auth
 import web_session
-from auth import log_audit
+from auth import PERMISSIONS, log_audit
 
 from .db import get_db
 
 auth_bp = Blueprint("auth", __name__)
+
+
+@auth_bp.route("/api/session")
+def session():
+    """Who is signed in and what the clinic lets that role do (P28: the Clinic Workspace app's permission centre).
+    Read only; the role checks themselves stay on every route."""
+    resp = jsonify({"username": g.user["username"], "role": g.user["role"],
+                    "capabilities": sorted(PERMISSIONS.get(g.user["role"], set()))})
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])

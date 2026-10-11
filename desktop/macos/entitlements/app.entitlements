@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- the shell: sandboxed; loopback HTTP to the clinic, its own demo backend and Jarvis; files only as picked -->
+	<key>com.apple.security.app-sandbox</key><true/>
+	<key>com.apple.security.network.client</key><true/>
+	<!-- the demo backend (this app's child, sandboxed with it) listens on 127.0.0.1:5100 -->
+	<key>com.apple.security.network.server</key><true/>
+	<key>com.apple.security.files.user-selected.read-write</key><true/>
+</dict>
+</plist>

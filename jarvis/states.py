@@ -90,6 +90,7 @@ class Machine:
         self._sent = False         # the current interaction's question has gone to the clinic guides
         self._answer = None        # (what to show, expiry on self.clock) - memory only (J02)
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
+        self.paused = False        # listening switched off by the owner (Clinic Workspace, P28) until resumed
 
     # --- moves ------------------------------------------------------------------------------------------------
     def _move(self, state, reason, again=False):
@@ -191,6 +192,13 @@ class Machine:
                 self.answers = new
                 self._changed()
 
+    def set_paused(self, on):
+        """The owner pauses or resumes listening; the listener closes or reopens the microphone (P28)."""
+        with self._lock:
+            if bool(on) != self.paused:
+                self.paused = bool(on)
+                self._changed()
+
     def show(self, answer, seconds):
         """An answer (or refusal) for the page, for `seconds`. Never in the history."""
         with self._lock:
@@ -279,7 +287,7 @@ class Machine:
         with self._lock:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
                     "version": self.version, "history": list(self.history), "clinic": dict(self.clinic),
-                    "answers": dict(self.answers), "answer": self._shown(),
+                    "answers": dict(self.answers), "answer": self._shown(), "paused": self.paused,
                     "ready": readiness(self.state, self.reason, self.answers)}
 
     def wait_change(self, version, timeout):

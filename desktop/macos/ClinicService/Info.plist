@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key><string>local.clinicdemo.clinic-service</string>
+	<key>CFBundleName</key><string>Clinic Service</string>
+	<key>CFBundleDisplayName</key><string>Clinic Service</string>
+	<key>CFBundleExecutable</key><string>ClinicService</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>@VERSION@</string>
+	<key>CFBundleVersion</key><string>@BUILD@</string>
+	<key>ClinicWorkspaceCommit</key><string>@COMMIT@</string>
+	<key>LSMinimumSystemVersion</key><string>14.0</string>
+	<key>LSApplicationCategoryType</key><string>public.app-category.medical</string>
+	<key>NSHighResolutionCapable</key><true/>
+	<key>NSHumanReadableCopyright</key><string>Local test build - starts this Mac's clinic app at login. Not notarized.</string>
+</dict>
+</plist>

@@ -27,6 +27,7 @@ SILENCE_SECONDS = 1.2           # end of the request
 IDLE_SECONDS = 6.0              # nothing said after the wake phrase
 MAX_ACTIVE_SECONDS = 15.0
 RETRY_SECONDS = 5.0
+PAUSED = "paused - listening switched off by the owner (resume in Clinic Workspace)"
 
 
 class MicError(Exception):
@@ -118,6 +119,14 @@ class Listener:
 
     def step(self):
         """One chunk. Raises StopIteration only when a test source runs out."""
+        if self.machine.paused:                    # P28: the microphone is closed until the owner resumes
+            if self.source is not None:
+                self.source.close()
+                self.source = None
+            self.degrade(PAUSED)                   # cancels anything in progress
+            self.retry_at = 0.0                    # reopen at once on resume
+            time.sleep(0.25)
+            return
         if self.source is None:
             if self.mono() >= self.retry_at or self.machine.state != "DEGRADED":
                 self._open()
