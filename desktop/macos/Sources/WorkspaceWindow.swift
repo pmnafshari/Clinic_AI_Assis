@@ -67,8 +67,8 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
         return alert.runModal() == .alertFirstButtonReturn ? .demo : .connected
     }
 
-    func switchProfile(to next: Profile, confirm: Bool = true) {
-        if let fixed = Settings.fixedProfile, next != fixed { return }
+    func switchProfile(to requested: Profile, confirm: Bool = true) {
+        let next = Settings.fixedProfile ?? requested     // Jarvis.app: always its one environment
         if confirm, next == profile { return }
         if confirm, dirty {
             let alert = NSAlert()
