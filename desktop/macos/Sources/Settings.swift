@@ -36,15 +36,20 @@ enum Profile: String {
 final class Settings {
     private let defaults = UserDefaults.standard
 
+    /// Jarvis.app opens the connected clinic only, and lets the signed-in person write by default - the clinic's own
+    /// role checks, CSRF and audit decide every write, as in the browser. Clinic Workspace leaves both unset.
+    static var fixedProfile: Profile?
+    static var connectedWritesByDefault = false
+
     var profile: Profile? {
-        get { defaults.string(forKey: "profile").flatMap(Profile.init(rawValue:)) }
+        get { Settings.fixedProfile ?? defaults.string(forKey: "profile").flatMap(Profile.init(rawValue:)) }
         set { defaults.set(newValue?.rawValue, forKey: "profile") }
     }
 
     /// The app's own capability layer, on top of the backend's role checks: may this app send writes to that clinic?
     /// The demo allows them by default; the connected clinic only after the owner switches them on.
     func writesAllowed(_ p: Profile) -> Bool {
-        defaults.object(forKey: "writes.\(p.rawValue)") as? Bool ?? (p == .demo)
+        defaults.object(forKey: "writes.\(p.rawValue)") as? Bool ?? (p == .demo || Settings.connectedWritesByDefault)
     }
 
     func setWritesAllowed(_ p: Profile, _ on: Bool) { defaults.set(on, forKey: "writes.\(p.rawValue)") }

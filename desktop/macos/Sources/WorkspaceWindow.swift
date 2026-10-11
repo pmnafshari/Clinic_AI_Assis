@@ -67,7 +67,8 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
         return alert.runModal() == .alertFirstButtonReturn ? .demo : .connected
     }
 
-    func switchProfile(to next: Profile, confirm: Bool = true) {
+    func switchProfile(to requested: Profile, confirm: Bool = true) {
+        let next = Settings.fixedProfile ?? requested     // Jarvis.app: always its one environment
         if confirm, next == profile { return }
         if confirm, dirty {
             let alert = NSAlert()
@@ -182,6 +183,13 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
         let v = min(max(z, 0.5), 3.0)
         web?.pageZoom = v
         app.settings.pageZoom = v
+    }
+
+    /// Opens a page of this environment (a clinic page cited on the Jarvis page, in Jarvis.app).
+    func load(_ url: URL) {
+        guard let p = profile, url.host == p.origin.host, url.port == p.origin.port else { return }
+        window.makeKeyAndOrderFront(nil)
+        web?.load(URLRequest(url: url))
     }
 
     func applyWriteSetting() { if let p = profile { makeWebView(for: p); open(p) } }

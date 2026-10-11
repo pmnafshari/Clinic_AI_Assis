@@ -34,7 +34,7 @@ final class PermissionsWindow: NSObject {
         addRow("notify", "Notifications", button("Ask macOS", #selector(askNotifications)))
         addRow("login", "Open Clinic Workspace at login", button("Switch", #selector(toggleLogin)))
         addRow("service", "Clinic app at login (connected clinic)", button("Open Clinic Service", #selector(toggleService)))
-        addRow("demo", "Isolated demo backend", button("Restart", #selector(restartDemo)))
+        if Settings.fixedProfile == nil { addRow("demo", "Isolated demo backend", button("Restart", #selector(restartDemo))) }
         addRow("network", "Network", nil)
         grid.translatesAutoresizingMaskIntoConstraints = false
     }
@@ -70,7 +70,8 @@ final class PermissionsWindow: NSObject {
 
     func refresh() {
         let p = app.workspace?.profile ?? app.settings.profile ?? .demo
-        set("environment", "\(p.shortTitle): \(p.title). Switch from the Environment menu.")
+        set("environment", "\(p.shortTitle): \(p.title). " + (Settings.fixedProfile == nil
+            ? "Switch from the Environment menu." : "This app opens only this one."))
         set("writes", app.settings.writesAllowed(p)
             ? "allowed - the clinic's own role checks still decide every write"
             : "switched off for this environment - the app refuses the page's writes; reading still works",
@@ -88,7 +89,7 @@ final class PermissionsWindow: NSObject {
         }
         loginState()
         serviceState()
-        demoState()
+        if Settings.fixedProfile == nil { demoState() }
         sessionState()
         jarvisState()
         UNUserNotificationCenter.current().getNotificationSettings { s in
