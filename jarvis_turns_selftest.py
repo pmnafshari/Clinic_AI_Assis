@@ -1061,6 +1061,28 @@ def doctor_signin():
     assert m.snapshot()["access"] is None, "20: after 00:00 (no delegation any more) the page asks again"
 
 
+def power_switch():
+    # 21. Owner, 2026-10-11: listening is switched on and off with one round switch in the middle of the orb (instead
+    #     of the window's text and Pause/Resume button) - a real on/off switch for keyboard and screen readers, still no
+    #     click-to-talk; it asks Jarvis itself through /listening and shows what Jarvis says, never what was clicked
+    m = machine()
+    html = create_app(m).test_client().get("/", base_url=BASE).data.decode()
+    hud = html[html.index('<div class="hud">'):html.index('<div class="status-block">')]
+    assert 'id="power"' in hud and 'role="switch"' in hud and 'type="checkbox"' in hud and 'checked' in hud, \
+        "21: the on/off switch sits in the orb, on while listening"
+    assert "JARVIS" in hud and "<button" not in html[html.index("<main"):html.index('<details id="more"')].lower(), \
+        "21: labelled JARVIS; still no button to talk"
+    code = _code_only(html)
+    body = _fn_body(code, "power")
+    assert '"/listening"' in body and "paused: !" in body and ".catch(" in body, \
+        "21: the switch asks Jarvis to pause or resume, and says when it could not"
+    assert '"power").checked = !s.paused' in _fn_body(code, "render"), "21: the switch shows Jarvis's own state"
+    m.set_paused(True)
+    html = create_app(m).test_client().get("/", base_url=BASE).data.decode()
+    hud = html[html.index('<div class="hud">'):html.index('<div class="status-block">')]
+    assert 'id="power"' in hud and " checked" not in hud.split('id="power"')[1].split(">")[0], "21: off while paused"
+
+
 def selftest():
     # an exception in a worker thread, or an exchange fault the listener logged, fails the suite (added after a
     # KeyError in a cancelled exchange's thread went unnoticed by every assertion during development)
@@ -1089,6 +1111,7 @@ def selftest():
     live_levels()
     voice_notes()
     doctor_signin()
+    power_switch()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"

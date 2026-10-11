@@ -135,7 +135,10 @@ final class SelfTest {
                          "banner": ws?.bannerText ?? "", "status": ws?.statusText ?? ""])
         }
         if step["jarvis"] != nil { app.showJarvis(nil); return done(["ok": true]) }
-        if step["jarvis_state"] != nil { return done(["ok": app.jarvis != nil, "strip": app.jarvis?.stripText ?? [:]]) }
+        if step["jarvis_state"] != nil {
+            guard let j = app.jarvis else { return done(["ok": false]) }
+            return j.status { s in done(["ok": true, "strip": s]) }
+        }
         if let on = step["jarvis_pause"] as? Bool { app.jarvis?.setPaused(on); return done(["ok": app.jarvis != nil]) }
         if let on = step["login_item"] as? Bool {      // the app's own "open at login" (SMAppService.mainApp)
             do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }

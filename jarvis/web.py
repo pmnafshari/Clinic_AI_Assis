@@ -38,6 +38,30 @@ PAGE = """<!doctype html>
   .hud::before { top: 0; } .hud::after { bottom: 0; }
   #orb { display: block; width: 100%; aspect-ratio: 1 / 1; }
   .brand { text-align: center; }
+  /* the on/off switch in the middle of the orb (owner, 2026-10-11) */
+  .power { position: absolute; left: 50%; top: 50%; width: 34%; aspect-ratio: 1 / 1; transform: translate(-50%, -50%);
+           cursor: pointer; display: block; }
+  .power input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; z-index: 2; }
+  .power .ring { position: absolute; inset: 0; border-radius: 50%; display: flex; flex-direction: column;
+           align-items: center; justify-content: center; gap: 2px; background: radial-gradient(circle, #0b0c11 58%, #050609 100%);
+           border: 3px solid var(--glow); color: var(--ink); transition: border-color .3s, box-shadow .3s, color .3s;
+           box-shadow: 0 0 22px rgba(255, 140, 40, .75), inset 0 0 24px rgba(255, 140, 40, .3); }
+  .power .ring::before, .power .ring::after { content: ""; position: absolute; border-radius: 50%; pointer-events: none;
+           border: 2px solid transparent; transition: opacity .3s; }
+  .power .ring::before { inset: -14%; border-top-color: rgba(255, 190, 110, .9); border-right-color: rgba(255, 190, 110, .35);
+           animation: power-spin 7s linear infinite; }
+  .power .ring::after { inset: -24%; border-bottom-color: rgba(255, 150, 60, .55); animation: power-spin 11s linear infinite reverse; }
+  .power .name { font-size: clamp(14px, 3.4vw, 22px); letter-spacing: .32em; margin-left: .32em; font-weight: 600; }
+  .power .onoff { font-size: 12px; letter-spacing: .25em; color: var(--glow); font-weight: 700; }
+  .power input:not(:checked) + .ring { border-color: #4b4036; color: var(--muted);
+           box-shadow: 0 0 6px rgba(255, 140, 40, .15), inset 0 0 10px rgba(0, 0, 0, .6); }
+  .power input:not(:checked) + .ring .onoff { color: var(--muted); }
+  .power input:not(:checked) + .ring::before, .power input:not(:checked) + .ring::after { opacity: .25;
+           animation-play-state: paused; }
+  .power input:focus-visible + .ring { outline: 3px solid var(--ink); outline-offset: 8px; }
+  .power input:disabled { cursor: default; } .power input:disabled + .ring { opacity: .45; }
+  @keyframes power-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .power .ring::before, .power .ring::after { animation: none; } }
   .status-block { text-align: center; margin: 4px 0 14px; }
   .status { font-size: 44px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0; }
   .status.Ready { color: var(--ok); } .status.Active { color: var(--glow); } .status.Sleep { color: var(--muted); }
@@ -88,7 +112,12 @@ PAGE = """<!doctype html>
 </style></head>
 <body><main data-clinic="{{ clinic_url }}">
   <p class="brand">JARVIS</p>
-  <div class="hud"><canvas id="orb" aria-hidden="true"></canvas></div>
+  <div class="hud"><canvas id="orb" aria-hidden="true"></canvas>
+    <label class="power" title="Switch Jarvis's listening on or off">
+      <input type="checkbox" id="power" role="switch" aria-label="Jarvis listening"{% if not s.paused %} checked{% endif %}>
+      <span class="ring" aria-hidden="true"><span class="name">JARVIS</span>
+        <span class="onoff" id="power-word">{{ "OFF" if s.paused else "ON" }}</span></span>
+    </label></div>
   <div class="status-block"><div aria-live="polite" aria-atomic="true">
     <h1 id="status" class="status {{ s.status.word }}">{{ s.status.word }}</h1>
     <p id="status-why" class="why">{{ s.status.why }}</p>
@@ -282,6 +311,7 @@ PAGE = """<!doctype html>
     const h = document.getElementById("state");
     h.textContent = "NOT REACHABLE"; h.className = "state UNREACHABLE";
     setText("status", "Sleep"); document.getElementById("status").className = "status Sleep";
+    document.getElementById("power").disabled = true;            // nothing to switch while Jarvis is not reachable
     setText("status-why", "Jarvis is not running");
     setReady({ok: false, text: "Not ready: Jarvis is not reachable."});
     document.getElementById("meaning").textContent = "Jarvis is not reachable - the state shown is unknown";
@@ -327,7 +357,21 @@ PAGE = """<!doctype html>
     e.preventDefault();
     fetch("/signout", {method: "POST"}).then(() => setAccess(null)).catch(() => {});
   });
+  // --- the on/off switch: asks Jarvis itself to pause or resume listening; shows what Jarvis then says
+  function power(on) {
+    fetch("/listening", {method: "POST", headers: {"Content-Type": "application/json"},
+                         body: JSON.stringify({paused: !on})})
+      .then((r) => { if (r.status !== 204) throw new Error(String(r.status)); })
+      .catch(() => {
+        document.getElementById("power").checked = !on;
+        setText("status-why", "Jarvis did not take that - nothing changed");
+      });
+  }
+  document.getElementById("power").addEventListener("change", (e) => power(e.target.checked));
   function render(s) {
+    document.getElementById("power").checked = !s.paused;
+    document.getElementById("power").disabled = false;
+    setText("power-word", s.paused ? "OFF" : "ON");
     setAccess(s.access);
     setText("status", s.status.word);
     document.getElementById("status").className = "status " + s.status.word;
