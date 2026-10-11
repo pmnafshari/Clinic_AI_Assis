@@ -15,6 +15,10 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     private let pause = NSButton(title: "Pause listening", target: nil, action: nil)
     private var timer: Timer?
     private var paused = false
+    /// Set in Jarvis.app: a link to a clinic page opens in its own Clinic tab instead of the browser.
+    var openClinicPage: ((URL) -> Void)?
+
+    private func isClinic(_ url: URL) -> Bool { url.host == "127.0.0.1" && url.port == 5000 }
 
     override init() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 820),
@@ -107,7 +111,8 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
         guard let url = action.request.url else { return decisionHandler(.cancel) }
         if url.host == Self.origin.host && url.port == Self.origin.port { return decisionHandler(.allow) }
         if ["http", "https"].contains(url.scheme ?? "") && action.navigationType == .linkActivated {
-            NSWorkspace.shared.open(url)               // a cited page opens in the clinic app's browser session
+            if isClinic(url), let open = openClinicPage { open(url) }
+            else { NSWorkspace.shared.open(url) }     // a cited page opens in the clinic app's browser session
         }
         decisionHandler(.cancel)
     }
@@ -122,7 +127,9 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     /// "Open page N ... (opens the clinic app in a new tab)": the default browser, under its own clinic sign-in.
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
-        if let url = action.request.url, ["http", "https"].contains(url.scheme ?? "") { NSWorkspace.shared.open(url) }
+        if let url = action.request.url, ["http", "https"].contains(url.scheme ?? "") {
+            if isClinic(url), let open = openClinicPage { open(url) } else { NSWorkspace.shared.open(url) }
+        }
         return nil
     }
 }

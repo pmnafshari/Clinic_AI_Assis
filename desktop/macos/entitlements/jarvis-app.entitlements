@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Jarvis.app: sandboxed; loopback HTTP to Jarvis and the clinic app only; files only as picked (uploads and
+	     downloads on clinic pages). No server port, no microphone: it runs no backend and never listens. -->
+	<key>com.apple.security.app-sandbox</key><true/>
+	<key>com.apple.security.network.client</key><true/>
+	<key>com.apple.security.files.user-selected.read-write</key><true/>
+</dict>
+</plist>

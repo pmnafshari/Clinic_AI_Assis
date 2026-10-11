@@ -45,6 +45,19 @@ workers. Clinic Service is small, unsandboxed (hardened runtime, no entitlements
   J02 is not accepted), and voice actions (none - not built). **Pause listening** asks Jarvis to close the
   microphone until you resume. Jarvis runs on its own (its login service); the app never records.
 
+## Jarvis as its own app (Jarvis.app)
+Drag **Jarvis** from the disk image to Applications too if you want Jarvis with its own icon. Its window has two tabs
+(Cmd-1, Cmd-2):
+- **Jarvis** - what Jarvis is doing (listening, clinic-guide answers, voice actions), **Pause/Resume listening**, and
+  Jarvis's own page. A clinic page it cites opens in the Clinic tab.
+- **Clinic** - the clinic app on this Mac (`127.0.0.1:5000`, the same database as the browser). Sign in as yourself;
+  you then see and change every record your role allows - a dentist all clinical records - through the clinic's own
+  role checks, CSRF protection and audit, exactly as in the browser. Writes are on by default here (Settings and
+  Permissions switches them off). There is no direct database access: the app talks only to the clinic app.
+Jarvis.app never listens itself (no microphone access) - Jarvis's login service does, and keeps running when you close
+or quit Jarvis.app. Voice still reads and writes no patient record (J03 not started; answers off while J02 is not
+accepted). Its sign-in is its own: signing in here does not sign you in to Clinic Workspace or the browser.
+
 ## Settings and Permissions
 Shows, for the open environment: who is signed in and what the clinic lets that role do; writes from this app (on/
 off); the microphone (this app never records - Jarvis's own service holds that permission); files (one pick at a
@@ -66,7 +79,7 @@ format between these builds.
 
 ## Uninstall
 1. In Settings and Permissions switch off "Open at login"; in Clinic Service press **Switch off** (if used).
-2. Quit the apps and move **Clinic Workspace** (and **Clinic Service**) from Applications to the Bin.
+2. Quit the apps and move **Clinic Workspace** (and **Clinic Service**, **Jarvis**) from Applications to the Bin.
 The clinic's data, the web version and Jarvis are untouched. The demo's own synthetic data stays in
 `~/Library/Containers/local.clinicdemo.workspace` until you delete that folder yourself (it holds only the demo).
 

@@ -9,6 +9,10 @@ Clinic Workspace - LOCAL TEST BUILD (not notarized; ad-hoc signed on the build M
 4. Sign in with your clinic account. Demo accounts: assistant / assistant-dev-pass, dentist /
    dentist-dev-pass, admin / admin-dev-pass (synthetic, documented in the UAT guide).
 
+Optional - "Jarvis": drag it to Applications for Jarvis as an app of its own - one window with a Jarvis tab
+(its state, Pause/Resume, its page) and a Clinic tab (the clinic app on this Mac: sign in, then every record your
+role allows, through the clinic's own checks). It never listens itself; Jarvis's login service does.
+
 Optional - "Clinic Service": drag it to Applications too if the clinic app should start by itself when you
 log in (the connected clinic needs it running). Open it once, choose the clinic folder (the one with run.py
 and .venv), press Switch on and approve it in System Settings > General > Login Items. macOS may also ask

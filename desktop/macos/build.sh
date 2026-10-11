@@ -21,7 +21,8 @@ C="$APP/Contents"
 R="$C/Resources"
 trap 'rm -rf "$WORK"' EXIT
 SVC="$WORK/Clinic Service.app"
-mkdir -p "$C/MacOS" "$R" "$SVC/Contents/MacOS" "$SVC/Contents/Library/LaunchAgents" "$OUT"
+JAR="$WORK/Jarvis.app"
+mkdir -p "$C/MacOS" "$R" "$SVC/Contents/MacOS" "$SVC/Contents/Library/LaunchAgents" "$JAR/Contents/MacOS" "$OUT"
 echo "== Clinic Workspace $VERSION ($BUILD, $COMMIT)"
 
 echo "== native code"
@@ -34,6 +35,11 @@ swiftc -O -target arm64-apple-macos14.0 desktop/macos/ClinicService/ClinicServic
 sed -e "s/@VERSION@/$VERSION/" -e "s/@BUILD@/$BUILD/" -e "s/@COMMIT@/$COMMIT/" desktop/macos/ClinicService/Info.plist \
     > "$SVC/Contents/Info.plist"
 cp desktop/macos/ClinicService/local.clinicdemo.clinic-service.plist "$SVC/Contents/Library/LaunchAgents/"
+# Jarvis.app: the same window code with its own entry point - Jarvis and the clinic records (signed in), no backend
+swiftc -O -target arm64-apple-macos14.0 $(ls desktop/macos/Sources/*.swift | grep -v '/main.swift$') \
+    desktop/macos/JarvisApp/main.swift -o "$JAR/Contents/MacOS/Jarvis"
+sed -e "s/@VERSION@/$VERSION/" -e "s/@BUILD@/$BUILD/" -e "s/@COMMIT@/$COMMIT/" desktop/macos/JarvisApp/Info.plist \
+    > "$JAR/Contents/Info.plist"
 
 echo "== python $PYVER (python-build-standalone via uv)"
 uv python install "$PYVER" >/dev/null
@@ -82,11 +88,14 @@ for f in "$SVC/Contents/MacOS/ClinicServiceHelper" "$SVC"; do
         --entitlements desktop/macos/entitlements/clinic-service.entitlements "$f"
 done
 codesign --verify --strict --deep "$SVC"
+codesign --force --sign - --timestamp=none --options runtime \
+    --entitlements desktop/macos/entitlements/jarvis-app.entitlements "$JAR"
+codesign --verify --strict --deep "$JAR"
 
 echo "== disk image"
 STAGE="$WORK/dmg"
 mkdir -p "$STAGE"
-cp -R "$APP" "$SVC" "$STAGE/"
+cp -R "$APP" "$SVC" "$JAR" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 cp desktop/macos/README-INSTALL.txt "$STAGE/READ ME FIRST.txt"
 NAME="ClinicWorkspace-$VERSION-$BUILD-local"
