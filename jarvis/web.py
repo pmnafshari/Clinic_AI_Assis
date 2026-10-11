@@ -44,7 +44,8 @@ PAGE = """<!doctype html>
   .cc { min-height: 3.2em; margin: 0 auto 16px; max-width: 40rem; padding: 10px 16px; border-radius: 10px;
         background: rgba(0, 0, 0, .72); border: 1px solid var(--line); font-size: 19px; line-height: 1.45; }
   .cc p { margin: 0; } .cc .who { color: var(--glow); font-weight: 700; margin-right: 6px; }
-  .cc:not(:has(span:not(:empty))) { opacity: .55; }
+  .cc:not(:has(span:not(:empty)))::before { content: "Captions appear here when Jarvis hears you or speaks.";
+        color: var(--muted); font-size: 16px; }
   .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px; margin-bottom: 16px; }
   .state { font-size: 28px; font-weight: 700; letter-spacing: .08em; margin: 0; }
   .READY { color: var(--ok); } .ACTIVE, .CONFIRMING, .WAITING_FOR_CONFIRMATION { color: var(--info); }
@@ -164,8 +165,8 @@ PAGE = """<!doctype html>
     const w = orb.clientWidth || 360, c = w / 2, R = w * .38, amp = level;
     const [r, g, b, glow] = MOODS[mood] || MOODS.READY;
     const motion = REDUCE ? .15 : 1;
-    ctx.globalCompositeOperation = "source-over";
-    ctx.fillStyle = "rgba(5, 6, 10, 0.3)"; ctx.fillRect(0, 0, w, w);
+    ctx.globalCompositeOperation = "destination-out";      // fade the last frame, keeping the canvas see-through
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)"; ctx.fillRect(0, 0, w, w);
     ctx.globalCompositeOperation = "lighter";
     for (const p of PARTS) {
       p.a += p.s * .003 * motion * (1 + amp * 5);
