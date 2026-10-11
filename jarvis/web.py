@@ -46,8 +46,7 @@ PAGE = """<!doctype html>
         border: 1px solid var(--line); font-size: 20px; line-height: 1.45; min-height: 3.2em; }
   .qa .line { margin: 0 0 6px; } .qa .who { color: var(--glow); font-weight: 700; margin-right: 10px; }
   .qa .line:has(span:not(.who):empty) { display: none; }
-  .qa:not(:has(.line span:not(.who):not(:empty)))::before { content: 'Say "Hey Jarvis", then your question.';
-        color: var(--muted); font-size: 17px; }
+  .qa:not(:has(.line span:not(.who):not(:empty))) { display: none; }
   .cite { font-size: 15px; color: var(--muted); } .cite p { margin: 2px 0; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .more { margin-top: 8px; } .more summary { cursor: pointer; color: var(--muted); min-height: 24px; padding: 4px 0; }
