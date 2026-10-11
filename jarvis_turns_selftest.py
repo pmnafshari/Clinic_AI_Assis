@@ -995,6 +995,71 @@ def voice_notes():
         "19: HARD FAIL - notes by voice outside the synthetic demo"
 
 
+def doctor_signin():
+    # 20. Owner, 2026-10-11: Jarvis asks for a doctor's username and password on its own page - when it starts (a
+    #     restart signs it out) and after 00:00; the page passes them straight to the clinic and keeps nothing;
+    #     only this page may sign in or out (Origin); the page shows who it acts for and until when
+    from jarvis.clinic import Refused
+    calls = []
+
+    class Access:
+        def signin(self, username, password):
+            calls.append(("in", username, password))
+            if password != "right":
+                raise Refused("credentials", "wrong username or password")
+            return {"username": username, "role": "dentist", "expires_at": "2026-10-11T22:00:00+00:00"}
+
+        def signout(self):
+            calls.append(("out",))
+    m = machine()
+    c = create_app(m, access=Access()).test_client()
+    html = c.get("/", base_url=BASE).data.decode()
+    top = html[html.index("<main"):html.index('<details id="more"')]
+    assert 'id="signin"' in top and 'type="password"' in top and 'autocomplete="current-password"' in top, \
+        "20: not signed in - the page asks for the doctor's username and password"
+    assert "<button" not in top.lower(), "20: still no click-to-talk"
+    ok = {"Origin": BASE}
+    assert c.post("/signin", json={"username": "drossi", "password": "right"}, base_url=BASE).status_code == 403, \
+        "20: HARD FAIL - a sign-in without this page's Origin"
+    assert c.post("/signin", json={"username": "drossi"}, headers=ok, base_url=BASE).status_code == 400
+    r = c.post("/signin", json={"username": "drossi", "password": "nope"}, headers=ok, base_url=BASE)
+    assert r.status_code == 403 and r.get_json()["error"] == "credentials", "20: a refusal says why"
+    r = c.post("/signin", json={"username": "drossi", "password": "right"}, headers=ok, base_url=BASE)
+    assert r.status_code == 200 and m.snapshot()["access"]["username"] == "drossi", "20: signed in, shown"
+    assert "right" not in json.dumps(m.snapshot()) and "right" not in c.get("/status", base_url=BASE).data.decode(), \
+        "20: HARD FAIL - the password kept by Jarvis"
+    html = c.get("/", base_url=BASE).data.decode()
+    top = html[html.index("<main"):html.index('<details id="more"')]
+    assert "drossi" in top and "00:00" in top and 'id="signout"' in top, "20: who, until when, and sign out"
+    assert c.post("/signout", headers=ok, base_url=BASE).status_code == 204 and calls[-1] == ("out",)
+    assert m.snapshot()["access"] is None, "20: signed out at once"
+    assert c.post("/signout", base_url=BASE).status_code == 403, "20: sign out only from this page"
+    import jarvis_run
+
+    class Link:
+        def __init__(self):
+            self.out = []
+
+        def logout(self, why):
+            self.out.append(why)
+    link = Link()
+    jarvis_run.start_signed_out(link)
+    assert link.out == ["restarted"], "20: HARD FAIL - a restart keeps the last sign-in"
+    jarvis_run.start_signed_out(None)                          # no credential on this machine: nothing to do
+    from jarvis import runtime
+
+    class Who:
+        def whoami(self):
+            return {"device": "Mac", "device_id": 1, "approved_guides": 3,
+                    "delegation": {"username": "drossi", "role": "dentist", "expires_at": "x", "kind": "login"}}
+    m = machine()
+    runtime.check_link(m, Who(), True)
+    assert m.snapshot()["access"]["username"] == "drossi", "20: the clinic's own view decides what the page shows"
+    Who.whoami = lambda self: {"device": "Mac", "device_id": 1, "approved_guides": 3, "delegation": None}
+    runtime.check_link(m, Who(), True)
+    assert m.snapshot()["access"] is None, "20: after 00:00 (no delegation any more) the page asks again"
+
+
 def selftest():
     # an exception in a worker thread, or an exchange fault the listener logged, fails the suite (added after a
     # KeyError in a cancelled exchange's thread went unnoticed by every assertion during development)
@@ -1022,6 +1087,7 @@ def selftest():
     simple_page()
     live_levels()
     voice_notes()
+    doctor_signin()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"

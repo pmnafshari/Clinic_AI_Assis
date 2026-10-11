@@ -135,8 +135,7 @@ class Exchange:
             return self.note_card(turn, heard, "unclear", NOTE_SAYING, "a note command could not be read")
         if given[1] is None:                       # no staff session delegated: the clinic is not even asked
             return self.note_card(turn, heard, "auth_required",
-                                  "A dentist or reception member must hand their signed-in session to this computer "
-                                  "first (Jarvis in the clinic app's sidebar). Nothing was written.",
+                                  "A doctor must sign Jarvis in first, on this page. Nothing was written.",
                                   "a note needs a delegated staff session - nothing written")
         if not m.go_for(turn, "ACTIVE", "preparing the note - not recording"):
             return "cancelled"

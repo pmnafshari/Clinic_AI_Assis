@@ -9,7 +9,7 @@ check is here, every call is audited, and voice plays no part in it.
 import collections
 import re
 import secrets
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import clinic_time
 import web_session
@@ -43,6 +43,16 @@ SCHEMA = """
         revoked_at TEXT
     );
 """
+DOCTOR = "dentist"            # owner, 2026-10-11: only a doctor signs Jarvis in, and only a doctor lets it write
+
+
+def ensure_columns(conn):
+    """2026-10-11: a delegation is either a staff browser session handed to the device ('web', J00) or a doctor
+    signing Jarvis in on the device itself ('login', until the next 00:00). Additive; old rows stay 'web'."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(jarvis_delegations)")}
+    if "kind" not in cols:
+        conn.execute("ALTER TABLE jarvis_delegations ADD COLUMN kind TEXT NOT NULL DEFAULT 'web'")
+        conn.commit()
 
 
 class LinkError(Exception):
@@ -150,17 +160,66 @@ def authenticate(conn, bearer):
 
 
 def current_delegation(conn, device_id, now=None):
-    """-> {username, role, expires_at} while the delegation, its staff session and its account are all valid."""
+    """-> {username, role, expires_at, kind} while the delegation, its staff session (or, for a sign-in on the
+    device, the doctor's account) and the account are all valid."""
     now = _now(now)
     row = conn.execute("SELECT * FROM jarvis_delegations WHERE device_id = ? AND revoked_at IS NULL ORDER BY id DESC"
                        " LIMIT 1", (device_id,)).fetchone()
     if row is None or now >= clinic_time.read_instant(row["expires_at"]):
         return None
+    if row["kind"] == "login":          # signed in on the device: the account must still be an active doctor
+        user = conn.execute("SELECT role, active FROM users WHERE username = ?", (row["username"],)).fetchone()
+        if user is None or user["active"] != 1 or user["role"] != DOCTOR:
+            return None
+        return {"username": row["username"], "role": user["role"], "expires_at": row["expires_at"], "kind": "login"}
     live = web_session.session_alive(conn, row["session_hash"], now)
     if live is None or live["username"] != row["username"]:
         return None
     # the role is the account's current one, never a copy taken when the delegation was made
-    return {"username": row["username"], "role": live["role"], "expires_at": row["expires_at"]}
+    return {"username": row["username"], "role": live["role"], "expires_at": row["expires_at"], "kind": "web"}
+
+
+def next_midnight(now):
+    """The next 00:00 in clinic time, as an instant: a sign-in on the device ends there, every day."""
+    local = clinic_time.to_local(now)
+    return clinic_time.to_utc(datetime.combine(local.date() + timedelta(days=1), time(0)))
+
+
+def login(conn, device, username, password, now=None):
+    """A doctor signs Jarvis in on the device with their own username and password - the clinic's own check, lockout
+    and audit. Until the next 00:00. -> {username, role, expires_at}"""
+    import web_auth
+    now = _now(now)
+    target = f"jarvis_device:{device['id']}"
+    role = web_auth.attempt_login(username, password, conn)
+    if role is None:
+        log_audit(conn, username or "unknown", "unknown", "jarvis_signin", target, allowed=0, reason="credentials")
+        raise LinkError("credentials", "wrong username or password")
+    if role != DOCTOR:
+        log_audit(conn, username, role, "jarvis_signin", target, allowed=0, reason="not_doctor")
+        raise LinkError("not_doctor", "only a doctor can sign Jarvis in")
+    owes = conn.execute("SELECT must_change_password FROM users WHERE username = ?", (username,)).fetchone()
+    if owes and owes[0]:
+        log_audit(conn, username, role, "jarvis_signin", target, allowed=0, reason="password_change")
+        raise LinkError("password_change", "change your password in the clinic app first")
+    stamp = clinic_time.to_storage(now)
+    until = next_midnight(now)
+    conn.execute("UPDATE jarvis_delegations SET revoked_by = ?, revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL",
+                 (username, stamp, device["id"]))
+    conn.execute("INSERT INTO jarvis_delegations (device_id, username, session_hash, created_at, expires_at, kind)"
+                 " VALUES (?, ?, ?, ?, ?, 'login')", (device["id"], username, "", stamp, clinic_time.to_storage(until)))
+    conn.commit()
+    log_audit(conn, username, role, "jarvis_signin", target, allowed=1)
+    return {"username": username, "role": role, "expires_at": clinic_time.to_storage(until)}
+
+
+def logout(conn, device, why):
+    """Whoever Jarvis acts for on this device, it stops at once (sign out, or Jarvis starting again)."""
+    conn.execute("UPDATE jarvis_delegations SET revoked_by = ?, revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL",
+                 (f"jarvis-device:{device['id']}", clinic_time.to_storage(_now(None)), device["id"]))
+    conn.commit()
+    log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_signout", f"jarvis_device:{device['id']}",
+              allowed=1, reason=why)
 
 
 def whoami(conn, bearer, now=None):
@@ -330,9 +389,9 @@ def _delegated(conn, device, action, target, now):
     if who is None:
         log_audit(conn, f"jarvis-device:{device['id']}", "device", action, target, allowed=0, reason="no_delegation")
         raise LinkError("auth_required", "a staff member must hand their signed-in session to this device first")
-    if not authorize(who["role"], "append_note"):
+    if who["role"] != DOCTOR or not authorize(who["role"], "append_note"):
         log_audit(conn, who["username"], who["role"], action, target, allowed=0, reason="role")
-        raise LinkError("role", "the person this device acts for may not add notes")
+        raise LinkError("role", "only a doctor can let Jarvis add notes")
     return who
 
 

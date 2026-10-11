@@ -196,3 +196,34 @@ def api_note_commit():
         return _json(jl.commit_note(conn, device, body["draft"], body["cf"], save))
     except jl.LinkError as e:
         return _json({"error": e.code, "message": str(e)}, NOTE_STATUS.get(e.code, 409))
+
+
+@jarvis_bp.route("/api/jarvis/login", methods=["POST"])
+def api_login():
+    """A doctor signs Jarvis in on the device (owner, 2026-10-11): their own username and password, checked by the
+    clinic as at its own sign-in; until the next 00:00. Device credential required; the password is never kept."""
+    conn = get_db()
+    device = _device(conn, "login")
+    if device is None:
+        return _json({"error": "not a registered Jarvis device"}, 401)
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("username"), str) or \
+            not isinstance(body.get("password"), str):
+        return _json({"error": "send {\"username\": \"...\", \"password\": \"...\"}"}, 400)
+    try:
+        return _json(jl.login(conn, device, body["username"].strip(), body["password"]))
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, 403)
+
+
+@jarvis_bp.route("/api/jarvis/logout", methods=["POST"])
+def api_logout():
+    """Whoever Jarvis acts for on this device, it stops (signing out, or Jarvis starting again)."""
+    conn = get_db()
+    device = _device(conn, "logout")
+    if device is None:
+        return _json({"error": "not a registered Jarvis device"}, 401)
+    body = request.get_json(silent=True)
+    why = body.get("why") if isinstance(body, dict) and body.get("why") in ("signed_out", "restarted") else "signed_out"
+    jl.logout(conn, device, why)
+    return "", 204

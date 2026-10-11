@@ -20,7 +20,8 @@ from . import db
 # with "s".
 # the Jarvis device routes carry a device credential, not a staff cookie; they check it themselves (J00, J02, J03)
 WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
-                       "jarvis.api_guides_vocabulary", "jarvis.api_note_draft", "jarvis.api_note_commit"}
+                       "jarvis.api_guides_vocabulary", "jarvis.api_note_draft", "jarvis.api_note_commit",
+                       "jarvis.api_login", "jarvis.api_logout"}
 
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave
@@ -145,6 +146,8 @@ def create_app():
     csrf.exempt(app.view_functions["jarvis.api_guides_ask"])
     csrf.exempt(app.view_functions["jarvis.api_note_draft"])         # J03: device credential, no staff cookie
     csrf.exempt(app.view_functions["jarvis.api_note_commit"])
+    csrf.exempt(app.view_functions["jarvis.api_login"])              # a doctor signs the device in (2026-10-11)
+    csrf.exempt(app.view_functions["jarvis.api_logout"])
     app.register_blueprint(similar_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)

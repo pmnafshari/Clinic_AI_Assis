@@ -34,6 +34,7 @@ def check_link(machine, link, answers_on=False):
         machine.set_clinic(False, str(e))
         return answers(machine, answers_on, DOWN)
     acting = who.get("delegation")
+    machine.set_access(acting)
     detail = f"connected as {who.get('device')}; " + (f"acting for {acting['username']} ({acting['role']})" if acting
                                                       else NO_DELEGATION)
     machine.set_clinic(True, detail)
