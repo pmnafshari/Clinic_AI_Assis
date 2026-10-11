@@ -69,7 +69,9 @@ PAGE = """<!doctype html>
   {% set a = s.answer %}
   <section class="card" id="answer" aria-live="polite"{% if not a %} hidden{% endif %}>
     <h2 id="answer-title" tabindex="-1">Last question</h2>
-    <p class="muted">Answers are shown here on screen, not spoken. They stay for two minutes and are kept nowhere.</p>
+    <p class="muted">{% if s.answers.demo %}Answers are shown here and read aloud by this Mac's voice (synthetic demo only;
+      a new "Hey Jarvis" or Pause stops it).{% else %}Answers are shown here on screen, not spoken.{% endif %} They stay
+      for two minutes and are kept nowhere.</p>
     <div id="answer-body">{% if a and a.title %}<h3>{{ a.title }}</h3>{% endif %}{% if a and a.outcome == "confirm" %}
       <h3>Did I hear you right?</h3>
       <p class="heard">{{ a.heard }}</p>
@@ -99,7 +101,8 @@ PAGE = """<!doctype html>
       <li>ACTIVE - one request after a short tone (at most 15 seconds), then worked out on this computer</li>
       <li>WAITING_FOR_CONFIRMATION - what was heard appears here, and nothing is asked until you press <em>Yes, ask
         this</em>; nothing is recorded meanwhile, and saying the wake phrase again starts over; then the clinic-guide
-        answer appears with the document and page it comes from (nothing is spoken back); then back to READY</li>
+        answer appears with the document and page it comes from (read aloud only in the synthetic demo); then back to
+        READY</li>
       <li>AUTH_REQUIRED - needs a delegated staff session; nothing protected is said</li>
       <li>CONFIRMING - a spoken confirmation of an action that is already authorised</li>
       <li>DEGRADED - not available, with the reason (asleep, microphone denied or muted, engine missing, fault)</li>

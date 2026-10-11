@@ -20,7 +20,7 @@ import sys
 import threading
 from pathlib import Path
 
-from jarvis import answer, launchd, listen, runtime, states, stt
+from jarvis import answer, launchd, listen, runtime, speech, states, stt
 from jarvis.clinic import DEFAULT_KEY, ClinicLink, store_key
 from jarvis.web import CLINIC_URL, PORT, create_app
 
@@ -33,6 +33,11 @@ def clinic_url():
 
 def answers_on(env):
     return env.get("JARVIS_GUIDE_ANSWERS") == "demo"
+
+
+def speaker_for(answers):
+    """The voice for spoken replies - only with answers on for the synthetic demo (owner decision 2026-10-11)."""
+    return speech.Speaker() if answers else None
 
 
 def _link():
@@ -78,6 +83,9 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
                 machine.go("DEGRADED", f"service fault ({type(e).__name__})")
             logging.exception("listener fault")
             os._exit(1)
+    speaker = speaker_for(enabled)
+    if speaker:
+        threading.Thread(target=speech.watch, args=(machine, speaker, stop), name="jarvis-speech", daemon=True).start()
     threading.Thread(target=checks, name="jarvis-checks", daemon=True).start()
     threading.Thread(target=listening, name="jarvis-listen", daemon=True).start()
     server = make_server("127.0.0.1", PORT, create_app(machine, clinic_url()), threaded=True)

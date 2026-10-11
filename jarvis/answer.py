@@ -1,5 +1,5 @@
 """One exchange (J02): the heard request -> local speech to text -> the clinic guides over loopback -> the answer on the
-Jarvis page, with its citation. Nothing is spoken back (J04 is BLOCKED by POL-13). The transcript and the answer live in
+Jarvis page, with its citation (read aloud only in the synthetic demo - jarvis/speech.py). The transcript and the answer live in
 memory only, on the page for ANSWER_SECONDS; the state's reason, which the history keeps, never carries what was said.
 
 Since J-D10 the speech to text is hinted with the library's own terms, and what was heard is shown first: nothing is
