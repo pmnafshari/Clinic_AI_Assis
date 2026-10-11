@@ -90,7 +90,8 @@ class Machine:
         self._sent = False         # the current interaction's question has gone to the clinic guides
         self._answer = None        # (what to show, expiry on self.clock) - memory only (J02)
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
-        self.paused = False        # listening switched off by the owner (Clinic Workspace, P28) until resumed
+        self.paused = False
+        self.mic_level = 0.0       # the microphone's loudness now (0-1), for the page's animation only - not a state        # listening switched off by the owner (Clinic Workspace, P28) until resumed
 
     # --- moves ------------------------------------------------------------------------------------------------
     def _move(self, state, reason, again=False):
