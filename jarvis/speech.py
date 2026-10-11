@@ -81,7 +81,7 @@ def words(card):
 
 def synthesize(text, path, voice=None):
     """The voice into a WAV file. -> (loudness 0-1 every STEP seconds, STEP)."""
-    cmd = [SAY, "-r", str(RATE), "-o", path, "--file-format=WAVE", "--data-format=LEI16@22050"]
+    cmd = [SAY, "-r", str(RATE), "-o", path, "--file-format=WAVE", "--data-format=LEI16@44100"]
     if voice:
         cmd += ["-v", voice]
     subprocess.run(cmd + ["--", text], check=True, timeout=60, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
