@@ -1,15 +1,21 @@
 """Jarvis (J00) in the clinic app: device registration (admin), session delegation (staff), and the device API
-(whoami since J00, clinic-guide questions since J02)."""
+(whoami since J00, clinic-guide questions since J02, a note added by voice since J03 - drafted, then saved only when
+the person at the device's screen picks the patient)."""
+from pathlib import Path
+
 from flask import Blueprint, flash, g, jsonify, redirect, render_template, request, url_for
 
 import jarvis_link as jl
 import web_session
 from auth import authorize, log_audit
 
-from .db import get_db
+from .db import get_chroma, get_db
 from .guides_routes import REASON_TITLES, gconn
 
 jarvis_bp = Blueprint("jarvis", __name__)
+SORTED_ROOT = Path("sorted")
+NOTE_STATUS = {"auth_required": 403, "role": 403, "empty": 400, "no_match": 404, "too_many": 409, "patient": 409,
+               "gone": 410}
 
 
 def _who():
@@ -137,3 +143,56 @@ def api_guides_vocabulary():
     resp = jsonify({"terms": terms, "dropped": len(ranked) - len(terms)})
     resp.headers["Cache-Control"] = "no-store"
     return resp
+
+
+def _device(conn, action):
+    header = request.headers.get("Authorization", "")
+    try:
+        return jl.authenticate(conn, header[7:] if header.startswith("Bearer ") else "")
+    except jl.LinkError:
+        log_audit(conn, "jarvis-device", "device", "jarvis_api", action, allowed=0)
+        return None
+
+
+def _json(body, status=200):
+    resp = jsonify(body)
+    resp.status_code = status
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@jarvis_bp.route("/api/jarvis/notes/draft", methods=["POST"])
+def api_note_draft():
+    """A note heard by a device, for a spoken patient name (J03). Device credential only; the delegated person's live
+    session and role decide; the matching patients come back for the screen - nothing is written."""
+    conn = get_db()
+    device = _device(conn, "note_draft")
+    if device is None:
+        return _json({"error": "not a registered Jarvis device"}, 401)
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("patient"), str) or not isinstance(body.get("text"), str):
+        return _json({"error": "send {\"patient\": \"...\", \"text\": \"...\"}"}, 400)
+    try:
+        return _json(jl.draft_note(conn, device, body["patient"], body["text"]))
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, NOTE_STATUS.get(e.code, 409))
+
+
+@jarvis_bp.route("/api/jarvis/notes/commit", methods=["POST"])
+def api_note_commit():
+    """Save a drafted note on the patient picked on the device's screen, through the clinic's own save."""
+    conn = get_db()
+    device = _device(conn, "note_commit")
+    if device is None:
+        return _json({"error": "not a registered Jarvis device"}, 401)
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or not isinstance(body.get("draft"), str) or not isinstance(body.get("cf"), str):
+        return _json({"error": "send {\"draft\": \"...\", \"cf\": \"...\"}"}, 400)
+    from storage import save_new_note
+
+    def save(note, role, username):
+        return save_new_note(note, conn, get_chroma(), role, username, sorted_root=SORTED_ROOT)
+    try:
+        return _json(jl.commit_note(conn, device, body["draft"], body["cf"], save))
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, NOTE_STATUS.get(e.code, 409))

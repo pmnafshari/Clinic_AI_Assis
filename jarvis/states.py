@@ -18,7 +18,7 @@ TRANSITIONS = {
     "ACTIVE": {"READY", "WAITING_FOR_CONFIRMATION", "AUTH_REQUIRED", "CONFIRMING", "DEGRADED"},
     "WAITING_FOR_CONFIRMATION": {"ACTIVE", "READY", "DEGRADED"},
     "AUTH_REQUIRED": {"READY", "DEGRADED"},
-    "CONFIRMING": {"READY", "DEGRADED"},
+    "CONFIRMING": {"ACTIVE", "READY", "DEGRADED"},   # J03: a new wake phrase cancels a note on screen
     # recovery always starts again: DEGRADED never jumps straight back to READY
     "DEGRADED": {"STARTING"},
 }
@@ -29,7 +29,7 @@ MEANING = {
     "WAITING_FOR_CONFIRMATION": "what was heard is on screen; nothing is asked until someone confirms it there - "
                                 "not recording, and the wake phrase is still heard",
     "AUTH_REQUIRED": "this needs a staff member's signed-in session on this device",
-    "CONFIRMING": "waiting for a spoken confirmation of an already-authorised action",
+    "CONFIRMING": "a note is on screen; nothing is saved until someone picks the patient and saves it there",
     "DEGRADED": "not available",
 }
 WAIT_SLICE = 1.0           # a wait wakes at least this often, so a deadline passed during sleep is seen at once
@@ -69,6 +69,8 @@ def status_words(state, reason, paused):
     if state in BUSY:
         if state == "WAITING_FOR_CONFIRMATION":
             return {"word": "Active", "why": "Check what I heard"}
+        if state == "CONFIRMING":
+            return {"word": "Active", "why": "Pick the patient and save on screen"}
         return {"word": "Active", "why": "Listening" if reason.startswith("heard the wake phrase") else "Working on it"}
     if state == "STARTING":
         return {"word": "Sleep", "why": "Starting up"}
@@ -246,6 +248,20 @@ class Machine:
             self._move("WAITING_FOR_CONFIRMATION", "waiting for what was heard to be confirmed on screen")
             return pid
 
+    def offer_note(self, turn, card, seconds):
+        """A drafted note on screen (J03): only a click on one of its patients ("save:<cf>") or "discard" decides.
+        -> its id; None if `turn` is no longer current."""
+        with self._lock:
+            if not turn or turn != self.turn:
+                return None
+            pid = secrets.token_urlsafe(16)
+            deadline = self.clock() + seconds
+            allowed = {"discard"} | {"save:" + c["cf"] for c in card["choices"]}
+            self._pending = {"id": pid, "decision": None, "deadline": deadline, "allowed": allowed}
+            self._answer = ({**card, "outcome": "note_confirm", "id": pid, "seconds": seconds}, deadline)
+            self._move("CONFIRMING", "a note is on screen, waiting to be saved there")
+            return pid
+
     def decide(self, pid, decision):
         """The person's choice on the page. -> "taken" only for the first "ask" or "discard" on what is waiting now,
         before its deadline; "expired" after it; "gone" when nothing waits under that id; "ambiguous" for a second
@@ -262,7 +278,7 @@ class Machine:
                 p["decision"] = "timeout"
             if p["decision"] == "timeout":
                 return "expired"
-            if p["decision"] is not None or decision not in ("ask", "discard"):
+            if p["decision"] is not None or decision not in p.get("allowed", ("ask", "discard")):
                 p["decision"] = "ambiguous"
                 return "ambiguous"
             p["decision"] = decision
@@ -298,7 +314,7 @@ class Machine:
         left = until - self.clock()
         if left <= 0:
             return None
-        if answer["outcome"] == "confirm":     # a page opened late must say the real time left, not the full 30 s
+        if answer["outcome"] in ("confirm", "note_confirm"):   # a page opened late says the real time left
             return {**answer, "left": max(1, round(left))}
         return answer
 

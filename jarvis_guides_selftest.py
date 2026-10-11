@@ -65,8 +65,9 @@ def route(tmp):
     #    is reception's whatever the delegation, withdrawn and restricted pages honoured, no other route opened
     from app import WHITELIST_ENDPOINTS
     # checked first: a staff page on this list would break the later requests before they could be judged (M19)
+    # J03 (2026-10-11) adds the device's note draft and save, each checked by jarvis_notes_selftest
     assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
-                                   "jarvis.api_guides_vocabulary"}, \
+                                   "jarvis.api_guides_vocabulary", "jarvis.api_note_draft", "jarvis.api_note_commit"}, \
         f"1: only the device routes skip the staff login ({WHITELIST_ENDPOINTS})"
     gconn, ids, devices = library(tmp)
     app, conn, db_path, admin, token, device = clinic(tmp)

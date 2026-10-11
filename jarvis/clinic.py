@@ -18,6 +18,15 @@ class LinkRefused(Exception):
     pass
 
 
+class NoteRefused(Exception):
+    """The clinic refused a note (J03): `code` says why - auth_required, role, empty, no_match, too_many, patient,
+    gone."""
+
+    def __init__(self, code, message):
+        super().__init__(message)
+        self.code = code
+
+
 def read_key(path):
     path = Path(path)
     mode = path.stat().st_mode
@@ -51,6 +60,33 @@ class ClinicLink:
             raise LinkDown(f"clinic app answered {e.code}") from None
         except (urllib.error.URLError, OSError):
             raise LinkDown("clinic app unreachable") from None
+
+    def _note(self, path, payload):
+        req = urllib.request.Request(f"{self.base_url}{path}", data=json.dumps(payload).encode(), method="POST",
+                                     headers={"Authorization": f"Bearer {self._token}", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                raise LinkRefused("device not registered or revoked") from None
+            try:
+                body = json.loads(e.read())
+            except (ValueError, OSError):
+                body = {}
+            if isinstance(body, dict) and isinstance(body.get("error"), str) and e.code in (400, 403, 404, 409, 410):
+                raise NoteRefused(body["error"], body.get("message", "")) from None
+            raise LinkDown(f"clinic app answered {e.code}") from None
+        except (urllib.error.URLError, OSError):
+            raise LinkDown("clinic app unreachable") from None
+
+    def note_draft(self, patient, text):
+        """A note heard for a spoken patient name (J03) -> {draft, choices, text, seconds}; nothing is written."""
+        return self._note("/api/jarvis/notes/draft", {"patient": patient, "text": text})
+
+    def note_commit(self, draft, cf):
+        """Save a drafted note on the patient picked on screen -> {saved, cf, name, status}."""
+        return self._note("/api/jarvis/notes/commit", {"draft": draft, "cf": cf})
 
     def whoami(self):
         return self._send(urllib.request.Request(f"{self.base_url}/api/jarvis/whoami",

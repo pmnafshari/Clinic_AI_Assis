@@ -205,6 +205,7 @@ PAGE = """<!doctype html>
   }
   function spoken(a) {          // the same words as the voice (jarvis/speech.py words())
     if (!a || a.outcome === "confirm") return "";
+    if (a.outcome === "note_confirm") return "Save this note? \u201c" + a.text + "\u201d - pick the patient below.";
     if (a.outcome === "answer") {
       const parts = [];
       for (const c of a.citations || []) parts.push(c.language && c.language !== "en" ? "The answer is on screen, in " +
@@ -222,6 +223,8 @@ PAGE = """<!doctype html>
     const cite = document.getElementById("qa-cite");
     cite.replaceChildren();
     for (const c of (a && a.citations) || []) cite.append(sourceLink(c.source_id, c.page, c.title + ", page " + c.page));
+    if (a && a.outcome === "note_confirm") cite.append(noteChoices(a));
+    if (a && a.outcome === "note_saved" && a.patient) cite.append(recordLink(a.patient));
     document.getElementById("qa-said").textContent = fullAnswer;      // read once by a screen reader
   }
   function live() {
@@ -334,6 +337,29 @@ PAGE = """<!doctype html>
       box.append(b);
     }
     return box;
+  }
+  // J03: a note waits on screen - one button per patient the name matched (same names told apart by codice
+  // fiscale), and Discard; only a click saves
+  function noteChoices(a) {
+    const box = line("div", "", "choices");
+    for (const c of a.choices || []) {
+      const b = line("button", "Save to " + c.name + " \u00b7 " + c.cf, "yes");
+      b.type = "button";
+      b.addEventListener("click", () => decide(a.id, "save:" + c.cf, box));
+      box.append(b);
+    }
+    const no = line("button", "Discard", "no");
+    no.type = "button";
+    no.addEventListener("click", () => decide(a.id, "discard", box));
+    box.append(no);
+    return box;
+  }
+  function recordLink(p) {     // the record in the clinic app, opened there under the viewer's own sign-in
+    const el = line("p", "", "source"), link = line("a", "Open " + p.name + "'s record");
+    link.href = CLINIC + "/patients/" + encodeURIComponent(p.cf);
+    link.target = "_blank"; link.rel = "noopener noreferrer";
+    el.append(link);
+    return el;
   }
   for (const box of document.querySelectorAll(".choices")) {
     for (const b of box.querySelectorAll("button")) b.addEventListener("click", () => decide(box.dataset.id, b.dataset.decision, box));

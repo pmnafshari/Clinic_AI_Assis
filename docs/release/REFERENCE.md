@@ -19,6 +19,8 @@ this file is stale.
 | POST | `/agent/undo` | `agent.undo_change` |
 | POST | `/api/jarvis/guides/ask` | `jarvis.api_guides_ask` |
 | GET | `/api/jarvis/guides/vocabulary` | `jarvis.api_guides_vocabulary` |
+| POST | `/api/jarvis/notes/commit` | `jarvis.api_note_commit` |
+| POST | `/api/jarvis/notes/draft` | `jarvis.api_note_draft` |
 | GET | `/api/jarvis/whoami` | `jarvis.api_whoami` |
 | GET | `/api/session` | `auth.session` |
 | GET | `/appointments` | `appointments.index` |

@@ -290,3 +290,98 @@ def approved_guides(gconn, role=GUIDE_ROLE):
     marks = ",".join("?" * len(audiences))
     return gconn.execute(f"SELECT COUNT(*) FROM sources WHERE status = 'approved' AND audience IN ({marks})",
                          audiences).fetchone()[0]
+
+
+# --- notes by voice (J03, first slice; owner-authorised 2026-10-11) -----------------------------------------------
+# The spoken name only proposes patients; the person at the device's screen picks one and saves. A draft lives here
+# in memory for NOTE_SECONDS and is used once: it never survives a restart, and nothing is written until the save.
+
+NOTE_SECONDS = 120
+MAX_NOTE = 1000
+MAX_MATCHES = 5
+NOTE_PREFIX = "Dictated to Jarvis: "
+_DRAFTS = {}
+_DRAFTS_LOCK = __import__("threading").Lock()
+
+
+def _fold(text):
+    import unicodedata
+    plain = "".join(c for c in unicodedata.normalize("NFKD", text or "") if not unicodedata.combining(c))
+    return re.findall(r"[a-z0-9]+", plain.casefold())
+
+
+def find_patients(conn, spoken):
+    """Patients whose name holds every spoken word (case and accents ignored). -> [{cf, name}]"""
+    want = _fold(spoken)
+    if not want:
+        return []
+    found = []
+    for row in conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE codice_fiscale IS NOT NULL"
+                            " ORDER BY patient_name, codice_fiscale"):
+        have = _fold(row["patient_name"])
+        if all(w in have for w in want):
+            found.append({"cf": row["codice_fiscale"], "name": row["patient_name"]})
+    return found
+
+
+def _delegated(conn, device, action, target, now):
+    """The person the device acts for, allowed to add notes - or LinkError (audited, naming no patient)."""
+    who = current_delegation(conn, device["id"], now)
+    if who is None:
+        log_audit(conn, f"jarvis-device:{device['id']}", "device", action, target, allowed=0, reason="no_delegation")
+        raise LinkError("auth_required", "a staff member must hand their signed-in session to this device first")
+    if not authorize(who["role"], "append_note"):
+        log_audit(conn, who["username"], who["role"], action, target, allowed=0, reason="role")
+        raise LinkError("role", "the person this device acts for may not add notes")
+    return who
+
+
+def draft_note(conn, device, spoken_patient, text, now=None):
+    """-> {draft, choices: [{cf, name}], text, seconds}. Nothing is written."""
+    now = _now(now)
+    target = f"jarvis_device:{device['id']}"
+    who = _delegated(conn, device, "jarvis_note_draft", target, now)
+    text = " ".join((text or "").split())[:MAX_NOTE]
+    if not text:
+        raise LinkError("empty", "no note was heard")
+    found = find_patients(conn, spoken_patient)
+    log_audit(conn, who["username"], who["role"], "jarvis_note_draft", target, allowed=1,
+              reason="no_match" if not found else "one_match" if len(found) == 1 else
+              "too_many" if len(found) > MAX_MATCHES else "several_matches")
+    if not found:
+        raise LinkError("no_match", "no patient matches that name - say the patient's full name")
+    if len(found) > MAX_MATCHES:
+        raise LinkError("too_many", "too many patients match - say the patient's full name")
+    draft = secrets.token_urlsafe(16)
+    with _DRAFTS_LOCK:
+        for key in [k for k, v in _DRAFTS.items() if v["expires"] <= now]:
+            del _DRAFTS[key]
+        _DRAFTS[draft] = {"device_id": device["id"], "username": who["username"], "text": text, "choices": found,
+                          "expires": now + timedelta(seconds=NOTE_SECONDS)}
+    return {"draft": draft, "choices": found, "text": text, "seconds": NOTE_SECONDS}
+
+
+def commit_note(conn, device, draft, cf, save, now=None):
+    """Save a draft's words on the chosen patient, through `save(note, role, username)` (the clinic's own save).
+    The draft is used up whatever happens. -> {saved, cf, name, status}"""
+    now = _now(now)
+    with _DRAFTS_LOCK:
+        d = _DRAFTS.pop(draft or "", None)
+    target = cf or f"jarvis_device:{device['id']}"
+    if d is None or d["device_id"] != device["id"] or now >= d["expires"]:
+        log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_note", target, allowed=0, reason="draft_gone")
+        raise LinkError("gone", "this note is no longer waiting - say it again")
+    who = _delegated(conn, device, "jarvis_note", target, now)
+    if who["username"] != d["username"]:
+        log_audit(conn, who["username"], who["role"], "jarvis_note", target, allowed=0, reason="delegation_changed")
+        raise LinkError("auth_required", "the person this device acts for has changed - say the note again")
+    choice = next((c for c in d["choices"] if c["cf"] == cf), None)
+    if choice is None:
+        log_audit(conn, who["username"], who["role"], "jarvis_note", target, allowed=0, reason="not_proposed")
+        raise LinkError("patient", "that patient was not one of the proposed ones")
+    from dental_notes_schema import DentalNote
+    note = DentalNote(patient_name=choice["name"], codice_fiscale=cf, visit_date=clinic_time.to_local(now).date(),
+                      clinical_notes=NOTE_PREFIX + d["text"])
+    status = save(note, who["role"], who["username"])
+    log_audit(conn, who["username"], who["role"], "jarvis_note", cf, allowed=1, reason="jarvis_voice")
+    return {"saved": status != "failed", "cf": cf, "name": choice["name"], "status": status}
