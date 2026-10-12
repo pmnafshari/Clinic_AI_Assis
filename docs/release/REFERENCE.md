@@ -19,10 +19,14 @@ this file is stale.
 | POST | `/agent/undo` | `agent.undo_change` |
 | POST | `/api/jarvis/guides/ask` | `jarvis.api_guides_ask` |
 | GET | `/api/jarvis/guides/vocabulary` | `jarvis.api_guides_vocabulary` |
+| POST | `/api/jarvis/handoff` | `jarvis.api_handoff` |
 | POST | `/api/jarvis/login` | `jarvis.api_login` |
 | POST | `/api/jarvis/logout` | `jarvis.api_logout` |
 | POST | `/api/jarvis/notes/commit` | `jarvis.api_note_commit` |
 | POST | `/api/jarvis/notes/draft` | `jarvis.api_note_draft` |
+| POST | `/api/jarvis/patients/edit/commit` | `jarvis.api_edit_commit` |
+| POST | `/api/jarvis/patients/edit/draft` | `jarvis.api_edit_draft` |
+| POST | `/api/jarvis/patients/read` | `jarvis.api_patients_read` |
 | GET | `/api/jarvis/whoami` | `jarvis.api_whoami` |
 | GET | `/api/session` | `auth.session` |
 | GET | `/appointments` | `appointments.index` |
@@ -68,6 +72,7 @@ this file is stale.
 | POST | `/imports/items/<int:import_id>/reject` | `imports.reject` |
 | GET,POST | `/jarvis/devices` | `jarvis.devices` |
 | POST | `/jarvis/devices/<int:device_id>/revoke` | `jarvis.revoke_device` |
+| GET | `/jarvis/handoff/<ticket>` | `jarvis.handoff` |
 | GET | `/jarvis/link` | `jarvis.link` |
 | POST | `/jarvis/link/<int:device_id>` | `jarvis.delegate` |
 | POST | `/jarvis/link/delegations/<int:delegation_id>/revoke` | `jarvis.revoke_delegation` |

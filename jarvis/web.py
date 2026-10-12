@@ -81,6 +81,12 @@ PAGE = """<!doctype html>
   .access input[type=submit] { font: inherit; font-weight: 600; padding: 8px 18px; border-radius: 10px; cursor: pointer;
             border: 2px solid var(--glow); background: var(--glow); color: #1a0d00; min-height: 24px; }
   #signout input[type=submit] { background: transparent; color: var(--info); margin-left: 8px; }
+  #clinic-signin a { color: var(--info); margin-right: 8px; }
+  .access input.linkish, .linkish { font: inherit; background: none; border: 0; color: var(--info); text-decoration: underline; cursor: pointer;
+             min-height: 24px; padding: 2px 4px; }
+  .patients { list-style: none; padding: 0; margin: 8px 0 0; text-align: left; }
+  .patients li { margin: 0 0 8px; } .patients .when { color: var(--ink); font-weight: 600; }
+  .patients .before { color: var(--muted); text-decoration: line-through; margin-right: 6px; }
   .access input:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .access p { margin: 0; } #signin-error:empty { display: none; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -134,6 +140,10 @@ PAGE = """<!doctype html>
     <p>Signed in as <strong id="access-who">{{ u.username if u else "" }}</strong> - <span id="access-until">{% if u
       and u.kind != "web" %}until 00:00{% elif u %}until the staff session ends{% endif %}</span>
       <input type="submit" value="Sign out"></p>
+  </form>
+  <form id="clinic-signin" class="access"{% if not u or u.kind == "web" %} hidden{% endif %}>
+    <p><a id="handoff-link" href="#" hidden target="_blank" rel="noopener noreferrer">Open the clinic app, signed in</a>
+      <input type="submit" class="linkish" value="Sign the clinic app in too"></p>
   </form>
   {% set a = s.answer %}
   <section id="qa" class="qa" aria-label="Question and answer">
@@ -256,8 +266,10 @@ PAGE = """<!doctype html>
     const el = document.getElementById("cc-" + who);
     if (el.textContent !== text) el.textContent = text || "";
   }
+  const IN_APP = navigator.userAgent.indexOf("JarvisApp") >= 0;   // Jarvis.app: clinic pages open in its Clinic tab
   function spoken(a) {          // the same words as the voice (jarvis/speech.py words())
     if (!a || a.outcome === "confirm") return "";
+    if (a.private) return a.say || "The answer is on screen.";      // about a patient: the details are below, unspoken
     if (a.outcome === "note_confirm") return "Save this note? \u201c" + a.text + "\u201d - pick the patient below.";
     if (a.outcome === "answer") {
       const parts = [];
@@ -277,7 +289,10 @@ PAGE = """<!doctype html>
     cite.replaceChildren();
     for (const c of (a && a.citations) || []) cite.append(sourceLink(c.source_id, c.page, c.title + ", page " + c.page));
     if (a && a.outcome === "note_confirm") cite.append(noteChoices(a));
-    if (a && a.outcome === "note_saved" && a.patient) cite.append(recordLink(a.patient));
+    if (a && a.outcome === "note_saved" && a.patient) cite.append(line("p", a.message), recordLink(a.patient));
+    if (a && ["patient_open", "patient_pick", "patient_next", "edit_confirm", "edit_saved"].includes(a.outcome)) {
+      cite.append(patientList(a));
+    }
     document.getElementById("qa-said").textContent = fullAnswer;      // read once by a screen reader
   }
   function live() {
@@ -341,6 +356,8 @@ PAGE = """<!doctype html>
     document.getElementById("signout").hidden = !u;
     setText("access-who", u ? u.username : "");
     setText("access-until", !u ? "" : u.kind === "web" ? "until the staff session ends" : "until 00:00");
+    document.getElementById("clinic-signin").hidden = !u || u.kind === "web";
+    if (!u) document.getElementById("handoff-link").hidden = true;
   }
   document.getElementById("signin").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -349,9 +366,29 @@ PAGE = """<!doctype html>
     f.password.value = "";
     err.textContent = "";
     fetch("/signin", {method: "POST", headers: {"Content-Type": "application/json"}, body: body})
-      .then((r) => r.ok ? r.json().then(setAccess) :
+      .then((r) => r.ok ? r.json().then((u) => { setAccess(u); handoff(u.handoff); }) :
             r.json().catch(() => ({})).then((b) => { err.textContent = SIGNIN[b.error] || "Not signed in."; }))
       .catch(() => { err.textContent = "Jarvis is not reachable."; });
+  });
+  // one sign-in (2026-10-12): the clinic's one-time link signs the Clinic tab in as the same doctor. Jarvis.app opens
+  // it in its Clinic tab by itself; a browser shows it as a link, valid for 60 seconds.
+  let linkTimer = null;
+  function handoff(url) {
+    const a = document.getElementById("handoff-link");
+    if (!url) { a.hidden = true; return; }
+    if (IN_APP) { window.location.assign(url); return; }
+    a.href = url; a.hidden = false;
+    clearTimeout(linkTimer);
+    linkTimer = setTimeout(() => { a.hidden = true; }, 55000);
+  }
+  document.getElementById("handoff-link").addEventListener("click", (e) => {
+    setTimeout(() => { e.target.hidden = true; }, 0);      // used once
+  });
+  document.getElementById("clinic-signin").addEventListener("submit", (e) => {
+    e.preventDefault();
+    fetch("/handoff", {method: "POST"}).then((r) => r.ok ? r.json() : Promise.reject(r.status))
+      .then((b) => handoff(b.handoff))
+      .catch(() => setText("signin-error", "The clinic app did not give a sign-in link."));
   });
   document.getElementById("signout").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -411,7 +448,9 @@ PAGE = """<!doctype html>
                        body: JSON.stringify({id: id, decision: decision})})
       .then((r) => {
         if (r.status === 204) {
-          status.textContent = decision === "ask" ? "Confirmed - asking the clinic guides." : "Discarded - nothing was asked.";
+          status.textContent = decision === "ask" ? "Confirmed - asking the clinic guides." :
+            decision.startsWith("save:") ? "Saving..." : decision.startsWith("open:") ? "Opening the record." :
+            "Discarded - nothing was asked.";
           return;
         }
         return r.json().catch(() => ({})).then((body) => {
@@ -455,6 +494,50 @@ PAGE = """<!doctype html>
     link.target = "_blank"; link.rel = "noopener noreferrer";
     el.append(link);
     return el;
+  }
+  // J03 slice 2: the patients a read or a change is about - on screen only. Each has its record link (opened in the
+  // clinic app under the viewer's own sign-in); a pick or a save waits for a click, as a note does
+  const opened = new Set();
+  function recordUrl(cf) { return CLINIC + "/patients/" + encodeURIComponent(cf); }
+  function patientList(a) {
+    const box = line("div", ""), list = line("ul", "", "patients");
+    if (a.message && a.outcome !== "note_saved") box.append(line("p", a.message));
+    for (const c of a.choices || []) {
+      const li = line("li", "");
+      li.append(line("strong", c.name), document.createTextNode(" \u00b7 " + c.cf + " "));
+      if (a.outcome === "patient_next") {
+        const n = c.next;
+        li.append(document.createElement("br"), line("span", n ? n.weekday + " " + n.date + ", " + n.time + " with " +
+                  n.dentist + " (" + n.minutes + " min)" : "No appointment booked", "when"));
+      }
+      if (a.outcome === "edit_confirm") {
+        li.append(document.createElement("br"), line("span", c.before || "no phone number", "before"),
+                  line("span", "\u2192 " + a.value, "when"));
+        const b = line("button", "Save to " + c.name + " \u00b7 " + c.cf, "yes");
+        b.type = "button";
+        b.addEventListener("click", () => decide(a.id, "save:" + c.cf, box));
+        li.append(document.createElement("br"), b);
+      } else {
+        const link = line("a", "Open record");
+        link.href = recordUrl(c.cf); link.target = "_blank"; link.rel = "noopener noreferrer";
+        if (a.outcome === "patient_pick") link.addEventListener("click", () => decide(a.id, "open:" + c.cf, box));
+        li.append(link);
+      }
+      list.append(li);
+    }
+    box.append(list);
+    if (a.outcome === "edit_confirm" || a.outcome === "patient_pick") {
+      const no = line("button", "Discard", "no");
+      no.type = "button";
+      no.addEventListener("click", () => decide(a.id, "discard", box));
+      box.append(no);
+    }
+    // one match: Jarvis.app opens the record in its Clinic tab by itself, once per answer
+    if (a.outcome === "patient_open" && a.open && IN_APP && !opened.has(a.open + a.heard)) {
+      opened.add(a.open + a.heard);
+      window.location.assign(recordUrl(a.open));
+    }
+    return box;
   }
   for (const box of document.querySelectorAll(".choices")) {
     for (const b of box.querySelectorAll("button")) b.addEventListener("click", () => decide(box.dataset.id, b.dataset.decision, box));
@@ -577,7 +660,23 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
         except (LinkRefused, LinkDown) as e:
             return jsonify({"error": "clinic", "message": str(e)}), 503
         machine.set_access(who)
-        return jsonify({"username": who["username"], "expires_at": who["expires_at"]})
+        return jsonify({"username": who["username"], "expires_at": who["expires_at"], "kind": "login",
+                        "handoff": who.get("handoff")})
+
+    @app.route("/handoff", methods=["POST"])
+    def handoff():
+        # one sign-in (2026-10-12): a fresh one-time link that signs the Clinic tab in as the doctor signed in here
+        if request.headers.get("Origin") not in ORIGINS:
+            abort(403)
+        if access is None:
+            abort(400)
+        from jarvis.clinic import LinkDown, LinkRefused, Refused
+        try:
+            return jsonify({"handoff": access.handoff()})
+        except Refused as e:
+            return jsonify({"error": e.code, "message": str(e)}), 403
+        except (LinkRefused, LinkDown) as e:
+            return jsonify({"error": "clinic", "message": str(e)}), 503
 
     @app.route("/signout", methods=["POST"])
     def signout():

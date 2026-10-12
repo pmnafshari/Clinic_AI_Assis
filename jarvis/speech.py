@@ -61,6 +61,8 @@ def words(card):
     screen; Jarvis is never READY while it waits.)"""
     if not card:
         return None
+    if card.get("private"):         # about a patient: on screen only, never spoken (§3.6 is not decided)
+        return card.get("say") or "The answer is on screen."
     if card.get("outcome") == "answer":
         parts = []
         for c in card.get("citations") or []:

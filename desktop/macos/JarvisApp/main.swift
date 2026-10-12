@@ -44,10 +44,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func showJarvis(_ sender: Any?) {
         if jarvis == nil {
-            jarvis = JarvisWindow()
-            jarvis?.openClinicPage = { [weak self] url in
+            jarvis = JarvisWindow(clinicTab: true)
+            jarvis?.openClinicPage = { [weak self] url, front in
                 self?.openWorkspace()
                 self?.workspace?.load(url)
+                if !front { self?.jarvis?.window.makeKeyAndOrderFront(nil) }   // the sign-in link: stay on Jarvis
             }
         }
         jarvis?.show()

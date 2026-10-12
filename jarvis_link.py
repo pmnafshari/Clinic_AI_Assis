@@ -204,6 +204,7 @@ def login(conn, device, username, password, now=None):
         raise LinkError("password_change", "change your password in the clinic app first")
     stamp = clinic_time.to_storage(now)
     until = next_midnight(now)
+    _end_handoff_sessions(conn, device["id"])
     conn.execute("UPDATE jarvis_delegations SET revoked_by = ?, revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL",
                  (username, stamp, device["id"]))
     conn.execute("INSERT INTO jarvis_delegations (device_id, username, session_hash, created_at, expires_at, kind)"
@@ -213,8 +214,17 @@ def login(conn, device, username, password, now=None):
     return {"username": username, "role": role, "expires_at": clinic_time.to_storage(until)}
 
 
+def _end_handoff_sessions(conn, device_id):
+    """The clinic sessions handed over from this device's current sign-in end with it (one sign-in, 2026-10-12)."""
+    for (h,) in conn.execute("SELECT session_hash FROM jarvis_delegations WHERE device_id = ? AND kind = 'login'"
+                             " AND revoked_at IS NULL AND session_hash != ''", (device_id,)).fetchall():
+        conn.execute("DELETE FROM sessions WHERE token_hash = ?", (h,))
+
+
 def logout(conn, device, why):
-    """Whoever Jarvis acts for on this device, it stops at once (sign out, or Jarvis starting again)."""
+    """Whoever Jarvis acts for on this device, it stops at once (sign out, or Jarvis starting again) - and so does the
+    clinic session its sign-in handed to the Clinic tab."""
+    _end_handoff_sessions(conn, device["id"])
     conn.execute("UPDATE jarvis_delegations SET revoked_by = ?, revoked_at = ? WHERE device_id = ? AND revoked_at IS NULL",
                  (f"jarvis-device:{device['id']}", clinic_time.to_storage(_now(None)), device["id"]))
     conn.commit()
@@ -404,15 +414,15 @@ def find_patients(conn, spoken):
     return found
 
 
-def _delegated(conn, device, action, target, now):
-    """The person the device acts for, allowed to add notes - or LinkError (audited, naming no patient)."""
+def _delegated(conn, device, action, target, now, capability="append_note", what="add notes"):
+    """The person the device acts for, allowed `capability` - or LinkError (audited, naming no patient)."""
     who = current_delegation(conn, device["id"], now)
     if who is None:
         log_audit(conn, f"jarvis-device:{device['id']}", "device", action, target, allowed=0, reason="no_delegation")
         raise LinkError("auth_required", "a staff member must hand their signed-in session to this device first")
-    if who["role"] != DOCTOR or not authorize(who["role"], "append_note"):
+    if who["role"] != DOCTOR or not authorize(who["role"], capability):
         log_audit(conn, who["username"], who["role"], action, target, allowed=0, reason="role")
-        raise LinkError("role", "only a doctor can let Jarvis add notes")
+        raise LinkError("role", f"only a doctor can let Jarvis {what}")
     return who
 
 
@@ -465,3 +475,181 @@ def commit_note(conn, device, draft, cf, save, now=None):
     status = save(note, who["role"], who["username"])
     log_audit(conn, who["username"], who["role"], "jarvis_note", cf, allowed=1, reason="jarvis_voice")
     return {"saved": status != "failed", "cf": cf, "name": choice["name"], "status": status}
+
+
+# --- read and edit by voice, one sign-in (J03 slice 2; owner-authorised 2026-10-12) ----------------------------------
+# Reading proposes patients as notes do; what is shown about them stays on the device's screen. A phone change is a
+# draft until the doctor clicks a patient; it is then saved through the clinic's own pending action.
+
+def _matches(conn, spoken, cf):
+    """The patients a spoken name proposes, or the one patient Jarvis already handled (by codice fiscale)."""
+    if cf:
+        row = conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone()
+        return [{"cf": row["codice_fiscale"], "name": row["patient_name"]}] if row else []
+    return find_patients(conn, spoken)
+
+
+def _next_appointment(conn, cf):
+    import appointments
+    row = appointments.next_booked(conn, cf)
+    if row is None:
+        return None
+    start = clinic_time.read_instant(row["starts_at"])
+    return {"date": clinic_time.local_date(row["starts_at"]), "time": clinic_time.local_hhmm(row["starts_at"]),
+            "weekday": clinic_time.to_local(start).strftime("%A"), "dentist": row["dentist"], "minutes": row["minutes"]}
+
+
+def read_patients(conn, device, spoken_patient, want, cf=None, now=None):
+    """`want` "open": the patients a spoken name matches, to open on screen; "next": the same, each with its next
+    booked appointment. -> {choices: [{cf, name, next?}]}. Nothing is written but the audit."""
+    now = _now(now)
+    target = f"jarvis_device:{device['id']}"
+    action = "jarvis_read"
+    who = _delegated(conn, device, action, target, now, "read_notes", "read patient records")
+    if want not in ("open", "next"):
+        raise LinkError("empty", "nothing to read")
+    found = _matches(conn, spoken_patient, cf)
+    if not found:
+        log_audit(conn, who["username"], who["role"], action, target, allowed=1, reason="no_match")
+        raise LinkError("no_match", "no patient matches that name - say the patient's full name")
+    if len(found) > MAX_MATCHES:
+        log_audit(conn, who["username"], who["role"], action, target, allowed=1, reason="too_many")
+        raise LinkError("too_many", "too many patients match - say the patient's full name")
+    if want == "open":
+        log_audit(conn, who["username"], who["role"], action, target, allowed=1,
+                  reason="open_one" if len(found) == 1 else "open_several")
+        return {"choices": found}
+    for c in found:          # each patient whose appointment is shown, audited against that patient
+        c["next"] = _next_appointment(conn, c["cf"])
+        log_audit(conn, who["username"], who["role"], action, c["cf"], allowed=1, reason="next_appointment")
+    return {"choices": found}
+
+
+EDIT_FIELDS = ("phone",)
+
+
+def draft_edit(conn, device, spoken_patient, field, value, cf=None, now=None):
+    """A field change heard by the device -> {draft, field, value, choices: [{cf, name, before}], seconds}. Nothing is
+    written. Only the phone, normalised as the clinic stores it."""
+    import phones
+    now = _now(now)
+    target = f"jarvis_device:{device['id']}"
+    who = _delegated(conn, device, "jarvis_edit_draft", target, now, "update_field", "change patient records")
+    if field not in EDIT_FIELDS:
+        raise LinkError("field", "Jarvis can change only a patient's phone number")
+    value = phones.canonical(value or "")
+    if value is None:
+        log_audit(conn, who["username"], who["role"], "jarvis_edit_draft", target, allowed=1, reason="bad_value")
+        raise LinkError("value", "that is not a valid Italian phone number")
+    found = _matches(conn, spoken_patient, cf)
+    log_audit(conn, who["username"], who["role"], "jarvis_edit_draft", target, allowed=1,
+              reason="no_match" if not found else "one_match" if len(found) == 1 else
+              "too_many" if len(found) > MAX_MATCHES else "several_matches")
+    if not found:
+        raise LinkError("no_match", "no patient matches that name - say the patient's full name")
+    if len(found) > MAX_MATCHES:
+        raise LinkError("too_many", "too many patients match - say the patient's full name")
+    for c in found:
+        c["before"] = conn.execute("SELECT phone FROM patients WHERE codice_fiscale = ?", (c["cf"],)).fetchone()[0]
+    draft = secrets.token_urlsafe(16)
+    with _DRAFTS_LOCK:
+        for key in [k for k, v in _DRAFTS.items() if v["expires"] <= now]:
+            del _DRAFTS[key]
+        _DRAFTS[draft] = {"device_id": device["id"], "username": who["username"], "kind": "edit", "field": field,
+                          "value": value, "choices": found, "expires": now + timedelta(seconds=NOTE_SECONDS)}
+    return {"draft": draft, "field": field, "value": value, "choices": found, "seconds": NOTE_SECONDS}
+
+
+def commit_edit(conn, device, draft, cf, apply, now=None):
+    """Save a drafted change on the patient picked on screen, through `apply(pending, role, username)` (the clinic's
+    own apply_pending_action). The draft is used up whatever happens. -> {saved, cf, name, field, value}"""
+    import agent
+    now = _now(now)
+    with _DRAFTS_LOCK:
+        d = _DRAFTS.pop(draft or "", None)
+    target = cf or f"jarvis_device:{device['id']}"
+    if d is None or d.get("kind") != "edit" or d["device_id"] != device["id"] or now >= d["expires"]:
+        log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_edit", target, allowed=0, reason="draft_gone")
+        raise LinkError("gone", "this change is no longer waiting - say it again")
+    who = _delegated(conn, device, "jarvis_edit", target, now, "update_field", "change patient records")
+    if who["username"] != d["username"]:
+        log_audit(conn, who["username"], who["role"], "jarvis_edit", target, allowed=0, reason="delegation_changed")
+        raise LinkError("auth_required", "the person this device acts for has changed - say the change again")
+    choice = next((c for c in d["choices"] if c["cf"] == cf), None)
+    if choice is None:
+        log_audit(conn, who["username"], who["role"], "jarvis_edit", target, allowed=0, reason="not_proposed")
+        raise LinkError("patient", "that patient was not one of the proposed ones")
+    row = conn.execute("SELECT patient_name, phone FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone()
+    if row is None or row["phone"] != choice["before"] or row["patient_name"] != choice["name"]:
+        log_audit(conn, who["username"], who["role"], "jarvis_edit", cf, allowed=0, reason="changed")
+        raise LinkError("changed", "the record changed after the change was shown - say it again")
+    call = agent.ToolCall(tool="update_field", args={"patient": row["patient_name"], "field": d["field"], "value": d["value"]})
+    pending, reason = agent.build_pending_action(call, conn, who["role"], who["username"],
+                                                 choose_cf=lambda candidates: cf if cf in candidates else None)
+    if pending is None or pending["cf"] != cf:
+        log_audit(conn, who["username"], who["role"], "jarvis_edit", cf, allowed=0, reason="not_built")
+        raise LinkError("patient", reason or "the change could not be prepared")
+    apply(pending, who["role"], who["username"])
+    log_audit(conn, who["username"], who["role"], "jarvis_edit", cf, allowed=1, reason="jarvis_voice")
+    return {"saved": True, "cf": cf, "name": row["patient_name"], "field": d["field"], "value": d["value"]}
+
+
+# --- one sign-in: the Clinic tab signed in from Jarvis's sign-in (owner, 2026-10-11/12) -----------------------------
+
+HANDOFF_SECONDS = 60
+_TICKETS = {}
+
+
+def handoff_ticket(conn, device, now=None):
+    """A one-time link that signs a browser in as the doctor who signed this device in - until that sign-in ends.
+    Kept in memory only, used once, HANDOFF_SECONDS. -> ticket"""
+    now = _now(now)
+    who = current_delegation(conn, device["id"], now)
+    if who is None or who["kind"] != "login":
+        log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_handoff", f"jarvis_device:{device['id']}",
+                  allowed=0, reason="no_signin")
+        raise LinkError("auth_required", "a doctor must sign Jarvis in first")
+    row = conn.execute("SELECT id FROM jarvis_delegations WHERE device_id = ? AND revoked_at IS NULL ORDER BY id DESC"
+                       " LIMIT 1", (device["id"],)).fetchone()
+    ticket = secrets.token_urlsafe(32)
+    with _DRAFTS_LOCK:
+        for key in [k for k, v in _TICKETS.items() if v["expires"] <= now]:
+            del _TICKETS[key]
+        _TICKETS[web_session.token_hash(ticket)] = {"delegation_id": row["id"], "device_id": device["id"],
+                                                     "username": who["username"],
+                                                     "expires": now + timedelta(seconds=HANDOFF_SECONDS)}
+    return ticket
+
+
+def use_handoff(conn, ticket, now=None):
+    """The hand-off link opened: -> (session token, username, role) for a new clinic session, recorded on the Jarvis
+    sign-in so it ends with it; or LinkError. The ticket is gone whatever happens."""
+    now = _now(now)
+    with _DRAFTS_LOCK:
+        t = _TICKETS.pop(web_session.token_hash(ticket or ""), None)
+    if t is None or now >= t["expires"]:
+        log_audit(conn, "jarvis-handoff", "unknown", "jarvis_handoff", "clinic", allowed=0, reason="ticket_gone")
+        raise LinkError("gone", "this sign-in link is no longer valid")
+    row = conn.execute("SELECT id FROM jarvis_delegations WHERE device_id = ? AND revoked_at IS NULL ORDER BY id DESC"
+                       " LIMIT 1", (t["device_id"],)).fetchone()
+    who = current_delegation(conn, t["device_id"], now)
+    if row is None or row["id"] != t["delegation_id"] or who is None or who["username"] != t["username"] \
+            or who["kind"] != "login":
+        log_audit(conn, t["username"], "unknown", "jarvis_handoff", f"jarvis_device:{t['device_id']}", allowed=0,
+                  reason="signin_ended")
+        raise LinkError("gone", "the Jarvis sign-in this link came from has ended")
+    token = web_session.create_session(conn, who["username"], who["role"], now)
+    conn.execute("UPDATE jarvis_delegations SET session_hash = ? WHERE id = ?", (web_session.token_hash(token), row["id"]))
+    conn.commit()
+    log_audit(conn, who["username"], who["role"], "jarvis_handoff", f"jarvis_device:{t['device_id']}", allowed=1)
+    return token, who["username"], who["role"]
+
+
+def handoff_over(conn, token_hash_value, now=None):
+    """True for a clinic session that came from a Jarvis sign-in which has since ended (00:00, sign out, Jarvis
+    restarting, another doctor). A session not from a hand-off is never touched."""
+    row = conn.execute("SELECT revoked_at, expires_at FROM jarvis_delegations WHERE kind = 'login' AND session_hash = ?"
+                       " ORDER BY id DESC LIMIT 1", (token_hash_value,)).fetchone()
+    if row is None:
+        return False
+    return row["revoked_at"] is not None or _now(now) >= clinic_time.read_instant(row["expires_at"])

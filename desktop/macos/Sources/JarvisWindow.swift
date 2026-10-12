@@ -8,15 +8,19 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     static let origin = URL(string: "http://127.0.0.1:5020")!
     let window: NSWindow
     private let web: WKWebView
-    /// Set in Jarvis.app: a link to a clinic page opens in its own Clinic tab instead of the browser.
-    var openClinicPage: ((URL) -> Void)?
+    /// Set in Jarvis.app: a clinic page opens in its own Clinic tab instead of the browser - brought to the front
+    /// (a record), or not (the one-time sign-in link, 2026-10-12).
+    var openClinicPage: ((URL, Bool) -> Void)?
 
     private func isClinic(_ url: URL) -> Bool { url.host == "127.0.0.1" && url.port == 5000 }
 
-    override init() {
+    /// `clinicTab`: Jarvis.app, whose page may open clinic pages in the Clinic tab by itself; the page learns it from
+    /// the user agent ("JarvisApp") - there is no bridge between the page and the app.
+    init(clinicTab: Bool = false) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 820),
                           styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         let config = WKWebViewConfiguration()
+        if clinicTab { config.applicationNameForUserAgent = "JarvisApp" }
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "6C1F0D5E-2E0B-4C55-9D1E-0A0000000003")!)
         web = WKWebView(frame: .zero, configuration: config)
         super.init()
@@ -44,6 +48,16 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
         }.resume()
     }
 
+    /// Run a script in Jarvis's page, as a person would act on it (the installed-app test only).
+    func evaluate(_ code: String, _ done: @escaping (Any?, String?) -> Void) {
+        web.callAsyncJavaScript(code, arguments: [:], in: nil, in: .page) { result in
+            switch result {
+            case .success(let v): done(v, nil)
+            case .failure(let e): done(nil, e.localizedDescription)
+            }
+        }
+    }
+
     /// Pause or resume listening, as the page's switch does (for the installed-app test).
     func setPaused(_ on: Bool) {
         var req = URLRequest(url: Self.origin.appendingPathComponent("listening"), timeoutInterval: 3)
@@ -58,9 +72,11 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
                  decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         guard let url = action.request.url else { return decisionHandler(.cancel) }
         if url.host == Self.origin.host && url.port == Self.origin.port { return decisionHandler(.allow) }
-        if ["http", "https"].contains(url.scheme ?? "") && action.navigationType == .linkActivated {
-            if isClinic(url), let open = openClinicPage { open(url) }
-            else { NSWorkspace.shared.open(url) }     // a cited page opens in the clinic app's browser session
+        if isClinic(url), let open = openClinicPage, action.targetFrame?.isMainFrame != false {
+            // a record the page opens by itself, or the one-time sign-in link: always in the Clinic tab, never here
+            open(url, !url.path.hasPrefix("/jarvis/handoff/"))
+        } else if ["http", "https"].contains(url.scheme ?? "") && action.navigationType == .linkActivated {
+            NSWorkspace.shared.open(url)              // a cited page opens in the clinic app's browser session
         }
         decisionHandler(.cancel)
     }
@@ -76,7 +92,8 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,
                  for action: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         if let url = action.request.url, ["http", "https"].contains(url.scheme ?? "") {
-            if isClinic(url), let open = openClinicPage { open(url) } else { NSWorkspace.shared.open(url) }
+            if isClinic(url), let open = openClinicPage { open(url, !url.path.hasPrefix("/jarvis/handoff/")) }
+            else { NSWorkspace.shared.open(url) }
         }
         return nil
     }

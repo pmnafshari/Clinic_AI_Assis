@@ -41,22 +41,34 @@ workers. Clinic Service is small, unsandboxed (hardened runtime, no entitlements
   images (guide pages) open in a preview window under the same sign-in.
 - Links to other sites, the patient portal or the public site open in your default browser.
 - View > Zoom In / Zoom Out / Actual Size (Cmd + / Cmd - / Cmd 0); the window can be resized freely.
-- **Jarvis** (Cmd-Shift-J): Jarvis's own page plus what it is doing - listening, clinic-guide answers (switched off:
-  J02 is not accepted), and voice actions (none - not built). **Pause listening** asks Jarvis to close the
-  microphone until you resume. Jarvis runs on its own (its login service); the app never records.
+- **Jarvis** (Cmd-Shift-J): Jarvis's own page. The round JARVIS switch in the middle of the orb asks Jarvis to close
+  the microphone (OFF) or open it again (ON). Jarvis runs on its own (its login service); the app never records.
 
 ## Jarvis as its own app (Jarvis.app)
 Drag **Jarvis** from the disk image to Applications too if you want Jarvis with its own icon. Its window has two tabs
 (Cmd-1, Cmd-2):
-- **Jarvis** - what Jarvis is doing (listening, clinic-guide answers, voice actions), **Pause/Resume listening**, and
-  Jarvis's own page. A clinic page it cites opens in the Clinic tab.
+- **Jarvis** - Jarvis's own page: Ready / Active / Sleep, what it heard and what it answered, the on/off switch in the
+  orb, and the doctor's sign-in. A clinic page it opens or cites opens in the Clinic tab.
 - **Clinic** - the clinic app on this Mac (`127.0.0.1:5000`, the same database as the browser). Sign in as yourself;
   you then see and change every record your role allows - a dentist all clinical records - through the clinic's own
   role checks, CSRF protection and audit, exactly as in the browser. Writes are on by default here (Settings and
   Permissions switches them off). There is no direct database access: the app talks only to the clinic app.
 Jarvis.app never listens itself (no microphone access) - Jarvis's login service does, and keeps running when you close
-or quit Jarvis.app. Voice still reads and writes no patient record (J03 not started; answers off while J02 is not
-accepted). Its sign-in is its own: signing in here does not sign you in to Clinic Workspace or the browser.
+or quit Jarvis.app.
+
+**One sign-in.** A doctor signs Jarvis in on its page (username and password; doctors only). Jarvis.app then signs the
+Clinic tab in as the same doctor by itself - nothing is typed there. Both end together: at 00:00, when you press Sign
+out on the Jarvis page, when Jarvis restarts, or when another doctor signs Jarvis in. The Clinic tab still signs out
+after 30 idle minutes like any clinic session; **Sign the clinic app in too** on the Jarvis page signs it in again. In
+a browser the Jarvis page shows a one-time link instead (valid for 60 seconds, used once). Signing out of the Clinic
+tab does not sign Jarvis out. This sign-in does not reach Clinic Workspace or the browser's own clinic sign-in.
+
+**By voice (synthetic demo only, while a doctor is signed in).** "Hey Jarvis, show me Giulia Santoro" opens her record
+in the Clinic tab (same names wait on screen for you to pick one); "when is her next appointment?" or "when is Giulia
+Santoro's next appointment?" answers on screen; "change Paola Rossi's phone number to 333 123 4567" shows the old and
+new number and changes it only when you press Save; "add a note to Marco Gallo saying ..." saves a note only when you
+press Save. Jarvis never says anything about a patient aloud - its voice says only "It is on screen." Only the phone
+number can be changed by voice. Outside the synthetic demo none of this is switched on.
 
 ## Settings and Permissions
 Shows, for the open environment: who is signed in and what the clinic lets that role do; writes from this app (on/

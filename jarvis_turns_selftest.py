@@ -1091,6 +1091,212 @@ def power_switch():
     assert 'id="power"' in hud and " checked" not in hud.split('id="power"')[1].split(">")[0], "21: off while paused"
 
 
+def voice_reads_and_edits():
+    # 22. J03 slice 2 (owner-authorised 2026-10-12): "show me <patient>", "<patient>'s next appointment", "change
+    #     <patient>'s phone number to <number>" - fixed rules; nothing asked of the clinic without a doctor signed in;
+    #     a bare "show me X" stays a clinic-guide question unless X is a patient; several patients wait for a pick on
+    #     screen; a change is saved only on a click; "her" is the patient just handled, for the same sign-in only;
+    #     nothing about a patient is spoken and the history never names one
+    from jarvis import patients, speech
+    from jarvis.clinic import NoteRefused
+    P = patients.parse
+    assert P("Show me Giulia Santoro.") == {"kind": "open", "name": "Giulia Santoro", "explicit": False}
+    assert P("Hey Jarvis, open the record of Paola Rossi") == {"kind": "open", "name": "Paola Rossi", "explicit": True}
+    assert P("Pull up Marco Gallo's record.")["explicit"] is True
+    assert P("When is Giulia Santoro's next appointment?") == {"kind": "next", "name": "Giulia Santoro", "explicit": True}
+    assert P("What's the next appointment for Marco Gallo?")["name"] == "Marco Gallo"
+    assert P("When is her next appointment?") == {"kind": "next", "name": None, "explicit": True}, "22: her = handled"
+    assert P("Change Marco Gallo's phone number to 333 123 4567.") == \
+        {"kind": "edit", "name": "Marco Gallo", "explicit": True, "field": "phone", "value": "3331234567"}
+    assert P("Set the phone number of Marco Gallo to three three three one two three four five six seven")["value"] \
+        == "3331234567", "22: a number said as words"
+    assert P("change his phone number to double three three")["value"] == "333" and P(
+        "change his phone number to double three three")["name"] is None
+    assert P("Show me Julia G-I-U-L-I-A Santoro")["name"] == "Giulia Santoro", "22: a spelled name wins, in place"
+    for question in ("Show me how to clean the autoclave", "Show me the timer settings on the AX-300",
+                     "How do I book the next appointment for a patient?", "What does the B-PROG button do?",
+                     "Open the notes", "Add a note to Giulia saying hello", "Change the water filter to the new one"):
+        assert P(question) is None, f"22: HARD FAIL - a guide question read as a patient command ({question})"
+
+    GIULIA = {"cf": "SNTGLI51R49D612Y", "name": "Giulia Santoro"}
+    PAOLAS = [{"cf": "RSPS850010150900", "name": "Paola Rossi"}, {"cf": "RSSP850010150900", "name": "Paola Rossi"}]
+
+    class Link:
+        def __init__(self, signed=True):
+            self.signed, self.calls, self.guides = signed, [], []
+
+        def whoami(self):
+            return {"device_id": 1, "delegation": {"username": "drossi", "role": "dentist", "expires_at": "x"}
+                    if self.signed else None}
+
+        def vocabulary(self):
+            return []
+
+        def ask_guides(self, q):
+            self.guides.append(q)
+            return dict(ANSWER)
+
+        def read_patients(self, name, want, cf=None):
+            self.calls.append(("read", name, want, cf))
+            if cf:
+                return {"choices": [{**GIULIA, "next": None}] if want == "next" else [GIULIA]}
+            if "Paola" in name:
+                return {"choices": [dict(c) for c in PAOLAS]}
+            if "Giulia" in name:
+                return {"choices": [{**GIULIA, "next": {"date": "2026-10-13", "time": "10:30", "weekday": "Tuesday",
+                                                        "dentist": "drossi", "minutes": 30}} if want == "next" else GIULIA]}
+            raise NoteRefused("no_match", "no patient matches that name - say the patient's full name")
+
+        def edit_draft(self, name, field, value, cf=None):
+            self.calls.append(("draft", name, field, value, cf))
+            return {"draft": "e1", "field": field, "value": "+39" + value, "seconds": 120,
+                    "choices": [{**c, "before": "+390611111111"} for c in PAOLAS]}
+
+        def edit_commit(self, draft, cf):
+            self.calls.append(("commit", draft, cf))
+            return {"saved": True, "cf": cf, "name": "Paola Rossi", "field": "phone", "value": "+393331234567"}
+
+    def run(link, said, decide=None, m=None, ex=None):
+        m = m or machine()
+        ex = ex or answer.Exchange(m, lambda pcm, terms, cancelled: (said[0], "en"), lambda: link, confirm=False,
+                                   notes=True, confirm_seconds=1.0)
+        t = threading.Thread(target=lambda: setattr(t, "reason", m.finish(turn, ex(b"pcm", turn)) and None))
+        turn = m.begin("heard the wake phrase")
+        t.start()
+        if decide is not None:
+            assert until(lambda: m.state == "CONFIRMING", 3), f"22: waits on screen ({m.state})"
+            m.decide(m.snapshot()["answer"]["id"], decide)
+        t.join(5)
+        snap = m.snapshot()
+        hist = json.dumps([h["reason"] for h in snap["history"]])        # the reasons kept (not the timestamps)
+        assert not any(x in hist for x in ("Giulia", "Paola", "SNTG", "RSSP", "RSPS", "333")), \
+            "22: HARD FAIL - the history names a patient or a number"
+        return m, ex, snap["answer"]
+    said = ["Show me Giulia Santoro"]
+    link = Link(signed=False)
+    m, ex, card = run(link, said)
+    assert not link.calls and link.guides == ["Show me Giulia Santoro"], \
+        "22: no doctor signed in - a bare show-me is a guide question; the clinic's patients are not asked"
+    for words in ("Open the record of Giulia Santoro", "When is Giulia Santoro's next appointment?",
+                  "Change Paola Rossi's phone number to 3331234567"):
+        said[0] = words
+        link = Link(signed=False)
+        m, ex, card = run(link, said)
+        assert not link.calls and card["reason"] == "auth_required", f"22: HARD FAIL - asked without a sign-in ({words})"
+    link = Link()
+    said[0] = "Show me Giulia Santoro"
+    m, ex, card = run(link, said)
+    assert card["outcome"] == "patient_open" and card["open"] == GIULIA["cf"] and card["private"] is True, card
+    assert speech.words(card) == "It is on screen.", "22: HARD FAIL - a patient card spoken"
+    said[0] = "Show me Tom Jones"
+    link2 = Link()
+    run(link2, said)
+    assert link2.guides == ["Show me Tom Jones"], "22: no such patient - the bare show-me goes to the guides after all"
+    said[0] = "Open the record of Paola Rossi"
+    m, ex, card = run(link, said, decide="open:RSSP850010150900")
+    assert card["outcome"] == "patient_open" and card["choices"] == [PAOLAS[1]], f"22: the picked patient ({card})"
+    said[0] = "When is her next appointment?"
+    m2, ex, card = run(link, said, m=m, ex=ex)
+    assert link.calls[-1] == ("read", "Paola Rossi", "next", "RSSP850010150900"), \
+        f"22: HARD FAIL - 'her' is not the patient just picked ({link.calls[-1]})"
+    assert card["outcome"] == "patient_next" and speech.words(card) == "The answer is on screen."
+    m.set_access({"username": "drossi", "role": "dentist", "expires_at": "x", "kind": "login"})   # signed in again
+    n = len(link.calls)
+    m2, ex, card = run(link, said, m=m, ex=ex)
+    assert len(link.calls) == n and card["reason"] == "which", "22: HARD FAIL - 'her' outlived a sign-in change"
+    said[0] = "When is Paola Rossi's next appointment?"
+    m, ex, card = run(link, said)
+    assert card["outcome"] == "patient_next" and len(card["choices"]) == 2
+    said[0] = "When is her next appointment?"
+    n = len(link.calls)
+    m, ex, card = run(link, said, m=m, ex=ex)
+    assert len(link.calls) == n and card["reason"] == "which", "22: two patients shown - 'her' is nobody"
+    said[0] = "Change Paola Rossi's phone number to 3331234567"
+    for decision in ("discard", "save:GLLMRC67A11F839U"):
+        link = Link()
+        m, ex, card = run(link, said, decide=decision)
+        assert not any(c[0] == "commit" for c in link.calls), f"22: HARD FAIL - changed on {decision!r}"
+    link = Link()
+    m = machine()
+    ex = answer.Exchange(m, lambda pcm, terms, cancelled: (said[0], "en"), lambda: link, confirm=False, notes=True,
+                         confirm_seconds=1.0)
+    turn = m.begin("heard the wake phrase")
+    t = threading.Thread(target=lambda: m.finish(turn, ex(b"pcm", turn)))
+    t.start()
+    assert until(lambda: m.state == "CONFIRMING", 3)
+    card = m.snapshot()["answer"]
+    assert card["outcome"] == "edit_confirm" and card["value"] == "+393331234567" and \
+        [c["before"] for c in card["choices"]] == ["+390611111111"] * 2, f"22: before and after per patient ({card})"
+    assert speech.words(card) == "Check the change on screen."
+    m.decide(card["id"], "save:RSSP850010150900")
+    t.join(5)
+    card = m.snapshot()["answer"]
+    assert link.calls[-1] == ("commit", "e1", "RSSP850010150900") and card["outcome"] == "edit_saved" \
+        and speech.words(card) == "Saved.", f"22: saved on the patient clicked ({card})"
+    said[0] = "Change her phone number to 3339999999"
+    run(link, said, decide="discard", m=m, ex=ex)
+    assert link.calls[-1] == ("draft", "Paola Rossi", "phone", "3339999999", "RSSP850010150900"), \
+        "22: 'her' after a change is the patient changed"
+    plain = Link()
+    m = machine()
+    said[0] = "Open the record of Giulia Santoro"
+    answer.Exchange(m, lambda pcm, terms, cancelled: (said[0], "en"), lambda: plain, confirm=False)(
+        b"pcm", m.begin("heard the wake phrase"))
+    assert not plain.calls, "22: HARD FAIL - patient commands without being switched on"
+    assert speech.words({"outcome": "note_saved", "private": True, "say": "Note saved.",
+                         "message": "Note saved to Giulia Santoro's record."}) == "Note saved.", \
+        "22: a saved note no longer speaks the patient's name"
+    html = create_app(machine()).test_client().get("/", base_url=BASE).data.decode()
+    code = _code_only(html)
+    body = _fn_body(code, "patientList")
+    assert '"save:" + c.cf' in body and '"open:" + c.cf' in body and "recordUrl(c.cf)" in body and \
+        "IN_APP" in body and "location.assign" in body, "22: the page lists the patients, picks through /confirm"
+    assert "a.private" in _fn_body(code, "spoken"), "22: the captions say only what the voice says"
+
+
+def one_signin():
+    # 23. One sign-in (owner, 2026-10-12): signing Jarvis in also hands the clinic's one-time link to the page, which
+    #     opens it in Jarvis.app's Clinic tab or shows it as a link in a browser; a new link can be asked for; only
+    #     this page may ask (Origin); the link is never kept by Jarvis
+    from jarvis.clinic import Refused
+    import jarvis_run
+
+    class Link:
+        def __init__(self, give=True):
+            self.give = give
+
+        def login(self, username, password):
+            return {"username": username, "role": "dentist", "expires_at": "2026-10-12T22:00:00+00:00"}
+
+        def handoff(self):
+            if not self.give:
+                raise Refused("auth_required", "a doctor must sign Jarvis in first")
+            return "http://127.0.0.1:5000/jarvis/handoff/TICKET"
+    access = jarvis_run.Access(lambda: Link())
+    who = access.signin("drossi", "pw")
+    assert who["handoff"].endswith("/jarvis/handoff/TICKET"), "23: the sign-in brings the one-time link"
+    assert jarvis_run.Access(lambda: Link(give=False)).signin("drossi", "pw")["handoff"] is None, \
+        "23: no link - still signed in"
+    m = machine()
+    c = create_app(m, access=access).test_client()
+    ok = {"Origin": BASE}
+    r = c.post("/signin", json={"username": "drossi", "password": "pw"}, headers=ok, base_url=BASE)
+    assert r.get_json()["handoff"].endswith("/TICKET"), "23: the page gets the link"
+    assert "TICKET" not in json.dumps(m.snapshot()) and "TICKET" not in c.get("/status", base_url=BASE).data.decode(), \
+        "23: HARD FAIL - the link kept in Jarvis's state"
+    assert c.post("/handoff", base_url=BASE).status_code == 403, "23: HARD FAIL - a link for another page"
+    assert c.post("/handoff", headers=ok, base_url=BASE).get_json()["handoff"].endswith("/TICKET")
+    c2 = create_app(machine(), access=jarvis_run.Access(lambda: Link(give=False))).test_client()
+    assert c2.post("/handoff", headers=ok, base_url=BASE).status_code == 403
+    html = c.get("/", base_url=BASE).data.decode()
+    top = html[html.index("<main"):html.index('<details id="more"')]
+    assert 'id="clinic-signin"' in top and "<button" not in top.lower(), "23: a form, still no click-to-talk"
+    code = _code_only(html)
+    body = _fn_body(code, "handoff")
+    assert "IN_APP" in body and "location.assign(url)" in body and "a.href = url" in body, \
+        "23: Jarvis.app opens the link in its Clinic tab; a browser shows it"
+
+
 def selftest():
     # an exception in a worker thread, or an exchange fault the listener logged, fails the suite (added after a
     # KeyError in a cancelled exchange's thread went unnoticed by every assertion during development)
@@ -1120,6 +1326,8 @@ def selftest():
     voice_notes()
     doctor_signin()
     power_switch()
+    voice_reads_and_edits()
+    one_signin()
     exchange_fault(faults)
     time.sleep(0.3)
     assert not faults, f"HARD FAIL - a fault in a background thread: {faults}"

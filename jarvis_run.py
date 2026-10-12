@@ -65,10 +65,23 @@ class Access:
         self.link_factory = link_factory
 
     def signin(self, username, password):
+        """-> the clinic's answer, with `handoff`: a one-time link that signs the Clinic tab in too (one sign-in,
+        2026-10-12), or None if the clinic gave none."""
         link = self.link_factory()
         if link is None:
             raise LinkRefused("no device credential on this machine")
-        return link.login(username, password)
+        who = link.login(username, password)
+        try:
+            who["handoff"] = link.handoff()
+        except Exception:
+            who["handoff"] = None
+        return who
+
+    def handoff(self):
+        link = self.link_factory()
+        if link is None:
+            raise LinkRefused("no device credential on this machine")
+        return link.handoff()
 
     def signout(self):
         link = self.link_factory()

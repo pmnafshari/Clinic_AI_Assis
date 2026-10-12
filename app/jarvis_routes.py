@@ -15,7 +15,7 @@ from .guides_routes import REASON_TITLES, gconn
 jarvis_bp = Blueprint("jarvis", __name__)
 SORTED_ROOT = Path("sorted")
 NOTE_STATUS = {"auth_required": 403, "role": 403, "empty": 400, "no_match": 404, "too_many": 409, "patient": 409,
-               "gone": 410}
+               "gone": 410, "field": 400, "value": 400, "changed": 409}
 
 
 def _who():
@@ -227,3 +227,105 @@ def api_logout():
     why = body.get("why") if isinstance(body, dict) and body.get("why") in ("signed_out", "restarted") else "signed_out"
     jl.logout(conn, device, why)
     return "", 204
+
+
+def _device_body(action, fields):
+    """-> (conn, device, body) or a ready response: device credential first, then a JSON body whose `fields` are
+    strings (the others it may carry are checked where they are used)."""
+    conn = get_db()
+    device = _device(conn, action)
+    if device is None:
+        return None, _json({"error": "not a registered Jarvis device"}, 401)
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or any(not isinstance(body.get(f), str) for f in fields):
+        return None, _json({"error": "send " + ", ".join(fields)}, 400)
+    return (conn, device, body), None
+
+
+def _cf(body):
+    cf = body.get("cf")
+    return cf if isinstance(cf, str) and cf else None
+
+
+@jarvis_bp.route("/api/jarvis/patients/read", methods=["POST"])
+def api_patients_read():
+    """Open a patient's record or read their next appointment by voice (J03 slice 2): the patients a spoken name
+    matches (or the one Jarvis just handled), for the device's screen. The signed-in doctor decides; audited."""
+    got, refused = _device_body("patients_read", ("want",))
+    if refused:
+        return refused
+    conn, device, body = got
+    patient = body.get("patient") if isinstance(body.get("patient"), str) else ""
+    try:
+        return _json(jl.read_patients(conn, device, patient, body["want"], cf=_cf(body)))
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, NOTE_STATUS.get(e.code, 409))
+
+
+@jarvis_bp.route("/api/jarvis/patients/edit/draft", methods=["POST"])
+def api_edit_draft():
+    """A phone change heard by a device: proposed for the matching patients, nothing written."""
+    got, refused = _device_body("edit_draft", ("field", "value"))
+    if refused:
+        return refused
+    conn, device, body = got
+    patient = body.get("patient") if isinstance(body.get("patient"), str) else ""
+    try:
+        return _json(jl.draft_edit(conn, device, patient, body["field"], body["value"], cf=_cf(body)))
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, NOTE_STATUS.get(e.code, 409))
+
+
+@jarvis_bp.route("/api/jarvis/patients/edit/commit", methods=["POST"])
+def api_edit_commit():
+    """Save a drafted change on the patient picked on the device's screen, through the clinic's own pending action."""
+    got, refused = _device_body("edit_commit", ("draft", "cf"))
+    if refused:
+        return refused
+    conn, device, body = got
+    import agent
+    from .agent_routes import UNDO_LOG
+
+    def apply(pending, role, username):
+        agent.apply_pending_action(pending, conn, role, username, log_path=UNDO_LOG, collection=get_chroma(),
+                                   sorted_root=SORTED_ROOT)
+    try:
+        return _json(jl.commit_edit(conn, device, body["draft"], body["cf"], apply))
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, NOTE_STATUS.get(e.code, 409))
+
+
+@jarvis_bp.route("/api/jarvis/handoff", methods=["POST"])
+def api_handoff():
+    """One sign-in (2026-10-12): a one-time link that signs the Clinic tab in as the doctor who signed this device in."""
+    conn = get_db()
+    device = _device(conn, "handoff")
+    if device is None:
+        return _json({"error": "not a registered Jarvis device"}, 401)
+    try:
+        ticket = jl.handoff_ticket(conn, device)
+    except jl.LinkError as e:
+        return _json({"error": e.code, "message": str(e)}, 403)
+    return _json({"path": url_for("jarvis.handoff", ticket=ticket), "seconds": jl.HANDOFF_SECONDS})
+
+
+@jarvis_bp.route("/jarvis/handoff/<ticket>")
+def handoff(ticket):
+    """The hand-off link opened in the Clinic tab (or a browser): whatever session this browser had ends, and a new
+    clinic session starts for the doctor - ending with the Jarvis sign-in it came from."""
+    conn = get_db()
+    old = request.cookies.get(web_session.COOKIE_NAME)
+    if old:
+        web_session.destroy_session(conn, old)
+    try:
+        token, _username, _role = jl.use_handoff(conn, ticket)
+    except jl.LinkError as e:
+        flash(f"{str(e).capitalize()} - sign in here.", "danger")
+        resp = redirect(url_for("auth.login"))
+        resp.delete_cookie(web_session.COOKIE_NAME)
+    else:
+        resp = redirect(url_for("dashboard.index"))
+        resp.set_cookie(web_session.COOKIE_NAME, token, httponly=True, samesite="Strict", max_age=None)
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Cache-Control"] = "no-store"
+    return resp

@@ -140,6 +140,15 @@ final class SelfTest {
             return j.status { s in done(["ok": true, "strip": s]) }
         }
         if let on = step["jarvis_pause"] as? Bool { app.jarvis?.setPaused(on); return done(["ok": app.jarvis != nil]) }
+        if let code = step["jarvis_js"] as? String {        // act on Jarvis's own page, as a person would
+            guard let j = app.jarvis else { return done(["ok": false, "error": "no Jarvis window"]) }
+            return j.evaluate(code) { value, error in
+                var r: [String: Any] = ["value": value ?? NSNull()]
+                if let e = error { r["error"] = e }
+                if let want = step["expect"] { r["ok"] = error == nil && Self.same(value, want) } else { r["ok"] = error == nil }
+                done(r)
+            }
+        }
         if let on = step["login_item"] as? Bool {      // the app's own "open at login" (SMAppService.mainApp)
             do { if on { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() } }
             catch { return done(["ok": false, "error": error.localizedDescription]) }

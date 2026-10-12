@@ -29,7 +29,8 @@ MEANING = {
     "WAITING_FOR_CONFIRMATION": "what was heard is on screen; nothing is asked until someone confirms it there - "
                                 "not recording, and the wake phrase is still heard",
     "AUTH_REQUIRED": "this needs a staff member's signed-in session on this device",
-    "CONFIRMING": "a note is on screen; nothing is saved until someone picks the patient and saves it there",
+    "CONFIRMING": "a note, a change or a choice of patient is on screen; nothing is saved or opened until someone "
+                  "picks the patient there",
     "DEGRADED": "not available",
 }
 WAIT_SLICE = 1.0           # a wait wakes at least this often, so a deadline passed during sleep is seen at once
@@ -58,6 +59,7 @@ def cancelled_card(why, sent):
 
 
 BUSY = {"ACTIVE", "WAITING_FOR_CONFIRMATION", "CONFIRMING", "AUTH_REQUIRED"}
+WAITING = ("confirm", "note_confirm", "edit_confirm", "patient_pick")     # cards that wait for a click
 
 
 def status_words(state, reason, paused):
@@ -70,7 +72,7 @@ def status_words(state, reason, paused):
         if state == "WAITING_FOR_CONFIRMATION":
             return {"word": "Active", "why": "Check what I heard"}
         if state == "CONFIRMING":
-            return {"word": "Active", "why": "Pick the patient and save on screen"}
+            return {"word": "Active", "why": "Pick the patient on screen"}
         return {"word": "Active", "why": "Listening" if reason.startswith("heard the wake phrase") else "Working on it"}
     if state == "STARTING":
         return {"word": "Sleep", "why": "Starting up"}
@@ -112,6 +114,7 @@ class Machine:
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
         self.paused = False
         self.access = None         # the doctor this device acts for, as the clinic says (2026-10-11), or None
+        self.access_epoch = 0      # changes with every sign-in and sign-out
         self.mic_level = 0.0       # the microphone's loudness now (0-1), for the page's animation only - not a state        # listening switched off by the owner (Clinic Workspace, P28) until resumed
 
     # --- moves ------------------------------------------------------------------------------------------------
@@ -220,6 +223,7 @@ class Machine:
             new = {k: who.get(k) for k in ("username", "role", "expires_at", "kind")} if who else None
             if new != self.access:
                 self.access = new
+                self.access_epoch += 1          # whatever Jarvis remembered for the previous sign-in is gone
                 self._changed()
 
     def set_paused(self, on):
@@ -257,18 +261,20 @@ class Machine:
             self._move("WAITING_FOR_CONFIRMATION", "waiting for what was heard to be confirmed on screen")
             return pid
 
-    def offer_note(self, turn, card, seconds):
-        """A drafted note on screen (J03): only a click on one of its patients ("save:<cf>") or "discard" decides.
+    def offer_note(self, turn, card, seconds, outcome="note_confirm", verb="save",
+                   reason="a note is on screen, waiting to be saved there"):
+        """A drafted note on screen (J03) - or a phone change ("edit_confirm"), or patients to open ("patient_pick",
+        verb "open"; J03 slice 2): only a click on one of its patients ("<verb>:<cf>") or "discard" decides.
         -> its id; None if `turn` is no longer current."""
         with self._lock:
             if not turn or turn != self.turn:
                 return None
             pid = secrets.token_urlsafe(16)
             deadline = self.clock() + seconds
-            allowed = {"discard"} | {"save:" + c["cf"] for c in card["choices"]}
+            allowed = {"discard"} | {f"{verb}:" + c["cf"] for c in card["choices"]}
             self._pending = {"id": pid, "decision": None, "deadline": deadline, "allowed": allowed}
-            self._answer = ({**card, "outcome": "note_confirm", "id": pid, "seconds": seconds}, deadline)
-            self._move("CONFIRMING", "a note is on screen, waiting to be saved there")
+            self._answer = ({**card, "outcome": outcome, "id": pid, "seconds": seconds}, deadline)
+            self._move("CONFIRMING", reason)
             return pid
 
     def decide(self, pid, decision):
@@ -323,7 +329,7 @@ class Machine:
         left = until - self.clock()
         if left <= 0:
             return None
-        if answer["outcome"] in ("confirm", "note_confirm"):   # a page opened late says the real time left
+        if answer["outcome"] in WAITING:                     # a page opened late says the real time left
             return {**answer, "left": max(1, round(left))}
         return answer
 

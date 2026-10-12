@@ -501,8 +501,10 @@ def selftest():
                 # J02 (2026-10-07): the Jarvis device route reads no cookie, only a device credential, so it is exempt
                 # from CSRF; a staff session without that credential must still be refused (401) and change nothing.
                 # J03 (2026-10-11): the device's note draft and save, the same
+                # 2026-10-12: read and edit by voice and the hand-off ticket, the same
                 device = {"jarvis.api_guides_ask", "jarvis.api_note_draft", "jarvis.api_note_commit",
-                          "jarvis.api_login", "jarvis.api_logout"}
+                          "jarvis.api_login", "jarvis.api_logout", "jarvis.api_patients_read",
+                          "jarvis.api_edit_draft", "jarvis.api_edit_commit", "jarvis.api_handoff"}
                 expected = 401 if rule.endpoint in device else 400
                 assert resp.status_code == expected, \
                     f"6d: POST {rule.rule} as {role} without a csrf token got {resp.status_code}"

@@ -4,6 +4,7 @@ from flask import Flask, flash, g, redirect, request, send_from_directory, url_f
 from flask_wtf import CSRFProtect
 
 import clinic_time
+import jarvis_link
 import similar_cases
 import web_session
 from auth import authorize
@@ -21,7 +22,8 @@ from . import db
 # the Jarvis device routes carry a device credential, not a staff cookie; they check it themselves (J00, J02, J03)
 WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
                        "jarvis.api_guides_vocabulary", "jarvis.api_note_draft", "jarvis.api_note_commit",
-                       "jarvis.api_login", "jarvis.api_logout"}
+                       "jarvis.api_login", "jarvis.api_logout", "jarvis.api_patients_read", "jarvis.api_edit_draft",
+                       "jarvis.api_edit_commit", "jarvis.api_handoff", "jarvis.handoff"}
 
 # reachable while an account still owes a password change - without logout in
 # here a flagged user could neither proceed nor leave
@@ -148,6 +150,10 @@ def create_app():
     csrf.exempt(app.view_functions["jarvis.api_note_commit"])
     csrf.exempt(app.view_functions["jarvis.api_login"])              # a doctor signs the device in (2026-10-11)
     csrf.exempt(app.view_functions["jarvis.api_logout"])
+    csrf.exempt(app.view_functions["jarvis.api_patients_read"])     # J03 slice 2: device credential, no staff cookie
+    csrf.exempt(app.view_functions["jarvis.api_edit_draft"])
+    csrf.exempt(app.view_functions["jarvis.api_edit_commit"])
+    csrf.exempt(app.view_functions["jarvis.api_handoff"])
     app.register_blueprint(similar_bp)
     app.register_blueprint(reminders_bp)
     app.register_blueprint(reports_bp)
@@ -180,6 +186,9 @@ def create_app():
             return
         token = request.cookies.get(web_session.COOKIE_NAME)
         user = web_session.load_session(db.get_db(), token) if token else None
+        if user is not None and jarvis_link.handoff_over(db.get_db(), web_session.token_hash(token)):
+            web_session.destroy_session(db.get_db(), token)      # its Jarvis sign-in ended (00:00, sign out)
+            user = None
         if user is None:
             return redirect(url_for("auth.login"))
         g.user = user

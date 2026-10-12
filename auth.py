@@ -169,6 +169,11 @@ ROUTE_POLICY = {
     "jarvis.api_note_commit": "public",
     "jarvis.api_login": "public",               # the device credential + the doctor's own password decide
     "jarvis.api_logout": "public",
+    "jarvis.api_patients_read": "public",       # J03 slice 2: the device credential + the signed-in doctor decide
+    "jarvis.api_edit_draft": "public",
+    "jarvis.api_edit_commit": "public",
+    "jarvis.api_handoff": "public",             # one sign-in: only for the doctor who signed the device in
+    "jarvis.handoff": "public",                 # the one-time link itself (used once, 60 s, ends with that sign-in)
     "imports.drive_auto": "read_clinical",
     # P24: asking and reading approved guides is dentist and reception; managing is the dentist's. The decision
     # routes are open to asking staff because a named administrative approver (a reception account) may approve

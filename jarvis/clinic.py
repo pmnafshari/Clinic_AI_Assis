@@ -91,6 +91,24 @@ class ClinicLink:
         """Save a drafted note on the patient picked on screen -> {saved, cf, name, status}."""
         return self._post("/api/jarvis/notes/commit", {"draft": draft, "cf": cf})
 
+    def read_patients(self, patient, want, cf=None):
+        """The patients a spoken name matches (or `cf`, the one just handled), to open on screen ("open") or with each
+        one's next appointment ("next") -> {choices}. Shown on screen only."""
+        return self._post("/api/jarvis/patients/read", {"patient": patient, "want": want, "cf": cf or ""})
+
+    def edit_draft(self, patient, field, value, cf=None):
+        """A phone change heard for a spoken name -> {draft, field, value, choices: [{cf, name, before}], seconds}."""
+        return self._post("/api/jarvis/patients/edit/draft",
+                          {"patient": patient, "field": field, "value": value, "cf": cf or ""})
+
+    def edit_commit(self, draft, cf):
+        """Save a drafted change on the patient picked on screen -> {saved, cf, name, field, value}."""
+        return self._post("/api/jarvis/patients/edit/commit", {"draft": draft, "cf": cf})
+
+    def handoff(self):
+        """A one-time link (60 s) that signs the Clinic tab in as the doctor signed in here -> its full address."""
+        return self.base_url + self._post("/api/jarvis/handoff", {})["path"]
+
     def login(self, username, password):
         """A doctor signs this device in until the next 00:00 (the clinic checks; nothing is kept here)."""
         return self._post("/api/jarvis/login", {"username": username, "password": password})
