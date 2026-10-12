@@ -222,8 +222,9 @@ class Machine:
         with self._lock:
             new = {k: who.get(k) for k in ("username", "role", "expires_at", "kind")} if who else None
             if new != self.access:
+                if (new or {}).get("username") != (self.access or {}).get("username"):
+                    self.access_epoch += 1      # another person, or nobody: what Jarvis remembered is gone
                 self.access = new
-                self.access_epoch += 1          # whatever Jarvis remembered for the previous sign-in is gone
                 self._changed()
 
     def set_paused(self, on):

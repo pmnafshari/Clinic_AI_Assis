@@ -659,7 +659,7 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
             return jsonify({"error": e.code, "message": str(e)}), 403
         except (LinkRefused, LinkDown) as e:
             return jsonify({"error": "clinic", "message": str(e)}), 503
-        machine.set_access(who)
+        machine.set_access({**who, "kind": "login"})
         return jsonify({"username": who["username"], "expires_at": who["expires_at"], "kind": "login",
                         "handoff": who.get("handoff")})
 

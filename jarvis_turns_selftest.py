@@ -1139,7 +1139,8 @@ def voice_reads_and_edits():
         def read_patients(self, name, want, cf=None):
             self.calls.append(("read", name, want, cf))
             if cf:
-                return {"choices": [{**GIULIA, "next": None}] if want == "next" else [GIULIA]}
+                c = next(x for x in [GIULIA] + PAOLAS if x["cf"] == cf)
+                return {"choices": [{**c, "next": None}] if want == "next" else [dict(c)]}
             if "Paola" in name:
                 return {"choices": [dict(c) for c in PAOLAS]}
             if "Giulia" in name:
@@ -1157,7 +1158,10 @@ def voice_reads_and_edits():
             return {"saved": True, "cf": cf, "name": "Paola Rossi", "field": "phone", "value": "+393331234567"}
 
     def run(link, said, decide=None, m=None, ex=None):
-        m = m or machine()
+        if m is None:
+            m = machine()
+            if link.signed:                            # as on the page: the doctor's sign-in is known before a turn
+                m.set_access({"username": "drossi", "role": "dentist", "expires_at": "x", "kind": "login"})
         ex = ex or answer.Exchange(m, lambda pcm, terms, cancelled: (said[0], "en"), lambda: link, confirm=False,
                                    notes=True, confirm_seconds=1.0)
         t = threading.Thread(target=lambda: setattr(t, "reason", m.finish(turn, ex(b"pcm", turn)) and None))
@@ -1200,7 +1204,16 @@ def voice_reads_and_edits():
     assert link.calls[-1] == ("read", "Paola Rossi", "next", "RSSP850010150900"), \
         f"22: HARD FAIL - 'her' is not the patient just picked ({link.calls[-1]})"
     assert card["outcome"] == "patient_next" and speech.words(card) == "The answer is on screen."
-    m.set_access({"username": "drossi", "role": "dentist", "expires_at": "x", "kind": "login"})   # signed in again
+    # the clinic check every 30 s rewrites the same doctor (found by the live run, §25: the page's sign-in had no kind,
+    # the check's had, and the patient was forgotten) - the same person: "her" still holds
+    m.set_access({"username": "drossi", "role": "dentist", "expires_at": "x"})
+    m.set_access({"username": "drossi", "role": "dentist", "expires_at": "x", "kind": "login"})
+    n = len(link.calls)
+    m2, ex, card = run(link, said, m=m, ex=ex)
+    assert len(link.calls) == n + 1 and link.calls[-1][3] == "RSSP850010150900", \
+        "22: HARD FAIL - 'her' forgotten when the clinic check rewrote the same sign-in"
+    m.set_access(None)                                       # signed out, then in again
+    m.set_access({"username": "drossi", "role": "dentist", "expires_at": "x", "kind": "login"})
     n = len(link.calls)
     m2, ex, card = run(link, said, m=m, ex=ex)
     assert len(link.calls) == n and card["reason"] == "which", "22: HARD FAIL - 'her' outlived a sign-in change"
