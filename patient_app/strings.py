@@ -248,6 +248,17 @@ STRINGS = {
     "bill_state_partially_paid": {"it": "Pagata in parte", "en": "Partly paid"},
     "bill_state_paid": {"it": "Pagata", "en": "Paid"},
     "bill_state_void": {"it": "Annullata", "en": "Cancelled"},
+    # P29 S1; Italian awaits native-speaker review. "unknown" stands where the
+    # ledger has no settled figure - the page never works one out itself
+    "bill_unknown": {"it": "sconosciuto", "en": "unknown"},
+    "bill_status": {"it": "Stato", "en": "Status"},
+    "bill_item": {"it": "Voce", "en": "Item"},
+    "bill_amount": {"it": "Importo", "en": "Amount"},
+    "bill_due_date": {"it": "Scadenza", "en": "Due date"},
+    "bill_lines_caption": {"it": "Voci e importi della visita del {date}",
+                           "en": "Items and amounts for the visit of {date}"},
+    "bill_installments_caption": {"it": "Rate della visita del {date}",
+                                  "en": "Installments for the visit of {date}"},
 
     # data rights (P06)
     "rights_heading": {"it": "I tuoi dati", "en": "Your data"},

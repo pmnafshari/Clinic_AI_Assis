@@ -606,3 +606,10 @@ textarea.chat-input { min-height: 100px; resize: vertical; padding: 10px; line-h
 @media (max-width: 760px) { .chat-composer-bar { flex-wrap: wrap; } .chat-send { margin-left: auto; } }
 /* P29 S1: a small label names what a date is, so a requested day never reads as a booking */
 .patient-row-label { display: block; font-size: var(--ds-caption); text-transform: uppercase; letter-spacing: var(--ds-tracking-wide); color: var(--ds-text-muted); }
+/* invoices and installments: one column of amounts, aligned on the right */
+.patient-invoice-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+.patient-money { width: 100%; font-size: var(--ds-caption); }
+.patient-money th, .patient-money td { padding: 6px 8px; vertical-align: top; overflow-wrap: anywhere; }
+.patient-money .ds-numeral { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.patient-money tfoot th, .patient-money tfoot td { font-weight: var(--ds-weight-semibold); }
+.patient-money-caption { caption-side: top; padding: 0 0 4px; color: var(--ds-text); font-weight: var(--ds-weight-semibold); }
