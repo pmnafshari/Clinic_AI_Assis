@@ -305,10 +305,15 @@ def file_view(doc_id):
         text = data.decode("utf-8", errors="replace")
         truncated = len(text) > TEXT_VIEW_LIMIT
         text = text[:TEXT_VIEW_LIMIT]
-    return render_template("patient_file_view.html", f=row, text=text, truncated=truncated,
-                           prev_id=ids[pos - 1] if pos > 0 else None,
-                           next_id=ids[pos + 1] if pos + 1 < len(ids) else None,
-                           position=pos + 1, total=len(ids))
+    resp = Response(render_template(
+        "patient_file_view.html", f=row, text=text, truncated=truncated,
+        prev_id=ids[pos - 1] if pos > 0 else None,
+        next_id=ids[pos + 1] if pos + 1 < len(ids) else None,
+        position=pos + 1, total=len(ids)))
+    # the page can carry the document's own text: kept out of the browser cache
+    # like every other file response
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @patient_bp.route("/files/<int:doc_id>/raw")

@@ -2546,7 +2546,10 @@ def selftest():
             assert view_pdf.status_code == 200 and f'data-pdf-src="/files/{pdf35}/raw"' in view_pdf.text, \
                 "35f: a PDF opens in the viewer and is fed from the raw route"
             assert 'href="/files"' in view_pdf.text and "data-viewer-close" in view_pdf.text, "35f: the viewer closes back to the list"
-            view_text = client35.get(f"/files/{text35}/view").text
+            view_text_resp = client35.get(f"/files/{text35}/view")
+            assert view_text_resp.headers.get("Cache-Control") == "no-store", \
+                "35f: a viewer page holds the document's text, so the browser must not keep it"
+            view_text = view_text_resp.text
             assert "Synthetic letter &lt;script&gt;alert(1)&lt;/script&gt; end" in view_text and \
                 "<script>alert(1)" not in view_text, "35f: text is shown as text, never run"
             view_img = client35.get(f"/files/{image35}/view").text
