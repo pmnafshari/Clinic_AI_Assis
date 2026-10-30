@@ -2351,6 +2351,36 @@ def selftest():
                 assert not on_page(t(key, "en"), text) or t(key, "it") == t(key, "en"), \
                     f"34g: english {key} on the italian {path}"
 
+        # 35. P29 redesign (direction C). a fresh patient with no data first,
+        # so every page's empty state is covered before anything is seeded
+        reset35 = raw_db()
+        reset35.execute("DELETE FROM patient_login_attempts")
+        reset35.commit()
+        reset35.close()
+        cf35 = "ZZRD290101010101"
+        pin35 = seed_and_issue(cf35, "redesign patient")
+        pid35 = pid_of(cf35)
+        client35, _ = sign_in(cf35, pin35)
+        page = client35.get("/change-pin")
+        client35.post("/change-pin", data={"pin": "36925814", "confirm": "36925814",
+                                           "csrf_token": _csrf_from(page.text)})
+
+        # 35a. the shell: the sidebar on computers, a five-tab bar on phones
+        home35 = client35.get("/").text
+        assert 'class="patient-tabbar"' in home35, "35a: phones get a bottom tab bar"
+        tabbar35 = home35.split('class="patient-tabbar"')[1].split("</nav>")[0]
+        assert re.findall(r'href="([^"]+)"', tabbar35) == ["/", "/appointments", "/billing", "/files", "/chat"], \
+            "35a: five tabs, in this order"
+        assert tabbar35.count('aria-current="page"') == 1 and \
+            re.search(r'href="/"[^>]*aria-current="page"', tabbar35), "35a: the current tab is marked"
+        side35 = home35.split('<nav class="patient-nav', 1)[1].split("</nav>")[0]
+        assert len(re.findall(r'href="[^"]+"', side35)) == 6 and 'href="/profile"' in side35, \
+            "35a: the sidebar keeps all six pages"
+        for path in ("/", "/appointments", "/billing", "/files", "/chat", "/profile"):
+            assert client35.get(path).status_code == 200, f"35a: {path} renders with no data"
+        for path in ("/appointments", "/billing", "/files"):
+            assert "<table" not in client35.get(path).text, f"35a: {path} draws no empty table"
+
     print("selftest ok")
 
 

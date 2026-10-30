@@ -615,3 +615,85 @@ textarea.chat-input { min-height: 100px; resize: vertical; padding: 10px; line-h
 .patient-money-caption { caption-side: top; padding: 0 0 4px; color: var(--ds-text); font-weight: var(--ds-weight-semibold); }
 .patient-waiting { margin-bottom: var(--ds-space-5); }
 .patient-waiting ul li { overflow-wrap: anywhere; }
+
+/* P29 redesign, direction C: white cards on a warm ground, a dark-ink current page,
+   zebra tables in fixed-height boxes that scroll inside, a button for every action.
+   patient stylesheet only; no remote assets. */
+:root {
+  --pp-ground: #f2f3ef; --pp-surface: #fff; --pp-sunken: #f5f6f3; --pp-zebra: #f3f6f2; --pp-hover: #e6efe9;
+  --pp-line: #e3e6e0; --pp-text: #17241f; --pp-muted: #5f6b65; --pp-ink: #15302a;
+  --pp-ok: #1c6b45; --pp-ok-bg: #e3f2e8; --pp-wait: #8a4d0a; --pp-wait-bg: #fcefdc;
+  --pp-no: #a32020; --pp-no-bg: #fbe7e5; --pp-scroll: #b9c3bd;
+}
+body { background: var(--pp-ground); color: var(--pp-text); }
+@media (min-width: 761px) { .patient-signed-in .patient-topbar { background: var(--pp-surface); border-right-color: var(--pp-line); } }
+.patient-mark { background: var(--pp-ink); }
+.patient-nav-link { color: var(--pp-muted); }
+.patient-nav-link:hover { background: var(--pp-sunken); color: var(--pp-text); }
+.patient-nav .patient-nav-link.active, .patient-nav .patient-nav-link.active:hover { background: var(--pp-ink); color: #fff; }
+.patient-lang-switch { background: var(--pp-sunken); border: 1px solid var(--pp-line); }
+.patient-lang-switch a.active { background: var(--pp-ink); color: #fff; box-shadow: none; }
+.btn-dark { background: var(--pp-ink); border-color: var(--pp-ink); color: #fff; }
+.btn-dark:hover, .btn-dark:focus { background: #0f241f; border-color: #0f241f; color: #fff; }
+.btn-sm { min-height: 36px; padding: 6px 12px; font-size: .85rem; border-radius: 9px; }
+
+/* the phone tab bar and the profile link that replaces the sidebar's last entry */
+.patient-tabbar, .patient-avatar-link { display: none; }
+@media (max-width: 760px) {
+  .patient-signed-in .patient-nav { display: none; }
+  .patient-signed-in .patient-shell { padding-bottom: 96px; }
+  .patient-tabbar { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    background: var(--pp-surface); border-top: 1px solid var(--pp-line);
+    padding: 6px max(4px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(4px, env(safe-area-inset-left, 0px)); }
+  .patient-tab { display: grid; justify-items: center; gap: 2px; min-height: 52px; padding-top: 4px; font-size: .72rem; font-weight: 500; color: var(--pp-muted); text-decoration: none; overflow-wrap: anywhere; text-align: center; }
+  .patient-tab i { width: 42px; height: 28px; display: grid; place-items: center; border-radius: 10px; font-size: 1.1rem; }
+  .patient-tab.active { color: var(--pp-ink); font-weight: 650; }
+  .patient-tab.active i { background: var(--pp-ink); color: #fff; }
+  .patient-signed-in .patient-tools { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+  .patient-avatar-link { display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--pp-sunken); border: 1px solid var(--pp-line); color: var(--pp-ink); font-size: 1.3rem; text-decoration: none; }
+  .patient-avatar-link.active { background: var(--pp-ink); color: #fff; }
+}
+
+/* shared pieces every page uses */
+.pp-card { background: var(--pp-surface); border: 1px solid var(--pp-line); border-radius: 18px; padding: 20px 22px; min-width: 0; }
+.pp-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-bottom: 14px; }
+.pp-card-head h2 { margin: 0; font-size: 1.05rem; font-weight: 650; letter-spacing: -.01em; }
+.pp-card-head .pp-end { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pp-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--pp-sunken); border: 1px solid var(--pp-line); border-radius: 12px; padding: 3px; }
+.pp-seg button, .pp-seg a { border: 0; background: transparent; color: var(--pp-muted); font-weight: 500; font-size: .88rem; padding: 6px 12px; border-radius: 9px; min-height: 36px; display: inline-flex; gap: 6px; align-items: center; text-decoration: none; }
+.pp-seg .on, .pp-seg [aria-pressed="true"] { background: var(--pp-ink); color: #fff; }
+.pp-seg b { font-size: .75rem; font-weight: 600; background: rgba(0, 0, 0, .07); border-radius: 999px; padding: 0 7px; }
+.pp-seg .on b, .pp-seg [aria-pressed="true"] b { background: rgba(255, 255, 255, .2); }
+.pp-pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 3px 10px; font-size: .8rem; font-weight: 600; white-space: nowrap; max-width: 100%; }
+.pp-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.pp-pill.ok { background: var(--pp-ok-bg); color: var(--pp-ok); }
+.pp-pill.wait { background: var(--pp-wait-bg); color: var(--pp-wait); }
+.pp-pill.no { background: var(--pp-no-bg); color: var(--pp-no); }
+.pp-pill.neutral { background: var(--pp-sunken); color: var(--pp-muted); border: 1px solid var(--pp-line); }
+/* a box keeps its height; more rows scroll inside it and the header row stays in place */
+.pp-box { max-height: var(--h, 360px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--pp-scroll) transparent; border-radius: 12px; }
+.pp-box::-webkit-scrollbar { width: 8px; height: 8px; }
+.pp-box::-webkit-scrollbar-thumb { background: var(--pp-scroll); border-radius: 8px; }
+.pp-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .93rem; margin: 0; }
+.pp-table th { position: sticky; top: 0; z-index: 1; background: var(--pp-sunken); color: var(--pp-muted); font-weight: 500; text-align: left; padding: 10px 14px; white-space: nowrap; }
+.pp-table th:first-child { border-radius: 10px 0 0 10px; }
+.pp-table th:last-child { border-radius: 0 10px 10px 0; }
+.pp-table td { padding: 12px 14px; vertical-align: middle; }
+.pp-table tbody tr:nth-child(even) td { background: var(--pp-zebra); }
+.pp-table tbody tr:hover td { background: var(--pp-hover); }
+.pp-table tbody td:first-child { border-radius: 10px 0 0 10px; }
+.pp-table tbody td:last-child { border-radius: 0 10px 10px 0; }
+.pp-table tfoot td, .pp-table tfoot th { position: static; background: none; border-top: 1px solid var(--pp-line); font-weight: 650; color: var(--pp-text); padding: 10px 14px; }
+.pp-table .pp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pp-table .pp-label { display: block; font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--pp-muted); }
+.pp-nw { white-space: nowrap; }
+.pp-acts { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.pp-scroll-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; font-size: .8rem; color: var(--pp-muted); border-top: 1px solid var(--pp-line); padding-top: 10px; margin: 8px 0 0; }
+.pp-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.pp-mini { display: flex; gap: 14px; align-items: flex-start; }
+.pp-mini > div { min-width: 0; display: grid; gap: 2px; justify-items: start; }
+.pp-ico { width: 42px; height: 42px; border-radius: 12px; background: var(--pp-sunken); display: grid; place-items: center; flex: none; font-size: 1.1rem; color: var(--pp-ink); }
+.pp-mini .pp-val { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; line-height: 1.2; overflow-wrap: anywhere; }
+.pp-mini .pp-lab { color: var(--pp-muted); font-size: .88rem; }
+.pp-mini .pp-pill { margin-top: 4px; }
+.pp-muted { color: var(--pp-muted); }

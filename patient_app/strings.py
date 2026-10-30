@@ -45,6 +45,13 @@ STRINGS = {
     'ui_next_action': {"it": 'Gestisci gli appuntamenti', "en": 'Manage appointments'},
     'ui_files_action': {"it": 'Visualizza i miei file', "en": 'View my files'},
     'ui_payments_action': {"it": 'Visualizza i pagamenti', "en": 'View payments'},
+    # P29 redesign (direction C): the phone tab bar. Italian awaits native-speaker review.
+    "tab_label": {"it": "Sezioni principali", "en": "Main sections"},
+    "tab_home": {"it": "Home", "en": "Home"},
+    "tab_visits": {"it": "Visite", "en": "Visits"},
+    "tab_bills": {"it": "Pagamenti", "en": "Bills"},
+    "tab_files": {"it": "File", "en": "Files"},
+    "tab_assistant": {"it": "Assistente", "en": "Assistant"},
 
     # [ASSUMED] italian below written without native-speaker review, same
     # caveat as the rest of this module
