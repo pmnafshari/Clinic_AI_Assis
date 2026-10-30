@@ -478,6 +478,17 @@ STRINGS = {
         "it": "Problemi ad accedere? Contatta la clinica.",
         "en": "Trouble signing in? Contact the clinic.",
     },
+    # P30 sign-in core: the word under the core on the login page. decoration -
+    # the alert above the form stays the message, so these never say more than it does
+    "core_idle": {"it": "In attesa", "en": "Waiting"},
+    "core_cf": {"it": "Ti ascolto", "en": "Listening"},
+    "core_pin": {"it": "Non guardo", "en": "Not looking"},
+    "core_away": {"it": "Guardo altrove", "en": "Looking away"},
+    "core_check": {"it": "Verifico", "en": "Checking"},
+    "core_wrong": {"it": "Non corrisponde", "en": "That didn't match"},
+    "core_locked": {"it": "Troppi tentativi", "en": "Too many attempts"},
+    "core_expired": {"it": "PIN scaduto", "en": "PIN expired"},
+    "core_ok": {"it": "Accesso riuscito", "en": "Signed in"},
 
     # --- chat page chrome ---
     "chat_heading": {"it": "Fai una domanda sui tuoi dati", "en": "Ask about your records"},

@@ -45,7 +45,7 @@ def fixture(root):
     conn = storage.init_db(str(db))
     pid = patient_id.seed_patient(conn, fx.CF['rossi'], 'Mario Rossi', '+393331234567')
     other = patient_id.seed_patient(conn, fx.CF['verdi'], 'Luca Verdi')
-    patient_auth.issue_pin(fx.CF['rossi'], conn, 'fixture', 'dentist')
+    pin = patient_auth.issue_pin(fx.CF['rossi'], conn, 'fixture', 'dentist')
     conn.execute('UPDATE patient_credentials SET must_change_pin=0')
     conn.commit()
     token = patient_auth.create_patient_session(conn, fx.CF['rossi'])
@@ -86,7 +86,7 @@ def fixture(root):
     conn.close()
     app = create_patient_app(env_path=root / '.env.patient')
     app.config['TESTING'] = True
-    return app, token, files, aid
+    return app, token, files, aid, pin
 
 
 def keyboard_pass(page, url):
@@ -207,7 +207,7 @@ def walk():
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='clinic-p29-patient-') as temp:
         root = Path(temp)
-        app, token, files, aid = fixture(root)
+        app, token, files, aid, pin = fixture(root)
         client = app.test_client()
         # Regression for losing the active page; hostile targets always map home.
         for target, expected in [('patient.login', '/login'), ('patient.files_page', '/files'),
@@ -339,6 +339,40 @@ def walk():
                         page.goto(base + path)
                         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                         page.screenshot(path=str(EVIDENCE / f'login-{width}.png'), full_page=True)
+                # P30 sign-in core: a wrong PIN turns the core red on the same page, keeping the codice
+                # fiscale; the right PIN signs in from the same page and the portal opens
+                context = browser.new_context(viewport={'width': 1440, 'height': 1000})
+                page = context.new_page()
+                errors = []
+                page.on('pageerror', lambda error: errors.append(str(error)))
+                page.goto(base + '/login')
+                core = page.locator('[data-login-core]')
+                expect(core).to_have_attribute('data-core-state', 'idle')
+                page.fill('#codice_fiscale', fx.CF['rossi'])
+                page.fill('#pin', '00000000')
+                page.click('button[type=submit]')
+                expect(core).to_have_attribute('data-core-state', 'wrong')
+                expect(page.locator('#patient-content > .alert')).to_have_count(1)
+                assert urlsplit(page.url).path == '/login', page.url
+                assert page.input_value('#codice_fiscale') == fx.CF['rossi'] and page.input_value('#pin') == ''
+                page.fill('#pin', pin)
+                page.click('button[type=submit]')
+                expect(core).to_have_attribute('data-core-state', 'ok')
+                assert page.locator('#patient-content > .alert').count() == 0, 'the old message stays while signing in'
+                page.wait_for_url(base + '/')
+                expect(page.locator('.patient-tabbar, .patient-nav').first).to_be_attached()
+                assert not errors, errors
+                context.close()
+                # the page a signed-out patient asked for is still where the background sign-in lands
+                context = browser.new_context(viewport={'width': 390, 'height': 900})
+                page = context.new_page()
+                page.goto(base + '/billing')
+                assert urlsplit(page.url).path == '/login', page.url
+                page.fill('#codice_fiscale', fx.CF['rossi'])
+                page.fill('#pin', pin)
+                page.click('button[type=submit]')
+                page.wait_for_url(base + '/billing')
+                context.close()
                 redesign_checks(browser, base, token, results)
                 browser.close()
         finally:
