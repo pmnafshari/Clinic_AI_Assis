@@ -15,6 +15,11 @@ CLAUDE.md
 /REQUIREMENTS.md
 /MILESTONES.md
 /RETROSPECTIVE.md
+# manual test results and the owner-facing P29 reports stay local (owner/process
+# details and per-person test notes), the same as the planning folder
+docs/release/CLINIC-UAT-*
+docs/release/UAT-*
+docs/release/P29-CHANGELOG*
 
 # python
 __pycache__/
