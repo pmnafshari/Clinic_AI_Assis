@@ -9,6 +9,7 @@
 {% endif %}
 <form method="post" action="{{ url_for('patient.change_pin') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ return_to or '' }}">
   {% if not patient.must_change_pin %}
   <div class="mb-3">
     <label for="current" class="form-label">{{ t('current_pin_label', lang) }}</label>

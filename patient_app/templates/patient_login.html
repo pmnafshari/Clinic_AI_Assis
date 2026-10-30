@@ -12,6 +12,7 @@
 <p class="text-secondary mb-4">{{ t('login_body', lang) }}</p>
 <form method="post" action="{{ url_for('patient.login') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="next" value="{{ return_to or '' }}">
   <div class="mb-3">
     <label for="codice_fiscale" class="form-label">{{ t('cf_label', lang) }}</label>
     <input type="text" id="codice_fiscale" name="codice_fiscale" class="form-control"
