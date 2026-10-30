@@ -476,8 +476,11 @@ def chat_page():
     # exchange rather than a lone answer. presentational only - it is the
     # value already read above, jinja-escaped on the way out, and capped at
     # 500 characters by the truncation a few lines up.
+    # P29: target says which record answered, so the page can offer a button to
+    # that record's own page; it is a route name from the pipeline, never text
     return render_template(
         "patient_chat.html", state=result["state"], body=body, question=question,
+        target=result.get("target"),
         waiting=handoff.open_for_patient(conn, g.patient["patient_id"])
     )
 

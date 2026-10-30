@@ -871,3 +871,21 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 .pp-files[data-mode="grid"] .pp-file-acts .btn-outline-secondary { flex: none; }
 .pp-files[data-mode="grid"] .pp-dl-word { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .pp-file-acts { position: relative; }
+
+/* assistant: the exchange and composer on a card, suggestions and the call-back beside it */
+.patient-card.patient-card--chat { padding-left: 0 !important; padding-right: 0 !important; background: transparent; border: 0; box-shadow: none; }
+.pp-chat { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 18px; align-items: start; }
+.pp-chat-main { background: var(--pp-surface); border: 1px solid var(--pp-line); border-radius: 18px; padding: 20px 22px; min-width: 0; display: grid; gap: 14px; }
+.pp-chat-side { display: grid; gap: 14px; min-width: 0; }
+.pp-chat-side .chat-examples { margin-bottom: 0; }
+.pp-chat-side .patient-waiting { margin-bottom: 0; }
+.pp-chat .chat-thread { margin-bottom: 0; }
+.pp-chat .ds-turn-user { background: var(--pp-ink); color: #fff; }
+.pp-chat .chat-response { align-self: flex-start; max-width: 94%; background: var(--pp-surface); border: 1px solid var(--pp-line); border-radius: 18px; border-bottom-left-radius: 6px; box-shadow: none; padding: 16px 18px !important; }
+.pp-who { display: flex; align-items: center; gap: 8px; margin: 4px 0 -4px; font-size: .82rem; color: var(--pp-muted); }
+.pp-who-mark { width: 26px; height: 26px; border-radius: 8px; background: var(--pp-ink); color: #fff; display: grid; place-items: center; font-size: .8rem; }
+.pp-quick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.pp-quick form { margin: 0; }
+.pp-answer-link { margin: 12px 0 0; }
+.pp-chat .chat-send { background: var(--pp-ink); }
+@media (max-width: 900px) { .pp-chat { grid-template-columns: 1fr; } }

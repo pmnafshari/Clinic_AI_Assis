@@ -2571,6 +2571,48 @@ def selftest():
         finally:
             _docs34.DOC_ROOT = saved_root35
 
+        # 35g. assistant: an answer points to the page it came from, and a
+        # proposal can be answered with a button that sends the same words a
+        # patient would type. the answer itself is stubbed - no model here.
+        real_answer35 = patient_routes.chat.answer_question
+        reply35 = {}
+
+        def fake_answer35(question, pid, conn, lang, ip=None):
+            return dict(reply35)
+
+        patient_routes.chat.answer_question = fake_answer35
+        try:
+            empty_chat35 = client35.get("/chat").text
+            assert empty_chat35.count('class="chat-example"') == 4 and "chat-response" not in empty_chat35, \
+                "35g: the empty page keeps its four suggestions and no answer card"
+            assert on_page(t("chat_privacy_note", "it"), empty_chat35), "35g: the page says what the assistant reads"
+            for target, page_path, key in (("next_appointment", "/appointments", "chat_open_appointments"),
+                                           ("invoices", "/billing", "chat_open_billing"),
+                                           ("demographics", "/profile", "chat_open_profile")):
+                reply35.clear()
+                reply35.update({"state": "answer", "body": "stub answer", "target": target})
+                page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+                assert page.count('class="card chat-response') == 1 and "ds-turn-user" in page, "35g: one exchange"
+                assert re.search(rf'<a class="btn[^"]*" href="{page_path}">\s*{re.escape(t(key, "it"))}', page), \
+                    f"35g: a {target} answer links to {page_path}"
+            reply35.clear()
+            reply35.update({"state": "refusal", "body": None, "target": "unrouted"})
+            page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+            assert "chat-answer-link" not in page, "35g: a refusal points nowhere"
+            reply35.clear()
+            reply35.update({"state": "agent_propose", "kind": "book", "target": "book:proposed",
+                            "payload": {"day": day9_35, "period": "afternoon"}})
+            for lang, yes, no in (("it", "confermo", "lascia perdere"), ("en", "confirm", "never mind")):
+                client35.get(f"/lang/{lang}")
+                page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+                quick = re.findall(r'<form method="post" action="/chat" class="chat-quick">(.*?)</form>', page, re.S)
+                values = [re.search(r'name="question" value="([^"]+)"', q).group(1) for q in quick]
+                assert values == [yes, no], f"35g: the {lang} quick replies send {values}"
+                assert all('name="csrf_token"' in q for q in quick), "35g: and carry the csrf token"
+            client35.get("/lang/it")
+        finally:
+            patient_routes.chat.answer_question = real_answer35
+
     print("selftest ok")
 
 

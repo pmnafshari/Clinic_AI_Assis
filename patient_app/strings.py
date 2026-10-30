@@ -301,6 +301,17 @@ STRINGS = {
     "chat_consent_state": {"it": "Consenso per l'assistente: {state}",
                            "en": "Consent for the assistant: {state}"},
     "chat_consent_open": {"it": "Gestisci il consenso nel profilo", "en": "Manage this consent in your profile"},
+    # P29 redesign: the assistant page. Italian awaits native-speaker review.
+    "chat_privacy_note": {"it": "L'assistente legge solo i tuoi dati. Non dà consigli medici e non conserva le tue domande.",
+                          "en": "The assistant reads only your own records. It gives no medical advice and does not keep your questions."},
+    "chat_open_appointments": {"it": "Apri gli appuntamenti", "en": "Open appointments"},
+    "chat_open_billing": {"it": "Apri i pagamenti", "en": "Open payments"},
+    "chat_open_profile": {"it": "Apri il profilo", "en": "Open your profile"},
+    "chat_quick_yes": {"it": "Sì, procedi", "en": "Yes, go ahead"},
+    "chat_quick_no": {"it": "No, lascia perdere", "en": "No, leave it"},
+    # the words the assistant already understands - the buttons send exactly these
+    "chat_quick_yes_word": {"it": "confermo", "en": "confirm"},
+    "chat_quick_no_word": {"it": "lascia perdere", "en": "never mind"},
 
     # billing (P07). figures come from the ledger, the same as the staff page
     "bill_heading": {"it": "Fatture e pagamenti", "en": "Invoices and payments"},
