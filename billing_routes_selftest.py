@@ -14,6 +14,7 @@ import ledger
 import patient_auth
 import patient_id
 import web_session
+from login_return_selftest import field
 from app import create_app
 from patient_app import chat, create_patient_app, routes as patient_routes
 
@@ -100,14 +101,16 @@ def selftest():
         dentist.post(f"/billing/invoices/{draft}/issue", data={
             "due_date": "2026-10-15", "csrf_token": _csrf(page)})
         page = dentist.get(f"/patients/{CF}/billing").text
-        assert "partially paid" in page and "Record payment" in page, "1: reconciled and issued"
+        assert "partially paid" in page and "Start payment" in page, "1: reconciled and issued"
 
         # 2. the same form submitted twice is one payment
-        key = _key(page)
+        form = dentist.get(f"/billing/invoices/{draft}/payment/new", follow_redirects=True).text
+        intent = field(form, "intent")
         for _ in range(2):
             dentist.post(f"/billing/invoices/{draft}/payment", data={
-                "amount": "100,00", "method": "card", "key": key, "reference": "R-0001",
-                "csrf_token": _csrf(page)})
+                "amount": "100,00", "method": "card", "intent": intent, "reference": "R-0001",
+                "form_id": field(form, "form_id"),
+                "csrf_token": _csrf(form)})
         conn = sqlite3.connect(db_path)
         n = conn.execute("SELECT COUNT(*) FROM payments WHERE reference = 'R-0001'").fetchone()[0]
         conn.close()
@@ -123,17 +126,21 @@ def selftest():
         # 4. reception records a payment received and nothing else (owner
         # decision 2026-09-22): the payment form only, idempotent, audited
         seen = assistant.get(f"/patients/{CF}/billing").text
-        assert "Record payment" in seen, "4: reception is offered the payment form"
+        assert "Start payment" in seen, "4: reception is offered the payment form"
         for dentist_only in ("Refund", "Reverse", "Reconcile", "Split", ">Void<", ">Issue<"):
             assert dentist_only not in seen, f"4: reception must not be offered {dentist_only}"
+        form = assistant.get(f"/billing/invoices/{draft}/payment/new", follow_redirects=True).text
+        intent = field(form, "intent")
         for _ in range(2):
             assistant.post(f"/billing/invoices/{draft}/payment", data={
-                "amount": "5,00", "method": "cash", "key": "asst-1", "csrf_token": _csrf(seen)})
+                "amount": "5,00", "method": "cash", "intent": intent, "reference": "R-ASST-0001",
+                "form_id": field(form, "form_id"),
+                "csrf_token": _csrf(form)})
         conn = sqlite3.connect(db_path)
-        assert conn.execute("SELECT COUNT(*) FROM payments WHERE idempotency_key = 'asst-1'"
+        assert conn.execute("SELECT COUNT(*) FROM payments WHERE reference = 'R-ASST-0001'"
                             " AND recorded_role = 'assistant'").fetchone()[0] == 1, \
             "4: reception's payment is recorded once, under its own role"
-        asst_pay = conn.execute("SELECT id FROM payments WHERE idempotency_key = 'asst-1'").fetchone()[0]
+        asst_pay = conn.execute("SELECT id FROM payments WHERE reference = 'R-ASST-0001'").fetchone()[0]
         conn.close()
         before = sqlite3.connect(db_path).execute("SELECT COUNT(*) FROM payments").fetchone()[0]
         for url in (f"/billing/payments/{asst_pay}/refund", f"/billing/payments/{asst_pay}/reverse",

@@ -378,7 +378,11 @@ def selftest():
             "T16: and must leave nothing behind"
 
         restored = tmp / "restored"
-        out = backup.restore(archive, str(restored), key_path=str(key), apply=True)
+        # This fixture predates erasures; never read the clinic's live tombstones.
+        no_stones = tmp / "no-erasures.jsonl"
+        no_stones.write_text("")
+        out = backup.restore(archive, str(restored), key_path=str(key), apply=True,
+                             tombstones=no_stones)
         assert out["applied"] is True, f"T16: the restore must actually apply, got {out}"
         assert not out["problems"], f"T16: and land clean, got {out['problems']}"
         back = storage.connect(str(restored / "db" / "clinic.sqlite"))

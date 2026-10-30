@@ -9,11 +9,19 @@ from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
+from . import payment_intent
 
 billing_bp = Blueprint("billing", __name__)
 
 INVOICE_ACTIONS = ("issue", "void", "reconcile", "plan")
 PAYMENT_ACTIONS = ("refund", "reverse")
+
+
+@billing_bp.after_request
+def private_billing_response(response):
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
 
 
 def _refuse(action, target=None):
@@ -119,20 +127,89 @@ def record_payment(invoice_id):
     if not authorize(g.user["role"], "record_payment"):
         return _refuse("record_payment", str(invoice_id))
     conn = get_db()
-    inv = conn.execute("SELECT patient_id FROM billing_invoices WHERE id = ?",
+    inv = conn.execute("SELECT id, patient_id FROM billing_invoices WHERE id = ?",
                        (invoice_id,)).fetchone()
     if inv is None:
         abort(404)
     form = request.form
+    token = form.get("intent", "")
+    form_id = form.get("form_id", type=int)
     try:
-        _, created = ledger.record_payment(
-            conn, invoice_id, form.get("amount"), form.get("method"), form.get("key"),
-            g.user["username"], g.user["role"], form.get("received_on") or None,
-            form.get("reference") or None, form.get("note") or None)
-        flash("Payment recorded." if created else "That payment was already recorded.", "success")
-    except (ledger.LedgerError, ValueError) as e:
+        intent = payment_intent.read(token, inv, g.user)
+        # Exact committed retries survive draft expiry/pruning. An unused
+        # intent must still be the form this account opened.
+        if payment_intent.receipt(conn, intent) is None:
+            if payment_intent.load_form(conn, form_id, inv, g.user) != token:
+                raise ledger.LedgerError("this payment form does not match the submitted intent")
+    except ledger.LedgerError as e:
+        log_audit(conn, g.user["username"], g.user["role"], "record_payment",
+                  inv["patient_id"], allowed=0, reason="invalid_intent")
         flash(f"Not done: {e}.", "danger")
-    return redirect(_patient_url(inv["patient_id"]))
+        return redirect(_patient_url(inv["patient_id"]), code=303)
+    try:
+        payment_id, created = ledger.record_payment(
+            conn, invoice_id, form.get("amount"), form.get("method"), intent["key"],
+            g.user["username"], g.user["role"], intent["received_on"],
+            form.get("reference") or None, form.get("note") or None,
+            expected_revision=intent["revision"], expires_at=intent["expires"],
+            expected_patient=intent["patient"])
+        flash("Payment recorded." if created else "That payment was already recorded.", "success")
+        return redirect(url_for("billing.payment_form", invoice_id=invoice_id, receipt=payment_id), code=303)
+    except (ledger.LedgerError, ValueError) as e:
+        log_audit(conn, g.user["username"], g.user["role"], "record_payment",
+                  inv["patient_id"], allowed=0, reason="invalid_payment")
+        flash(f"Not done: {e}.", "danger")
+    return redirect(url_for("billing.payment_form", invoice_id=invoice_id, form=form_id), code=303)
+
+
+@billing_bp.route("/billing/invoices/<int:invoice_id>/payment/new")
+def new_payment(invoice_id):
+    if not authorize(g.user["role"], "record_payment"):
+        return _refuse("record_payment", str(invoice_id))
+    conn = get_db()
+    inv = ledger.summary(conn, invoice_id)
+    if inv is None:
+        abort(404)
+    if inv["state"] not in ("issued", "partially_paid"):
+        flash("Payments can only be recorded against an issued invoice with money still owed.", "danger")
+        return redirect(_patient_url(inv["patient_id"]))
+    form_id = payment_intent.stage(conn, inv, g.user)
+    return redirect(url_for("billing.payment_form", invoice_id=invoice_id, form=form_id), code=303)
+
+
+@billing_bp.route("/billing/invoices/<int:invoice_id>/payment/form")
+def payment_form(invoice_id):
+    if not authorize(g.user["role"], "record_payment"):
+        return _refuse("record_payment", str(invoice_id))
+    conn = get_db()
+    inv = ledger.summary(conn, invoice_id)
+    if inv is None:
+        abort(404)
+    form_id = request.args.get("form", type=int)
+    receipt_id = request.args.get("receipt", type=int)
+    token = ""
+    receipt, problem, intent = None, None, None
+    try:
+        if receipt_id is not None:
+            receipt = payment_intent.receipt_for_id(conn, receipt_id, inv, g.user)
+            if receipt is None:
+                abort(404)
+        else:
+            token = payment_intent.load_form(conn, form_id, inv, g.user)
+            intent = payment_intent.read(token, inv, g.user)
+            receipt = payment_intent.receipt(conn, intent)
+        if receipt is None:
+            payment_intent.check_open(conn, intent)
+            if inv["state"] not in ("issued", "partially_paid"):
+                raise ledger.LedgerError("this invoice no longer accepts payments")
+    except ledger.LedgerError as e:
+        problem = str(e)
+    patient = conn.execute("SELECT patient_name FROM patients WHERE patient_id = ?",
+                           (inv["patient_id"],)).fetchone()
+    return render_template("billing_payment.html", invoice=inv, patient=patient,
+                           intent=intent, token=token, form_id=form_id, receipt=receipt, problem=problem,
+                           billing_url=_patient_url(inv["patient_id"]), fmt=ledger.fmt,
+                           methods=ledger.METHODS)
 
 
 @billing_bp.route("/billing/payments/<int:payment_id>/<action>", methods=["POST"])

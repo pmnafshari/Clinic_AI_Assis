@@ -113,6 +113,8 @@ ROUTE_POLICY = {
     "billing.preview": "view_billing",
     "billing.invoice_action": "manage_billing",
     "billing.record_payment": "record_payment",
+    "billing.new_payment": "record_payment",
+    "billing.payment_form": "record_payment",
     "stock.index": "use_inventory",
     "stock.item": "use_inventory",
     "stock.move": "use_inventory",
@@ -256,7 +258,8 @@ def _pseudonymise(conn, text):
     return pid or "cf-unknown"
 
 
-def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, reason=None):
+def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, reason=None,
+              commit=True):
     # ip: the source address behind the row. the patient surface sets it on
     # login, logout, chat and scope-violation rows; staff paths still pass None.
     # it is resolved through patient_app/net.py, so it is the patient's own
@@ -277,7 +280,8 @@ def log_audit(conn, username, role, action, target, allowed, ts=None, ip=None, r
         " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (ts, username, role, action, target, allowed, ip, reason),
     )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def purge_audit(conn, where, params, actor, reason):

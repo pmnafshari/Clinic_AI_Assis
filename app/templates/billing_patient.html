@@ -69,17 +69,7 @@
       </form>
       {% endif %}
       {% if can_pay and inv.state in ('issued', 'partially_paid') %}
-      <form method="post" action="{{ url_for('billing.record_payment', invoice_id=inv.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <input type="hidden" name="key" value="{{ key() }}">
-        <div><label class="form-label small" for="amt-{{ inv.id }}">Amount received</label>
-        <input class="form-control form-control-sm" id="amt-{{ inv.id }}" name="amount" inputmode="decimal" placeholder="0,00" required></div>
-        <div><label class="form-label small" for="meth-{{ inv.id }}">Method</label>
-        <select class="form-select form-select-sm" id="meth-{{ inv.id }}" name="method">{% for m in methods %}<option value="{{ m }}">{{ m | replace('_', ' ') }}</option>{% endfor %}</select></div>
-        <div><label class="form-label small" for="ref-{{ inv.id }}">Receipt no.</label>
-        <input class="form-control form-control-sm" id="ref-{{ inv.id }}" name="reference" maxlength="60"></div>
-        <button class="btn btn-primary btn-sm" type="submit">Record payment</button>
-      </form>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('billing.new_payment', invoice_id=inv.id) }}">Start payment</a>
       {% endif %}
       {% if can_change and inv.state in ('issued', 'partially_paid') and not inv.installments %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='plan') }}" class="d-flex gap-2 align-items-end">

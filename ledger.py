@@ -24,7 +24,7 @@ staff pages, the patient portal, the chat and staff Q&A all read them.
 import sqlite3
 import sys
 from datetime import date, timedelta
-from decimal import ROUND_HALF_UP, Decimal
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from pathlib import Path
 
 import clinic_time
@@ -138,9 +138,14 @@ def cents(value):
         text = text.replace(".", "").replace(",", ".")
     try:
         amount = Decimal(text)
-    except Exception:
-        raise LedgerError(f"not an amount: {value!r}")
-    return int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        if not amount.is_finite():
+            raise InvalidOperation
+        result = int((amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    except (InvalidOperation, ValueError, OverflowError):
+        raise LedgerError("enter a valid amount") from None
+    if abs(result) > 9223372036854775807:
+        raise LedgerError("that amount is too large")
+    return result
 
 
 def fmt(value_cents, lang="it"):
@@ -339,58 +344,76 @@ def _existing(conn, key):
     return conn.execute("SELECT id FROM payments WHERE idempotency_key = ?", (key,)).fetchone()
 
 
+def payment_revision(conn, invoice_id):
+    return conn.execute("SELECT COALESCE(MAX(id), 0) FROM payment_allocations WHERE invoice_id = ?",
+                        (invoice_id,)).fetchone()[0]
+
+
 def record_payment(conn, invoice_id, amount, method, key, actor, role, received_on=None,
-                   reference=None, note=None, source="manual"):
+                   reference=None, note=None, source="manual", expected_revision=None,
+                   expires_at=None, expected_patient=None):
     """Record money received against one invoice. Returns (payment_id, created).
-    The same idempotency key twice returns the first payment and records nothing."""
+    An exact replay returns the first payment; changed details are refused."""
     # the one change reception may make (owner decision 2026-09-22): recording
     # money received. refunds, reversals, reconciliation, issue, void and plans
     # stay behind manage_billing
     _gate(conn, actor, role, "record_payment", str(invoice_id), "record_payment")
     if not key:
         raise LedgerError("a payment needs an idempotency key")
-    found = _existing(conn, key)
-    if found:
-        return found[0], False
     amount = cents(amount) if not isinstance(amount, int) else amount
     if amount <= 0:
         raise LedgerError("a payment is more than zero")
     if method not in METHODS:
         raise LedgerError(f"method must be one of {METHODS}")
-    received_on = received_on or clinic_time.now_utc().date().isoformat()
-    date.fromisoformat(received_on)
+    if received_on:
+        date.fromisoformat(received_on)
+    reference, note = reference or None, note or None
 
     conn.commit()
     conn.execute("BEGIN IMMEDIATE")
     try:
         # re-read inside the lock: two tabs submitting at once see each other
-        found = _existing(conn, key)
+        found = conn.execute("SELECT * FROM payments WHERE idempotency_key = ?", (key,)).fetchone()
         if found:
+            allocation = conn.execute(
+                "SELECT invoice_id, amount_cents FROM payment_allocations WHERE payment_id = ?",
+                (found["id"],)).fetchall()
+            if (found["kind"] != "payment" or found["recorded_by"] != actor
+                    or found["recorded_role"] != role or found["source"] != source
+                    or found["amount_cents"] != amount or found["method"] != method
+                    or found["reference"] != reference or found["note"] != note
+                    or (received_on and found["received_on"] != received_on)
+                    or (expected_patient and found["patient_id"] != expected_patient)
+                    or len(allocation) != 1 or allocation[0]["invoice_id"] != invoice_id
+                    or allocation[0]["amount_cents"] != amount):
+                raise LedgerError("that payment key was already used for different details")
             conn.execute("ROLLBACK")
-            return found[0], False
+            return found["id"], False
         state = summary(conn, invoice_id)
         if state is None:
             raise LedgerError("no such invoice")
+        if expected_patient is not None and state["patient_id"] != expected_patient:
+            raise LedgerError("the invoice belongs to a different patient now; reopen billing")
+        if expires_at is not None and clinic_time.now_utc() > clinic_time.read_instant(expires_at):
+            raise LedgerError("this payment form has expired; check the invoice before starting again")
+        if expected_revision is not None and payment_revision(conn, invoice_id) != expected_revision:
+            raise LedgerError("the invoice payments have changed; check the invoice before starting again")
         if state["state"] not in ("issued", "partially_paid"):
             raise LedgerError(f"payments go against an issued invoice, this one is {state['state']}")
         if amount > state["outstanding_cents"]:
             raise LedgerError(f"that is more than the {fmt(state['outstanding_cents'])} outstanding")
         pid = state["patient_id"]
+        received_on = received_on or clinic_time.now_utc().date().isoformat()
         payment_id = _insert_payment(conn, pid, "payment", amount, method, source, key, actor,
                                      role, received_on, reference, note)
         conn.execute("INSERT INTO payment_allocations (payment_id, invoice_id, amount_cents)"
                      " VALUES (?, ?, ?)", (payment_id, invoice_id, amount))
+        log_audit(conn, actor, role, "record_payment", pid, allowed=1,
+                  reason=str(payment_id), commit=False)
         conn.execute("COMMIT")
-    except sqlite3.IntegrityError:
-        conn.execute("ROLLBACK")
-        found = _existing(conn, key)
-        if found:
-            return found[0], False
-        raise
     except Exception:
         conn.execute("ROLLBACK")
         raise
-    log_audit(conn, actor, role, "record_payment", pid, allowed=1, reason=str(payment_id))
     return payment_id, True
 
 

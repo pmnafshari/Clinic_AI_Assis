@@ -38,6 +38,8 @@ this file is stale.
 | GET | `/billing` | `billing.index` |
 | POST | `/billing/invoices/<int:invoice_id>/<action>` | `billing.invoice_action` |
 | POST | `/billing/invoices/<int:invoice_id>/payment` | `billing.record_payment` |
+| GET | `/billing/invoices/<int:invoice_id>/payment/form` | `billing.payment_form` |
+| GET | `/billing/invoices/<int:invoice_id>/payment/new` | `billing.new_payment` |
 | GET | `/billing/invoices/<int:invoice_id>/preview` | `billing.preview` |
 | POST | `/billing/payments/<int:payment_id>/<action>` | `billing.payment_action` |
 | GET,POST | `/change-password` | `auth.change_password` |

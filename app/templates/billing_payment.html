@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="mb-3" aria-label="Breadcrumb"><a href="{{ billing_url }}">Back to billing</a></nav>
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
+    <h1 class="ds-page-title">{% if receipt %}Payment recorded{% else %}Record a payment{% endif %}</h1>
+    <p class="ds-page-meta">Invoice #{{ invoice.id }} · Still to pay {{ fmt(invoice.outstanding_cents, 'en') }}</p>
+  </div>
+</div>
+<section class="card dash-card p-3 p-md-4" aria-label="Payment details">
+{% if problem %}
+  <p class="ds-alert ds-alert-warning" role="alert">{{ problem }}. Nothing new was recorded by opening this page.</p>
+  <a class="btn btn-outline-primary" href="{{ billing_url }}">Review invoice</a>
+{% elif receipt %}
+  <dl>
+    <dt>Payment</dt><dd>#{{ receipt.id }} · {{ fmt(receipt.amount_cents, 'en') }}</dd>
+    <dt>Method</dt><dd>{{ receipt.method | replace('_', ' ') }}</dd>
+    <dt>Received on</dt><dd>{{ receipt.received_on }}</dd>
+    <dt>Recorded by</dt><dd>{{ receipt.recorded_by }}</dd>
+    {% if receipt.reference %}<dt>Receipt no.</dt><dd>{{ receipt.reference }}</dd>{% endif %}
+  </dl>
+  <p>This payment has already been recorded. Refreshing or returning to this page will not record it again. Later refunds or corrections are shown in billing.</p>
+  <div class="d-flex flex-wrap gap-2">
+    <a class="btn btn-outline-primary" href="{{ billing_url }}">Review invoice</a>
+    {% if invoice.state in ('issued', 'partially_paid') %}
+    <a class="btn btn-primary" href="{{ url_for('billing.new_payment', invoice_id=invoice.id) }}">Start another payment</a>
+    {% endif %}
+  </div>
+{% else %}
+  <p>Record money already received. This does not charge the patient. Check the amount and method before saving.</p>
+  <form method="post" action="{{ url_for('billing.record_payment', invoice_id=invoice.id) }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="intent" value="{{ token }}">
+    <input type="hidden" name="form_id" value="{{ form_id }}">
+    <div class="row g-3">
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="amount">Amount received (EUR)</label>
+        <input class="form-control" id="amount" name="amount" inputmode="decimal" maxlength="20" required autofocus aria-describedby="amount-help">
+        <small id="amount-help">Up to {{ fmt(invoice.outstanding_cents, 'en') }}. Use a comma or decimal point.</small>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="method">Method</label>
+        <select class="form-select" id="method" name="method">{% for m in methods %}<option value="{{ m }}">{{ m | replace('_', ' ') }}</option>{% endfor %}</select>
+      </div>
+      <div class="col-12 col-md-4">
+        <label class="form-label" for="reference">Receipt no. (optional)</label>
+        <input class="form-control" id="reference" name="reference" maxlength="60" aria-describedby="reference-help">
+        <small id="reference-help">Maximum 60 characters.</small>
+      </div>
+    </div>
+    <p class="mt-3">Received on {{ intent.received_on }}. This form expires after 15 minutes.</p>
+    <div class="d-flex flex-wrap gap-2">
+      <button class="btn btn-primary" type="submit">Record payment</button>
+      <a class="btn btn-outline-secondary" href="{{ billing_url }}">Cancel</a>
+    </div>
+  </form>
+{% endif %}
+</section>
+{% endblock %}
