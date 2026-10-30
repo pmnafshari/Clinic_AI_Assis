@@ -32,7 +32,7 @@
     <a class="pp-file-thumb pp-file-thumb--{{ 'img' if f.kind in ('png', 'jpeg') else 'doc' }}" href="{{ url_for('patient.file_view', doc_id=f.id) }}" tabindex="-1" aria-hidden="true">
       <span class="pp-file-badge">{{ f.kind | upper }}</span>
       {% if f.kind in ('png', 'jpeg') %}
-      <img src="{{ url_for('patient.file_preview', doc_id=f.id) }}" alt="" loading="lazy">
+      <img class="patient-file-image" src="{{ url_for('patient.file_preview', doc_id=f.id) }}" alt="{{ t('files_preview_alt', lang).format(name=name) }}" loading="lazy">
       {% else %}
       <span class="pp-file-sheet"><i></i><i></i><i></i><i></i></span>
       {% endif %}
@@ -49,7 +49,7 @@
   {% endfor %}
 </ol>
 </div>
-<p class="pp-scroll-foot"><span>{{ t('ui_file_limit', lang) }}</span></p>
+<p class="pp-scroll-foot"><span>{{ t('ui_file_limit', lang) }}</span>{% if files | selectattr('kind', 'in', ['png', 'jpeg']) | list %}<span>{{ t('files_preview_note', lang) }}</span>{% endif %}</p>
 {% else %}
 <p class="pp-note">{{ t('files_none', lang) }}</p>
 {% endif %}
