@@ -1,13 +1,15 @@
 {% extends "patient_base.html" %}
 {% block card_class %}patient-card--wide patient-card--dash{% endblock %}
 {% block lang_class %}patient-lang--wide{% endblock %}
+{% macro tile(value) %}<span class="pp-datetile" aria-hidden="true">{{ value | appt_tile(lang) }}</span>{% endmacro %}
 {% block content %}
-<div class="ds-page-head">
+<div class="ds-page-head pp-page-head">
   <div>
     <p class="ds-page-eyebrow">{{ t('nav_appointments', lang) }}</p>
     <h1 class="ds-page-title">{{ t('appt_heading', lang) }}</h1>
     <p class="ds-page-meta">{{ t('appt_intro', lang) }}</p>
   </div>
+  <a class="btn btn-dark" href="#request"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{ t('appt_request_title', lang) }}</a>
 </div>
 
 {% if request.args.get('done') == 'requested' %}
@@ -16,124 +18,169 @@
 <div class="ds-alert ds-alert-success mb-3" role="status">{{ t('appt_cancelled_ok', lang) }}</div>
 {% endif %}
 
+{# P29 redesign: one table for everything the patient asked for or booked.
+   booked rows show the confirmed time; requests and past rows the day asked
+   for. the note column reaches the page only for an open request, where it is
+   the patient's own words - on declined and cancelled rows it can be staff text. #}
+{% set total = booked | length + requested | length + history | length %}
 <div class="patient-split">
-  <div class="patient-split-main">
-    <section class="ds-card" aria-labelledby="upcoming-title">
-      <div class="ds-card-body">
-        <h2 class="ds-card-title mb-3" id="upcoming-title">{{ t('appt_upcoming', lang) }}</h2>
-        {% if booked %}
-        <ul class="ds-rows patient-scroll" tabindex="0">
-          {% for a in booked %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar-check"></i></span>
-            <span class="ds-row-main">
-              {# a booked row has a real time, so it is shown as one #}
-              <span class="patient-row-label">{{ t('appt_confirmed_time', lang) }}</span>
-              <span class="ds-row-title">{{ a.starts_at | appt_when(lang) }}</span>
-              <span class="ds-badge ds-badge-success">{{ t('ui_booked', lang) }}</span>
-              {% if a.dentist %}<span class="ds-row-sub">{{ t('appt_with', lang).format(dentist=a.dentist) }}</span>{% endif %}
-            </span>
-            <form method="post" action="{{ url_for('patient.appointments_cancel', appointment_id=a.id) }}"
-                  data-confirm="{{ t('appt_cancel_confirm', lang) }}">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('appt_cancel', lang) }}</button>
-            </form>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="text-secondary mb-0">{{ t('appt_none', lang) }}</p>
-        {% endif %}
+  <section class="pp-card patient-split-main" aria-labelledby="appt-list-title">
+    <div class="pp-card-head">
+      <h2 id="appt-list-title" class="visually-hidden">{{ t('appt_heading', lang) }}</h2>
+      {% if total %}
+      <div class="pp-seg" role="group" aria-label="{{ t('appt_show', lang) }}" data-appt-tabs hidden>
+        <button type="button" data-appt-tab="all" aria-pressed="true">{{ t('appt_tab_all', lang) }} <b>{{ total }}</b></button>
+        <button type="button" data-appt-tab="upcoming" aria-pressed="false">{{ t('appt_tab_upcoming', lang) }} <b>{{ booked | length }}</b></button>
+        <button type="button" data-appt-tab="requests" aria-pressed="false">{{ t('appt_tab_requests', lang) }} <b>{{ requested | length }}</b></button>
+        <button type="button" data-appt-tab="past" aria-pressed="false">{{ t('appt_history', lang) }} <b>{{ history | length }}</b></button>
       </div>
-    </section>
-
-    {% if requested %}
-    <section class="ds-card" aria-labelledby="pending-title">
-      <div class="ds-card-body">
-        <h2 class="ds-card-title mb-3" id="pending-title">{{ t('appt_pending', lang) }}</h2>
-        <ul class="ds-rows patient-scroll" tabindex="0">
-          {% for a in requested %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
-            <span class="ds-row-main">
-              {# NEVER a time. a request holds a date and a period, and rendering it as
-                 an hour would be inventing a confirmation the clinic has not given. #}
-              <span class="patient-row-label">{{ t('appt_requested_day', lang) }}</span>
-              <span class="ds-row-title">{{ t('appt_pending_line', lang).format(
-                   day=a.starts_at | appt_day(lang),
-                   period=t('appt_' ~ a.period, lang)) }}</span>
-              {% if a.note %}<span class="ds-row-sub"><em>{{ a.note }}</em></span>{% endif %}
-            </span>
-            <span class="ds-badge ds-badge-warning">{{ t('appt_pending_badge', lang) }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </section>
-    {% endif %}
-
-    {% if history %}
-    {# P29: an outcome stays on the page with its date and a status word. no
-       note is passed in - on these rows it can be staff text. #}
-    <section class="ds-card" aria-labelledby="history-title">
-      <div class="ds-card-body">
-        <h2 class="ds-card-title mb-1" id="history-title">{{ t('appt_history', lang) }}</h2>
-        <p class="small text-secondary mb-3">{{ t('appt_history_note', lang) }}</p>
-        <ul class="ds-rows patient-scroll" tabindex="0" aria-labelledby="history-title">
-          {% for h in history %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-{{ 'calendar-x' if h.status == 'cancelled' else 'x-circle' }}"></i></span>
-            <span class="ds-row-main">
-              {% if h.period %}
-              <span class="patient-row-label">{{ t('appt_requested_day', lang) }}</span>
-              <span class="ds-row-title">{{ h.starts_at | appt_day(lang) }}, {{ t('appt_' ~ h.period, lang) }}</span>
-              {% else %}
-              <span class="patient-row-label">{{ t('appt_confirmed_time', lang) }}</span>
-              <span class="ds-row-title">{{ h.starts_at | appt_when(lang) }}</span>
-              {% endif %}
-              {% if h.status == 'declined' %}<span class="ds-row-sub">{{ t('appt_declined_next', lang) }}</span>{% endif %}
-            </span>
-            <span class="ds-badge ds-badge-neutral">{{ t('appt_status_' ~ h.status, lang) }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </section>
-    {% endif %}
-  </div>
-
-  <section class="ds-card patient-split-side" aria-labelledby="request-title">
-    <div class="ds-card-body">
-      <h2 class="ds-card-title" id="request-title">{{ t('appt_request_title', lang) }}</h2>
-      <p class="text-secondary">{{ t('appt_request_note', lang) }}</p>
-      <form method="post" action="{{ url_for('patient.appointments_request') }}" class="mt-3">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="mb-3">
-          <label for="day" class="form-label">{{ t('appt_request_day', lang) }}</label>
-          <input type="date" id="day" name="day" class="form-control" required
-                 min="{{ today }}" value="{{ request.form.get('day', today) }}">
-        </div>
-        <fieldset class="mb-3">
-          <legend class="form-label">{{ t('appt_request_period', lang) }}</legend>
-          <div class="form-check">
-            <input class="form-check-input" type="radio" name="period" id="period-morning"
-                   value="morning" {{ 'checked' if request.form.get('period', 'morning') == 'morning' else '' }}>
-            <label class="form-check-label" for="period-morning">{{ t('appt_morning', lang) }}</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input" type="radio" name="period" id="period-afternoon"
-                   value="afternoon" {{ 'checked' if request.form.get('period') == 'afternoon' else '' }}>
-            <label class="form-check-label" for="period-afternoon">{{ t('appt_afternoon', lang) }}</label>
-          </div>
-        </fieldset>
-        <div class="mb-3">
-          <label for="reason" class="form-label">{{ t('appt_request_reason', lang) }}</label>
-          <textarea id="reason" name="reason" class="form-control" maxlength="200" rows="3" aria-describedby="reason-count">{{ request.form.get('reason', '') }}</textarea>
-          <p class="patient-counter" id="reason-count" data-count-for="reason">0 / 200 {{ t('ui_chars', lang) }}</p>
-        </div>
-        <button type="submit" class="btn btn-primary w-100">{{ t('appt_request_send', lang) }}</button>
-      </form>
+      {% endif %}
     </div>
+    {% if total %}
+    <div class="pp-box" style="--h:440px" tabindex="0" role="region" aria-labelledby="appt-list-title">
+      <table class="pp-table">
+        <thead><tr><th scope="col">{{ t('appt_col_date', lang) }}</th><th scope="col">{{ t('appt_col_with', lang) }}</th><th scope="col">{{ t('appt_col_status', lang) }}</th><th scope="col" class="text-end">{{ t('appt_col_actions', lang) }}</th></tr></thead>
+        <tbody>
+          {% for a in booked %}
+          {% set d = 'appt-d-b' ~ loop.index %}
+          <tr data-group="upcoming">
+            <td><span class="pp-label">{{ t('appt_confirmed_time', lang) }}</span>{{ a.starts_at | appt_when(lang) }}</td>
+            <td>{{ a.dentist or '-' }}</td>
+            <td><span class="pp-pill ok">{{ t('ui_booked', lang) }}</span></td>
+            <td><div class="pp-acts">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-dialog-open="{{ d }}" hidden>{{ t('appt_details', lang) }}<span class="visually-hidden">: {{ a.starts_at | appt_when(lang) }}</span></button>
+              <form method="post" id="cancel-{{ a.id }}" action="{{ url_for('patient.appointments_cancel', appointment_id=a.id) }}"
+                    data-confirm="{{ t('appt_cancel_confirm', lang) }}" data-confirm-yes="{{ t('appt_confirm_yes', lang) }}"
+                    data-confirm-no="{{ t('appt_confirm_keep', lang) }}" data-confirm-danger>
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger btn-sm">{{ t('appt_cancel', lang) }}<span class="visually-hidden">: {{ a.starts_at | appt_when(lang) }}</span></button>
+              </form>
+            </div></td>
+          </tr>
+          {% endfor %}
+          {% for a in requested %}
+          {% set d = 'appt-d-r' ~ loop.index %}
+          <tr data-group="requests">
+            {# NEVER a time. a request holds a date and a period, and rendering it as
+               an hour would be inventing a confirmation the clinic has not given. #}
+            <td><span class="pp-label">{{ t('appt_requested_day', lang) }}</span>{{ a.starts_at | appt_day(lang) }}, {{ t('appt_' ~ a.period, lang) }}</td>
+            <td class="pp-muted">{{ t('appt_not_set', lang) }}</td>
+            <td><span class="pp-pill wait">{{ t('appt_pending_badge', lang) }}</span></td>
+            <td><div class="pp-acts"><button type="button" class="btn btn-outline-secondary btn-sm" data-dialog-open="{{ d }}" hidden>{{ t('appt_details', lang) }}<span class="visually-hidden">: {{ a.starts_at | appt_day(lang) }}</span></button></div></td>
+          </tr>
+          {% endfor %}
+          {% for h in history %}
+          {% set d = 'appt-d-h' ~ loop.index %}
+          <tr data-group="past">
+            {% if h.period %}
+            <td><span class="pp-label">{{ t('appt_requested_day', lang) }}</span>{{ h.starts_at | appt_day(lang) }}, {{ t('appt_' ~ h.period, lang) }}</td>
+            {% else %}
+            <td><span class="pp-label">{{ t('appt_confirmed_time', lang) }}</span>{{ h.starts_at | appt_when(lang) }}</td>
+            {% endif %}
+            <td class="pp-muted">-</td>
+            <td><span class="pp-pill {{ 'no' if h.status == 'declined' else 'neutral' }}">{{ t('appt_status_' ~ h.status, lang) }}</span></td>
+            <td><div class="pp-acts">
+              <button type="button" class="btn btn-outline-secondary btn-sm" data-dialog-open="{{ d }}" hidden>{{ t('appt_details', lang) }}<span class="visually-hidden">: {{ h.starts_at | appt_day(lang) }}</span></button>
+              {% if h.status == 'declined' and h.period and h.starts_at[:10] >= today %}
+              <a class="btn btn-sm pp-btn-soft" href="{{ url_for('patient.appointments_page', day=h.starts_at[:10], period=h.period) }}#request">{{ t('appt_ask_again', lang) }}<span class="visually-hidden">: {{ h.starts_at | appt_day(lang) }}</span></a>
+              {% endif %}
+            </div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="pp-scroll-foot"><span>{{ t('appt_count', lang).format(n=total) }}</span><span>{{ t('appt_history_note', lang) }}</span></p>
+    {% else %}
+    <p class="pp-muted mb-0">{{ t('appt_none', lang) }}</p>
+    {% endif %}
+  </section>
+
+  <section class="pp-card patient-split-side" id="request" aria-labelledby="request-title">
+    <h2 class="ds-card-title" id="request-title">{{ t('appt_request_title', lang) }}</h2>
+    <p class="pp-muted">{{ t('appt_request_note', lang) }}</p>
+    {% set form_day = request.form.get('day') or prefill_day or today %}
+    {% set form_period = request.form.get('period') or prefill_period or 'morning' %}
+    <form method="post" action="{{ url_for('patient.appointments_request') }}" class="mt-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="mb-3">
+        <label for="day" class="form-label">{{ t('appt_request_day', lang) }}</label>
+        <input type="date" id="day" name="day" class="form-control" required min="{{ today }}" value="{{ form_day }}">
+      </div>
+      <fieldset class="mb-3">
+        <legend class="form-label">{{ t('appt_request_period', lang) }}</legend>
+        <div class="pp-radio">
+          <input type="radio" name="period" id="period-morning"
+                 value="morning" {{ 'checked' if form_period == 'morning' else '' }}>
+          <label for="period-morning">{{ t('appt_morning', lang) }}</label>
+          <input type="radio" name="period" id="period-afternoon"
+                 value="afternoon" {{ 'checked' if form_period == 'afternoon' else '' }}>
+          <label for="period-afternoon">{{ t('appt_afternoon', lang) }}</label>
+        </div>
+      </fieldset>
+      <div class="mb-3">
+        <label for="reason" class="form-label">{{ t('appt_request_reason', lang) }}</label>
+        <textarea id="reason" name="reason" class="form-control" maxlength="200" rows="3" aria-describedby="reason-count">{{ request.form.get('reason', '') }}</textarea>
+        <p class="patient-counter" id="reason-count" data-count-for="reason">0 / 200 {{ t('ui_chars', lang) }}</p>
+      </div>
+      <button type="submit" class="btn btn-dark w-100">{{ t('appt_request_send', lang) }}</button>
+    </form>
   </section>
 </div>
+
+{# the details panels: sized to their content, the date leads. a booked one
+   reaches the row's own cancel form through form="cancel-N", so there is one
+   cancel form per booking and it always asks once before it happens. #}
+{% for a in booked %}
+<dialog class="pp-detail" id="appt-d-b{{ loop.index }}" aria-labelledby="appt-d-b{{ loop.index }}-t">
+  <div class="pp-detail-top">
+    <p class="pp-detail-bar"><span id="appt-d-b{{ loop.index }}-t">{{ t('appt_detail_title', lang) }}</span>
+      <button type="button" class="pp-detail-x" data-dialog-close aria-label="{{ t('appt_close', lang) }}"><i class="bi bi-x-lg" aria-hidden="true"></i></button></p>
+    <div class="pp-detail-who">{{ tile(a.starts_at) }}<div><p class="pp-hero-big">{{ a.starts_at | appt_when(lang) }}</p><span class="pp-pill ok">{{ t('ui_booked', lang) }}</span></div></div>
+  </div>
+  <dl class="pp-detail-rows">
+    <div><dt><i class="bi bi-clock" aria-hidden="true"></i> {{ t('appt_confirmed_time', lang) }}</dt><dd>{{ a.starts_at | appt_when(lang) }}</dd></div>
+    <div><dt><i class="bi bi-person" aria-hidden="true"></i> {{ t('appt_col_with', lang) }}</dt><dd>{{ a.dentist or '-' }}</dd></div>
+  </dl>
+  <p class="pp-note">{{ t('appt_help', lang) }}</p>
+  <div class="pp-detail-foot">
+    <button type="button" class="btn btn-outline-secondary" data-dialog-close>{{ t('appt_close', lang) }}</button>
+    <button type="submit" class="btn btn-outline-danger" form="cancel-{{ a.id }}">{{ t('appt_cancel_visit', lang) }}</button>
+  </div>
+</dialog>
+{% endfor %}
+{% for a in requested %}
+<dialog class="pp-detail" id="appt-d-r{{ loop.index }}" aria-labelledby="appt-d-r{{ loop.index }}-t">
+  <div class="pp-detail-top">
+    <p class="pp-detail-bar"><span id="appt-d-r{{ loop.index }}-t">{{ t('appt_detail_title', lang) }}</span>
+      <button type="button" class="pp-detail-x" data-dialog-close aria-label="{{ t('appt_close', lang) }}"><i class="bi bi-x-lg" aria-hidden="true"></i></button></p>
+    <div class="pp-detail-who">{{ tile(a.starts_at) }}<div><p class="pp-hero-big">{{ a.starts_at | appt_day(lang) }}, {{ t('appt_' ~ a.period, lang) }}</p><span class="pp-pill wait">{{ t('appt_pending_badge', lang) }}</span></div></div>
+  </div>
+  <dl class="pp-detail-rows">
+    <div><dt><i class="bi bi-calendar3" aria-hidden="true"></i> {{ t('appt_requested_day', lang) }}</dt><dd>{{ a.starts_at | appt_day(lang) }}, {{ t('appt_' ~ a.period, lang) }}</dd></div>
+    <div><dt><i class="bi bi-person" aria-hidden="true"></i> {{ t('appt_col_with', lang) }}</dt><dd>{{ t('appt_not_set', lang) }}</dd></div>
+    {% if a.note %}<div><dt><i class="bi bi-chat-left-text" aria-hidden="true"></i> {{ t('appt_reason_label', lang) }}</dt><dd>{{ a.note }}</dd></div>{% endif %}
+  </dl>
+  <p class="pp-note">{{ t('appt_pending_line', lang).format(day=a.starts_at | appt_day(lang), period=t('appt_' ~ a.period, lang)) }}</p>
+  <div class="pp-detail-foot"><button type="button" class="btn btn-outline-secondary" data-dialog-close>{{ t('appt_close', lang) }}</button></div>
+</dialog>
+{% endfor %}
+{% for h in history %}
+<dialog class="pp-detail" id="appt-d-h{{ loop.index }}" aria-labelledby="appt-d-h{{ loop.index }}-t">
+  <div class="pp-detail-top">
+    <p class="pp-detail-bar"><span id="appt-d-h{{ loop.index }}-t">{{ t('appt_detail_title', lang) }}</span>
+      <button type="button" class="pp-detail-x" data-dialog-close aria-label="{{ t('appt_close', lang) }}"><i class="bi bi-x-lg" aria-hidden="true"></i></button></p>
+    <div class="pp-detail-who">{{ tile(h.starts_at) }}<div><p class="pp-hero-big">{% if h.period %}{{ h.starts_at | appt_day(lang) }}, {{ t('appt_' ~ h.period, lang) }}{% else %}{{ h.starts_at | appt_when(lang) }}{% endif %}</p><span class="pp-pill {{ 'no' if h.status == 'declined' else 'neutral' }}">{{ t('appt_status_' ~ h.status, lang) }}</span></div></div>
+  </div>
+  <dl class="pp-detail-rows">
+    {% if h.period %}
+    <div><dt><i class="bi bi-calendar3" aria-hidden="true"></i> {{ t('appt_requested_day', lang) }}</dt><dd>{{ h.starts_at | appt_day(lang) }}, {{ t('appt_' ~ h.period, lang) }}</dd></div>
+    {% else %}
+    <div><dt><i class="bi bi-clock" aria-hidden="true"></i> {{ t('appt_confirmed_time', lang) }}</dt><dd>{{ h.starts_at | appt_when(lang) }}</dd></div>
+    {% endif %}
+  </dl>
+  {% if h.status == 'declined' %}<p class="pp-note">{{ t('appt_declined_next', lang) }}</p>{% endif %}
+  <div class="pp-detail-foot"><button type="button" class="btn btn-outline-secondary" data-dialog-close>{{ t('appt_close', lang) }}</button></div>
+</dialog>
+{% endfor %}
 {% endblock %}

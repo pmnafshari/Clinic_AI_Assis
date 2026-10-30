@@ -2192,7 +2192,12 @@ def selftest():
         c.close()
         page34 = client34.get("/appointments").text
         assert on_page(t("appt_history", "it"), page34), "34b: the past requests have their own section"
-        history34 = page34.split('id="history-title"')[1]
+        # P29 redesign: one table; the past rows and their details panels
+        def group34(page, name):
+            rows = re.findall(rf'<tr data-group="{name}">(.*?)</tr>', page, re.S)
+            panels = re.findall(r'<dialog class="pp-detail" id="appt-d-h\d+".*?</dialog>', page, re.S) if name == "past" else []
+            return rows, "".join(rows + panels)
+        _, history34 = group34(page34, "past")
         assert on_page(t("appt_status_declined", "it"), history34), "34b: declined says so in words"
         assert on_page(t("appt_status_cancelled", "it"), history34), "34b: cancelled says so in words"
         assert on_page(t("appt_declined_next", "it"), history34), "34b: and what to do next"
@@ -2201,7 +2206,7 @@ def selftest():
             on_page(t("appt_confirmed_time", "it"), history34), "34b: each date says what it is"
         assert "11:15" in history34, "34b: a cancelled booking keeps the time that was confirmed"
         assert "00:00" not in page34, "34b: a request is never given a time"
-        upcoming34 = page34.split('id="upcoming-title"')[1].split('id="history-title"')[0]
+        _, upcoming34 = group34(page34, "upcoming")
         assert "16:45" in upcoming34 and on_page(t("appt_confirmed_time", "it"), upcoming34), \
             "34b: the booked row is labelled as the confirmed time"
         day_fmt = app.jinja_env.filters["appt_day"]
@@ -2211,8 +2216,8 @@ def selftest():
         for _ in range(patient_routes.HISTORY_LIMIT + 3):
             _appt34.decline(c, _appt34.request(c, cf34, day7, "morning", None))
         c.close()
-        history34 = client34.get("/appointments").text.split('id="history-title"')[1]
-        assert history34.count("<li class=\"ds-row\">") == patient_routes.HISTORY_LIMIT, \
+        past_rows34, _ = group34(client34.get("/appointments").text, "past")
+        assert len(past_rows34) == patient_routes.HISTORY_LIMIT, \
             "34b: the history is bounded"
         assert t("appt_history", "it") not in other34.get("/appointments").text, \
             "34b: another patient's outcomes are never listed"
@@ -2430,6 +2435,40 @@ def selftest():
         assert on_page(t("kpi_requests_wait", "it"), home35), "35b: the request card says one is waiting"
         files_card35 = home35.split('id="home-files"')[1].split("</a>")[0]
         assert ">1<" in files_card35.replace(" ", ""), "35b: one shared file is counted"
+
+        # 35c. appointments: one table with tabs, a details panel per row, a
+        # confirm step on cancel, and "ask again" only for a day still ahead
+        day12_35 = (datetime.now().date() + timedelta(days=12)).isoformat()
+        past_35 = (datetime.now().date() - timedelta(days=20)).isoformat()
+        c = raw_db()
+        future_declined = _appt35.request(c, cf35, day12_35, "morning", None)
+        _appt35.decline(c, future_declined, "STAFF-ONLY reason one")
+        past_declined = _appt35.request(c, cf35, day12_35, "afternoon", None)
+        _appt35.decline(c, past_declined, "STAFF-ONLY reason two")
+        c.execute("UPDATE appointments SET starts_at = ? WHERE id = ?", (f"{past_35}T00:00:00", past_declined))
+        c.commit()
+        c.close()
+        appt35 = client35.get("/appointments").text
+        rows35 = re.findall(r'<tr data-group="(\w+)"', appt35)
+        assert rows35.count("upcoming") == 1 and rows35.count("requests") == 1 and rows35.count("past") == 2, rows35
+        for group, n in (("all", 4), ("upcoming", 1), ("requests", 1), ("past", 2)):
+            assert re.search(rf'data-appt-tab="{group}"[^>]*>[^<]*<b>{n}</b>', appt35), f"35c: the {group} tab counts {n}"
+        opens35 = re.findall(r'data-dialog-open="(appt-d-[brh]\d+)"', appt35)
+        assert len(opens35) == 4 and all(f'<dialog class="pp-detail" id="{d}"' in appt35 for d in opens35), \
+            "35c: every row has a details panel"
+        assert "STAFF-ONLY" not in appt35, "35c: HARD FAIL - a staff decline reason reached the page"
+        assert appt35.count("data-confirm-danger") == 1 and appt35.count('form="cancel-') == 1, \
+            "35c: one cancel form, reached from the row and from its panel"
+        assert f'href="/appointments?day={day12_35}&amp;period=morning#request"' in appt35, \
+            "35c: a declined day still ahead can be asked again"
+        assert f"day={past_35}" not in appt35, "35c: a past day is never offered again"
+        pre35 = client35.get(f"/appointments?day={day12_35}&period=afternoon").text
+        assert f'value="{day12_35}"' in pre35 and re.search(r'id="period-afternoon"\s+value="afternoon"\s+checked', pre35), \
+            "35c: ask again fills the form"
+        for bad in ("day=1999-01-01&period=afternoon", "day=nonsense", "day=" + day12_35 + "&period=evening"):
+            page = client35.get("/appointments?" + bad).text
+            assert "1999-01-01" not in page and "nonsense" not in page and \
+                re.search(r'id="period-morning"\s+value="morning"\s+checked', page), f"35c: {bad} is ignored"
 
     print("selftest ok")
 

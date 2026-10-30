@@ -3,12 +3,20 @@
   const dialog = document.getElementById('patient-confirm');
   const message = document.getElementById('patient-confirm-message');
   let proceed = null;
-  function confirmChoice(text, action) {
+  const yesButton = dialog.querySelector('[data-dialog-confirm]');
+  const noButton = dialog.querySelector('[data-dialog-cancel]');
+  const yesLabel = yesButton.textContent;
+  const noLabel = noButton.textContent;
+  // a form may name its own answers and mark a cancelling action (P29)
+  function confirmChoice(text, action, form) {
     if (!dialog || typeof dialog.showModal !== 'function') {
       if (window.confirm(text)) action();
       return;
     }
     message.textContent = text;
+    yesButton.textContent = (form && form.dataset.confirmYes) || yesLabel;
+    noButton.textContent = (form && form.dataset.confirmNo) || noLabel;
+    dialog.classList.toggle('is-danger', !!(form && 'confirmDanger' in form.dataset));
     proceed = action;
     dialog.showModal();
     dialog.querySelector('[data-dialog-cancel]').focus();
@@ -23,7 +31,7 @@
   document.querySelectorAll('form[data-confirm]').forEach(form => {
     form.addEventListener('submit', event => {
       event.preventDefault();
-      confirmChoice(form.dataset.confirm, () => HTMLFormElement.prototype.submit.call(form));
+      confirmChoice(form.dataset.confirm, () => HTMLFormElement.prototype.submit.call(form), form);
     });
   });
   const changed = new Set();
@@ -48,6 +56,28 @@
     const update = () => { counter.textContent = `${field.value.length} / ${field.maxLength} ${suffix}`; };
     field.addEventListener('input', update);
     update();
+  });
+  // P29: details panels open from their row; close with the button or Escape
+  document.querySelectorAll('[data-dialog-open]').forEach(button => {
+    const panel = document.getElementById(button.dataset.dialogOpen);
+    if (!panel || typeof panel.showModal !== 'function') return;
+    button.hidden = false;
+    button.addEventListener('click', () => panel.showModal());
+  });
+  document.querySelectorAll('[data-dialog-close]').forEach(button => {
+    button.addEventListener('click', () => button.closest('dialog').close());
+  });
+  // P29: tabs that show one group of table rows at a time
+  document.querySelectorAll('[data-appt-tabs], [data-bill-tabs]').forEach(tabs => {
+    const table = tabs.closest('section').querySelector('tbody');
+    tabs.hidden = false;
+    tabs.querySelectorAll('button').forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.querySelectorAll('button').forEach(other => other.setAttribute('aria-pressed', String(other === tab)));
+        const group = tab.dataset.apptTab || tab.dataset.billTab;
+        table.querySelectorAll('tr[data-group]').forEach(row => { row.hidden = group !== 'all' && row.dataset.group !== group; });
+      });
+    });
   });
   const filters = document.querySelector('[data-file-filters]');
   if (filters) {

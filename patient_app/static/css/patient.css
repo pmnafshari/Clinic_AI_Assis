@@ -671,7 +671,8 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 .pp-pill.no { background: var(--pp-no-bg); color: var(--pp-no); }
 .pp-pill.neutral { background: var(--pp-sunken); color: var(--pp-muted); border: 1px solid var(--pp-line); }
 /* a box keeps its height; more rows scroll inside it and the header row stays in place */
-.pp-box { max-height: var(--h, 360px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--pp-scroll) transparent; border-radius: 12px; }
+/* relative: the screen-reader-only text in row buttons is absolutely placed, and must stay clipped by the box */
+.pp-box { position: relative; max-height: var(--h, 360px); overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--pp-scroll) transparent; border-radius: 12px; }
 .pp-box::-webkit-scrollbar { width: 8px; height: 8px; }
 .pp-box::-webkit-scrollbar-thumb { background: var(--pp-scroll); border-radius: 8px; }
 .pp-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .93rem; margin: 0; }
@@ -723,3 +724,42 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 .pp-link-text { margin-top: 6px; font-size: .86rem; font-weight: 650; color: var(--pp-ink); }
 .patient-signed-in .patient-nav { align-items: stretch; }
 .patient-signed-in .patient-nav .patient-nav-link { justify-content: flex-start; width: 100%; }
+
+/* appointments: page head with its main action, the table card beside the request form */
+.pp-page-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.pp-btn-soft { background: var(--pp-ok-bg); color: var(--pp-ok); border-color: transparent; }
+.pp-btn-soft:hover { background: #d3eadc; color: var(--pp-ok); }
+.btn-outline-danger { color: var(--pp-no); border-color: #e7b9b3; background: var(--pp-surface); }
+.btn-outline-danger:hover, .btn-outline-danger:focus { background: var(--pp-no); border-color: var(--pp-no); color: #fff; }
+.pp-radio { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pp-radio input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pp-radio label { display: grid; place-items: center; min-height: 44px; border: 1px solid #aebdb4; border-radius: 10px; font-weight: 500; cursor: pointer; }
+.pp-radio input:checked + label { background: var(--pp-ink); border-color: var(--pp-ink); color: #fff; }
+.pp-radio input:focus-visible + label { outline: 3px solid #977013; outline-offset: 3px; }
+.pp-note { display: block; background: var(--pp-sunken); border: 1px solid var(--pp-line); border-radius: 12px; padding: 10px 12px; color: var(--pp-muted); font-size: .88rem; margin: 0; }
+
+/* the details panel: only as tall as what it shows, the date leads */
+.pp-detail { width: min(92vw, 380px); padding: 0; border: 1px solid var(--pp-line); border-radius: 20px; overflow: hidden; color: var(--pp-text); box-shadow: 0 24px 70px #183b3433; }
+.pp-detail::backdrop { background: #10282188; }
+.pp-detail-top { background: var(--pp-ink); color: #fff; padding: 14px 18px 18px; display: grid; gap: 12px; }
+.pp-detail-bar { display: flex; align-items: center; gap: 8px; margin: 0; font-size: .86rem; opacity: .9; }
+.pp-detail-x { margin-left: auto; width: 36px; height: 36px; border-radius: 10px; border: 0; background: rgba(255, 255, 255, .14); color: #fff; display: grid; place-items: center; }
+.pp-detail-who { display: flex; align-items: center; gap: 14px; }
+.pp-detail-who .pp-hero-big { font-size: 1.1rem; margin: 0 0 6px; }
+.pp-detail-top .pp-pill.ok { background: rgba(124, 196, 166, .22); color: #c9f0dc; }
+.pp-detail-top .pp-pill.wait { background: rgba(252, 239, 220, .2); color: #fde3bd; }
+.pp-detail-top .pp-pill.no { background: rgba(251, 231, 229, .2); color: #ffd2cc; }
+.pp-detail-top .pp-pill.neutral { background: rgba(255, 255, 255, .14); color: #fff; border: 0; }
+.pp-detail-rows { margin: 0; padding: 6px 18px; }
+.pp-detail-rows > div { display: grid; gap: 2px; padding: 11px 0; border-bottom: 1px solid var(--pp-line); }
+.pp-detail-rows > div:last-child { border-bottom: 0; }
+.pp-detail-rows dt { font-size: .8rem; font-weight: 500; color: var(--pp-muted); }
+.pp-detail-rows dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.pp-detail > .pp-note { margin: 0 18px; }
+.pp-detail-foot { display: flex; gap: 8px; padding: 16px 18px 18px; }
+.pp-detail-foot .btn { flex: 1; }
+/* the shared confirm dialog, red when it confirms a cancellation */
+.patient-dialog.is-danger [data-dialog-confirm] { background: var(--pp-no); border-color: var(--pp-no); color: #fff; }
+@media (min-width: 1101px) { .patient-split { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); } }
+.pp-table .pp-acts { flex-wrap: nowrap; }
+.pp-table td:first-child { min-width: 10.5rem; }

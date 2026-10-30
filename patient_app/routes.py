@@ -5,6 +5,7 @@ before_request function so the "don't trap the user" property lives in one
 place, the same shape app/__init__.py uses for CHANGE_PW_ALLOWED.
 """
 
+from datetime import date
 from pathlib import Path
 
 from flask import (Blueprint, Response, abort, current_app, g, redirect, render_template, request,
@@ -13,6 +14,7 @@ from werkzeug.exceptions import HTTPException
 
 from codice_fiscale import normalize as normalize_cf
 import appointments
+import clinic_time
 import consent
 import ledger
 import data_rights
@@ -468,13 +470,28 @@ def _appointment_history(conn, cf):
             for r in rows[:HISTORY_LIMIT]]
 
 
+def _prefill():
+    """P29: "ask again" fills the request form - only with a real day still ahead and a known period."""
+    # both or nothing: a refused day takes its period with it
+    day = request.args.get("day", "")
+    try:
+        if date.fromisoformat(day) < clinic_time.now().date():
+            return "", ""
+    except ValueError:
+        return "", ""
+    period = request.args.get("period", "")
+    return day, period if period in appointments.PERIODS else ""
+
+
 @patient_bp.route("/appointments")
 def appointments_page():
     cf = g.patient["codice_fiscale"]
     booked, requested = appointments.open_for_patient(get_db(), cf)
+    prefill_day, prefill_period = _prefill()
     return render_template("patient_appointments.html",
                            booked=booked, requested=requested,
-                           history=_appointment_history(get_db(), cf))
+                           history=_appointment_history(get_db(), cf),
+                           prefill_day=prefill_day, prefill_period=prefill_period)
 
 
 @patient_bp.route("/appointments/request", methods=["POST"])

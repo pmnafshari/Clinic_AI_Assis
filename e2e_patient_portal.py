@@ -180,8 +180,8 @@ def walk():
                     # P29 S1: each shared image has a View button named after the file.
                     expect(page.get_by_role('link', name=re.compile(r'^View\s*:'))).to_have_count(6)
                     page.goto(base + '/appointments')
-                    expect(page.locator('#history-title')).to_be_visible()
-                    expect(page.locator('#history-title ~ ul').get_by_text('Declined', exact=True)).to_be_visible()
+                    expect(page.locator('tr[data-group="past"]').first).to_be_visible()
+                    expect(page.locator('tr[data-group="past"]').get_by_text('Declined', exact=True)).to_be_visible()
                     expect(page.get_by_text('Requested day').first).to_be_visible()
                     assert 'STAFF-ONLY' not in page.content()
                     page.goto(base + '/billing')
@@ -205,7 +205,7 @@ def walk():
                     page.locator('#reason').fill('First line\nSecond line')
                     expect(page.locator('#reason-count')).to_contain_text('22 / 200')
                     page.locator('[data-locale-link]').filter(has_text='IT').click()
-                    expect(page.locator('dialog')).to_be_visible()
+                    expect(page.locator('#patient-confirm')).to_be_visible()
                     page.keyboard.press('Escape')
                     expect(page.locator('#reason')).to_have_value('First line\nSecond line')
                     # Cancel never submits until the confirmation action; keyboard focus starts safely.
