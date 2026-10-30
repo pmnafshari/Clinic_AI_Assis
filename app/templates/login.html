@@ -24,8 +24,9 @@
         <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
         {% endif %}
 
-        <form method="post" action="{{ url_for('auth.login') }}">
+        <form method="post" action="{{ url_for('auth.login') }}" data-login-return>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ return_to }}">
           <div class="ds-field">
             <label for="username" class="ds-label">Username</label>
             <input type="text" id="username" name="username" class="ds-input" autocomplete="username" autofocus>
@@ -50,4 +51,5 @@
     </div>
   </div>
 </div>
+<script src="{{ url_for('static', filename='js/login_return.js') }}" defer></script>
 {% endblock %}

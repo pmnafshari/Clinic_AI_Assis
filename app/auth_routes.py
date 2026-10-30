@@ -6,6 +6,7 @@ import web_session
 from auth import PERMISSIONS, log_audit
 
 from .db import get_db
+from .login_return import local_destination
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -22,18 +23,19 @@ def session():
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
+    target = local_destination((request.args if request.method == "GET" else request.form).get("next"))
     if request.method == "GET":
-        return render_template("login.html")
+        return render_template("login.html", return_to=target)
 
     username = request.form.get("username", "")
     password = request.form.get("password", "")
 
     role = web_auth.attempt_login(username, password, get_db())
     if role is None:
-        return render_template("login.html", error="invalid username or password")
+        return render_template("login.html", error="invalid username or password", return_to=target)
 
     token = web_session.create_session(get_db(), username, role)
-    resp = redirect(url_for("dashboard.index"))
+    resp = redirect(target or url_for("dashboard.index"))
     resp.set_cookie(
         web_session.COOKIE_NAME, token,
         httponly=True, samesite="Strict", max_age=None,
@@ -44,16 +46,17 @@ def login():
 @auth_bp.route("/change-password", methods=["GET", "POST"])
 def change_password():
     min_length = web_auth.MIN_PASSWORD_LENGTH
+    target = local_destination((request.args if request.method == "GET" else request.form).get("next"))
 
     if request.method == "GET":
-        return render_template("change_password.html", min_length=min_length)
+        return render_template("change_password.html", min_length=min_length, return_to=target)
 
     current = request.form.get("current", "")
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
 
     def refuse(message):
-        return render_template("change_password.html", error=message, min_length=min_length)
+        return render_template("change_password.html", error=message, min_length=min_length, return_to=target)
 
     # cheap validations first, the credential check last - otherwise a typo in
     # confirm or a short new password burns a failed attempt against the
@@ -86,7 +89,7 @@ def change_password():
     # every session for this account, including this one (D-03) - matches what
     # disabling an account already does
     web_session.destroy_user_sessions(conn, g.user["username"])
-    resp = redirect(url_for("auth.login"))
+    resp = redirect(url_for("auth.login", **({"next": target} if target else {})))
     resp.delete_cookie(web_session.COOKIE_NAME)
     return resp
 

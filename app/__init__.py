@@ -14,6 +14,7 @@ from shared.names import initials, tint
 from storage import init_db
 
 from . import db
+from .login_return import authentication_url
 
 # "shared" serves the cross-app token/component css and the font. the login
 # page needs it before any session exists, which is the same reason "static"
@@ -190,11 +191,11 @@ def create_app():
             web_session.destroy_session(db.get_db(), token)      # its Jarvis sign-in ended (00:00, sign out)
             user = None
         if user is None:
-            return redirect(url_for("auth.login"))
+            return redirect(authentication_url("auth.login"))
         g.user = user
 
         if user["must_change_password"] and request.endpoint not in CHANGE_PW_ALLOWED:
-            return redirect(url_for("auth.change_password"))
+            return redirect(authentication_url("auth.change_password"))
 
     return app
 
