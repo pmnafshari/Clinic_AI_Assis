@@ -221,7 +221,10 @@ STRINGS = {
         "it": "Per usare l'assistente serve il tuo consenso. Puoi darlo o ritirarlo dal tuo profilo.",
         "en": "The assistant needs your consent first. You can give or withdraw it from your profile.",
     },
-    "chat_consent_link": {"it": "Vai al profilo", "en": "Go to your profile"},
+    # P29 S1; Italian awaits native-speaker review.
+    "chat_consent_state": {"it": "Consenso per l'assistente: {state}",
+                           "en": "Consent for the assistant: {state}"},
+    "chat_consent_open": {"it": "Gestisci il consenso nel profilo", "en": "Manage this consent in your profile"},
 
     # billing (P07). figures come from the ledger, the same as the staff page
     "bill_heading": {"it": "Fatture e pagamenti", "en": "Invoices and payments"},
@@ -490,6 +493,20 @@ STRINGS = {
         "it": "Richiesta di contatto in attesa",
         "en": "Call-back request waiting",
     },
+    # P29 S1; Italian awaits native-speaker review. what the patient asked
+    # about is the queue's topic - the question itself is never stored, and
+    # nothing here says when or whether someone will call
+    "handoff_since": {"it": "In attesa dal {when}", "en": "Waiting since {when}"},
+    "handoff_about": {"it": "Argomento: {topic}", "en": "About: {topic}"},
+    "handoff_no_time": {
+        "it": "La richiesta è nella coda dello studio. Non possiamo indicare quando arriverà una risposta.",
+        "en": "The request is in the clinic's queue. We cannot say when you will get a reply.",
+    },
+    "handoff_topic_appointment": {"it": "appuntamenti", "en": "appointments"},
+    "handoff_topic_billing": {"it": "pagamenti", "en": "payments"},
+    "handoff_topic_clinical": {"it": "una domanda clinica", "en": "a clinical question"},
+    "handoff_topic_records": {"it": "documenti e dati", "en": "records and data"},
+    "handoff_topic_other": {"it": "altro", "en": "something else"},
     "question_label": {"it": "La tua domanda", "en": "Your question"},
     "question_placeholder": {
         "it": "Es. Quando è il mio prossimo appuntamento?",

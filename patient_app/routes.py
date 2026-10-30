@@ -380,7 +380,12 @@ def chat_page():
         if request.method == "POST":
             log_audit(get_db(), g.patient["patient_id"], "patient", "patient_query",
                       "consent_required", allowed=0, ip=net.from_request(request))
-        return render_template("patient_chat.html", consent_needed=True)
+        # the state is shown beside the link, so the patient knows why
+        # before being sent to the profile (P29)
+        ai = [c for c in consent.state(get_db(), g.patient["patient_id"], current_language())
+              if c["purpose"] == "ai_assistant"]
+        return render_template("patient_chat.html", consent_needed=True,
+                               consent_row=ai[0] if ai else None)
 
     if request.method == "GET":
         return render_template("patient_chat.html",

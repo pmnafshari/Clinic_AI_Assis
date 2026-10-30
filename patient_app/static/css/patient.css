@@ -613,3 +613,5 @@ textarea.chat-input { min-height: 100px; resize: vertical; padding: 10px; line-h
 .patient-money .ds-numeral { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .patient-money tfoot th, .patient-money tfoot td { font-weight: var(--ds-weight-semibold); }
 .patient-money-caption { caption-side: top; padding: 0 0 4px; color: var(--ds-text); font-weight: var(--ds-weight-semibold); }
+.patient-waiting { margin-bottom: var(--ds-space-5); }
+.patient-waiting ul li { overflow-wrap: anywhere; }

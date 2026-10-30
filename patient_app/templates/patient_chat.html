@@ -9,7 +9,12 @@
 {% if consent_needed %}
 <div class="card chat-response p-4" role="status">
   <p class="mb-2">{{ t('chat_consent_needed', lang) }}</p>
-  <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-primary btn-sm">{{ t('chat_consent_link', lang) }}</a>
+  {% if consent_row %}
+  {# the same four words the profile uses, so the two pages agree #}
+  {% set c = consent_row %}
+  <p class="mb-2"><strong>{{ t('chat_consent_state', lang).format(state=t('consent_given', lang) if c.granted and not c.outdated else t('consent_outdated', lang) if c.outdated else t('consent_withdrawn', lang) if c.recorded else t('consent_not_asked', lang)) }}</strong></p>
+  {% endif %}
+  <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-primary btn-sm">{{ t('chat_consent_open', lang) }}</a>
 </div>
 {% else %}
 
@@ -33,9 +38,17 @@
 {% if waiting %}
 {# P10.05: what the patient can see about a call-back. a status, never an ETA -
    nothing was sent to them, because there is no messaging provider. #}
-<p class="ds-note" role="status">
-  <i class="bi bi-telephone" aria-hidden="true"></i> {{ t('handoff_status', lang) }}
-</p>
+<div class="ds-note patient-waiting" role="status">
+  <p class="mb-1"><i class="bi bi-telephone" aria-hidden="true"></i> <strong>{{ t('handoff_status', lang) }}</strong></p>
+  {# P29: since when and the topic only. who took it and any staff note stay
+     on the staff side #}
+  <ul class="list-unstyled mb-1">
+    {% for h in waiting %}
+    <li>{{ t('handoff_since', lang).format(when=h.created_at | appt_when(lang)) }} · {{ t('handoff_about', lang).format(topic=t('handoff_topic_' ~ h.topic, lang)) }}</li>
+    {% endfor %}
+  </ul>
+  <p class="small mb-0">{{ t('handoff_no_time', lang) }}</p>
+</div>
 {% endif %}
 
 {# exactly one response region, rendered only when a POST produced a state -
