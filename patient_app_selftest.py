@@ -2110,6 +2110,247 @@ def selftest():
         assert count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_scope_violation'") \
             == before33 + 1, "33c: and the attempt is logged as a scope violation"
 
+        # 34. P29 S1 - patient portal fixes. two fresh patients, so nothing
+        # seeded above shows up on these pages
+        import hashlib
+        import appointments as _appt34
+        import documents as _docs34
+        import handoff as _handoff34
+        import ledger as _ledger34
+        import patient_files as _pfiles34
+        from patient_files_selftest import png as _png34
+
+        reset34 = raw_db()
+        reset34.execute("DELETE FROM patient_login_attempts")
+        reset34.commit()
+        reset34.close()
+        cf34, cf34_other = "ZZPS290101010101", "ZZPS290101010102"
+        pin34 = seed_and_issue(cf34, "portal patient")
+        pin34_other = seed_and_issue(cf34_other, "other portal patient", with_consent=False)
+        pid34, pid34_other = pid_of(cf34), pid_of(cf34_other)
+
+        # 34a. login destination: the page asked for survives the login and the
+        # forced pin change, and nothing but a local page path is accepted
+        client34 = app.test_client()
+        bounced34 = client34.get("/billing")
+        assert bounced34.status_code == 302 and \
+            bounced34.headers["Location"] == "/login?next=/billing", \
+            f"34a: the login keeps the page asked for, got {bounced34.headers['Location']}"
+        page = client34.get(bounced34.headers["Location"])
+        assert 'name="next" value="/billing"' in page.text, "34a: the form carries it"
+        resp = client34.post("/login", data={"codice_fiscale": cf34, "pin": pin34, "next": "/billing",
+                                             "csrf_token": _csrf_from(page.text)})
+        assert resp.headers["Location"] == "/billing", \
+            f"34a: signed in, the patient goes back to the page, got {resp.headers['Location']}"
+        gate34 = client34.get("/billing")
+        assert gate34.status_code == 302 and \
+            gate34.headers["Location"] == "/change-pin?next=/billing", \
+            "34a: the forced pin change still comes first, and keeps the page"
+        page = client34.get(gate34.headers["Location"])
+        assert 'name="next" value="/billing"' in page.text, "34a: the pin form carries it"
+        done34 = client34.post("/change-pin", data={"pin": "24681357", "confirm": "24681357",
+                                                    "next": "/billing", "csrf_token": _csrf_from(page.text)})
+        assert done34.headers["Location"] == "/billing", "34a: and lands on it after the change"
+
+        hostile34 = ["https://evil.invalid/", "http:/evil.invalid", "//evil.invalid", "///evil.invalid",
+                     "/\\evil.invalid", "\\\\evil.invalid", "/%2F%2Fevil.invalid", "%2F%2Fevil.invalid",
+                     "/%252F%252Fevil.invalid", "/%62illing", "javascript:alert(1)", " /billing",
+                     "/billing\n", "/billing?next=//evil.invalid", "/billing#x", "/./billing",
+                     "/files/1/download", "/files/1/preview", "/data-requests/1/download", "/logout",
+                     "/login", "/change-pin", "/lang/en", "/no-such-page", "", None, 42]
+        with app.test_request_context():
+            for value in hostile34:
+                assert patient_routes.local_return(value) == "", f"34a: {value!r} must be refused"
+            for value in ("/", "/billing", "/appointments", "/files", "/profile", "/chat"):
+                assert patient_routes.local_return(value) == value, f"34a: {value} is a portal page"
+
+        # the refusal end to end, on the login and on the pin change
+        other34 = app.test_client()
+        page = other34.get("/login?next=//evil.invalid")
+        assert "evil.invalid" not in page.text, "34a: a refused target is not echoed into the form"
+        resp = other34.post("/login", data={"codice_fiscale": cf34_other, "pin": pin34_other,
+                                            "next": "//evil.invalid", "csrf_token": _csrf_from(page.text)})
+        assert resp.headers["Location"] == "/", f"34a: refused -> home, got {resp.headers['Location']}"
+        page = other34.get("/change-pin")
+        resp = other34.post("/change-pin", data={"pin": "13572468", "confirm": "13572468",
+                                                 "next": "https://evil.invalid/",
+                                                 "csrf_token": _csrf_from(page.text)})
+        assert resp.headers["Location"] == "/", "34a: the pin change refuses it too"
+
+        # 34b. declined and cancelled outcomes stay on the page, with a date, a
+        # status word and a label, and never the note column
+        c = raw_db()
+        day7 = (datetime.now().date() + timedelta(days=7)).isoformat()
+        day9 = (datetime.now().date() + timedelta(days=9)).isoformat()
+        declined34 = _appt34.request(c, cf34, day7, "morning", "my own words")
+        _appt34.decline(c, declined34, "STAFF-ONLY decline reason")
+        withdrawn34 = _appt34.request(c, cf34, day9, "afternoon", None)
+        _appt34.cancel(c, withdrawn34)
+        cancelled34 = _appt34.book(c, cf34, "dr rossi", f"{day7}T11:15", 30, note="STAFF-ONLY booking note")
+        _appt34.cancel(c, cancelled34)
+        _appt34.book(c, cf34, "dr rossi", f"{day9}T16:45", 30)
+        c.close()
+        page34 = client34.get("/appointments").text
+        assert on_page(t("appt_history", "it"), page34), "34b: the past requests have their own section"
+        history34 = page34.split('id="history-title"')[1]
+        assert on_page(t("appt_status_declined", "it"), history34), "34b: declined says so in words"
+        assert on_page(t("appt_status_cancelled", "it"), history34), "34b: cancelled says so in words"
+        assert on_page(t("appt_declined_next", "it"), history34), "34b: and what to do next"
+        assert "STAFF-ONLY" not in page34, "34b: HARD FAIL - a staff note reached the patient"
+        assert on_page(t("appt_requested_day", "it"), history34) and \
+            on_page(t("appt_confirmed_time", "it"), history34), "34b: each date says what it is"
+        assert "11:15" in history34, "34b: a cancelled booking keeps the time that was confirmed"
+        assert "00:00" not in page34, "34b: a request is never given a time"
+        upcoming34 = page34.split('id="upcoming-title"')[1].split('id="history-title"')[0]
+        assert "16:45" in upcoming34 and on_page(t("appt_confirmed_time", "it"), upcoming34), \
+            "34b: the booked row is labelled as the confirmed time"
+        day_fmt = app.jinja_env.filters["appt_day"]
+        assert history34.index(day_fmt(day9, "it")) < history34.index(day_fmt(day7, "it")), \
+            "34b: newest first"
+        c = raw_db()
+        for _ in range(patient_routes.HISTORY_LIMIT + 3):
+            _appt34.decline(c, _appt34.request(c, cf34, day7, "morning", None))
+        c.close()
+        history34 = client34.get("/appointments").text.split('id="history-title"')[1]
+        assert history34.count("<li class=\"ds-row\">") == patient_routes.HISTORY_LIMIT, \
+            "34b: the history is bounded"
+        assert t("appt_history", "it") not in other34.get("/appointments").text, \
+            "34b: another patient's outcomes are never listed"
+
+        # 34c. files: only confirmed, published, own files, each with a clear
+        # button; everything else is the same 404 by direct url
+        saved_root34 = _docs34.DOC_ROOT
+        _docs34.DOC_ROOT = Path(tmp) / "documents34"
+
+        def stored34(owner, data, kind, publish=True):
+            sha = hashlib.sha256(data).hexdigest()
+            rel = f"{owner}/{sha}"
+            path = Path(_docs34.DOC_ROOT) / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            c = raw_db()
+            did = c.execute(
+                "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256,"
+                " size, status, uploaded_by, uploaded_at, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (owner, kind, "PRIVATE-NAME.txt", rel, sha, len(data), "confirmed", "fixture",
+                 "2026-10-01T10:00:00+00:00", "report")).lastrowid
+            c.commit()
+            if publish:
+                _pfiles34.publish(c, did, owner, "fixture", "dentist")
+            c.close()
+            return did
+
+        try:
+            hidden34 = stored34(pid34, b"not shared yet", "text", publish=False)
+            files34 = client34.get("/files").text
+            assert on_page(t("files_none", "it"), files34), "34c: an empty list says why"
+            assert f"/files/{hidden34}/" not in files34 and "PRIVATE" not in files34, \
+                "34c: and gives no hint that an unpublished file exists"
+            image34 = stored34(pid34, _png34(34), "png")
+            text34 = stored34(pid34, b"Synthetic report text", "text")
+            foreign34 = stored34(pid34_other, _png34(35), "png")
+            files34 = client34.get("/files").text
+            assert f'href="/files/{image34}/preview"' in files34 and on_page(t("files_view", "it"), files34), \
+                "34c: an image has a View button"
+            assert f'href="/files/{text34}/download"' in files34, "34c: every shared file can be downloaded"
+            assert files34.count("data-file-view") == 1, "34c: View only where the browser can show it"
+            assert f"/files/{foreign34}/" not in files34, "34c: another patient's file is not listed"
+            denied34 = count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'")
+            for path in (f"/files/{foreign34}/preview", f"/files/{foreign34}/download",
+                         f"/files/{hidden34}/download", f"/files/{text34}/preview", "/files/999999/download"):
+                assert client34.get(path).status_code == 404, f"34c: {path} must be the same 404"
+            assert count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'") == \
+                denied34 + 5, "34c: and every refusal is audited"
+            assert client34.get(f"/files/{image34}/preview").status_code == 200, "34c: the own image opens"
+        finally:
+            _docs34.DOC_ROOT = saved_root34
+
+        # 34d. billing: aligned tables of ledger values; no settled figure is
+        # shown as "unknown", never as a number the page worked out
+        c = raw_db()
+
+        def visit34(day, lines):
+            vid = c.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes,"
+                            " source_path) VALUES (?, ?, '[]', '', ?)",
+                            (pid34, day, f"p29-{day}")).lastrowid
+            for i, (desc, cents) in enumerate(lines):
+                c.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents,"
+                          " description) VALUES (?, ?, ?, ?, ?, ?)", (pid34, vid, i, cents / 100, cents, desc))
+            return vid
+
+        _ledger34.ensure_invoice(c, pid34, visit34("2025-11-10", [("igiene", 8000)]), legacy=True)
+        issued34 = _ledger34.ensure_invoice(c, pid34, visit34("2026-09-01", [("controllo", 12345)]))
+        c.commit()
+        _ledger34.issue(c, issued34, "test-dentist", "dentist", due_date=day9)
+        _ledger34.plan_installments(c, issued34, 2, day9, "test-dentist", "dentist")
+        ledger34 = _ledger34.patient_summary(c, pid34)
+        c.close()
+        bill34 = client34.get("/billing").text
+        assert on_page(t("bill_unknown", "it"), bill34), "34d: an invoice being checked says unknown"
+        legacy34 = bill34.split(t("bill_state_unknown", "it"))[1].split("</section>")[0]
+        assert "€ 0,00" not in legacy34, "34d: HARD FAIL - an unknown payment was shown as a figure"
+        assert "<table" in bill34 and on_page(t("bill_amount", "it"), bill34) and \
+            on_page(t("bill_due_date", "it"), bill34), "34d: lines and installments are tables"
+        issued_row = [i for i in ledger34["invoices"] if i["id"] == issued34][0]
+        for cents in [issued_row["total_cents"], issued_row["outstanding_cents"]] + \
+                [i["amount_cents"] for i in issued_row["installments"]]:
+            assert _ledger34.fmt(cents, "it") in bill34, f"34d: ledger figure {cents} is on the page"
+        assert bill34.count(t("bill_open", "it")) == len(issued_row["installments"]), \
+            "34d: each installment has a status word"
+
+        # 34e. a waiting call-back says since when and about what - not who
+        # took it, and no promise of a time
+        c = raw_db()
+        _handoff34.raise_request(c, pid34, "patient_asked", "billing")
+        c.execute("UPDATE handoff_requests SET status = 'claimed', claimed_by = 'STAFF-ONLY-NAME'"
+                  " WHERE patient_id = ?", (pid34,))
+        c.commit()
+        c.close()
+        chat34 = client34.get("/chat").text
+        assert on_page(t("handoff_about", "it", topic=t("handoff_topic_billing", "it")), chat34), \
+            "34e: the topic is shown"
+        assert on_page(t("handoff_since", "it", when="").strip(), chat34), "34e: and since when"
+        assert on_page(t("handoff_no_time", "it"), chat34), "34e: without promising a time"
+        assert "STAFF-ONLY-NAME" not in chat34, "34e: HARD FAIL - a staff name reached the patient"
+
+        # 34f. consent in context: the chat says what the consent state is,
+        # right beside the way to change it
+        chat_other = other34.get("/chat").text
+        assert on_page(t("chat_consent_state", "it", state=t("consent_not_asked", "it")), chat_other), \
+            "34f: the chat shows the consent state"
+        assert 'href="/profile#consent"' in chat_other, "34f: next to the link to the consent"
+        c = raw_db()
+        consent.record(c, pid34_other, "ai_assistant", True, pid34_other, "patient")
+        consent.record(c, pid34_other, "ai_assistant", False, pid34_other, "patient")
+        c.close()
+        assert on_page(t("chat_consent_state", "it", state=t("consent_withdrawn", "it")),
+                       other34.get("/chat").text), "34f: a withdrawal reads as withdrawn"
+
+        # 34g. both languages on every changed page, no mixed fragments, and
+        # switching keeps the page and the session
+        switched = client34.get("/lang/en", query_string={"page": "patient.billing"})
+        assert switched.headers["Location"] == "/billing", "34g: switching keeps the page"
+        pages34 = {path: client34.get(path) for path in ("/appointments", "/files", "/billing", "/chat")}
+        assert all(r.status_code == 200 for r in pages34.values()), "34g: still signed in"
+        new_keys34 = {
+            "/appointments": ("appt_history", "appt_requested_day", "appt_confirmed_time",
+                              "appt_status_declined", "appt_status_cancelled"),
+            "/files": ("files_view",),
+            "/billing": ("bill_unknown", "bill_amount", "bill_due_date", "bill_item"),
+            "/chat": ("handoff_no_time",),
+        }
+        for path, keys in new_keys34.items():
+            for key in keys:
+                assert on_page(t(key, "en"), pages34[path].text), f"34g: {key} in english on {path}"
+                assert not on_page(t(key, "it"), pages34[path].text) or t(key, "it") == t(key, "en"), \
+                    f"34g: italian {key} on the english {path}"
+        client34.get("/lang/it")
+        for path, keys in new_keys34.items():
+            text = client34.get(path).text
+            for key in keys:
+                assert not on_page(t(key, "en"), text) or t(key, "it") == t(key, "en"), \
+                    f"34g: english {key} on the italian {path}"
+
     print("selftest ok")
 
 
