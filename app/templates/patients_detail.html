@@ -175,9 +175,9 @@
           {% for e in file_timeline[:8] %}
           <li class="ds-row"><span class="ds-row-main">
             <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
-            {% if e.kind == 'file' %}<a class="ds-row-title text-break" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ e.category }} · {{ e.display_name }}</a>{% else %}<span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>{% endif %}
+            <span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>
             <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% endif %}{% if e.kind == 'file' %} · {{ 'shown to patient' if e.published else 'not shown to patient' }}{% endif %}</span>
-          </span></li>
+          </span>{% if e.kind == 'file' %}<span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">Open<span class="visually-hidden">: {{ e.category }} · {{ e.display_name }}</span></a></span>{% endif %}</li>
           {% endfor %}
         </ol>
         {% if file_timeline | length > 8 %}<p class="ds-row-sub mb-0">{{ file_timeline | length - 8 }} more on the <a href="{{ url_for('documents.index', cf=cf) }}#timeline">Files page</a>.</p>{% endif %}
@@ -377,10 +377,10 @@
         <ul class="ds-rows">
           {% for r in imaging %}
           <li class="ds-row"><span class="ds-row-main">
-            <a class="ds-row-title" href="{{ url_for('imaging.view', cf=cf, rid=r.id) }}">{{ r.exam_label }}, request {{ r.id }} v{{ r.version }}</a>
+            <span class="ds-row-title">{{ r.exam_label }}, request {{ r.id }} v{{ r.version }}</span>
             <span class="ds-row-sub">{{ r.state }}{% if r.activated_at %} · active since {{ r.activated_at | appt_date }}{% endif %} · by {{ r.activated_by or r.created_by }}</span>
           </span>
-          <span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ r.state }}</span></li>
+          <span class="sx-row-acts"><span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ r.state }}</span><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imaging.view', cf=cf, rid=r.id) }}">Open<span class="visually-hidden">: {{ r.exam_label }}, request {{ r.id }}</span></a></span></li>
           {% endfor %}
         </ul>
         {% elif not authorize(g.user.role, 'manage_imaging_requests') %}

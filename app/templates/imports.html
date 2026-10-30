@@ -170,12 +170,12 @@
       {% endfor %}
     </nav>
     {% if queue %}
-    <ul class="ds-rows">
+    <ul class="ds-rows sx-box">
       {% for r in queue %}
       <li class="ds-row"><span class="ds-row-main">
-        <a class="ds-row-title text-break" href="{{ url_for('imports.item', import_id=r.id) }}">{{ name_of(r) }}</a>
+        <span class="ds-row-title text-break">{{ name_of(r) }}</span>
         <span class="ds-row-sub">item {{ r.id }} · {{ r.kind }} · <strong>{{ labels[r.state] }}</strong>{% if r.strength %} ({{ 'strong' if r.strength == 'strong' else 'needs checking' }}){% endif %}{% if r.patient_id and people.get(r.patient_id) %} · proposed: {{ people[r.patient_id].patient_name }}{% endif %}</span>
-      </span></li>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imports.item', import_id=r.id) }}">Decide<span class="visually-hidden">: {{ name_of(r) }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}

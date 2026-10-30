@@ -476,6 +476,15 @@ def selftest():
                 f"12f: {path12} states are not a tab control"
         assert 'style="' not in _section(clients["dentist"].get("/").get_data(as_text=True), "agenda"), \
             "12f: an inline style on home (app_selftest 21 forbids them)"
+        # 12g. no list row is opened by clicking its title text: the title is plain, a button opens the row,
+        # and an expanding section opens with a button too
+        linked12 = [t.name for t in (Path(__file__).parent / "app" / "templates").glob("*.html")
+                    if '<a class="ds-row-title' in t.read_text()]
+        assert not linked12, f"12g: a row title is still the only link in {sorted(linked12)}"
+        summary12 = " ".join(body for sel, body in re.findall(r"([^{}]*)\{([^}]*)\}", css12)
+                             if ".ux-upload summary" in [s.strip() for s in sel.split(",")])
+        assert "border:" in summary12 and "border-radius" in summary12, \
+            "12g: an expanding section opens with a line of link text"
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

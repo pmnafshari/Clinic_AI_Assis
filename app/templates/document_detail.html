@@ -31,7 +31,7 @@
     <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">File</span><span class="ds-row-title text-break">{{ doc.kind or 'unknown type' }} · {{ doc.size }} bytes · sha256 {{ doc.sha256[:16] }}…</span></span></li>
     <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Read by</span><span class="ds-row-title">{{ doc.extractor or 'not read' }}</span></span></li>
     {% if doc.decided_by %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Decision</span><span class="ds-row-title">{{ doc.status.replace('_', ' ') }} by {{ doc.decided_by }} · {{ doc.decided_at | appt_date }}</span></span></li>{% endif %}
-    {% if doc.supersedes_id %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Replaces</span><a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=doc.supersedes_id) }}">document {{ doc.supersedes_id }}</a></span></li>{% endif %}
+    {% if doc.supersedes_id %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Replaces</span><span class="ds-row-title">document {{ doc.supersedes_id }}</span></span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=doc.supersedes_id) }}">Open<span class="visually-hidden">: document {{ doc.supersedes_id }}</span></a></span></li>{% endif %}
   </ul>
   <a href="{{ url_for('documents.original', cf=cf, did=doc.id) }}">Download the original</a>
   </div>
