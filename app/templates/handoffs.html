@@ -17,30 +17,20 @@
   records <strong>why</strong> and <strong>what about</strong> — never what the patient typed.</div>
 </div>
 
-<section class="card dash-card mb-3" aria-labelledby="counts-title">
-  <div class="dash-card-head">
-    <h2 class="ds-card-title" id="counts-title">By state</h2>
-    {% if status %}<a href="{{ url_for('handoff.index') }}">Show all</a>{% endif %}
-  </div>
-  <div class="dash-card-body"><ul class="ds-rows">
-    {% for state, n in counts.items() %}
-    <li class="ds-row">
-      <span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('handoff.index', status=state) }}">{{ state | capitalize }}</a>
-      </span>
-      <span class="ds-numeral ms-auto">{{ n }}</span>
-    </li>
-    {% endfor %}
-  </ul></div>
-</section>
-
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' call-backs') if status else 'The queue' }}</h2>
+    {# P29 redesign: the states are a tab control - the count on each, the current one marked #}
+    <nav class="sx-tabs sx-tabs-sm" aria-label="Show">
+      <a href="{{ url_for('handoff.index') }}"{% if not status %} aria-current="page"{% endif %}>All</a>
+      {% for state, n in counts.items() %}
+      <a href="{{ url_for('handoff.index', status=state) }}"{% if status == state %} aria-current="page"{% endif %}>{{ state | capitalize }} <span class="sx-count">{{ n }}</span></a>
+      {% endfor %}
+    </nav>
   </div>
   <div class="dash-card-body">
     {% if rows %}
-    <ul class="ds-rows">
+    <ul class="ds-rows sx-box">
       {% for r in rows %}
       <li class="ds-row">
         <span class="ds-row-main">
@@ -52,13 +42,13 @@
           </span>
         </span>
         {% if r.status == 'open' %}
-        <form method="post" action="{{ url_for('handoff.claim', handoff_id=r.id) }}" class="ms-auto">
+        <form method="post" action="{{ url_for('handoff.claim', handoff_id=r.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
           <button class="btn btn-outline-secondary btn-sm" type="submit">Take it</button>
         </form>
         {% elif r.status == 'claimed' %}
-        <form method="post" action="{{ url_for('handoff.resolve', handoff_id=r.id) }}" class="ms-auto">
+        <form method="post" action="{{ url_for('handoff.resolve', handoff_id=r.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
           <button class="btn btn-outline-secondary btn-sm" type="submit">Mark done</button>

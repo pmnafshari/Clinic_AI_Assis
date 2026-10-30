@@ -17,19 +17,22 @@
 {% if alerts %}
 <section class="card dash-card mb-3" aria-labelledby="alerts-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="alerts-title">Low stock ({{ alerts | length }})</h2></div>
-  <div class="dash-card-body"><ul class="ds-rows">
+  <div class="dash-card-body"><ul class="ds-rows sx-box sx-box-md">
     {% for a in alerts %}
     <li class="ds-row">
       <span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('stock.item', item_id=a.item_id) }}">{{ a.name }}</a>
+        <span class="ds-row-title">{{ a.name }}</span>
         <span class="ds-row-sub">{{ a.balance_at_open }} {{ a.unit }} at or below {{ a.threshold_at_open }} since {{ a.opened_at | appt_date }}{% if a.acknowledged_at %} · seen by {{ a.acknowledged_by }}{% endif %}</span>
       </span>
-      {% if not a.acknowledged_at %}
-      <form method="post" action="{{ url_for('stock.acknowledge', alert_id=a.id) }}" class="ms-auto">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Mark as seen</button>
-      </form>
-      {% endif %}
+      <span class="sx-row-acts">
+        {% if not a.acknowledged_at %}
+        <form method="post" action="{{ url_for('stock.acknowledge', alert_id=a.id) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="btn btn-outline-secondary btn-sm" type="submit">Mark as seen<span class="visually-hidden">: {{ a.name }}</span></button>
+        </form>
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.item', item_id=a.item_id) }}">Open<span class="visually-hidden">: {{ a.name }}</span></a>
+      </span>
     </li>
     {% endfor %}
   </ul></div>
@@ -39,18 +42,21 @@
 <section class="card dash-card mb-3" aria-labelledby="items-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="items-title">Items</h2>
-    <nav aria-label="Filter"><a href="{{ url_for('stock.index') }}" {% if not low_only %}aria-current="page"{% endif %}>All</a> · <a href="{{ url_for('stock.index', show='low') }}" {% if low_only %}aria-current="page"{% endif %}>Low only</a></nav>
+    <nav class="sx-tabs sx-tabs-sm" aria-label="Filter"><a href="{{ url_for('stock.index') }}" {% if not low_only %}aria-current="page"{% endif %}>All</a><a href="{{ url_for('stock.index', show='low') }}" {% if low_only %}aria-current="page"{% endif %}>Low only</a></nav>
   </div>
   <div class="dash-card-body">
     {% if items %}
-    <ul class="ds-rows">
+    <ul class="ds-rows sx-box">
       {% for i in items %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <a class="ds-row-title" href="{{ url_for('stock.item', item_id=i.id) }}">{{ i.name }}</a>
+          <span class="ds-row-title">{{ i.name }}</span>
           <span class="ds-row-sub">threshold {{ i.threshold }} {{ i.unit }}{% if i.low %} · <strong>low</strong>{% endif %}</span>
         </span>
-        <span class="ds-numeral ms-auto">{{ i.balance }} {{ i.unit }}</span>
+        <span class="sx-row-acts">
+          <span class="ds-numeral">{{ i.balance }} {{ i.unit }}</span>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.item', item_id=i.id) }}">Open<span class="visually-hidden">: {{ i.name }}</span></a>
+        </span>
       </li>
       {% endfor %}
     </ul>

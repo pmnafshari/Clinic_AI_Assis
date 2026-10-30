@@ -15,31 +15,20 @@
   wording below are demo defaults and have not been approved.</div>
 </div>
 
-<section class="card dash-card mb-3" aria-labelledby="counts-title">
-  <div class="dash-card-head">
-    <h2 class="ds-card-title" id="counts-title">By state</h2>
-    {% if status %}<a href="{{ url_for('reminders.index') }}">Show all</a>{% endif %}
-  </div>
-  <div class="dash-card-body"><ul class="ds-rows">
-    {% for state, n in counts.items() %}
-    <li class="ds-row">
-      <span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('reminders.index', status=state) }}">{{ state | capitalize }}</a>
-        {% if state == 'delivered' %}<span class="ds-row-sub">no channel reports delivery yet</span>{% endif %}
-      </span>
-      <span class="ds-numeral ms-auto">{{ n }}</span>
-    </li>
-    {% endfor %}
-  </ul></div>
-</section>
-
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' reminders') if status else 'Latest reminders' }}</h2>
+    {# P29 redesign: the states are a tab control - the count on each, the current one marked #}
+    <nav class="sx-tabs sx-tabs-sm" aria-label="Show">
+      <a href="{{ url_for('reminders.index') }}"{% if not status %} aria-current="page"{% endif %}>All</a>
+      {% for state, n in counts.items() %}
+      <a href="{{ url_for('reminders.index', status=state) }}"{% if status == state %} aria-current="page"{% endif %}>{{ state | capitalize }} <span class="sx-count">{{ n }}</span></a>
+      {% endfor %}
+    </nav>
   </div>
   <div class="dash-card-body">
     {% if jobs %}
-    <ul class="ds-rows">
+    <ul class="ds-rows sx-box">
       {% for j in jobs %}
       <li class="ds-row">
         <span class="ds-row-main">
@@ -52,7 +41,7 @@
           </span>
         </span>
         {% if can_retry and j.status == 'failed' %}
-        <form method="post" action="{{ url_for('reminders.retry', job_id=j.id) }}" class="ms-auto">
+        <form method="post" action="{{ url_for('reminders.retry', job_id=j.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
           <button class="btn btn-outline-secondary btn-sm" type="submit">Try again</button>
@@ -66,4 +55,5 @@
     {% endif %}
   </div>
 </section>
-{% endblock %}
+{% if counts.get('delivered') is not none %}<p class="sx-scroll-foot"><span>Delivered: no channel reports delivery yet.</span></p>
+{% endif %}{% endblock %}

@@ -20,11 +20,11 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="queue-title">Waiting</h2></div>
   <div class="dash-card-body">
     {% if rows %}
-    <ul class="ds-rows">
+    <ul class="ds-rows sx-box">
       {% for r in rows %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <a class="ds-row-title" href="{{ url_for('review.detail', review_id=r.id) }}">{{ r.patient_name or 'Patient not identified' }}</a>
+          <span class="ds-row-title">{{ r.patient_name or 'Patient not identified' }}</span>
           <span class="ds-row-sub">
             {%- if r.origin == 'legacy' %}earlier note, filed before review existed
             {%- elif r.status == 'extraction_failed' %}could not be read{% if r.attempts %} · {{ r.attempts }} retr{{ 'y' if r.attempts == 1 else 'ies' }}{% endif %}
@@ -32,6 +32,7 @@
             {%- else %}uploaded by {{ r.created_by }}{% endif %} · {{ r.created_at | appt_date }}
           </span>
         </span>
+        <span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.detail', review_id=r.id) }}">Review<span class="visually-hidden">: {{ r.patient_name or 'patient not identified' }}</span></a></span>
       </li>
       {% endfor %}
     </ul>

@@ -464,6 +464,19 @@ def selftest():
             assert 'id="imaging"' in rec12 and 'id="editModal"' in rec12, "12e: a link target or the edit dialog is gone"
             assert ("Clinical history" in rec12) == (role12 == "dentist"), "12e: clinical history shown to the wrong role"
 
+        # 12f. lists: a button opens each row, long lists keep their height and scroll inside, state filters are tabs
+        stock12 = clients["dentist"].get("/stock").get_data(as_text=True)
+        item12 = conn.execute("SELECT id FROM inventory_items WHERE name = 'guanti'").fetchone()[0]
+        assert len(re.findall(rf'<a class="btn[^"]*" href="/stock/{item12}"', stock12)) >= 2, \
+            "12f: the low alert and the item row do not open the item with a button"
+        assert len(re.findall(r'class="[^"]*\bsx-box\b', stock12)) >= 2, "12f: the stock lists are not in fixed-height boxes"
+        for path12 in ("/handoffs", "/reminders"):
+            page12 = clients["assistant"].get(path12).get_data(as_text=True)
+            assert re.search(r'<nav class="sx-tabs[^"]*"[^>]*aria-label="Show"', page12) and 'aria-current="page"' in page12, \
+                f"12f: {path12} states are not a tab control"
+        assert 'style="' not in _section(clients["dentist"].get("/").get_data(as_text=True), "agenda"), \
+            "12f: an inline style on home (app_selftest 21 forbids them)"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")
