@@ -2645,6 +2645,64 @@ def selftest():
         assert re.search(r'<a class="btn[^"]*" href="/data-requests/\d+/download"', client32.get("/profile").text), \
             "35h: the ready copy of the patient's data is downloaded with a button"
 
+        # 36. P30 sign-in core: the Jarvis orb on the login page, reacting to typing and to the
+        # answer. decoration only - canvases and caption are hidden from screen readers, and the
+        # alert the server already renders stays the message
+        reset36 = raw_db()
+        reset36.execute("DELETE FROM patient_login_attempts")
+        reset36.commit()
+        reset36.close()
+        client36 = app.test_client()
+        login36 = client36.get("/login").text
+        core36 = re.search(r"<div[^>]*\sdata-login-core(?=[\s>])[^>]*>", login36)
+        assert core36 and 'data-core-state="idle"' in core36.group(0), "36a: the login page carries the core, waiting"
+        aside36 = login36.split('<aside class="patient-brand')[1].split("</aside>")[0]
+        assert "data-login-core" in aside36 and re.search(r'<canvas[^>]+aria-hidden="true"', aside36), \
+            "36a: the big core sits in the side panel, hidden from screen readers"
+        assert re.search(r'<p(?=[^>]*data-core-caption)(?=[^>]*aria-hidden="true")[^>]*>', aside36), \
+            "36a: the caption under the core is decoration"
+        mini36 = re.search(r'<div class="patient-core-mini"[^>]*aria-hidden="true"[^>]*>\s*<canvas', login36)
+        assert mini36, "36a: phones get a small core in the card, hidden from screen readers"
+        assert "js/login_core.js" in login36, "36a: the core's script is loaded"
+        assert 'data-home="/"' in login36, "36a: the form says where a signed-in patient lands"
+        for state36 in ("idle", "cf", "pin", "away", "check", "wrong", "locked", "expired", "ok"):
+            key36 = "core_" + state36
+            assert t(key36, "it") and t(key36, "en") and t(key36, "it") != t(key36, "en"), f"36a: {key36} in both languages"
+            assert f'data-cap-{state36}="{html_escape(t(key36, "it"))}"' in login36, f"36a: the {state36} caption reaches the page"
+
+        # 36b. a wrong PIN comes back with the core angry, a lockout with it tired. the state follows
+        # the message the server already shows, so it says nothing new: an unknown codice fiscale
+        # looks exactly like a wrong PIN
+        cf36 = "ZZLC300101010101"
+        seed_and_issue(cf36, "core patient")
+        wrong36 = client36.post("/login", data={"codice_fiscale": cf36, "pin": "00000000",
+                                                "csrf_token": _csrf_from(login36)}).text
+        assert 'data-core-state="wrong"' in wrong36 and t("err_bad_credentials", "it") in wrong36, \
+            "36b: a wrong PIN shows the angry core with the usual message"
+        unknown36 = client36.post("/login", data={"codice_fiscale": "ZZNO000000000000", "pin": "00000000",
+                                                  "csrf_token": _csrf_from(login36)}).text
+        assert 'data-core-state="wrong"' in unknown36, "36b: an unknown codice fiscale looks like a wrong PIN"
+        assert 'data-core-state="locked"' in locked_resp.text, "36b: a lockout shows the tired core"
+
+        # 36c. the background sign-in: the same form to the same address, the session cookie set by
+        # the server's own redirect, nothing kept in the browser
+        js36 = Path("patient_app/static/js/login_core.js").read_text()
+        assert 'redirect: "manual"' in js36 and 'credentials: "same-origin"' in js36 and "form.action" in js36, \
+            "36c: the form is sent as it is, to where it always went"
+        assert "opaqueredirect" in js36, "36c: only the server's redirect counts as signed in"
+        assert not re.search(r"localStorage|sessionStorage|indexedDB|console\.", js36), \
+            "36c: nothing from the sign-in is kept or logged in the browser"
+
+        # 36d. phones: the small core takes the heading's place; the heading stays for screen readers
+        css36 = Path("patient_app/static/css/patient.css").read_text()
+        phone36 = re.search(r"@media \(max-width: 575\.98px\)\s*\{\s*\.patient-login-intro\s*\{([^}]*)\}", css36)
+        assert phone36 and "clip" in phone36.group(1) and "display: none" not in phone36.group(1), \
+            "36d: on a phone the heading is hidden visually, not removed"
+        assert re.search(r"@media \(max-width: 991\.98px\)\s*\{[^@]*\.patient-core-mini\s*\{\s*display: block", css36), \
+            "36d: without the side panel, the small core shows in the card"
+        assert len(re.findall(r'class="[^"]*\bpatient-login-intro\b', login36)) == 2, \
+            "36d: the heading and the line under it are the parts phones hide"
+
     print("selftest ok")
 
 

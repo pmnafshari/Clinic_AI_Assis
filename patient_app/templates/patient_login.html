@@ -1,16 +1,25 @@
 {% extends "patient_base.html" %}
 {% block shell_class %}patient-shell--split{% endblock %}
+{# P30 sign-in core. the state the page opens in follows the message the server
+   already shows, so the core never tells anyone more than the words do: an
+   unknown codice fiscale and a wrong PIN share one message, so they share one face #}
+{% set core_state = 'idle' if not error else ('locked' if error == t('err_locked', lang) else ('expired' if error == t('err_expired', lang) else 'wrong')) %}
 {% block auth_brand %}
-<aside class="patient-brand">
+<aside class="patient-brand patient-brand--core">
   <span class="patient-brand-mark" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
+  <div class="patient-core" data-login-core data-core-state="{{ core_state }}"{% for state in ('idle', 'cf', 'pin', 'away', 'check', 'wrong', 'locked', 'expired', 'ok') %} data-cap-{{ state }}="{{ t('core_' ~ state, lang) }}"{% endfor %}>
+    <canvas aria-hidden="true"></canvas>
+  </div>
+  <p class="patient-core-caption" data-core-caption data-mood="{{ core_state }}" aria-hidden="true">{{ t('core_' ~ core_state, lang) }}</p>
   <p class="patient-brand-line">{{ t('brand_line', lang) }}</p>
 </aside>
 {% endblock %}
 {% block content %}
-<span class="patient-mark mb-3" aria-hidden="true"><i class="bi bi-person-lock"></i></span>
-<h1 class="mb-3">{{ t('login_heading', lang) }}</h1>
-<p class="text-secondary mb-4">{{ t('login_body', lang) }}</p>
-<form method="post" action="{{ url_for('patient.login') }}">
+<span class="patient-mark patient-login-icon mb-3" aria-hidden="true"><i class="bi bi-person-lock"></i></span>
+<div class="patient-core-mini" aria-hidden="true"><canvas data-login-core-mini></canvas></div>
+<h1 class="mb-3 patient-login-intro">{{ t('login_heading', lang) }}</h1>
+<p class="text-secondary mb-4 patient-login-intro">{{ t('login_body', lang) }}</p>
+<form method="post" action="{{ url_for('patient.login') }}" data-login-form data-home="{{ url_for('home') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="next" value="{{ return_to or '' }}">
   <div class="mb-3">
@@ -36,4 +45,5 @@
 </form>
 <p class="text-secondary small mt-3 mb-0">{{ t('help_line', lang) }}</p>
 <script src="{{ url_for('static', filename='js/auth.js') }}" defer></script>
+<script src="{{ url_for('static', filename='js/login_core.js') }}" defer></script>
 {% endblock %}

@@ -905,3 +905,36 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 .patient-auth .patient-card { border: 1px solid var(--pp-line); box-shadow: none; }
 .patient-auth .patient-mark { background: var(--pp-ink); }
 .patient-brand { background: var(--pp-ink); }
+
+/* P30 sign-in core: the Jarvis orb, recoloured for the portal and given a face.
+   it reacts to key presses and to the server's answer; decoration only, the
+   alert above the form stays the message. on a computer it fills the side
+   panel; without the panel a small one sits in the card, and on a phone it
+   takes the heading's place (the heading stays for screen readers) */
+.patient-brand--core {
+  position: relative;
+  align-items: center;
+  text-align: center;
+  gap: var(--ds-space-4);
+  background-image: radial-gradient(70% 55% at 50% 42%, #214a3f 0%, #19392f 45%, var(--pp-ink) 100%);
+}
+.patient-brand--core .patient-brand-mark { position: absolute; top: var(--ds-space-6); left: var(--ds-space-6); margin: 0; }
+.patient-core { width: min(420px, 88%); aspect-ratio: 1 / 1; }
+.patient-core canvas, .patient-core-mini canvas { display: block; width: 100%; height: 100%; }
+.patient-core-caption { margin: 0; min-height: 1.125rem; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.32em; text-transform: uppercase; color: #8fdcb6; transition: color 0.4s; }
+.patient-core-caption[data-mood="cf"], .patient-core-caption[data-mood="check"] { color: #b4f0d2; }
+.patient-core-caption[data-mood="wrong"] { color: #ff8a6a; }
+.patient-core-caption[data-mood="locked"], .patient-core-caption[data-mood="expired"] { color: #e58a7a; }
+.patient-core-caption[data-mood="ok"] { color: #7eeaa6; }
+.patient-core-mini { display: none; width: min(240px, 74%); aspect-ratio: 1 / 1; margin: 0 auto var(--ds-space-3); }
+
+@media (max-width: 991.98px) {
+  .patient-core-mini { display: block; }
+  .patient-login-icon { display: none !important; }
+}
+@media (max-width: 575.98px) {
+  .patient-login-intro { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .patient-core-caption { transition: none; }
+}
