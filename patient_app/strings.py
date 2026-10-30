@@ -62,7 +62,8 @@ STRINGS = {
                            " data, use the request in your profile."},
     "files_none": {"it": "Non ci sono ancora file condivisi con te.", "en": "No files have been shared with you yet."},
     "files_download": {"it": "Scarica", "en": "Download"},
-    "files_open_full": {"it": "Apri a grandezza intera", "en": "Open full size"},
+    # P29 S1; Italian awaits native-speaker review.
+    "files_view": {"it": "Visualizza", "en": "View"},
     "files_taken": {"it": "Data:", "en": "Date:"},
     "files_added": {"it": "Aggiunto il", "en": "Added"},
     "files_preview_note": {"it": "Anteprima solo per orientarsi: non adatta a una diagnosi.",
@@ -168,6 +169,22 @@ STRINGS = {
                           "en": "Choose morning or afternoon."},
     "appt_error_generic": {"it": "Non e stato possibile completare la richiesta.",
                            "en": "That could not be completed."},
+    # P29 S1 patient portal fixes; Italian awaits native-speaker review.
+    "appt_requested_day": {"it": "Giorno richiesto", "en": "Requested day"},
+    "appt_confirmed_time": {"it": "Orario confermato", "en": "Confirmed time"},
+    "appt_history": {"it": "Richieste passate", "en": "Past requests"},
+    "appt_history_note": {
+        "it": "Richieste rifiutate e appuntamenti annullati, dal più recente (al massimo 20).",
+        "en": "Declined requests and cancelled appointments, newest first (up to 20).",
+    },
+    "appt_status_declined": {"it": "Rifiutata", "en": "Declined"},
+    "appt_status_cancelled": {"it": "Annullato", "en": "Cancelled"},
+    "appt_declined_next": {
+        "it": "La clinica non ha potuto confermare questa richiesta. Se ti serve ancora un"
+              " appuntamento, invia una nuova richiesta o contatta lo studio.",
+        "en": "The clinic could not confirm this request. If you still need an appointment,"
+              " send a new request or contact the clinic.",
+    },
     "overview_records_title": {"it": "Visite e fatture", "en": "Visits and invoices"},
     "overview_records_body": {
         "it": "I tuoi dati clinici si consultano tramite l'assistente, non come elenco su questa pagina.",
@@ -204,7 +221,10 @@ STRINGS = {
         "it": "Per usare l'assistente serve il tuo consenso. Puoi darlo o ritirarlo dal tuo profilo.",
         "en": "The assistant needs your consent first. You can give or withdraw it from your profile.",
     },
-    "chat_consent_link": {"it": "Vai al profilo", "en": "Go to your profile"},
+    # P29 S1; Italian awaits native-speaker review.
+    "chat_consent_state": {"it": "Consenso per l'assistente: {state}",
+                           "en": "Consent for the assistant: {state}"},
+    "chat_consent_open": {"it": "Gestisci il consenso nel profilo", "en": "Manage this consent in your profile"},
 
     # billing (P07). figures come from the ledger, the same as the staff page
     "bill_heading": {"it": "Fatture e pagamenti", "en": "Invoices and payments"},
@@ -231,6 +251,17 @@ STRINGS = {
     "bill_state_partially_paid": {"it": "Pagata in parte", "en": "Partly paid"},
     "bill_state_paid": {"it": "Pagata", "en": "Paid"},
     "bill_state_void": {"it": "Annullata", "en": "Cancelled"},
+    # P29 S1; Italian awaits native-speaker review. "unknown" stands where the
+    # ledger has no settled figure - the page never works one out itself
+    "bill_unknown": {"it": "sconosciuto", "en": "unknown"},
+    "bill_status": {"it": "Stato", "en": "Status"},
+    "bill_item": {"it": "Voce", "en": "Item"},
+    "bill_amount": {"it": "Importo", "en": "Amount"},
+    "bill_due_date": {"it": "Scadenza", "en": "Due date"},
+    "bill_lines_caption": {"it": "Voci e importi della visita del {date}",
+                           "en": "Items and amounts for the visit of {date}"},
+    "bill_installments_caption": {"it": "Rate della visita del {date}",
+                                  "en": "Installments for the visit of {date}"},
 
     # data rights (P06)
     "rights_heading": {"it": "I tuoi dati", "en": "Your data"},
@@ -462,6 +493,20 @@ STRINGS = {
         "it": "Richiesta di contatto in attesa",
         "en": "Call-back request waiting",
     },
+    # P29 S1; Italian awaits native-speaker review. what the patient asked
+    # about is the queue's topic - the question itself is never stored, and
+    # nothing here says when or whether someone will call
+    "handoff_since": {"it": "In attesa dal {when}", "en": "Waiting since {when}"},
+    "handoff_about": {"it": "Argomento: {topic}", "en": "About: {topic}"},
+    "handoff_no_time": {
+        "it": "La richiesta è nella coda dello studio. Non possiamo indicare quando arriverà una risposta.",
+        "en": "The request is in the clinic's queue. We cannot say when you will get a reply.",
+    },
+    "handoff_topic_appointment": {"it": "appuntamenti", "en": "appointments"},
+    "handoff_topic_billing": {"it": "pagamenti", "en": "payments"},
+    "handoff_topic_clinical": {"it": "una domanda clinica", "en": "a clinical question"},
+    "handoff_topic_records": {"it": "documenti e dati", "en": "records and data"},
+    "handoff_topic_other": {"it": "altro", "en": "something else"},
     "question_label": {"it": "La tua domanda", "en": "Your question"},
     "question_placeholder": {
         "it": "Es. Quando è il mio prossimo appuntamento?",

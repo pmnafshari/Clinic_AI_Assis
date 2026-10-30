@@ -9,6 +9,7 @@ from pathlib import Path
 
 from flask import (Blueprint, Response, abort, current_app, g, redirect, render_template, request,
                    send_file, url_for)
+from werkzeug.exceptions import HTTPException
 
 from codice_fiscale import normalize as normalize_cf
 import appointments
@@ -91,6 +92,43 @@ def get_db():
     return g.db
 
 
+# P29: pages a patient may be sent back to after signing in or changing the
+# pin. a file or an export is a download, not a page, and the auth screens
+# would loop
+NO_RETURN = {
+    "static", "vendor", "shared", "set_language", "patient.login", "patient.logout",
+    "patient.change_pin", "patient.file_download", "patient.file_preview",
+    "patient.data_download",
+}
+
+
+def local_return(value):
+    """A plain local path to a GET page of this app, or "".
+
+    no scheme, host, backslash, percent-escape, query or dot segment - anything
+    that is not exactly a path this app routes sends the patient home.
+    """
+    if not isinstance(value, str) or len(value) > 200:
+        return ""
+    if not value.startswith("/") or value.startswith("//") or "/." in value:
+        return ""
+    if any(c in "\\%?#:@" or c.isspace() or ord(c) < 32 for c in value):
+        return ""
+    try:
+        endpoint, _ = current_app.url_map.bind("localhost").match(value, method="GET")
+    except HTTPException:
+        return ""
+    if endpoint in NO_RETURN:
+        return ""
+    return value
+
+
+def _return_arg():
+    # only a page the patient was opening, never a form post being replayed
+    target = local_return(request.path) if request.method == "GET" else ""
+    return {"next": target} if target and target != "/" else {}
+
+
 def require_patient_session():
     if request.endpoint is None:
         return  # unmatched route - let the normal 404 flow run
@@ -100,20 +138,22 @@ def require_patient_session():
     token = request.cookies.get(patient_auth.PATIENT_COOKIE_NAME)
     session = patient_auth.load_patient_session(get_db(), token) if token else None
     if session is None:
-        return redirect(url_for("patient.login"))
+        return redirect(url_for("patient.login", **_return_arg()))
     g.patient = session
 
     if session["must_change_pin"] and request.endpoint not in FORCED_CHANGE_ALLOWED:
-        return redirect(url_for("patient.change_pin"))
+        return redirect(url_for("patient.change_pin", **_return_arg()))
 
 
 @patient_bp.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        return render_template("patient_login.html")
+        return render_template("patient_login.html",
+                               return_to=local_return(request.args.get("next")))
 
     cf = normalize_cf(request.form.get("codice_fiscale", ""))
     pin = request.form.get("pin", "")
+    return_to = local_return(request.form.get("next"))
 
     # unbounded form input goes straight into werkzeug's key derivation
     # function - a handful of concurrent multi-megabyte posts would pin cpu
@@ -122,7 +162,7 @@ def login():
     # other one (WR-06)
     if len(pin) > 128:
         error = t("err_bad_credentials", current_language())
-        return render_template("patient_login.html", error=error)
+        return render_template("patient_login.html", error=error, return_to=return_to)
 
     conn = get_db()
     # evidence for the throttle and the audit row, never identity - see the
@@ -137,14 +177,16 @@ def login():
         # same string. the .get is the backstop for the next status nobody
         # remembers to map (WR-13)
         error = t(STATUS_TO_ERROR_KEY.get(status, "err_bad_credentials"), current_language())
-        return render_template("patient_login.html", error=error)
+        return render_template("patient_login.html", error=error, return_to=return_to)
 
     token = patient_auth.create_patient_session(conn, cf)
     # a name that is not "login" so patient and staff sign-ins are
     # distinguishable in one audit trail (phase 16-01 precedent)
     log_audit(conn, cf, "patient", "patient_login", cf, allowed=1, ip=net.from_request(request))
 
-    resp = redirect(url_for("home"))
+    # a forced pin change still comes first: the gate sends this on to
+    # /change-pin and carries the page along
+    resp = redirect(return_to or url_for("home"))
     resp.set_cookie(
         patient_auth.PATIENT_COOKIE_NAME, token,
         httponly=True, samesite="Strict", secure=current_app.config["SESSION_COOKIE_SECURE"],
@@ -280,16 +322,18 @@ def logout():
 @patient_bp.route("/change-pin", methods=["GET", "POST"])
 def change_pin():
     if request.method == "GET":
-        return render_template("patient_change_pin.html")
+        return render_template("patient_change_pin.html",
+                               return_to=local_return(request.args.get("next")))
 
     current = request.form.get("current", "")
     pin = request.form.get("pin", "")
     confirm = request.form.get("confirm", "")
     lang = current_language()
+    return_to = local_return(request.form.get("next"))
 
     if pin != confirm:
         return render_template(
-            "patient_change_pin.html", error=t("err_pin_mismatch", lang)
+            "patient_change_pin.html", error=t("err_pin_mismatch", lang), return_to=return_to
         )
 
     conn = get_db()
@@ -310,14 +354,14 @@ def change_pin():
             error = t("err_bad_credentials", lang)
         else:
             error = t("err_bad_credentials", lang)
-        return render_template("patient_change_pin.html", error=error)
+        return render_template("patient_change_pin.html", error=error, return_to=return_to)
 
     # change_pin just destroyed every session for this codice fiscale,
     # including this browser's - hand it a fresh token rather than bouncing
     # it to the login screen for changing its own pin. a stolen token is
     # dead even in the case where the stolen token is the one being used (D-09)
     token = patient_auth.create_patient_session(conn, cf)
-    resp = redirect(url_for("home"))
+    resp = redirect(return_to or url_for("home"))
     resp.set_cookie(
         patient_auth.PATIENT_COOKIE_NAME, token,
         httponly=True, samesite="Strict", secure=current_app.config["SESSION_COOKIE_SECURE"],
@@ -336,7 +380,12 @@ def chat_page():
         if request.method == "POST":
             log_audit(get_db(), g.patient["patient_id"], "patient", "patient_query",
                       "consent_required", allowed=0, ip=net.from_request(request))
-        return render_template("patient_chat.html", consent_needed=True)
+        # the state is shown beside the link, so the patient knows why
+        # before being sent to the profile (P29)
+        ai = [c for c in consent.state(get_db(), g.patient["patient_id"], current_language())
+              if c["purpose"] == "ai_assistant"]
+        return render_template("patient_chat.html", consent_needed=True,
+                               consent_row=ai[0] if ai else None)
 
     if request.method == "GET":
         return render_template("patient_chat.html",
@@ -402,12 +451,30 @@ def _deny(conn, cf, action):
               allowed=0, ip=net.from_request(request))
 
 
+HISTORY_LIMIT = 20
+
+
+def _appointment_history(conn, cf):
+    """Declined requests and cancelled appointments, newest first (P29).
+
+    the note column is left behind on purpose: decline() writes the clinic's
+    reason into it, and a booking's note is staff text too. a row that still
+    has a period was a request, so it shows the day asked for; one without
+    was a booking, so it shows the time that had been confirmed.
+    """
+    rows = [r for r in appointments.for_patient(conn, cf)
+            if r["status"] in (appointments.DECLINED, appointments.CANCELLED)]
+    return [{"status": r["status"], "starts_at": r["starts_at"], "period": r["period"]}
+            for r in rows[:HISTORY_LIMIT]]
+
+
 @patient_bp.route("/appointments")
 def appointments_page():
     cf = g.patient["codice_fiscale"]
     booked, requested = appointments.open_for_patient(get_db(), cf)
     return render_template("patient_appointments.html",
-                           booked=booked, requested=requested)
+                           booked=booked, requested=requested,
+                           history=_appointment_history(get_db(), cf))
 
 
 @patient_bp.route("/appointments/request", methods=["POST"])
@@ -427,7 +494,8 @@ def appointments_request():
             "appt_error_period" if "morning" in str(e) else "appt_error_generic")
         booked, requested = appointments.open_for_patient(conn, cf)
         return render_template("patient_appointments.html", booked=booked,
-                               requested=requested, error=t(key, lang)), 400
+                               requested=requested, error=t(key, lang),
+                               history=_appointment_history(conn, cf)), 400
     log_audit(conn, cf, "patient", "patient_appointment_request", str(new_id),
               allowed=1, ip=net.from_request(request))
     return redirect(url_for("patient.appointments_page", done="requested"))

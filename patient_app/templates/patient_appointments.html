@@ -28,6 +28,7 @@
             <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar-check"></i></span>
             <span class="ds-row-main">
               {# a booked row has a real time, so it is shown as one #}
+              <span class="patient-row-label">{{ t('appt_confirmed_time', lang) }}</span>
               <span class="ds-row-title">{{ a.starts_at | appt_when(lang) }}</span>
               <span class="ds-badge ds-badge-success">{{ t('ui_booked', lang) }}</span>
               {% if a.dentist %}<span class="ds-row-sub">{{ t('appt_with', lang).format(dentist=a.dentist) }}</span>{% endif %}
@@ -57,12 +58,42 @@
             <span class="ds-row-main">
               {# NEVER a time. a request holds a date and a period, and rendering it as
                  an hour would be inventing a confirmation the clinic has not given. #}
+              <span class="patient-row-label">{{ t('appt_requested_day', lang) }}</span>
               <span class="ds-row-title">{{ t('appt_pending_line', lang).format(
                    day=a.starts_at | appt_day(lang),
                    period=t('appt_' ~ a.period, lang)) }}</span>
               {% if a.note %}<span class="ds-row-sub"><em>{{ a.note }}</em></span>{% endif %}
             </span>
             <span class="ds-badge ds-badge-warning">{{ t('appt_pending_badge', lang) }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+    {% endif %}
+
+    {% if history %}
+    {# P29: an outcome stays on the page with its date and a status word. no
+       note is passed in - on these rows it can be staff text. #}
+    <section class="ds-card" aria-labelledby="history-title">
+      <div class="ds-card-body">
+        <h2 class="ds-card-title mb-1" id="history-title">{{ t('appt_history', lang) }}</h2>
+        <p class="small text-secondary mb-3">{{ t('appt_history_note', lang) }}</p>
+        <ul class="ds-rows patient-scroll" tabindex="0" aria-labelledby="history-title">
+          {% for h in history %}
+          <li class="ds-row">
+            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-{{ 'calendar-x' if h.status == 'cancelled' else 'x-circle' }}"></i></span>
+            <span class="ds-row-main">
+              {% if h.period %}
+              <span class="patient-row-label">{{ t('appt_requested_day', lang) }}</span>
+              <span class="ds-row-title">{{ h.starts_at | appt_day(lang) }}, {{ t('appt_' ~ h.period, lang) }}</span>
+              {% else %}
+              <span class="patient-row-label">{{ t('appt_confirmed_time', lang) }}</span>
+              <span class="ds-row-title">{{ h.starts_at | appt_when(lang) }}</span>
+              {% endif %}
+              {% if h.status == 'declined' %}<span class="ds-row-sub">{{ t('appt_declined_next', lang) }}</span>{% endif %}
+            </span>
+            <span class="ds-badge ds-badge-neutral">{{ t('appt_status_' ~ h.status, lang) }}</span>
           </li>
           {% endfor %}
         </ul>

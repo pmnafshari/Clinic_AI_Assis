@@ -3,6 +3,7 @@ No real account, model, provider or clinic service is used.
 """
 import hashlib
 import json
+import re
 import sqlite3
 import tempfile
 import threading
@@ -19,6 +20,8 @@ import appointments
 import availability
 import consent
 import documents
+import handoff
+import ledger
 import legacy_fixtures as fx
 import patient_auth
 import patient_files
@@ -54,6 +57,15 @@ def fixture(root):
     date = (datetime.now() + timedelta(days=10)).date().isoformat()
     aid = appointments.book(conn, pid, 'Demo dentist', date + 'T10:30', 30)
     appointments.request(conn, pid, date, 'afternoon', 'Synthetic appointment request')
+    # P29 S1: an outcome history, a waiting call-back and an invoice still being checked
+    declined = appointments.request(conn, pid, date, 'morning', None)
+    appointments.decline(conn, declined, 'STAFF-ONLY synthetic reason')
+    handoff.raise_request(conn, pid, 'patient_asked', 'billing')
+    visit = conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                         " VALUES (?, '2025-11-10', '[]', '', 'p29-e2e')", (pid,)).lastrowid
+    conn.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                 " VALUES (?, ?, 0, 80.0, 8000, 'Synthetic hygiene')", (pid, visit))
+    ledger.ensure_invoice(conn, pid, visit, legacy=True)
     # Direct synthetic storage fixtures: reader/indexing is not under test here.
     files = []
     for n in range(14):
@@ -76,6 +88,28 @@ def fixture(root):
     return app, token, files, aid
 
 
+def keyboard_pass(page, url):
+    """Tab from the top until focus leaves the page. Every stop must be visible and
+    named, and reaching the end proves there is no focus trap."""
+    page.goto(url)
+    stops = []
+    for _ in range(200):
+        page.keyboard.press('Tab')
+        info = page.evaluate("""() => { const e = document.activeElement;
+            if (!e || e === document.body) return null;
+            const r = e.getBoundingClientRect();
+            const img = e.querySelector('img');
+            const name = (e.getAttribute('aria-label') || e.innerText || (img && img.alt) || e.value || e.title
+                          || (e.labels && e.labels[0] && e.labels[0].innerText) || '').trim();
+            return {html: e.outerHTML.slice(0, 80), name, visible: r.width > 0 && r.height > 0}; }""")
+        if info is None:
+            return len(stops)
+        assert info['visible'], (url, 'focus on a hidden element', info)
+        assert info['name'] or 'tabindex="0"' in info['html'], (url, 'unnamed focus stop', info)
+        stops.append(info['html'])
+    raise AssertionError(f'{url}: focus never left the page (trap?)')
+
+
 def walk():
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='clinic-p29-patient-') as temp:
@@ -92,6 +126,10 @@ def walk():
         for fid in files[-2:]:
             assert client.get(f'/files/{fid}/download').status_code == 404
         assert 'PRIVATE-OTHER-NAME' not in client.get('/files').text
+        # the foreign file is the same 404 by preview too, and never leaks its name
+        for fid in files[-2:]:
+            denied = client.get(f'/files/{fid}/preview')
+            assert denied.status_code == 404 and b'PRIVATE' not in denied.data
         assert client.post('/appointments/request', data={'day': '2099-01-01'}).status_code == 400
         server = make_server('127.0.0.1', 0, app, request_handler=Quiet)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -139,6 +177,22 @@ def walk():
                     expect(page.locator('#file-no-matches')).to_be_visible()
                     page.locator('#file-clear').click()
                     expect(page.locator('[data-file-kind]:visible')).to_have_count(12)
+                    # P29 S1: each shared image has a View button named after the file.
+                    expect(page.get_by_role('link', name=re.compile(r'^View\s*:'))).to_have_count(6)
+                    page.goto(base + '/appointments')
+                    expect(page.locator('#history-title')).to_be_visible()
+                    expect(page.locator('#history-title ~ ul').get_by_text('Declined', exact=True)).to_be_visible()
+                    expect(page.get_by_text('Requested day').first).to_be_visible()
+                    assert 'STAFF-ONLY' not in page.content()
+                    page.goto(base + '/billing')
+                    expect(page.locator('table.patient-money').first).to_be_visible()
+                    expect(page.get_by_text('unknown', exact=True).first).to_be_visible()
+                    page.goto(base + '/chat')
+                    expect(page.get_by_text('About: payments')).to_be_visible()
+                    for path in ('/appointments', '/files', '/billing', '/chat', '/profile'):
+                        stops = keyboard_pass(page, base + path)
+                        results.append(f'keyboard {path} {width}: {stops} stops, all visible and named, no trap')
+                    page.goto(base + '/files')
                     # Published original uses existing scoped download endpoint.
                     with page.expect_download() as downloaded:
                         page.locator('a[href$="/download"]').first.click()
@@ -196,7 +250,7 @@ def walk():
         finally:
             server.shutdown()
             thread.join(timeout=5)
-        (EVIDENCE / 'browser-results.json').write_text(json.dumps({'pages': results, 'other_checks': ['language allowlist', 'CSRF rejection', 'file publication and ownership', 'safe filenames', 'search/type/reset', 'download', 'unsent locale dismissal', 'cancellation dismissal and commit', 'multiline text', 'keyboard skip link', 'no JS errors'], 'fixtures': 'disposable synthetic only'}, indent=2))
+        (EVIDENCE / 'browser-results.json').write_text(json.dumps({'pages': results, 'other_checks': ['language allowlist', 'CSRF rejection', 'file publication and ownership', 'safe filenames', 'search/type/reset', 'download', 'unsent locale dismissal', 'P29 S1 history, View buttons, billing tables, call-back, keyboard-only pass', 'cancellation dismissal and commit', 'multiline text', 'keyboard skip link', 'no JS errors'], 'fixtures': 'disposable synthetic only'}, indent=2))
         print('PASS: 28 page/locale/viewport combinations + guarded interactions, login and private file checks')
 
 if __name__ == '__main__':
