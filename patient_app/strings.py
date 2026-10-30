@@ -23,6 +23,29 @@ def current_language():
     return lang if lang in LANGUAGES else DEFAULT_LANGUAGE
 
 STRINGS = {
+    "ui_pin_hint": {"it": "Usa almeno 8 caratteri. Non ripetere lo stesso carattere, non usare sequenze numeriche e scegli un PIN diverso da quello attuale.", "en": "Use at least 8 characters. Avoid repeating one character or consecutive numbers, and choose a PIN different from your current one."},
+    "ui_chat_keys": {"it": "Invio per inviare · Maiusc + Invio per andare a capo", "en": "Enter to send · Shift + Enter for a new line"},
+    # P29 patient portal presentation; Italian awaits native-speaker review.
+    'ui_skip': {"it": 'Vai al contenuto', "en": 'Skip to content'},
+    'ui_confirm_title': {"it": 'Conferma la scelta', "en": 'Confirm your choice'},
+    'ui_keep': {"it": 'Torna indietro', "en": 'Go back'},
+    'ui_continue': {"it": 'Continua', "en": 'Continue'},
+    'ui_unsaved': {"it": 'Cambiando lingua perderai le modifiche non inviate. Continuare?', "en": 'Changing language will discard your unsent changes. Continue?'},
+    'ui_quick': {"it": 'A portata di mano', "en": 'Your care, at a glance'},
+    'ui_files_body': {"it": 'Apri le immagini e scarica i documenti condivisi dal dentista.', "en": 'Open images and download documents your dentist has shared.'},
+    'ui_payments_body': {"it": 'Consulta le fatture, i pagamenti registrati e le rate.', "en": 'See invoices, recorded payments and installments.'},
+    'ui_search_files': {"it": 'Cerca tra i file visualizzati', "en": 'Search displayed files'},
+    'ui_file_kind': {"it": 'Tipo di file', "en": 'File type'},
+    'ui_all_types': {"it": 'Tutti i tipi', "en": 'All types'},
+    'ui_no_matches': {"it": 'Nessun file corrisponde. Modifica o cancella i filtri.', "en": 'No matching files. Change or clear the filters.'},
+    'ui_clear': {"it": 'Cancella filtri', "en": 'Clear filters'},
+    'ui_chars': {"it": 'caratteri', "en": 'characters'},
+    'ui_file_limit': {"it": 'Sono visualizzati fino a 200 file condivisi, dal più recente. Per lo storico completo contatta lo studio.', "en": 'Up to 200 shared files are displayed, newest first. Contact the clinic for your full history.'},
+    'ui_booked': {"it": 'Confermato', "en": 'Confirmed'},
+    'ui_next_action': {"it": 'Gestisci gli appuntamenti', "en": 'Manage appointments'},
+    'ui_files_action': {"it": 'Visualizza i miei file', "en": 'View my files'},
+    'ui_payments_action': {"it": 'Visualizza i pagamenti', "en": 'View payments'},
+
     # [ASSUMED] italian below written without native-speaker review, same
     # caveat as the rest of this module
     # --- portal shell (UX-13/UX-14) -----------------------------------

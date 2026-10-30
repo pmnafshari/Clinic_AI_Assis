@@ -11,9 +11,16 @@
 <p class="small">{{ t('files_notice', lang) }}</p>
 
 {% if files %}
-<ol class="list-unstyled patient-files" aria-label="{{ t('files_heading', lang) }}">
+<div class="patient-filter ds-card" data-file-filters hidden>
+  <div><label for="file-search" class="form-label">{{ t('ui_search_files', lang) }}</label><input id="file-search" type="search" class="form-control" autocomplete="off"></div>
+  <div><label for="file-kind" class="form-label">{{ t('ui_file_kind', lang) }}</label><select id="file-kind" class="form-select"><option value="">{{ t('ui_all_types', lang) }}</option>{% for kind in files | map(attribute='kind') | unique | sort %}<option value="{{ kind }}">{{ kind | upper }}</option>{% endfor %}</select></div>
+  <button type="button" class="btn btn-outline-secondary" id="file-clear">{{ t('ui_clear', lang) }}</button>
+</div>
+<p class="small text-secondary">{{ t('ui_file_limit', lang) }}</p>
+<p id="file-no-matches" role="status" hidden>{{ t('ui_no_matches', lang) }}</p>
+<ol class="list-unstyled patient-files patient-scroll" tabindex="0" aria-label="{{ t('files_heading', lang) }}">
   {% for f in files %}
-  <li class="ds-card patient-profile-card mb-3">
+  <li class="ds-card patient-profile-card mb-3" data-file-kind="{{ f.kind }}">
     <div class="ds-card-body d-flex flex-wrap gap-3 align-items-start">
       {% if f.kind in ('png', 'jpeg') %}
       <figure class="patient-file-figure">
@@ -21,6 +28,7 @@
       </figure>
       {% endif %}
       <div class="min-w-0 flex-grow-1">
+        <p class="patient-file-type">{{ f.kind | upper }} · {{ f.download_name }}</p>
         <h2 class="h6 mb-1 text-break">{{ t('filecat_' ~ (f.category or f.kind), lang) }}</h2>
         <p class="small mb-1">{{ t('files_taken' if f.dated_by_evidence else 'files_added', lang) }} {{ f.date | appt_day(lang) }}</p>
         {% if f.kind in ('png', 'jpeg') %}<p class="small text-secondary mb-1">{{ t('files_preview_note', lang) }}</p>{% else %}<p class="small text-secondary mb-1">{{ t('files_no_preview', lang) }}</p>{% endif %}

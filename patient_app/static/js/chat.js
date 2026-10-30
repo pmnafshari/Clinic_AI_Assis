@@ -19,6 +19,15 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
+  const question = document.getElementById("question");
+  if (question && form) {
+    question.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+        event.preventDefault();
+        form.requestSubmit();
+      }
+    });
+  }
   if (form) {
     form.addEventListener("submit", function () {
       var button = document.getElementById("chat-submit");

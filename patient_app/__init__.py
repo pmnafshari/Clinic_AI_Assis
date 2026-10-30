@@ -9,7 +9,7 @@ from pathlib import Path
 
 from datetime import date, datetime
 
-from flask import Flask, g, redirect, render_template, send_from_directory, url_for
+from flask import Flask, g, redirect, render_template, request, send_from_directory, url_for
 from flask_wtf import CSRFProtect
 
 import clinic_time
@@ -147,7 +147,11 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
     def set_language(code):
         # redirect to a fixed in-app target, never to request.referrer - that
         # would be an open redirect on an internet-reachable surface
-        resp = redirect(url_for("home"))
+        # Endpoint allowlist: preserve the current page without accepting a URL.
+        pages = {"home", "patient.login", "patient.change_pin", "patient.profile",
+                 "patient.appointments_page", "patient.billing", "patient.files_page", "patient.chat"}
+        page = request.args.get("page", "home")
+        resp = redirect(url_for(page if page in pages else "home"))
         if code in LANGUAGES:
             resp.set_cookie(LANG_COOKIE_NAME, code, httponly=False, samesite="Strict")
         return resp

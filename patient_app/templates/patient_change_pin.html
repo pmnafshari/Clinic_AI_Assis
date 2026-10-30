@@ -17,7 +17,8 @@
   {% endif %}
   <div class="mb-3">
     <label for="pin" class="form-label">{{ t('pin_label', lang) }}</label>
-    <input type="password" id="pin" name="pin" class="form-control" inputmode="numeric" {% if patient.must_change_pin %}autofocus{% endif %} required>
+    <p id="pin-hint" class="small text-secondary">{{ t('ui_pin_hint', lang) }}</p>
+    <input aria-describedby="pin-hint" minlength="8" type="password" id="pin" name="pin" class="form-control" inputmode="numeric" {% if patient.must_change_pin %}autofocus{% endif %} required>
   </div>
   <div class="mb-4">
     <label for="confirm" class="form-label">{{ t('confirm_label', lang) }}</label>

@@ -22,17 +22,18 @@
       <div class="ds-card-body">
         <h2 class="ds-card-title mb-3" id="upcoming-title">{{ t('appt_upcoming', lang) }}</h2>
         {% if booked %}
-        <ul class="ds-rows">
+        <ul class="ds-rows patient-scroll" tabindex="0">
           {% for a in booked %}
           <li class="ds-row">
             <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar-check"></i></span>
             <span class="ds-row-main">
               {# a booked row has a real time, so it is shown as one #}
               <span class="ds-row-title">{{ a.starts_at | appt_when(lang) }}</span>
+              <span class="ds-badge ds-badge-success">{{ t('ui_booked', lang) }}</span>
               {% if a.dentist %}<span class="ds-row-sub">{{ t('appt_with', lang).format(dentist=a.dentist) }}</span>{% endif %}
             </span>
             <form method="post" action="{{ url_for('patient.appointments_cancel', appointment_id=a.id) }}"
-                  onsubmit="return confirm('{{ t('appt_cancel_confirm', lang) }}');">
+                  data-confirm="{{ t('appt_cancel_confirm', lang) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('appt_cancel', lang) }}</button>
             </form>
@@ -49,7 +50,7 @@
     <section class="ds-card" aria-labelledby="pending-title">
       <div class="ds-card-body">
         <h2 class="ds-card-title mb-3" id="pending-title">{{ t('appt_pending', lang) }}</h2>
-        <ul class="ds-rows">
+        <ul class="ds-rows patient-scroll" tabindex="0">
           {% for a in requested %}
           <li class="ds-row">
             <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
@@ -79,24 +80,25 @@
         <div class="mb-3">
           <label for="day" class="form-label">{{ t('appt_request_day', lang) }}</label>
           <input type="date" id="day" name="day" class="form-control" required
-                 min="{{ today }}" value="{{ today }}">
+                 min="{{ today }}" value="{{ request.form.get('day', today) }}">
         </div>
         <fieldset class="mb-3">
           <legend class="form-label">{{ t('appt_request_period', lang) }}</legend>
           <div class="form-check">
             <input class="form-check-input" type="radio" name="period" id="period-morning"
-                   value="morning" checked>
+                   value="morning" {{ 'checked' if request.form.get('period', 'morning') == 'morning' else '' }}>
             <label class="form-check-label" for="period-morning">{{ t('appt_morning', lang) }}</label>
           </div>
           <div class="form-check">
             <input class="form-check-input" type="radio" name="period" id="period-afternoon"
-                   value="afternoon">
+                   value="afternoon" {{ 'checked' if request.form.get('period') == 'afternoon' else '' }}>
             <label class="form-check-label" for="period-afternoon">{{ t('appt_afternoon', lang) }}</label>
           </div>
         </fieldset>
         <div class="mb-3">
           <label for="reason" class="form-label">{{ t('appt_request_reason', lang) }}</label>
-          <input type="text" id="reason" name="reason" class="form-control" maxlength="200">
+          <textarea id="reason" name="reason" class="form-control" maxlength="200" rows="3" aria-describedby="reason-count">{{ request.form.get('reason', '') }}</textarea>
+          <p class="patient-counter" id="reason-count" data-count-for="reason">0 / 200 {{ t('ui_chars', lang) }}</p>
         </div>
         <button type="submit" class="btn btn-primary w-100">{{ t('appt_request_send', lang) }}</button>
       </form>

@@ -10,7 +10,8 @@
   <link rel="stylesheet" href="{{ url_for('shared', filename='css/components.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/patient.css') }}">
 </head>
-<body>
+<body class="{{ 'patient-signed-in' if patient and not patient.must_change_pin else 'patient-auth' }}">
+  <a class="patient-skip" href="#patient-content">{{ t('ui_skip', lang) }}</a>
   {# phase 45 - the reference's header, as a rounded bar at the top of the
      column rather than a full-bleed strip. it carries .patient-lang because it
      IS the language/logout bar: e2e check 11 measures that bar's edges against
@@ -34,7 +35,7 @@
         {% for endpoint, key in [('home', 'nav_overview'), ('patient.appointments_page', 'nav_appointments'), ('patient.billing', 'nav_billing'), ('patient.files_page', 'nav_files'), ('patient.chat', 'nav_chat'), ('patient.profile', 'nav_profile')] %}
         <a href="{{ url_for(endpoint) }}"
            class="patient-nav-link{{ ' active' if request.endpoint == endpoint else '' }}"
-           {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ t(key, lang) }}</a>
+           {% if request.endpoint == endpoint %}aria-current="page"{% endif %}><i class="bi bi-{{ {'home': 'grid-1x2', 'patient.appointments_page': 'calendar3', 'patient.billing': 'wallet2', 'patient.files_page': 'folder2-open', 'patient.chat': 'chat-dots', 'patient.profile': 'person-circle'}[endpoint] }}" aria-hidden="true"></i>{{ t(key, lang) }}</a>
         {% endfor %}
       </nav>
       {% endif %}
@@ -46,15 +47,15 @@
         </form>
         {% endif %}
         <span class="patient-lang-switch">
-          <a href="{{ url_for('set_language', code='it') }}"
-             class="patient-lang-link{{ ' active' if lang == 'it' else '' }}">IT</a>
-          <a href="{{ url_for('set_language', code='en') }}"
-             class="patient-lang-link{{ ' active' if lang == 'en' else '' }}">EN</a>
+          <a href="{{ url_for('set_language', code='it', page=request.endpoint) }}"
+             data-locale-link class="patient-lang-link{{ ' active' if lang == 'it' else '' }}">IT</a>
+          <a href="{{ url_for('set_language', code='en', page=request.endpoint) }}"
+             data-locale-link class="patient-lang-link{{ ' active' if lang == 'en' else '' }}">EN</a>
         </span>
       </div>
     </header>
 
-    <div class="card patient-card {% block card_class %}{% endblock %} p-4">
+    <div id="patient-content" tabindex="-1" class="card patient-card {% block card_class %}{% endblock %} p-4">
       {% if error %}
       <div class="alert alert-danger" role="alert">{{ error }}</div>
       {% endif %}
@@ -62,5 +63,15 @@
     </div>
     </div>
   </main>
+  <dialog class="patient-dialog" id="patient-confirm" aria-labelledby="patient-confirm-title">
+    <h2 id="patient-confirm-title">{{ t('ui_confirm_title', lang) }}</h2>
+    <p id="patient-confirm-message"></p>
+    <div class="patient-dialog-actions">
+      <button class="btn btn-outline-secondary" type="button" data-dialog-cancel autofocus>{{ t('ui_keep', lang) }}</button>
+      <button class="btn btn-primary" type="button" data-dialog-confirm>{{ t('ui_continue', lang) }}</button>
+    </div>
+  </dialog>
+  <script src="{{ url_for('static', filename='js/portal.js') }}" defer
+          data-unsaved="{{ t('ui_unsaved', lang) }}"></script>
 </body>
 </html>

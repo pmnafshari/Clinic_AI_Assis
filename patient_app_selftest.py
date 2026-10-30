@@ -584,12 +584,10 @@ def selftest():
         # would be asserting a failure against correct behaviour.
         assert not on_page(t("not_connected", "it"), home_resp.text), \
             "18b: nothing on the overview is unconnected now - appointments are real"
-        # visits and invoices are still read through the assistant, and still
-        # must not be mislabelled as unavailable
-        assert on_page(t("via_assistant", "it"), home_resp.text), \
-            "18b: reachable-via-assistant must not be labelled unavailable"
-        assert on_page(t("overview_appt_body", "it"), home_resp.text), \
-            "18b: the appointments card must say what it now does"
+        # P29: files and payments now have explicit overview actions, alongside chat.
+        assert on_page(t("ui_files_action", "it"), home_resp.text)
+        assert on_page(t("ui_payments_action", "it"), home_resp.text)
+        assert on_page(t("home_cta", "it"), home_resp.text)
         # and it has to actually go somewhere
         assert "/appointments" in home_resp.text, \
             "18b: the appointments card must link to the real surface"
@@ -1675,8 +1673,8 @@ def selftest():
             "name=\"question\". more than one and the browser serialises the field twice on "
             f"implicit submission, and the route answers the wrong question. found {named_question28}"
         )
-        assert named_question28[0][0] == "input" and 'id="question"' in named_question28[0][1], (
-            "28: the single name=\"question\" element must be the text input itself, found "
+        assert named_question28[0][0] == "textarea" and 'id="question"' in named_question28[0][1], (
+            "28: the single name=\"question\" element must be the multiline question field itself, found "
             f"{named_question28[0]}"
         )
 

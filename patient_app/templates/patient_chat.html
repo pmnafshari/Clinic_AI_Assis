@@ -90,17 +90,19 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {# the label stays in the dom and stays associated - it is read by a screen
      reader and the placeholder is not a substitute for it #}
-  <label for="question" class="ds-sr-only">{{ t('question_label', lang) }}</label>
+  <label for="question" class="form-label">{{ t('question_label', lang) }}</label>
   <div class="chat-composer-bar">
-    <input type="text" id="question" name="question" class="chat-input"
+    <textarea id="question" name="question" class="chat-input" rows="3" aria-describedby="question-count question-keys"
            placeholder="{{ t('question_placeholder', lang) }}" maxlength="500"
-           autocomplete="off" required>
+           autocomplete="off" required></textarea>
     <button type="submit" id="chat-submit" class="chat-send"
             data-pending-label="{{ t('chat_pending_cta', lang) }}">
       <span class="chat-submit-label">{{ t('chat_cta', lang) }}</span>
       <span class="spinner-border spinner-border-sm ms-2 d-none" aria-hidden="true"></span>
     </button>
   </div>
+  <p class="small text-secondary" id="question-keys">{{ t('ui_chat_keys', lang) }}</p>
+  <p id="question-count" class="patient-counter" data-count-for="question">0 / 500 {{ t('ui_chars', lang) }}</p>
   <p id="chat-pending-help" class="chat-pending-help d-none">{{ t('chat_pending_help', lang) }}</p>
 </form>
 

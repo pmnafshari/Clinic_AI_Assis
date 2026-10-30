@@ -66,7 +66,7 @@
 <h2 class="h5" id="rights">{{ t('rights_heading', lang) }}</h2>
 <p class="small">{{ t('rights_intro', lang) }}</p>
 {% if requests %}
-<ul class="list-unstyled small">
+<ul class="list-unstyled small patient-scroll patient-striped" tabindex="0">
   {% for r in requests %}
   <li class="mb-1">
     {{ t('rights_kind_' ~ r.kind, lang) }} · {{ t('rights_status_' ~ r.status, lang) }}
@@ -80,6 +80,7 @@
 <form method="post" action="{{ url_for('patient.data_request') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <fieldset class="mb-2">
+    <legend class="visually-hidden">{{ t('rights_heading', lang) }}</legend>
     {% for kind in ('export', 'access', 'amend', 'erasure') %}
     <div class="form-check">
       <input class="form-check-input" type="radio" name="kind" id="kind-{{ kind }}" value="{{ kind }}" {% if loop.first %}checked{% endif %}>
@@ -88,7 +89,8 @@
     {% endfor %}
   </fieldset>
   <label class="form-label small" for="rights-detail">{{ t('rights_detail_label', lang) }}</label>
-  <textarea class="form-control mb-2" id="rights-detail" name="detail" rows="2" maxlength="1000"></textarea>
+  <textarea class="form-control mb-2" id="rights-detail" name="detail" rows="4" maxlength="1000" aria-describedby="rights-count"></textarea>
+  <p class="patient-counter" id="rights-count" data-count-for="rights-detail">0 / 1000 {{ t('ui_chars', lang) }}</p>
   <p class="text-secondary small">{{ t('rights_erasure_note', lang) }}</p>
   <button type="submit" class="btn btn-outline-primary btn-sm">{{ t('rights_submit', lang) }}</button>
 </form>
