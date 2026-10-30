@@ -2255,10 +2255,11 @@ def selftest():
             text34 = stored34(pid34, b"Synthetic report text", "text")
             foreign34 = stored34(pid34_other, _png34(35), "png")
             files34 = client34.get("/files").text
-            assert f'href="/files/{image34}/preview"' in files34 and on_page(t("files_view", "it"), files34), \
+            # P29 redesign: every shared file opens in the viewer now, not only images
+            assert f'href="/files/{image34}/view"' in files34 and on_page(t("files_view", "it"), files34), \
                 "34c: an image has a View button"
             assert f'href="/files/{text34}/download"' in files34, "34c: every shared file can be downloaded"
-            assert files34.count("data-file-view") == 1, "34c: View only where the browser can show it"
+            assert f'href="/files/{text34}/view"' in files34, "34c: a text file has a View button too"
             assert f"/files/{foreign34}/" not in files34, "34c: another patient's file is not listed"
             denied34 = count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'")
             for path in (f"/files/{foreign34}/preview", f"/files/{foreign34}/download",
@@ -2503,6 +2504,72 @@ def selftest():
         detail35 = bill35.split(f'id="inv-{inv35}"')[1].split("</section>")[0]
         assert detail35.count(t("bill_covered", "it")) == 1 and detail35.count(t("bill_open", "it")) == 1, \
             "35d: each installment says covered or open"
+
+        # 35e/35f. files: every shared file has View and Download; the viewer
+        # shows images, text (as text, never as markup) and PDFs, and refuses
+        # anything the patient may not open with the same 404
+        from documents_selftest import pdf as _pdf35
+        saved_root35 = _docs34.DOC_ROOT
+        _docs34.DOC_ROOT = Path(tmp) / "documents35"
+        try:
+            def stored35(owner, data, kind, publish=True):
+                sha = hashlib.sha256(data).hexdigest()
+                path = Path(_docs34.DOC_ROOT) / f"{owner}/{sha}"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+                c = raw_db()
+                did = c.execute(
+                    "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size,"
+                    " status, uploaded_by, uploaded_at, category) VALUES (?, ?, 'PRIVATE-NAME', ?, ?, ?,"
+                    " 'confirmed', 'fixture', '2026-10-02T10:00:00+00:00', 'report')",
+                    (owner, kind, f"{owner}/{sha}", sha, len(data))).lastrowid
+                c.commit()
+                if publish:
+                    _pfiles35.publish(c, did, owner, "fixture", "dentist")
+                c.close()
+                return did
+
+            pdf35 = stored35(pid35, _pdf35(["Synthetic treatment plan"]), "pdf")
+            text35 = stored35(pid35, b"Synthetic letter <script>alert(1)</script> end", "text")
+            image35 = stored35(pid35, _png34(36), "png")
+            hidden35 = stored35(pid35, b"not shared", "text", publish=False)
+            foreign35 = stored35(pid34_other, _pdf35(["someone else"]), "pdf")
+
+            files35 = client35.get("/files").text
+            for did in (pdf35, text35, image35):
+                assert f'href="/files/{did}/view"' in files35 and f'href="/files/{did}/download"' in files35, \
+                    f"35e: shared file {did} has View and Download"
+            assert f"/files/{hidden35}/" not in files35 and f"/files/{foreign35}/" not in files35, \
+                "35e: unshared and foreign files are not listed"
+
+            view_pdf = client35.get(f"/files/{pdf35}/view")
+            assert view_pdf.status_code == 200 and f'data-pdf-src="/files/{pdf35}/raw"' in view_pdf.text, \
+                "35f: a PDF opens in the viewer and is fed from the raw route"
+            assert 'href="/files"' in view_pdf.text and "data-viewer-close" in view_pdf.text, "35f: the viewer closes back to the list"
+            view_text = client35.get(f"/files/{text35}/view").text
+            assert "Synthetic letter &lt;script&gt;alert(1)&lt;/script&gt; end" in view_text and \
+                "<script>alert(1)" not in view_text, "35f: text is shown as text, never run"
+            view_img = client35.get(f"/files/{image35}/view").text
+            assert f'src="/files/{image35}/preview"' in view_img, "35f: an image opens in the viewer"
+            assert "PRIVATE-NAME" not in view_pdf.text + view_text + view_img, "35f: the original file name never shows"
+            denied35 = count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'")
+            for path in (f"/files/{foreign35}/view", f"/files/{hidden35}/view", "/files/999999/view",
+                         f"/files/{foreign35}/raw", f"/files/{text35}/raw", f"/files/{image35}/raw"):
+                assert client35.get(path).status_code == 404, f"35f: {path} is the same 404"
+            assert count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'") == denied35 + 6, \
+                "35f: and every refusal is audited"
+            raw35 = client35.get(f"/files/{pdf35}/raw")
+            assert raw35.status_code == 200 and raw35.mimetype == "application/pdf" and raw35.data[:5] == b"%PDF-" and \
+                raw35.headers["Content-Security-Policy"] == "sandbox; default-src 'none'", \
+                "35f: the PDF's bytes come through the same gate, sandboxed"
+            with app.test_request_context():
+                assert patient_routes.local_return(f"/files/{pdf35}/raw") == "", "35f: login never returns to raw bytes"
+            lic35 = Path(patient_app.__file__).parent / "static" / "vendor" / "pdfjs" / "4.10.38" / "LICENSE"
+            assert lic35.exists() and "Apache License" in lic35.read_text(), "35f: pdf.js ships with its licence"
+            js35 = app.test_client().get("/static/vendor/pdfjs/4.10.38/pdf.min.mjs")
+            assert js35.status_code == 200 and js35.mimetype == "text/javascript", "35f: pdf.js is served as a module"
+        finally:
+            _docs34.DOC_ROOT = saved_root35
 
     print("selftest ok")
 

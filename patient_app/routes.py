@@ -100,7 +100,7 @@ def get_db():
 NO_RETURN = {
     "static", "vendor", "shared", "set_language", "patient.login", "patient.logout",
     "patient.change_pin", "patient.file_download", "patient.file_preview",
-    "patient.data_download",
+    "patient.file_raw", "patient.data_download",
 }
 
 
@@ -249,12 +249,12 @@ def files_page():
     return render_template("patient_files.html", files=files)
 
 
-def _published_file(doc_id, action, images_only=False):
+def _published_file(doc_id, action, kinds=None):
     conn = get_db()
     pid = g.patient["patient_id"]
     ip = net.from_request(request)
     row = patient_accessor.get_published_file(pid, doc_id, conn, ip=ip)
-    if row and images_only and row["kind"] not in ("png", "jpeg"):
+    if row and kinds and row["kind"] not in kinds:
         row = None
     data = documents.verified_bytes(row) if row else None
     if data is None:
@@ -282,8 +282,40 @@ def file_download(doc_id):
 
 @patient_bp.route("/files/<int:doc_id>/preview")
 def file_preview(doc_id):
-    row, data = _published_file(doc_id, "patient_file_preview", images_only=True)
+    row, data = _published_file(doc_id, "patient_file_preview", kinds=("png", "jpeg"))
     return _file_response(data, documents.MIMETYPES[row["kind"]])
+
+
+# P29: one viewer page for every shared file - an image, a text shown as text,
+# or a PDF drawn in the browser by the vendored pdf.js from the raw route below.
+# both go through _published_file, so a file the patient may not open is the
+# same audited 404 as everywhere else.
+TEXT_VIEW_LIMIT = 200_000
+
+
+@patient_bp.route("/files/<int:doc_id>/view")
+def file_view(doc_id):
+    row, data = _published_file(doc_id, "patient_file_view")
+    ids = [f["id"] for f in patient_accessor.get_published_files(
+        g.patient["patient_id"], get_db(), ip=net.from_request(request))]
+    pos = ids.index(doc_id) if doc_id in ids else 0
+    text = None
+    truncated = False
+    if row["kind"] == "text":
+        text = data.decode("utf-8", errors="replace")
+        truncated = len(text) > TEXT_VIEW_LIMIT
+        text = text[:TEXT_VIEW_LIMIT]
+    return render_template("patient_file_view.html", f=row, text=text, truncated=truncated,
+                           prev_id=ids[pos - 1] if pos > 0 else None,
+                           next_id=ids[pos + 1] if pos + 1 < len(ids) else None,
+                           position=pos + 1, total=len(ids))
+
+
+@patient_bp.route("/files/<int:doc_id>/raw")
+def file_raw(doc_id):
+    # the PDF viewer's bytes: a PDF only, sandboxed like every other file response
+    row, data = _published_file(doc_id, "patient_file_view_pdf", kinds=("pdf",))
+    return _file_response(data, documents.MIMETYPES["pdf"])
 
 
 @patient_bp.route("/billing")

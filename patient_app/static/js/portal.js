@@ -112,5 +112,22 @@
     search.addEventListener('input', apply);
     kind.addEventListener('change', apply);
     document.getElementById('file-clear').addEventListener('click', () => { search.value = ''; kind.value = ''; apply(); search.focus(); });
+    // P29: sort, and tiles or rows - the choice of layout is remembered on this device only
+    const list = document.querySelector('.pp-files');
+    const sort = document.getElementById('file-sort');
+    sort.addEventListener('change', () => {
+      const by = { new: (a, b) => b.dataset.date.localeCompare(a.dataset.date),
+                   old: (a, b) => a.dataset.date.localeCompare(b.dataset.date),
+                   name: (a, b) => a.dataset.name.localeCompare(b.dataset.name) }[sort.value];
+      rows.slice().sort(by).forEach(row => list.appendChild(row));
+    });
+    const modes = [...filters.querySelectorAll('[data-file-mode]')];
+    const setMode = mode => {
+      list.dataset.mode = mode;
+      modes.forEach(button => button.setAttribute('aria-pressed', String(button.dataset.fileMode === mode)));
+      try { localStorage.setItem('pp-files-view', mode); } catch (error) { /* private window: not remembered */ }
+    };
+    modes.forEach(button => button.addEventListener('click', () => setMode(button.dataset.fileMode)));
+    try { if (localStorage.getItem('pp-files-view') === 'list') setMode('list'); } catch (error) { /* not remembered */ }
   }
 })();

@@ -6,42 +6,51 @@
   <div>
     <p class="ds-page-eyebrow">{{ t('nav_files', lang) }}</p>
     <h1 class="ds-page-title">{{ t('files_heading', lang) }}</h1>
+    <p class="ds-page-meta">{{ t('files_notice', lang) }}</p>
   </div>
 </div>
-<p class="small">{{ t('files_notice', lang) }}</p>
 
 {% if files %}
-<div class="patient-filter ds-card" data-file-filters hidden>
-  <div><label for="file-search" class="form-label">{{ t('ui_search_files', lang) }}</label><input id="file-search" type="search" class="form-control" autocomplete="off"></div>
+{# P29 redesign: one list that shows as tiles or as rows. every shared file
+   opens in the viewer and can be downloaded; the original file name never shows. #}
+<div class="pp-card pp-files-toolbar" data-file-filters hidden>
+  <div class="pp-files-search"><label for="file-search" class="form-label">{{ t('ui_search_files', lang) }}</label><input id="file-search" type="search" class="form-control" autocomplete="off"></div>
   <div><label for="file-kind" class="form-label">{{ t('ui_file_kind', lang) }}</label><select id="file-kind" class="form-select"><option value="">{{ t('ui_all_types', lang) }}</option>{% for kind in files | map(attribute='kind') | unique | sort %}<option value="{{ kind }}">{{ kind | upper }}</option>{% endfor %}</select></div>
+  <div><label for="file-sort" class="form-label">{{ t('files_sort', lang) }}</label><select id="file-sort" class="form-select"><option value="new">{{ t('files_sort_new', lang) }}</option><option value="old">{{ t('files_sort_old', lang) }}</option><option value="name">{{ t('files_sort_name', lang) }}</option></select></div>
+  <div class="pp-seg" role="group" aria-label="{{ t('files_layout', lang) }}">
+    <button type="button" data-file-mode="grid" aria-pressed="true"><i class="bi bi-grid" aria-hidden="true"></i> {{ t('files_grid', lang) }}</button>
+    <button type="button" data-file-mode="list" aria-pressed="false"><i class="bi bi-list-ul" aria-hidden="true"></i> {{ t('files_list', lang) }}</button>
+  </div>
   <button type="button" class="btn btn-outline-secondary" id="file-clear">{{ t('ui_clear', lang) }}</button>
 </div>
-<p class="small text-secondary">{{ t('ui_file_limit', lang) }}</p>
-<p id="file-no-matches" role="status" hidden>{{ t('ui_no_matches', lang) }}</p>
-<ol class="list-unstyled patient-files patient-scroll" tabindex="0" aria-label="{{ t('files_heading', lang) }}">
+<p id="file-no-matches" class="pp-note" role="status" hidden>{{ t('ui_no_matches', lang) }}</p>
+<div class="pp-box pp-files-box" style="--h:900px">
+<ol class="pp-files" data-mode="grid" aria-label="{{ t('files_heading', lang) }}">
   {% for f in files %}
-  <li class="ds-card patient-profile-card mb-3" data-file-kind="{{ f.kind }}">
-    <div class="ds-card-body d-flex flex-wrap gap-3 align-items-start">
+  {% set name = t('filecat_' ~ (f.category or f.kind), lang) %}
+  <li class="pp-file" data-file-kind="{{ f.kind }}" data-date="{{ f.date }}" data-name="{{ name }}">
+    <a class="pp-file-thumb pp-file-thumb--{{ 'img' if f.kind in ('png', 'jpeg') else 'doc' }}" href="{{ url_for('patient.file_view', doc_id=f.id) }}" tabindex="-1" aria-hidden="true">
+      <span class="pp-file-badge">{{ f.kind | upper }}</span>
       {% if f.kind in ('png', 'jpeg') %}
-      <figure class="patient-file-figure">
-        <a href="{{ url_for('patient.file_preview', doc_id=f.id) }}" target="_blank" rel="noopener"><img class="patient-file-image" src="{{ url_for('patient.file_preview', doc_id=f.id) }}" alt="{{ t('files_preview_alt', lang).format(name=t('filecat_' ~ (f.category or f.kind), lang)) }}" loading="lazy"></a>
-      </figure>
+      <img src="{{ url_for('patient.file_preview', doc_id=f.id) }}" alt="" loading="lazy">
+      {% else %}
+      <span class="pp-file-sheet"><i></i><i></i><i></i><i></i></span>
       {% endif %}
-      <div class="min-w-0 flex-grow-1">
-        <p class="patient-file-type">{{ f.kind | upper }} · {{ f.download_name }}</p>
-        <h2 class="h6 mb-1 text-break">{{ t('filecat_' ~ (f.category or f.kind), lang) }}</h2>
-        <p class="small mb-1">{{ t('files_taken' if f.dated_by_evidence else 'files_added', lang) }} {{ f.date | appt_day(lang) }}</p>
-        {% if f.kind in ('png', 'jpeg') %}<p class="small text-secondary mb-1">{{ t('files_preview_note', lang) }}</p>{% else %}<p class="small text-secondary mb-1">{{ t('files_no_preview', lang) }}</p>{% endif %}
-        {# P29: one clear View for what the browser can show, Download for every file.
-           both name the file for a screen reader, not just the verb #}
-        {% if f.kind in ('png', 'jpeg') %}<a class="btn btn-primary btn-sm me-1" href="{{ url_for('patient.file_preview', doc_id=f.id) }}" target="_blank" rel="noopener" data-file-view><i class="bi bi-eye" aria-hidden="true"></i> {{ t('files_view', lang) }}<span class="visually-hidden">: {{ t('filecat_' ~ (f.category or f.kind), lang) }}, {{ f.date | appt_day(lang) }}</span></a>{% endif %}
-        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('patient.file_download', doc_id=f.id) }}"><i class="bi bi-download" aria-hidden="true"></i> {{ t('files_download', lang) }}<span class="visually-hidden">: {{ t('filecat_' ~ (f.category or f.kind), lang) }}, {{ f.date | appt_day(lang) }}</span></a>
-      </div>
+    </a>
+    <div class="pp-file-body">
+      <h2 class="pp-file-name">{{ name }}</h2>
+      <p class="pp-file-meta">{{ t('files_kind_' ~ f.kind, lang) }} · {{ t('files_taken' if f.dated_by_evidence else 'files_added', lang) }} {{ f.date | appt_day(lang) }}</p>
+    </div>
+    <div class="pp-file-acts">
+      <a class="btn btn-dark btn-sm" href="{{ url_for('patient.file_view', doc_id=f.id) }}"><i class="bi bi-eye" aria-hidden="true"></i> {{ t('files_view', lang) }}<span class="visually-hidden">: {{ name }}, {{ f.date | appt_day(lang) }}</span></a>
+      <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patient.file_download', doc_id=f.id) }}"><i class="bi bi-download" aria-hidden="true"></i> <span class="pp-dl-word">{{ t('files_download', lang) }}</span><span class="visually-hidden">: {{ name }}, {{ f.date | appt_day(lang) }}</span></a>
     </div>
   </li>
   {% endfor %}
 </ol>
+</div>
+<p class="pp-scroll-foot"><span>{{ t('ui_file_limit', lang) }}</span></p>
 {% else %}
-<p>{{ t('files_none', lang) }}</p>
+<p class="pp-note">{{ t('files_none', lang) }}</p>
 {% endif %}
 {% endblock %}

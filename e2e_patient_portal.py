@@ -177,8 +177,8 @@ def walk():
                     expect(page.locator('#file-no-matches')).to_be_visible()
                     page.locator('#file-clear').click()
                     expect(page.locator('[data-file-kind]:visible')).to_have_count(12)
-                    # P29 S1: each shared image has a View button named after the file.
-                    expect(page.get_by_role('link', name=re.compile(r'^View\s*:'))).to_have_count(6)
+                    # every shared file has a View button named after the file (P29 redesign: images, PDFs and text)
+                    expect(page.get_by_role('link', name=re.compile(r'^View\s*:'))).to_have_count(12)
                     page.goto(base + '/appointments')
                     expect(page.locator('tr[data-group="past"]').first).to_be_visible()
                     expect(page.locator('tr[data-group="past"]').get_by_text('Declined', exact=True)).to_be_visible()
