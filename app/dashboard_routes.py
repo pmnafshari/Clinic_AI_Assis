@@ -218,10 +218,18 @@ def index():
         chart = {"bars": bars, "total": total, "peak": peak, "upcoming": upcoming,
                  "period": f"{days[0]:%a} {days[0].day} {days[0]:%b} - {days[-1]:%a} {days[-1].day} {days[-1]:%b}"}
 
+    # P29 redesign: the dark card that leads home. a dentist sees their own next patient today (the clinic's next
+    # when they have none of their own); reception sees the front desk - requests and call-backs. every value is
+    # one already computed above, so the card can never disagree with the agenda or the attention line.
+    hero_kind = "dentist" if authorize(role, "review_upload") else "desk"
+    upcoming_today = [r for r in (agenda or []) if not r["is_past"]]
+    own = [r for r in upcoming_today if r["dentist"] == g.user["username"]]
+    next_up = (own or upcoming_today or [None])[0]
+
     show_intake = authorize(role, "upload_file")
     intake = _intake_counts(conn, g.user["username"]) if show_intake else None
     return render_template(
-        "dashboard.html",
+        "dashboard.html", hero_kind=hero_kind, next_up=next_up, next_is_own=bool(own), callbacks=callbacks,
         today_label=f"{now:%A} {now.day} {now:%B %Y}", today_iso=today,
         may_book=may_book, agenda=agenda, requests=_request_view(pending) if pending else [],
         request_total=len(pending) if pending is not None else None,

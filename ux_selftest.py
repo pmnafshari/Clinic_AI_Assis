@@ -430,6 +430,26 @@ def selftest():
         assert re.search(r"\.sx-box[^{]*th\s*\{[^}]*position: sticky", css12), "12b: the header row scrolls away"
         assert re.search(r"tbody tr:nth-child\(even\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
 
+        # 12c. home opens with what comes next for this person: the dentist's own next patient
+        home12 = clients["dentist"].get("/").get_data(as_text=True)
+        hero12 = _section(home12, "hero")
+        assert 'data-kind="dentist"' in home12 and "Anna Uno" in hero12 and "09:30" in hero12, \
+            "12c: the dentist's next patient does not lead home"
+        assert re.search(r'<a class="btn[^"]*" href="/patients/ZZUA800101010101"', hero12), "12c: no button to the record"
+        agenda12 = _section(home12, "agenda")
+        assert re.search(r'<a class="btn[^"]*" href="/patients/ZZUA800101010101"[^>]*>\s*Open', agenda12), \
+            "12c: an agenda row's Open is not a button"
+        assert 'class="sx-box' in agenda12, "12c: the agenda is not in a fixed-height box"
+        # 12d. reception's home opens with the front desk: requests and call-backs, each a button to where it is done
+        desk12 = clients["assistant"].get("/").get_data(as_text=True)
+        hero12 = _section(desk12, "hero")
+        waiting12 = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]
+        assert 'data-kind="desk"' in desk12 and \
+            f"{waiting12} request{'' if waiting12 == 1 else 's'} to confirm" in _text(hero12), "12d: the front desk does not lead"
+        assert re.search(r'<a class="btn[^"]*" href="/appointments[^"]*#requests"', hero12) and \
+            re.search(r'<a class="btn[^"]*" href="/handoffs"', hero12), "12d: the desk card's actions are not buttons"
+        assert "low on stock" not in _text(hero12), "12d: the stock alert is repeated in the desk card"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")
