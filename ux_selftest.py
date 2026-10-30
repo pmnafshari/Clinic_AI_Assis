@@ -418,6 +418,18 @@ def selftest():
         # 11l. quick actions keep their labels on one line
         assert re.search(r"\.ux-quick-item \{[^}]*white-space: nowrap", css), "11l: quick actions wrap"
 
+        # 12. P29 staff redesign (the patient portal's direction, the staff palette kept)
+        css12 = (Path(__file__).parent / "app" / "static" / "css" / "app.css").read_text()
+        # 12a. sign out is always reachable: the account foot stays pinned while a long menu scrolls
+        foot12 = re.findall(r"\.app-side-foot\s*\{([^}]*)\}", css12)
+        assert any("position: sticky" in r and "bottom: 0" in r for r in foot12), "12a: sign out scrolls out of reach"
+        # 12b. a fixed-height box scrolls inside and keeps its header row in place
+        box12 = re.search(r"\.sx-box\s*\{([^}]*)\}", css12)
+        assert box12 and "overflow: auto" in box12.group(1) and "max-height" in box12.group(1) \
+            and "position: relative" in box12.group(1), "12b: no fixed-height scroll box"
+        assert re.search(r"\.sx-box[^{]*th\s*\{[^}]*position: sticky", css12), "12b: the header row scrolls away"
+        assert re.search(r"tbody tr:nth-child\(even\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")
