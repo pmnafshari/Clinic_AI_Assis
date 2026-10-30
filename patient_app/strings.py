@@ -168,6 +168,22 @@ STRINGS = {
                           "en": "Choose morning or afternoon."},
     "appt_error_generic": {"it": "Non e stato possibile completare la richiesta.",
                            "en": "That could not be completed."},
+    # P29 S1 patient portal fixes; Italian awaits native-speaker review.
+    "appt_requested_day": {"it": "Giorno richiesto", "en": "Requested day"},
+    "appt_confirmed_time": {"it": "Orario confermato", "en": "Confirmed time"},
+    "appt_history": {"it": "Richieste passate", "en": "Past requests"},
+    "appt_history_note": {
+        "it": "Richieste rifiutate e appuntamenti annullati, dal più recente (al massimo 20).",
+        "en": "Declined requests and cancelled appointments, newest first (up to 20).",
+    },
+    "appt_status_declined": {"it": "Rifiutata", "en": "Declined"},
+    "appt_status_cancelled": {"it": "Annullato", "en": "Cancelled"},
+    "appt_declined_next": {
+        "it": "La clinica non ha potuto confermare questa richiesta. Se ti serve ancora un"
+              " appuntamento, invia una nuova richiesta o contatta lo studio.",
+        "en": "The clinic could not confirm this request. If you still need an appointment,"
+              " send a new request or contact the clinic.",
+    },
     "overview_records_title": {"it": "Visite e fatture", "en": "Visits and invoices"},
     "overview_records_body": {
         "it": "I tuoi dati clinici si consultano tramite l'assistente, non come elenco su questa pagina.",

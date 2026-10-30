@@ -446,12 +446,30 @@ def _deny(conn, cf, action):
               allowed=0, ip=net.from_request(request))
 
 
+HISTORY_LIMIT = 20
+
+
+def _appointment_history(conn, cf):
+    """Declined requests and cancelled appointments, newest first (P29).
+
+    the note column is left behind on purpose: decline() writes the clinic's
+    reason into it, and a booking's note is staff text too. a row that still
+    has a period was a request, so it shows the day asked for; one without
+    was a booking, so it shows the time that had been confirmed.
+    """
+    rows = [r for r in appointments.for_patient(conn, cf)
+            if r["status"] in (appointments.DECLINED, appointments.CANCELLED)]
+    return [{"status": r["status"], "starts_at": r["starts_at"], "period": r["period"]}
+            for r in rows[:HISTORY_LIMIT]]
+
+
 @patient_bp.route("/appointments")
 def appointments_page():
     cf = g.patient["codice_fiscale"]
     booked, requested = appointments.open_for_patient(get_db(), cf)
     return render_template("patient_appointments.html",
-                           booked=booked, requested=requested)
+                           booked=booked, requested=requested,
+                           history=_appointment_history(get_db(), cf))
 
 
 @patient_bp.route("/appointments/request", methods=["POST"])
@@ -471,7 +489,8 @@ def appointments_request():
             "appt_error_period" if "morning" in str(e) else "appt_error_generic")
         booked, requested = appointments.open_for_patient(conn, cf)
         return render_template("patient_appointments.html", booked=booked,
-                               requested=requested, error=t(key, lang)), 400
+                               requested=requested, error=t(key, lang),
+                               history=_appointment_history(conn, cf)), 400
     log_audit(conn, cf, "patient", "patient_appointment_request", str(new_id),
               allowed=1, ip=net.from_request(request))
     return redirect(url_for("patient.appointments_page", done="requested"))

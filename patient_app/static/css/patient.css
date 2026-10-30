@@ -604,3 +604,5 @@ textarea.chat-input { min-height: 100px; resize: vertical; padding: 10px; line-h
 .chat-send { border-radius: 10px; background: #205b50; min-height: 44px; }
 .patient-signed-in .patient-card:not(.patient-card--wide) { max-width: 540px; }
 @media (max-width: 760px) { .chat-composer-bar { flex-wrap: wrap; } .chat-send { margin-left: auto; } }
+/* P29 S1: a small label names what a date is, so a requested day never reads as a booking */
+.patient-row-label { display: block; font-size: var(--ds-caption); text-transform: uppercase; letter-spacing: var(--ds-tracking-wide); color: var(--ds-text-muted); }
