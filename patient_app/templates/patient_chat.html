@@ -14,7 +14,7 @@
   {% set c = consent_row %}
   <p class="mb-2"><strong>{{ t('chat_consent_state', lang).format(state=t('consent_given', lang) if c.granted and not c.outdated else t('consent_outdated', lang) if c.outdated else t('consent_withdrawn', lang) if c.recorded else t('consent_not_asked', lang)) }}</strong></p>
   {% endif %}
-  <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-primary btn-sm">{{ t('chat_consent_open', lang) }}</a>
+  <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-dark btn-sm">{{ t('chat_consent_open', lang) }}</a>
 </div>
 {% else %}
 

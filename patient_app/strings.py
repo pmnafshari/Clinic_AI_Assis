@@ -277,6 +277,12 @@ STRINGS = {
         "en": "To correct these details, contact the clinic - they cannot be changed here.",
     },
     "profile_change_pin": {"it": "Cambia il PIN", "en": "Change your PIN"},
+    # P29 redesign: the profile page. Italian awaits native-speaker review.
+    "profile_details_title": {"it": "I tuoi recapiti", "en": "Your details"},
+    "rights_requests_title": {"it": "Le tue richieste", "en": "Your requests"},
+    "rights_col_request": {"it": "Richiesta", "en": "Request"},
+    "rights_col_notes": {"it": "Note", "en": "Notes"},
+    "rights_new": {"it": "Nuova richiesta", "en": "New request"},
 
     # consent (P06). the wording itself lives in consent_texts.json
     "consent_heading": {"it": "I tuoi consensi", "en": "Your consents"},

@@ -2613,6 +2613,35 @@ def selftest():
         finally:
             patient_routes.chat.answer_question = real_answer35
 
+        # 35h. every page of the redesign in both languages, with no fragment
+        # of the other one; and the data-rights download on the profile is a button
+        keys35 = {
+            "/": ("tab_visits", "tab_bills", "tab_assistant", "home_next_label", "home_todo", "home_shared_files"),
+            "/appointments": ("appt_tab_all", "appt_tab_upcoming", "appt_tab_requests", "appt_col_date",
+                              "appt_details", "appt_detail_title", "appt_close", "appt_cancel_visit"),
+            "/billing": ("bill_next_installment", "bill_invoices_title", "bill_tab_all", "bill_tab_topay",
+                         "bill_view_invoice", "bill_col_visit", "bill_from_ledger"),
+            "/files": ("files_sort", "files_sort_new", "files_grid", "files_list", "files_view"),
+            "/chat": ("chat_privacy_note", "chat_examples_heading"),
+            f"/files/{pdf35}/view": ("viewer_close", "viewer_keys", "viewer_prev_page", "viewer_zoom_in"),
+            "/profile": ("profile_details_title", "rights_new"),
+        }
+        _docs34.DOC_ROOT = Path(tmp) / "documents35"
+        try:
+            for lang, other in (("en", "it"), ("it", "en")):
+                client35.get(f"/lang/{lang}")
+                for path, keys in keys35.items():
+                    text = client35.get(path).text
+                    for key in keys:
+                        assert on_page(t(key, lang), text), f"35h: {key} in {lang} on {path}"
+                        assert t(key, other) == t(key, lang) or not on_page(t(key, other), text), \
+                            f"35h: {other} {key} on the {lang} {path}"
+        finally:
+            _docs34.DOC_ROOT = saved_root35
+            client35.get("/lang/it")
+        assert re.search(r'<a class="btn[^"]*" href="/data-requests/\d+/download"', client32.get("/profile").text), \
+            "35h: the ready copy of the patient's data is downloaded with a button"
+
     print("selftest ok")
 
 

@@ -889,3 +889,18 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 .pp-answer-link { margin: 12px 0 0; }
 .pp-chat .chat-send { background: var(--pp-ink); }
 @media (max-width: 900px) { .pp-chat { grid-template-columns: 1fr; } }
+
+/* profile: details and consents beside the data requests */
+.pp-profile { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.pp-profile-col { display: grid; gap: 18px; min-width: 0; }
+.pp-consents { list-style: none; margin: 0; padding: 0; }
+.pp-consents li { padding: 14px 12px; border-radius: 12px; }
+.pp-consents li:nth-child(even) { background: var(--pp-zebra); }
+.pp-consent-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+@media (max-width: 1100px) { .pp-profile { grid-template-columns: 1fr; } }
+
+/* sign-in and pin change: the same white card, dark main button and focus as the signed-in pages */
+.patient-auth { background: var(--pp-ground); }
+.patient-auth .patient-card { border: 1px solid var(--pp-line); box-shadow: none; }
+.patient-auth .patient-mark { background: var(--pp-ink); }
+.patient-brand { background: var(--pp-ink); }

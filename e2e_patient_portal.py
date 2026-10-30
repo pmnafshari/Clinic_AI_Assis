@@ -28,6 +28,7 @@ import patient_files
 import patient_id
 import storage
 from patient_app import create_patient_app, routes
+from documents_selftest import pdf as make_pdf
 from patient_files_selftest import png
 
 EVIDENCE = Path('.planning/evidence/P29/P29.04')
@@ -108,6 +109,98 @@ def keyboard_pass(page, url):
         assert info['name'] or 'tabindex="0"' in info['html'], (url, 'unnamed focus stop', info)
         stops.append(info['html'])
     raise AssertionError(f'{url}: focus never left the page (trap?)')
+
+
+def seed_many(db_path):
+    """P29 redesign: enough rows that every box has to scroll, plus a real PDF and a text
+    file with markup in it. Disposable database only; the temp directory is removed after."""
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    pid = patient_id.resolve(conn, fx.CF['rossi'])
+    start = datetime.now().date() + timedelta(days=20)
+    for n in range(25):
+        appointments.request(conn, pid, (start + timedelta(days=n)).isoformat(), 'morning', None)
+    for n in range(15):
+        visit = conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                             " VALUES (?, ?, '[]', '', ?)", (pid, f'2024-{n % 12 + 1:02d}-10', f'p29-many-{n}')).lastrowid
+        conn.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                     " VALUES (?, ?, 0, 50.0, 5000, 'Synthetic item')", (pid, visit))
+        ledger.ensure_invoice(conn, pid, visit, legacy=True)
+    conn.commit()
+    made = {}
+    blobs = [('pdf', make_pdf(['Synthetic plan, page one', 'Synthetic plan, page two'])),
+             ('text', b'Synthetic letter <b>bold?</b> stays plain text.')]
+    blobs += [('text', f'Synthetic note {n}'.encode()) for n in range(20)]
+    for n, (kind, data) in enumerate(blobs):
+        sha = hashlib.sha256(data).hexdigest()
+        rel = f'{pid}/{sha}'
+        (documents.DOC_ROOT / rel).parent.mkdir(parents=True, exist_ok=True)
+        (documents.DOC_ROOT / rel).write_bytes(data)
+        doc = conn.execute('INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size, status, uploaded_by, uploaded_at, category) VALUES (?,?,?,?,?,?,?,?,?,?)',
+                           (pid, kind, 'PRIVATE-NAME', rel, sha, len(data), 'confirmed', 'fixture', f'2026-09-{n % 28 + 1:02d}T09:00:00+00:00', 'report')).lastrowid
+        conn.commit()
+        patient_files.publish(conn, doc, pid, 'fixture', 'dentist')
+        made.setdefault(kind, doc)
+    conn.close()
+    return made['pdf'], made['text']
+
+
+def box_scrolls(page, selector):
+    """A fixed-height box with more rows than fit: it scrolls inside, and its header row stays on top."""
+    return page.evaluate("""sel => {
+        const box = document.querySelector(sel);
+        if (!box || box.scrollHeight <= box.clientHeight) return false;
+        box.scrollTop = box.scrollHeight;
+        const th = box.querySelector('thead th');
+        // on a phone the rows are labelled cards and the header row is only for screen readers
+        if (!th || getComputedStyle(box.querySelector('thead')).position === 'absolute') return true;
+        return Math.abs(th.getBoundingClientRect().top - box.getBoundingClientRect().top) < 2;
+    }""", selector)
+
+
+def redesign_checks(browser, base, token, results):
+    pdf_id, text_id = seed_many(routes.DB_PATH)
+    for width in (1440, 390):
+        context = browser.new_context(viewport={'width': width, 'height': 900}, reduced_motion='reduce')
+        context.add_cookies([{'name': patient_auth.PATIENT_COOKIE_NAME, 'value': token, 'url': base}, {'name': 'patient_lang', 'value': 'en', 'url': base}])
+        page = context.new_page()
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto(base + '/appointments')
+        assert box_scrolls(page, '.patient-split-main .pp-box'), ('appointments box', width)
+        page.locator('[data-appt-tab="requests"]').click()
+        groups = page.evaluate("[...document.querySelectorAll('tr[data-group]')].filter(r => !r.hidden).map(r => r.dataset.group)")
+        assert groups and set(groups) == {'requests'}, groups
+        page.goto(base + '/billing')
+        assert box_scrolls(page, 'section[aria-labelledby="inv-list-title"] .pp-box'), ('invoices box', width)
+        page.locator('[data-bill-tab="topay"]').click()
+        assert page.evaluate("[...document.querySelectorAll('tr[data-group]')].every(r => r.hidden || r.dataset.group === 'topay')")
+        page.goto(base + '/files')
+        assert box_scrolls(page, '.pp-files-box'), ('files box', width)
+        page.locator('[data-file-mode="list"]').click()
+        expect(page.locator('.pp-files')).to_have_attribute('data-mode', 'list')
+        page.goto(base + f'/files/{pdf_id}/view')
+        page.wait_for_selector('canvas[data-drawn="1"]', timeout=20000)
+        inked = page.evaluate("""() => { const c = document.querySelector('canvas'); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+            let dark = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 128) dark++; return dark; }""")
+        assert inked > 50, ('the PDF page is drawn', inked)
+        page.locator('[data-pdf-next]').click()
+        page.wait_for_selector('canvas[data-drawn="2"]', timeout=20000)
+        assert 'PRIVATE-NAME' not in page.content()
+        page.screenshot(path=str(EVIDENCE / f'viewer-pdf-{width}.png'))
+        page.keyboard.press('Escape')
+        page.wait_for_url(base + '/files')
+        page.goto(base + f'/files/{text_id}/view')
+        assert '<b>bold?</b>' in page.locator('.pp-textsheet').inner_text(), 'text is shown as text'
+        page.screenshot(path=str(EVIDENCE / f'viewer-text-{width}.png'))
+        for path in ('/', '/appointments', '/billing', '/files', f'/files/{pdf_id}/view', '/chat', '/profile'):
+            page.goto(base + path)
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth'), (path, width, 'horizontal overflow')
+            stops = keyboard_pass(page, base + path)
+            results.append(f'redesign {path} {width}: {stops} focus stops, no overflow, no trap')
+            page.screenshot(path=str(EVIDENCE / f'redesign-{path.strip("/").replace("/", "-") or "home"}-{width}.png'), full_page=True)
+        assert not errors, errors
+        context.close()
 
 
 def walk():
@@ -246,12 +339,13 @@ def walk():
                         page.goto(base + path)
                         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
                         page.screenshot(path=str(EVIDENCE / f'login-{width}.png'), full_page=True)
+                redesign_checks(browser, base, token, results)
                 browser.close()
         finally:
             server.shutdown()
             thread.join(timeout=5)
         (EVIDENCE / 'browser-results.json').write_text(json.dumps({'pages': results, 'other_checks': ['language allowlist', 'CSRF rejection', 'file publication and ownership', 'safe filenames', 'search/type/reset', 'download', 'unsent locale dismissal', 'P29 S1 history, View buttons, billing tables, call-back, keyboard-only pass', 'cancellation dismissal and commit', 'multiline text', 'keyboard skip link', 'no JS errors'], 'fixtures': 'disposable synthetic only'}, indent=2))
-        print('PASS: 28 page/locale/viewport combinations + guarded interactions, login and private file checks')
+        print('PASS: 28 page/locale/viewport combinations + guarded interactions, login and private file checks, redesign scroll boxes, tabs, pdf/text viewer and keyboard passes')
 
 if __name__ == '__main__':
     walk()

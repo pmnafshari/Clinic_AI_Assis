@@ -13,87 +13,94 @@
     </div>
   </div>
 </div>
-<section class="ds-card patient-profile-card">
-<div class="ds-card-body">
 
-{# read through patient_accessor, the same scope-checked path the chat uses.
+{# P29 redesign: details and consents on the left, data requests on the right.
+   read through patient_accessor, the same scope-checked path the chat uses.
    nothing clinical is shown here - no visit, no invoice. #}
-<dl class="patient-facts">
-  <dt>{{ t('profile_name', lang) }}</dt>
-  <dd>{{ demo.patient_name if demo and demo.patient_name else t('profile_missing', lang) }}</dd>
-  <dt>{{ t('profile_phone', lang) }}</dt>
-  <dd>{{ demo.phone if demo and demo.phone else t('profile_missing', lang) }}</dd>
-  <dt>{{ t('profile_cf', lang) }}</dt>
-  <dd>{{ cf }}</dd>
-</dl>
+<div class="pp-profile">
+  <div class="pp-profile-col">
+    <section class="pp-card" aria-labelledby="details-title">
+      <div class="pp-card-head"><h2 id="details-title">{{ t('profile_details_title', lang) }}</h2></div>
+      <dl class="patient-facts">
+        <dt>{{ t('profile_name', lang) }}</dt>
+        <dd>{{ demo.patient_name if demo and demo.patient_name else t('profile_missing', lang) }}</dd>
+        <dt>{{ t('profile_phone', lang) }}</dt>
+        <dd>{{ demo.phone if demo and demo.phone else t('profile_missing', lang) }}</dd>
+        <dt>{{ t('profile_cf', lang) }}</dt>
+        <dd>{{ cf }}</dd>
+      </dl>
+      <p class="pp-muted small">{{ t('profile_note', lang) }}</p>
+      <a href="{{ url_for('patient.change_pin') }}" class="btn btn-outline-secondary"><i class="bi bi-key" aria-hidden="true"></i> {{ t('profile_change_pin', lang) }}</a>
+    </section>
 
-<p class="text-secondary small">{{ t('profile_note', lang) }}</p>
+    <section class="pp-card" aria-labelledby="consent">
+      <div class="pp-card-head"><h2 id="consent">{{ t('consent_heading', lang) }}</h2></div>
+      <p class="pp-muted small">{{ t('consent_template_note', lang) }}</p>
+      <ul class="pp-consents">
+        {% for c in consents %}
+        {% set given = c.granted and not c.outdated %}
+        <li class="patient-consent">
+          <div class="pp-consent-head">
+            <h3 class="h6 mb-0">{{ t('consent_' ~ c.purpose, lang) }}</h3>
+            <span class="pp-pill {{ 'ok' if given else ('wait' if c.outdated else 'neutral') }}">{% if given %}{{ t('consent_given', lang) }}{% elif c.outdated %}{{ t('consent_outdated', lang) }}{% elif c.recorded %}{{ t('consent_withdrawn', lang) }}{% else %}{{ t('consent_not_asked', lang) }}{% endif %}</span>
+          </div>
+          <p class="small mb-2">{{ c.text }}</p>
+          <form method="post" action="{{ url_for('patient.consent_submit') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="purpose" value="{{ c.purpose }}">
+            {% if given %}
+            <input type="hidden" name="granted" value="0">
+            <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('consent_withdraw', lang) }}<span class="visually-hidden">: {{ t('consent_' ~ c.purpose, lang) }}</span></button>
+            {% else %}
+            <input type="hidden" name="granted" value="1">
+            <button type="submit" class="btn btn-dark btn-sm">{{ t('consent_give', lang) }}<span class="visually-hidden">: {{ t('consent_' ~ c.purpose, lang) }}</span></button>
+            {% endif %}
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+  </div>
 
-<a href="{{ url_for('patient.change_pin') }}" class="btn btn-outline-secondary"><i class="bi bi-key" aria-hidden="true"></i> {{ t('profile_change_pin', lang) }}</a>
-</div>
-</section>
-
-<section class="ds-card patient-profile-card mt-3" aria-labelledby="consent">
-<div class="ds-card-body">
-<h2 class="h5" id="consent">{{ t('consent_heading', lang) }}</h2>
-<p class="text-secondary small">{{ t('consent_template_note', lang) }}</p>
-{% for c in consents %}
-<div class="patient-consent">
-  <h3 class="h6 mb-1">{{ t('consent_' ~ c.purpose, lang) }}</h3>
-  <p class="small mb-1">{{ c.text }}</p>
-  <p class="small text-secondary mb-2">
-    {% if c.granted and not c.outdated %}{{ t('consent_given', lang) }}{% elif c.outdated %}{{ t('consent_outdated', lang) }}{% elif c.recorded %}{{ t('consent_withdrawn', lang) }}{% else %}{{ t('consent_not_asked', lang) }}{% endif %}
-  </p>
-  <form method="post" action="{{ url_for('patient.consent_submit') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <input type="hidden" name="purpose" value="{{ c.purpose }}">
-    {% if c.granted and not c.outdated %}
-    <input type="hidden" name="granted" value="0">
-    <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('consent_withdraw', lang) }}</button>
-    {% else %}
-    <input type="hidden" name="granted" value="1">
-    <button type="submit" class="btn btn-primary btn-sm">{{ t('consent_give', lang) }}</button>
-    {% endif %}
-  </form>
-</div>
-{% if not loop.last %}<hr>{% endif %}
-{% endfor %}
-</div>
-</section>
-
-<section class="ds-card patient-profile-card mt-3" aria-labelledby="rights">
-<div class="ds-card-body">
-<h2 class="h5" id="rights">{{ t('rights_heading', lang) }}</h2>
-<p class="small">{{ t('rights_intro', lang) }}</p>
-{% if requests %}
-<ul class="list-unstyled small patient-scroll patient-striped" tabindex="0">
-  {% for r in requests %}
-  <li class="mb-1">
-    {{ t('rights_kind_' ~ r.kind, lang) }} · {{ t('rights_status_' ~ r.status, lang) }}
-    {% if r.reason %} · {{ r.reason }}{% endif %}
-    {% if r.hold_reason %} · {{ r.hold_reason }}{% endif %}
-    {% if r.export_file %} · <a href="{{ url_for('patient.data_download', req_id=r.id) }}">{{ t('rights_download', lang) }}</a>{% endif %}
-  </li>
-  {% endfor %}
-</ul>
-{% endif %}
-<form method="post" action="{{ url_for('patient.data_request') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <fieldset class="mb-2">
-    <legend class="visually-hidden">{{ t('rights_heading', lang) }}</legend>
-    {% for kind in ('export', 'access', 'amend', 'erasure') %}
-    <div class="form-check">
-      <input class="form-check-input" type="radio" name="kind" id="kind-{{ kind }}" value="{{ kind }}" {% if loop.first %}checked{% endif %}>
-      <label class="form-check-label" for="kind-{{ kind }}">{{ t('rights_kind_' ~ kind, lang) }}</label>
+  <section class="pp-card" aria-labelledby="rights">
+    <div class="pp-card-head"><h2 id="rights">{{ t('rights_heading', lang) }}</h2></div>
+    <p class="small">{{ t('rights_intro', lang) }}</p>
+    {% if requests %}
+    <h3 class="pp-sub-h" id="rights-list">{{ t('rights_requests_title', lang) }}</h3>
+    <div class="pp-box mb-3" style="--h:260px" tabindex="0" role="region" aria-labelledby="rights-list">
+      <table class="pp-table pp-table--stack">
+        <thead><tr><th scope="col">{{ t('rights_col_request', lang) }}</th><th scope="col">{{ t('appt_col_status', lang) }}</th><th scope="col">{{ t('rights_col_notes', lang) }}</th><th scope="col" class="text-end">{{ t('appt_col_actions', lang) }}</th></tr></thead>
+        <tbody>
+          {% for r in requests %}
+          <tr>
+            <td data-label="{{ t('rights_col_request', lang) }}">{{ t('rights_kind_' ~ r.kind, lang) }}</td>
+            <td data-label="{{ t('appt_col_status', lang) }}"><span class="pp-pill {{ {'approved': 'ok', 'done': 'ok', 'rejected': 'no'}.get(r.status, 'wait') }}">{{ t('rights_status_' ~ r.status, lang) }}</span></td>
+            <td data-label="{{ t('rights_col_notes', lang) }}">{{ r.reason or '' }}{% if r.reason and r.hold_reason %} · {% endif %}{{ r.hold_reason or '' }}{% if not r.reason and not r.hold_reason %}-{% endif %}</td>
+            <td data-label=""><div class="pp-acts">{% if r.export_file %}<a class="btn btn-dark btn-sm" href="{{ url_for('patient.data_download', req_id=r.id) }}"><i class="bi bi-download" aria-hidden="true"></i> {{ t('rights_download', lang) }}</a>{% endif %}</div></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
     </div>
-    {% endfor %}
-  </fieldset>
-  <label class="form-label small" for="rights-detail">{{ t('rights_detail_label', lang) }}</label>
-  <textarea class="form-control mb-2" id="rights-detail" name="detail" rows="4" maxlength="1000" aria-describedby="rights-count"></textarea>
-  <p class="patient-counter" id="rights-count" data-count-for="rights-detail">0 / 1000 {{ t('ui_chars', lang) }}</p>
-  <p class="text-secondary small">{{ t('rights_erasure_note', lang) }}</p>
-  <button type="submit" class="btn btn-outline-primary btn-sm">{{ t('rights_submit', lang) }}</button>
-</form>
+    {% endif %}
+    <h3 class="pp-sub-h">{{ t('rights_new', lang) }}</h3>
+    <form method="post" action="{{ url_for('patient.data_request') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <fieldset class="mb-2">
+        <legend class="visually-hidden">{{ t('rights_heading', lang) }}</legend>
+        {% for kind in ('export', 'access', 'amend', 'erasure') %}
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="kind" id="kind-{{ kind }}" value="{{ kind }}" {% if loop.first %}checked{% endif %}>
+          <label class="form-check-label" for="kind-{{ kind }}">{{ t('rights_kind_' ~ kind, lang) }}</label>
+        </div>
+        {% endfor %}
+      </fieldset>
+      <label class="form-label small" for="rights-detail">{{ t('rights_detail_label', lang) }}</label>
+      <textarea class="form-control mb-2" id="rights-detail" name="detail" rows="4" maxlength="1000" aria-describedby="rights-count"></textarea>
+      <p class="patient-counter" id="rights-count" data-count-for="rights-detail">0 / 1000 {{ t('ui_chars', lang) }}</p>
+      <p class="pp-note mb-3">{{ t('rights_erasure_note', lang) }}</p>
+      <button type="submit" class="btn btn-dark">{{ t('rights_submit', lang) }}</button>
+    </form>
+  </section>
 </div>
-</section>
 {% endblock %}
