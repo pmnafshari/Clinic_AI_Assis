@@ -1424,3 +1424,16 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 .sx-box-md { --h: 18rem; }
 .sx-box-agenda { --h: 22rem; }
 .ds-rows.sx-box { padding-right: 2px; }
+/* an expanding section opens with a button, not a line of link text */
+.appt-more > summary, .ux-upload summary, .ux-bars-table summary, .dup-merge > summary {
+  display: inline-flex; align-items: center; gap: 0.375rem; min-height: 32px; padding: 0.3rem 0.75rem;
+  border: 1px solid var(--ds-border); border-radius: 9px; background: var(--ds-surface); color: var(--ds-text);
+  font-size: 0.8125rem; font-weight: 600; cursor: pointer; list-style: none; }
+.appt-more > summary:hover, .ux-upload summary:hover, .ux-bars-table summary:hover, .dup-merge > summary:hover { background: var(--ds-surface-sunken); }
+.ux-upload summary::-webkit-details-marker, .ux-bars-table summary::-webkit-details-marker { display: none; }
+.ux-upload summary::after, .ux-bars-table summary::after { content: "\25BE"; }
+.ux-upload[open] summary, .ux-bars-table[open] summary { margin-bottom: 0.75rem; }
+.ux-panel > summary::after { padding: 0.25rem 0.75rem; border: 1px solid var(--ds-border); border-radius: 9px; background: var(--ds-surface); color: var(--ds-text); }
+.ux-request:nth-child(even) { background: var(--sx-zebra); border-radius: 10px; }
+.ux-request { padding: 0.75rem 0.875rem; }
+.appt-more > summary:focus-visible, .ux-upload summary:focus-visible, .ux-bars-table summary:focus-visible, .dup-merge > summary:focus-visible { border-radius: 9px; }

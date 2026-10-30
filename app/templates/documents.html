@@ -36,16 +36,13 @@
         {% endif %}
         <span class="ds-row-main">
           <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
-          {% if e.kind == 'file' %}
-          <a class="ds-row-title text-break" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ e.category }} · {{ e.display_name }}</a>
-          {% else %}
           <span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>
-          {% endif %}
           <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% elif e.kind == 'file' %} · no visit linked{% endif %}</span>
         </span>
         {% if e.kind == 'file' %}
         <span class="file-actions">
           {% if e.published %}<span class="ds-badge ds-badge-success">Shown to patient</span>{% else %}<span class="ds-badge ds-badge-warning">Not shown to patient</span>{% endif %}
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">Open<span class="visually-hidden">: {{ e.category }} · {{ e.display_name }}</span></a>
           {% if e.preview %}<a class="btn btn-outline-primary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}#preview">View image<span class="visually-hidden"> {{ e.display_name }}</span></a>{% endif %}
           <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.original', cf=cf, did=e.doc_id) }}" >Download<span class="visually-hidden"> the original of {{ e.display_name }}</span></a>
           {% if e.published %}
@@ -86,10 +83,10 @@
     <ul class="ds-rows">
       {% for r in results %}
       <li class="ds-row"><span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=r.doc_id) }}" aria-label="{{ r.display_name }} · page {{ r.page }}, document {{ r.doc_id }}">{{ r.display_name }} · page {{ r.page }}</a>
+        <span class="ds-row-title">{{ r.display_name }} · page {{ r.page }}</span>
         <span class="ds-row-sub text-break">"{{ r.snippet }}"</span>
         <span class="ds-row-sub">confirmed by {{ r.confirmed_by }} · read by {{ r.extractor }}{% if r.uncertain %} · <strong>uncertain reading ({{ r.confidence }}%)</strong>{% endif %}</span>
-      </span></li>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=r.doc_id) }}">Open<span class="visually-hidden">: {{ r.display_name }} · page {{ r.page }}, document {{ r.doc_id }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% endif %}
@@ -115,9 +112,9 @@
     <ul class="ds-rows">
       {% for d in rows %}
       <li class="ds-row"><span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('documents.detail', cf=cf, did=d.id) }}" aria-label="{{ d.display_name }}, document {{ d.id }}, {{ d.status.replace('_', ' ') }}">{{ d.display_name }}</a>
+        <span class="ds-row-title">{{ d.display_name }}</span>
         <span class="ds-row-sub">{{ d.status.replace('_', ' ') }}{% if d.reason %} · {{ d.reason }}{% endif %} · {{ d.uploaded_at | appt_date }}</span>
-      </span></li>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=d.id) }}">Open<span class="visually-hidden">: {{ d.display_name }}, document {{ d.id }}, {{ d.status.replace('_', ' ') }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}

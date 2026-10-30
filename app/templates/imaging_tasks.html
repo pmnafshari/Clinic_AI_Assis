@@ -14,9 +14,9 @@
     <ul class="ds-rows">
       {% for t in tasks %}
       <li class="ds-row"><span class="ds-row-main">
-        <a class="ds-row-title" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking">{{ t.patient_name }} · appointment {{ t.when }}</a>
+        <span class="ds-row-title">{{ t.patient_name }} · appointment {{ t.when }}</span>
         <span class="ds-row-sub">Needs reception action: {{ t.reason }}. The appointment was left as it is.</span>
-      </span><span class="ds-badge ds-badge-warning">needs action</span></li>
+      </span><span class="sx-row-acts"><span class="ds-badge ds-badge-warning">needs action</span><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking">Open<span class="visually-hidden">: {{ t.patient_name }}, appointment {{ t.when }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}

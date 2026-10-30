@@ -106,9 +106,9 @@
   <div class="dash-card-body"><ul class="ds-rows">
     {% for pid, p in people.items() %}
     <li class="ds-row"><span class="ds-row-main">
-      <a class="ds-row-title" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}">{{ p.patient_name }}</a>
+      <span class="ds-row-title">{{ p.patient_name }}</span>
       <span class="ds-row-sub font-monospace">{{ p.codice_fiscale }}{% if pid == item.patient_id %} · proposed{% endif %}</span>
-    </span></li>
+    </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}">Open record<span class="visually-hidden">: {{ p.patient_name }}</span></a></span></li>
     {% endfor %}
   </ul></div>
 </section>
