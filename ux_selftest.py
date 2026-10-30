@@ -450,6 +450,20 @@ def selftest():
             re.search(r'<a class="btn[^"]*" href="/handoffs"', hero12), "12d: the desk card's actions are not buttons"
         assert "low on stock" not in _text(hero12), "12d: the stock alert is repeated in the desk card"
 
+        # 12e. the patient record is grouped into tabs; every section is still on the page (no script shows them all),
+        # and a role only gets the tabs it may open
+        for role12, expect12 in (("dentist", ["overview", "clinical", "files", "billing", "portal", "imaging"]),
+                                 ("assistant", ["overview", "files", "billing", "portal", "imaging"])):
+            rec12 = clients[role12].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            tabs12 = re.findall(r'<button type="button" role="tab" id="tabbtn-(\w+)" aria-controls="tab-(\w+)"', rec12)
+            assert [a for a, _ in tabs12] == expect12 and all(a == b for a, b in tabs12), f"12e: {role12} tabs {tabs12}"
+            for name in expect12:
+                assert f'id="tab-{name}" role="tabpanel" aria-labelledby="tabbtn-{name}"' in rec12, f"12e: no {name} panel"
+            for heading in ("Demographics", "Record timeline", "Consent", "Data requests", "Invoices", "Visit dates"):
+                assert f">{heading}" in rec12, f"12e: {role12} lost the {heading} section"
+            assert 'id="imaging"' in rec12 and 'id="editModal"' in rec12, "12e: a link target or the edit dialog is gone"
+            assert ("Clinical history" in rec12) == (role12 == "dentist"), "12e: clinical history shown to the wrong role"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

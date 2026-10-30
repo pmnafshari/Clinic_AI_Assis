@@ -31,8 +31,24 @@
   {% endif %}
 </div>
 
-<div class="row g-3">
-  <div class="col-12 col-xl-4 d-flex flex-column gap-3">
+
+{# P29 redesign: the record grouped into tabs, like the patient portal's pages. every section is the same markup it
+   was before, moved into the tab it belongs to; a role only gets the tabs it may open. without script the tab bar
+   stays hidden and every section is on the page in order. app.js opens the tab holding a linked #id (e.g. #imaging). #}
+{% set tabs = [('overview', 'Overview', 'bi-person-lines-fill', none)] %}
+{% if show_clinical %}{% set tabs = tabs + [('clinical', 'Clinical', 'bi-heart-pulse', clinical | length)] %}{% endif %}
+{% if show_clinical or authorize(g.user.role, 'upload_file') %}{% set tabs = tabs + [('files', 'Files', 'bi-folder2-open', file_timeline | length if show_clinical else none)] %}{% endif %}
+{% set tabs = tabs + [('billing', 'Billing', 'bi-receipt', patient.invoices | length)] %}
+{% set tabs = tabs + [('portal', 'Portal & consent', 'bi-shield-check', none)] %}
+{% if authorize(g.user.role, 'view_imaging_requests') %}{% set tabs = tabs + [('imaging', 'Imaging', 'bi-camera', imaging | length)] %}{% endif %}
+<div class="sx-tabs" role="tablist" aria-label="Sections of this record" data-record-tabs hidden>
+  {% for key, label, icon, n in tabs %}
+  <button type="button" role="tab" id="tabbtn-{{ key }}" aria-controls="tab-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}"{% if not loop.first %} tabindex="-1"{% endif %}><i class="bi {{ icon }}" aria-hidden="true"></i> {{ label }}{% if n %} <span class="sx-count">{{ n }}</span>{% endif %}</button>
+  {% endfor %}
+</div>
+
+<div class="sx-panel sx-panel-2" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview" tabindex="0">
+  <div class="sx-panel-col">
     <section class="card dash-card" aria-labelledby="profile-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="profile-title">Demographics</h2>
@@ -49,6 +65,189 @@
       </div>
     </section>
 
+    <section class="card dash-card" aria-labelledby="visits-title">
+      <div class="dash-card-head">
+        <h2 class="ds-card-title" id="visits-title">Visit dates</h2>
+      </div>
+      <div class="dash-card-body">
+        {% if patient.visit_dates %}
+        <ul class="ds-rows">
+          {% for d in patient.visit_dates %}
+          <li class="ds-row">
+            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+            <span class="ds-row-main"><span class="ds-row-title">{{ d }}</span></span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty-line">No visits on record.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+  <div class="sx-panel-col">
+    {# one date-ordered history. every other card here is one relation in
+       isolation, and none of them answer "what happened to this person, in
+       order" - which is the question actually being asked when a record is
+       opened. #}
+    <section class="card dash-card" aria-labelledby="timeline-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
+          <p class="ds-card-sub">Visits, appointments and billing, in order</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if timeline %}
+        <ol class="tl">
+          {% for event in timeline %}
+          <li class="tl-item tl-{{ event.kind }}">
+            <span class="tl-date">{{ event.date or 'no date' }}</span>
+            <span class="tl-main">
+              <span class="ds-row-title">{{ event.title }}</span>
+              {% if event.detail %}<span class="ds-row-sub">{{ event.detail }}</span>{% endif %}
+              <span class="tl-source">{{ event.source }}</span>
+            </span>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="text-secondary mb-0">Nothing recorded for this patient yet.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+{% if show_clinical %}
+<div class="sx-panel" id="tab-clinical" role="tabpanel" aria-labelledby="tabbtn-clinical" tabindex="0">
+    <section class="card dash-card" aria-labelledby="clinical-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="clinical-title">Clinical history</h2>
+          <p class="ds-card-sub">Dentist only</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if clinical %}
+        <ol class="timeline">
+          {% for visit in clinical %}
+          <li class="timeline-item">
+            <div class="timeline-head">
+              <span class="timeline-date">{{ visit.visit_date or "no date" }}</span>
+              <button type="button" class="btn btn-outline-secondary btn-sm"
+                data-bs-toggle="modal" data-bs-target="#editModal"
+                hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
+                hx-target="#modal-body-target" hx-swap="innerHTML" aria-label="Edit visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Edit</button>
+              {% if similar_cases_enabled() %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}" aria-label="Similar cases for visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Similar cases</a>{% endif %}
+            </div>
+            <p class="timeline-note">{{ visit.clinical_notes }}</p>
+            {% if visit.procedures %}
+            <p class="timeline-procs"><span class="visually-hidden">Procedures: </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>
+            {% endif %}
+            <p class="timeline-next">Recall written in the note: {{ visit.next_appointment or "none" }}</p>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}
+        <p class="dash-empty-line">No clinical visits on record.</p>
+        {% endif %}
+      </div>
+    </section>
+</div>
+{% endif %}
+
+{% if show_clinical or authorize(g.user.role, 'upload_file') %}
+<div class="sx-panel sx-panel-2" id="tab-files" role="tabpanel" aria-labelledby="tabbtn-files" tabindex="0">
+  {% if show_clinical %}
+  <div class="sx-panel-col">
+    <section class="card dash-card" aria-labelledby="timeline-files-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="timeline-files-title">File timeline</h2>
+          <p class="ds-card-sub">Confirmed files and notes, newest first</p>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.index', cf=cf) }}#timeline">All files</a>
+      </div>
+      <div class="dash-card-body">
+        {% if file_timeline %}
+        <ol class="ds-rows" aria-label="Most recent confirmed files and notes">
+          {% for e in file_timeline[:8] %}
+          <li class="ds-row"><span class="ds-row-main">
+            <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
+            {% if e.kind == 'file' %}<a class="ds-row-title text-break" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ e.category }} · {{ e.display_name }}</a>{% else %}<span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>{% endif %}
+            <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% endif %}{% if e.kind == 'file' %} · {{ 'shown to patient' if e.published else 'not shown to patient' }}{% endif %}</span>
+          </span></li>
+          {% endfor %}
+        </ol>
+        {% if file_timeline | length > 8 %}<p class="ds-row-sub mb-0">{{ file_timeline | length - 8 }} more on the <a href="{{ url_for('documents.index', cf=cf) }}#timeline">Files page</a>.</p>{% endif %}
+        {% else %}
+        <p class="dash-empty-line">No confirmed files or notes yet.</p>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+  {% endif %}
+  <div class="sx-panel-col">
+  {% if show_clinical %}
+    <section class="card dash-card" aria-labelledby="files-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="files-title">Files</h2>
+          <p class="ds-card-sub">The intake folder as filed - not all reviewed</p>
+        </div>
+      </div>
+      <div class="dash-card-body patient-files">
+        <div hx-get="{{ url_for('patients.files_fragment', cf=cf) }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
+      </div>
+    </section>
+  {% endif %}
+    {% if authorize(g.user.role, 'upload_file') %}
+    <section class="card dash-card" aria-labelledby="upload-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="upload-title">Upload files</h2>
+          <p class="ds-card-sub">Filed straight to this patient</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% with cf=cf %}{% include "_upload_zone.html" %}{% endwith %}
+        <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<div class="sx-panel" id="tab-billing" role="tabpanel" aria-labelledby="tabbtn-billing" tabindex="0">
+    <section class="card dash-card" aria-labelledby="invoices-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
+          <p class="ds-card-sub">Billed lines - no paid or unpaid status is recorded</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if patient.invoices %}
+        <ul class="ds-rows">
+          {% for inv in patient.invoices %}
+          <li class="ds-row">
+            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-receipt"></i></span>
+            <span class="ds-row-main"><span class="ds-row-title">{{ inv.description }}</span></span>
+            <span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty-line">No invoices on record.</p>
+        {% endif %}
+      </div>
+    </section>
+</div>
+
+<div class="sx-panel sx-panel-2" id="tab-portal" role="tabpanel" aria-labelledby="tabbtn-portal" tabindex="0">
+  <div class="sx-panel-col">
     {% if authorize(g.user.role, 'issue_patient_pin') or authorize(g.user.role, 'revoke_patient_pin') %}
     <section class="card dash-card" aria-labelledby="access-title">
       <div class="dash-card-head">
@@ -122,7 +321,8 @@
         </ul>
       </div>
     </section>
-
+  </div>
+  <div class="sx-panel-col">
     <section class="card dash-card" aria-labelledby="rights-title">
       <div class="dash-card-head">
         <div>
@@ -160,159 +360,11 @@
         {% endif %}
       </div>
     </section>
-
-    <section class="card dash-card" aria-labelledby="visits-title">
-      <div class="dash-card-head">
-        <h2 class="ds-card-title" id="visits-title">Visit dates</h2>
-      </div>
-      <div class="dash-card-body">
-        {% if patient.visit_dates %}
-        <ul class="ds-rows">
-          {% for d in patient.visit_dates %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
-            <span class="ds-row-main"><span class="ds-row-title">{{ d }}</span></span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="dash-empty-line">No visits on record.</p>
-        {% endif %}
-      </div>
-    </section>
-
-    <section class="card dash-card" aria-labelledby="invoices-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
-          <p class="ds-card-sub">Billed lines - no paid or unpaid status is recorded</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        {% if patient.invoices %}
-        <ul class="ds-rows">
-          {% for inv in patient.invoices %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-receipt"></i></span>
-            <span class="ds-row-main"><span class="ds-row-title">{{ inv.description }}</span></span>
-            <span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="dash-empty-line">No invoices on record.</p>
-        {% endif %}
-      </div>
-    </section>
   </div>
-
-  <div class="col-12 col-xl-8 d-flex flex-column gap-3">
-    {# one date-ordered history. every other card here is one relation in
-       isolation, and none of them answer "what happened to this person, in
-       order" - which is the question actually being asked when a record is
-       opened. #}
-    <section class="card dash-card" aria-labelledby="timeline-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
-          <p class="ds-card-sub">Visits, appointments and billing, in order</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        {% if timeline %}
-        <ol class="tl">
-          {% for event in timeline %}
-          <li class="tl-item tl-{{ event.kind }}">
-            <span class="tl-date">{{ event.date or 'no date' }}</span>
-            <span class="tl-main">
-              <span class="ds-row-title">{{ event.title }}</span>
-              {% if event.detail %}<span class="ds-row-sub">{{ event.detail }}</span>{% endif %}
-              <span class="tl-source">{{ event.source }}</span>
-            </span>
-          </li>
-          {% endfor %}
-        </ol>
-        {% else %}
-        <p class="text-secondary mb-0">Nothing recorded for this patient yet.</p>
-        {% endif %}
-      </div>
-    </section>
-
-    {% if show_clinical %}
-    <section class="card dash-card" aria-labelledby="clinical-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="clinical-title">Clinical history</h2>
-          <p class="ds-card-sub">Dentist only</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        {% if clinical %}
-        <ol class="timeline">
-          {% for visit in clinical %}
-          <li class="timeline-item">
-            <div class="timeline-head">
-              <span class="timeline-date">{{ visit.visit_date or "no date" }}</span>
-              <button type="button" class="btn btn-outline-secondary btn-sm"
-                data-bs-toggle="modal" data-bs-target="#editModal"
-                hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
-                hx-target="#modal-body-target" hx-swap="innerHTML" aria-label="Edit visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Edit</button>
-              {% if similar_cases_enabled() %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}" aria-label="Similar cases for visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Similar cases</a>{% endif %}
-            </div>
-            <p class="timeline-note">{{ visit.clinical_notes }}</p>
-            {% if visit.procedures %}
-            <p class="timeline-procs"><span class="visually-hidden">Procedures: </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>
-            {% endif %}
-            <p class="timeline-next">Recall written in the note: {{ visit.next_appointment or "none" }}</p>
-          </li>
-          {% endfor %}
-        </ol>
-        {% else %}
-        <p class="dash-empty-line">No clinical visits on record.</p>
-        {% endif %}
-      </div>
-    </section>
-
-    <section class="card dash-card" aria-labelledby="timeline-files-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="timeline-files-title">File timeline</h2>
-          <p class="ds-card-sub">Confirmed files and notes, newest first</p>
-        </div>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.index', cf=cf) }}#timeline">All files</a>
-      </div>
-      <div class="dash-card-body">
-        {% if file_timeline %}
-        <ol class="ds-rows" aria-label="Most recent confirmed files and notes">
-          {% for e in file_timeline[:8] %}
-          <li class="ds-row"><span class="ds-row-main">
-            <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
-            {% if e.kind == 'file' %}<a class="ds-row-title text-break" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ e.category }} · {{ e.display_name }}</a>{% else %}<span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>{% endif %}
-            <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% endif %}{% if e.kind == 'file' %} · {{ 'shown to patient' if e.published else 'not shown to patient' }}{% endif %}</span>
-          </span></li>
-          {% endfor %}
-        </ol>
-        {% if file_timeline | length > 8 %}<p class="ds-row-sub mb-0">{{ file_timeline | length - 8 }} more on the <a href="{{ url_for('documents.index', cf=cf) }}#timeline">Files page</a>.</p>{% endif %}
-        {% else %}
-        <p class="dash-empty-line">No confirmed files or notes yet.</p>
-        {% endif %}
-      </div>
-    </section>
-
-    <section class="card dash-card" aria-labelledby="files-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="files-title">Files</h2>
-          <p class="ds-card-sub">The intake folder as filed - not all reviewed</p>
-        </div>
-      </div>
-      <div class="dash-card-body patient-files">
-        <div hx-get="{{ url_for('patients.files_fragment', cf=cf) }}" hx-trigger="load, every 5s" hx-swap="innerHTML"></div>
-      </div>
-    </section>
-    {% endif %}
+</div>
 
     {% if authorize(g.user.role, 'view_imaging_requests') %}
+    <div class="sx-panel" id="tab-imaging" role="tabpanel" aria-labelledby="tabbtn-imaging" tabindex="0">
     <section class="card dash-card" aria-labelledby="imaging-title" id="imaging">
       <div class="dash-card-head">
         <div>
@@ -347,24 +399,9 @@
         {% endif %}
       </div>
     </section>
+    </div>
     {% endif %}
 
-    {% if authorize(g.user.role, 'upload_file') %}
-    <section class="card dash-card" aria-labelledby="upload-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="upload-title">Upload files</h2>
-          <p class="ds-card-sub">Filed straight to this patient</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        {% with cf=cf %}{% include "_upload_zone.html" %}{% endwith %}
-        <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
-      </div>
-    </section>
-    {% endif %}
-  </div>
-</div>
 
 <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">

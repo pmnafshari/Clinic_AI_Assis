@@ -138,3 +138,35 @@ document.querySelectorAll(".ds-segmented[data-filter-target]").forEach(function 
     });
   });
 });
+
+// record tabs (P29). without script every section is on the page; with it, one tab's sections at a time.
+// arrow keys move between tabs, and a link to an #id inside a panel (e.g. #imaging) opens that panel.
+document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
+  var tabs = Array.prototype.slice.call(list.querySelectorAll('[role="tab"]'));
+  function select(tab, focus) {
+    tabs.forEach(function (t) {
+      var on = t === tab;
+      t.setAttribute("aria-selected", on ? "true" : "false");
+      t.tabIndex = on ? 0 : -1;
+      document.getElementById(t.getAttribute("aria-controls")).hidden = !on;
+    });
+    if (focus) tab.focus();
+  }
+  tabs.forEach(function (tab, i) {
+    tab.addEventListener("click", function () { select(tab, false); });
+    tab.addEventListener("keydown", function (e) {
+      var next = e.key === "ArrowRight" ? i + 1 : e.key === "ArrowLeft" ? i - 1 : null;
+      if (e.key === "Home") next = 0;
+      if (e.key === "End") next = tabs.length - 1;
+      if (next === null) return;
+      e.preventDefault();
+      select(tabs[(next + tabs.length) % tabs.length], true);
+    });
+  });
+  list.hidden = false;
+  var target = window.location.hash ? document.getElementById(window.location.hash.slice(1)) : null;
+  var panel = target ? target.closest('[role="tabpanel"]') : null;
+  var start = panel ? list.querySelector('[aria-controls="' + panel.id + '"]') : tabs[0];
+  select(start || tabs[0], false);
+  if (target) target.scrollIntoView();
+});

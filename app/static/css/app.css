@@ -1409,3 +1409,7 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 @media (min-width: 1200px) { .sx-panel-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
 .sx-panel > *, .sx-panel-col > * { min-width: 0; }
 .sx-panel-col { display: grid; gap: 1rem; align-content: start; }
+/* a record tab panel: no outline when focus lands on it from the tab bar */
+.sx-panel[role="tabpanel"]:focus { outline: none; }
+.sx-panel[role="tabpanel"]:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 14px; }
+.sx-panel + .sx-panel { margin-top: 1rem; }
