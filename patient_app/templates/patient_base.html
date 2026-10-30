@@ -40,6 +40,10 @@
       </nav>
       {% endif %}
       <div class="patient-tools">
+        {% if patient and not patient.must_change_pin %}
+        {# on a phone the sidebar becomes the bottom tab bar, which has no room for Profile #}
+        <a class="patient-avatar-link{{ ' active' if request.endpoint == 'patient.profile' else '' }}" href="{{ url_for('patient.profile') }}"><i class="bi bi-person-circle" aria-hidden="true"></i><span class="visually-hidden">{{ t('nav_profile', lang) }}</span></a>
+        {% endif %}
         {% if patient %}
         <form method="post" action="{{ url_for('patient.logout') }}" class="d-inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -63,12 +67,19 @@
     </div>
     </div>
   </main>
+  {% if patient and not patient.must_change_pin %}
+  <nav class="patient-tabbar" aria-label="{{ t('tab_label', lang) }}">
+    {% for endpoint, key, icon in [('home', 'tab_home', 'house'), ('patient.appointments_page', 'tab_visits', 'calendar3'), ('patient.billing', 'tab_bills', 'wallet2'), ('patient.files_page', 'tab_files', 'folder2-open'), ('patient.chat', 'tab_assistant', 'chat-dots')] %}
+    <a href="{{ url_for(endpoint) }}" class="patient-tab{{ ' active' if request.endpoint == endpoint else '' }}"{% if request.endpoint == endpoint %} aria-current="page"{% endif %}><i class="bi bi-{{ icon }}" aria-hidden="true"></i>{{ t(key, lang) }}</a>
+    {% endfor %}
+  </nav>
+  {% endif %}
   <dialog class="patient-dialog" id="patient-confirm" aria-labelledby="patient-confirm-title">
     <h2 id="patient-confirm-title">{{ t('ui_confirm_title', lang) }}</h2>
     <p id="patient-confirm-message"></p>
     <div class="patient-dialog-actions">
       <button class="btn btn-outline-secondary" type="button" data-dialog-cancel autofocus>{{ t('ui_keep', lang) }}</button>
-      <button class="btn btn-primary" type="button" data-dialog-confirm>{{ t('ui_continue', lang) }}</button>
+      <button class="btn btn-dark" type="button" data-dialog-confirm>{{ t('ui_continue', lang) }}</button>
     </div>
   </dialog>
   <script src="{{ url_for('static', filename='js/portal.js') }}" defer

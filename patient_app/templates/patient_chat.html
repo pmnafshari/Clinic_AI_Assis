@@ -14,45 +14,17 @@
   {% set c = consent_row %}
   <p class="mb-2"><strong>{{ t('chat_consent_state', lang).format(state=t('consent_given', lang) if c.granted and not c.outdated else t('consent_outdated', lang) if c.outdated else t('consent_withdrawn', lang) if c.recorded else t('consent_not_asked', lang)) }}</strong></p>
   {% endif %}
-  <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-primary btn-sm">{{ t('chat_consent_open', lang) }}</a>
+  <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-dark btn-sm">{{ t('chat_consent_open', lang) }}</a>
 </div>
 {% else %}
 
-{# suggestions belong to the empty state: once there is an exchange on the
-   page they are noise, and the composer is where attention should be. #}
-{% if not state %}
-<p class="chat-examples-heading">{{ t('chat_examples_heading', lang) }}</p>
-{# type=button, unnamed, not attached to the form. as submit buttons named
-   "question" they were unusable in a browser two different ways: a click
-   failed the required input's validation and posted nothing, and enter in the
-   field submitted the first chip's value instead of what was typed. chat.js
-   fills the field from the chip text instead. #}
-<div class="chat-examples">
-  <button type="button" class="chat-example">{{ t('chat_example_1', lang) }}</button>
-  <button type="button" class="chat-example">{{ t('chat_example_2', lang) }}</button>
-  <button type="button" class="chat-example">{{ t('chat_example_3', lang) }}</button>
-  <button type="button" class="chat-example">{{ t('chat_example_4', lang) }}</button>
-</div>
-{% endif %}
-
-{% if waiting %}
-{# P10.05: what the patient can see about a call-back. a status, never an ETA -
-   nothing was sent to them, because there is no messaging provider. #}
-<div class="ds-note patient-waiting" role="status">
-  <p class="mb-1"><i class="bi bi-telephone" aria-hidden="true"></i> <strong>{{ t('handoff_status', lang) }}</strong></p>
-  {# P29: since when and the topic only. who took it and any staff note stay
-     on the staff side #}
-  <ul class="list-unstyled mb-1">
-    {% for h in waiting %}
-    <li>{{ t('handoff_since', lang).format(when=h.created_at | appt_when(lang)) }} · {{ t('handoff_about', lang).format(topic=t('handoff_topic_' ~ h.topic, lang)) }}</li>
-    {% endfor %}
-  </ul>
-  <p class="small mb-0">{{ t('handoff_no_time', lang) }}</p>
-</div>
-{% endif %}
+{# P29 redesign: the exchange and the composer on the left, suggestions, the
+   call-back and what the assistant reads on the right (below on a phone). #}
+<div class="pp-chat">
+<div class="pp-chat-main">
 
 {# exactly one response region, rendered only when a POST produced a state -
-   a reload with no state returns to the empty state above, per D-03.
+   a reload with no state returns to the empty state, per D-03.
 
    The exchange is ONE question and one reply, not a transcript: this app
    keeps no conversation state, and a client-side history would contradict
@@ -62,6 +34,7 @@
   {% if question %}
   <p class="ds-turn ds-turn-user">{{ question }}</p>
   {% endif %}
+  <p class="pp-who"><span class="pp-who-mark" aria-hidden="true"><i class="bi bi-stars"></i></span>{{ t('nav_chat', lang) }}</p>
 <div class="card chat-response chat-response--{{ state }} p-4" role="status" aria-live="polite">
   <h2 class="chat-response-heading h5 mb-2" id="chat-response-heading" tabindex="-1">
     {% if state == 'answer' %}
@@ -95,6 +68,29 @@
     {{ t('chat_error_body', lang) }}
     {% endif %}
   </p>
+  {# a button to the page the answer came from - only pages the patient can already open #}
+  {% set links = {'next_appointment': ('patient.appointments_page', 'chat_open_appointments'),
+                  'invoices': ('patient.billing', 'chat_open_billing'),
+                  'demographics': ('patient.profile', 'chat_open_profile')} %}
+  {% set link = links.get(target) if state == 'answer' else (links['next_appointment'] if state == 'agent_done' else none) %}
+  {% if state == 'agent_propose' %}
+  {# the same words a patient can type: the assistant reads them exactly as typed text #}
+  <div class="pp-quick">
+    <form method="post" action="{{ url_for('patient.chat') }}" class="chat-quick">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="question" value="{{ t('chat_quick_yes_word', lang) }}">
+      <button type="submit" class="btn btn-dark btn-sm">{{ t('chat_quick_yes', lang) }}</button>
+    </form>
+    <form method="post" action="{{ url_for('patient.chat') }}" class="chat-quick">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="question" value="{{ t('chat_quick_no_word', lang) }}">
+      <button type="submit" class="btn btn-outline-secondary btn-sm">{{ t('chat_quick_no', lang) }}</button>
+    </form>
+  </div>
+  {% endif %}
+  {% if link %}
+  <p class="pp-answer-link"><a class="btn btn-outline-secondary btn-sm chat-answer-link" href="{{ url_for(link[0]) }}">{{ t(link[1], lang) }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a></p>
+  {% endif %}
 </div>
 </div>
 {% endif %}
@@ -118,6 +114,46 @@
   <p id="question-count" class="patient-counter" data-count-for="question">0 / 500 {{ t('ui_chars', lang) }}</p>
   <p id="chat-pending-help" class="chat-pending-help d-none">{{ t('chat_pending_help', lang) }}</p>
 </form>
+</div>
+
+<aside class="pp-chat-side" aria-label="{{ t('chat_examples_heading', lang) }}">
+{# suggestions belong to the empty state: once there is an exchange on the
+   page they are noise, and the composer is where attention should be. #}
+{% if not state %}
+<div class="pp-card">
+<p class="chat-examples-heading">{{ t('chat_examples_heading', lang) }}</p>
+{# type=button, unnamed, not attached to the form. as submit buttons named
+   "question" they were unusable in a browser two different ways: a click
+   failed the required input's validation and posted nothing, and enter in the
+   field submitted the first chip's value instead of what was typed. chat.js
+   fills the field from the chip text instead. #}
+<div class="chat-examples">
+  <button type="button" class="chat-example">{{ t('chat_example_1', lang) }}</button>
+  <button type="button" class="chat-example">{{ t('chat_example_2', lang) }}</button>
+  <button type="button" class="chat-example">{{ t('chat_example_3', lang) }}</button>
+  <button type="button" class="chat-example">{{ t('chat_example_4', lang) }}</button>
+</div>
+</div>
+{% endif %}
+
+{% if waiting %}
+{# P10.05: what the patient can see about a call-back. a status, never an ETA -
+   nothing was sent to them, because there is no messaging provider. #}
+<div class="ds-note patient-waiting pp-card" role="status">
+  <p class="mb-1"><i class="bi bi-telephone" aria-hidden="true"></i> <strong>{{ t('handoff_status', lang) }}</strong></p>
+  {# P29: since when and the topic only. who took it and any staff note stay
+     on the staff side #}
+  <ul class="list-unstyled mb-1">
+    {% for h in waiting %}
+    <li>{{ t('handoff_since', lang).format(when=h.created_at | appt_when(lang)) }} · {{ t('handoff_about', lang).format(topic=t('handoff_topic_' ~ h.topic, lang)) }}</li>
+    {% endfor %}
+  </ul>
+  <p class="small mb-0">{{ t('handoff_no_time', lang) }}</p>
+</div>
+{% endif %}
+<p class="pp-note"><i class="bi bi-shield-check" aria-hidden="true"></i> {{ t('chat_privacy_note', lang) }}</p>
+</aside>
+</div>
 
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endif %}

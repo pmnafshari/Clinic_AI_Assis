@@ -2192,7 +2192,12 @@ def selftest():
         c.close()
         page34 = client34.get("/appointments").text
         assert on_page(t("appt_history", "it"), page34), "34b: the past requests have their own section"
-        history34 = page34.split('id="history-title"')[1]
+        # P29 redesign: one table; the past rows and their details panels
+        def group34(page, name):
+            rows = re.findall(rf'<tr data-group="{name}">(.*?)</tr>', page, re.S)
+            panels = re.findall(r'<dialog class="pp-detail" id="appt-d-h\d+".*?</dialog>', page, re.S) if name == "past" else []
+            return rows, "".join(rows + panels)
+        _, history34 = group34(page34, "past")
         assert on_page(t("appt_status_declined", "it"), history34), "34b: declined says so in words"
         assert on_page(t("appt_status_cancelled", "it"), history34), "34b: cancelled says so in words"
         assert on_page(t("appt_declined_next", "it"), history34), "34b: and what to do next"
@@ -2201,7 +2206,7 @@ def selftest():
             on_page(t("appt_confirmed_time", "it"), history34), "34b: each date says what it is"
         assert "11:15" in history34, "34b: a cancelled booking keeps the time that was confirmed"
         assert "00:00" not in page34, "34b: a request is never given a time"
-        upcoming34 = page34.split('id="upcoming-title"')[1].split('id="history-title"')[0]
+        _, upcoming34 = group34(page34, "upcoming")
         assert "16:45" in upcoming34 and on_page(t("appt_confirmed_time", "it"), upcoming34), \
             "34b: the booked row is labelled as the confirmed time"
         day_fmt = app.jinja_env.filters["appt_day"]
@@ -2211,8 +2216,8 @@ def selftest():
         for _ in range(patient_routes.HISTORY_LIMIT + 3):
             _appt34.decline(c, _appt34.request(c, cf34, day7, "morning", None))
         c.close()
-        history34 = client34.get("/appointments").text.split('id="history-title"')[1]
-        assert history34.count("<li class=\"ds-row\">") == patient_routes.HISTORY_LIMIT, \
+        past_rows34, _ = group34(client34.get("/appointments").text, "past")
+        assert len(past_rows34) == patient_routes.HISTORY_LIMIT, \
             "34b: the history is bounded"
         assert t("appt_history", "it") not in other34.get("/appointments").text, \
             "34b: another patient's outcomes are never listed"
@@ -2250,10 +2255,11 @@ def selftest():
             text34 = stored34(pid34, b"Synthetic report text", "text")
             foreign34 = stored34(pid34_other, _png34(35), "png")
             files34 = client34.get("/files").text
-            assert f'href="/files/{image34}/preview"' in files34 and on_page(t("files_view", "it"), files34), \
+            # P29 redesign: every shared file opens in the viewer now, not only images
+            assert f'href="/files/{image34}/view"' in files34 and on_page(t("files_view", "it"), files34), \
                 "34c: an image has a View button"
             assert f'href="/files/{text34}/download"' in files34, "34c: every shared file can be downloaded"
-            assert files34.count("data-file-view") == 1, "34c: View only where the browser can show it"
+            assert f'href="/files/{text34}/view"' in files34, "34c: a text file has a View button too"
             assert f"/files/{foreign34}/" not in files34, "34c: another patient's file is not listed"
             denied34 = count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'")
             for path in (f"/files/{foreign34}/preview", f"/files/{foreign34}/download",
@@ -2350,6 +2356,294 @@ def selftest():
             for key in keys:
                 assert not on_page(t(key, "en"), text) or t(key, "it") == t(key, "en"), \
                     f"34g: english {key} on the italian {path}"
+
+        # 35. P29 redesign (direction C). a fresh patient with no data first,
+        # so every page's empty state is covered before anything is seeded
+        reset35 = raw_db()
+        reset35.execute("DELETE FROM patient_login_attempts")
+        reset35.commit()
+        reset35.close()
+        cf35 = "ZZRD290101010101"
+        pin35 = seed_and_issue(cf35, "redesign patient")
+        pid35 = pid_of(cf35)
+        client35, _ = sign_in(cf35, pin35)
+        page = client35.get("/change-pin")
+        client35.post("/change-pin", data={"pin": "36925814", "confirm": "36925814",
+                                           "csrf_token": _csrf_from(page.text)})
+
+        # 35a. the shell: the sidebar on computers, a five-tab bar on phones
+        home35 = client35.get("/").text
+        assert 'class="patient-tabbar"' in home35, "35a: phones get a bottom tab bar"
+        tabbar35 = home35.split('class="patient-tabbar"')[1].split("</nav>")[0]
+        assert re.findall(r'href="([^"]+)"', tabbar35) == ["/", "/appointments", "/billing", "/files", "/chat"], \
+            "35a: five tabs, in this order"
+        assert tabbar35.count('aria-current="page"') == 1 and \
+            re.search(r'href="/"[^>]*aria-current="page"', tabbar35), "35a: the current tab is marked"
+        side35 = home35.split('<nav class="patient-nav', 1)[1].split("</nav>")[0]
+        assert len(re.findall(r'href="[^"]+"', side35)) == 6 and 'href="/profile"' in side35, \
+            "35a: the sidebar keeps all six pages"
+        for path in ("/", "/appointments", "/billing", "/files", "/chat", "/profile"):
+            assert client35.get(path).status_code == 200, f"35a: {path} renders with no data"
+        for path in ("/appointments", "/billing", "/files"):
+            assert "<table" not in client35.get(path).text, f"35a: {path} draws no empty table"
+        empty35 = client35.get("/").text
+        assert on_page(t("home_nothing_to_do", "it"), empty35), "35a: an empty home says nothing is waiting"
+        assert on_page(t("kpi_next_none", "it"), empty35), "35a: and that nothing is booked"
+
+        # seeds shared by 35b-35h: a booking, a request, an invoice with two
+        # installments of which the first is paid, a call-back and a shared file
+        import appointments as _appt35
+        import handoff as _handoff35
+        import ledger as _ledger35
+        import patient_files as _pfiles35
+        day7_35 = (datetime.now().date() + timedelta(days=7)).isoformat()
+        day9_35 = (datetime.now().date() + timedelta(days=9)).isoformat()
+        c = raw_db()
+        _appt35.book(c, cf35, "dr rossi", f"{day7_35}T10:30", 30)
+        _appt35.request(c, cf35, day9_35, "afternoon", "my own words")
+        vid35 = c.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                          " VALUES (?, '2026-09-01', '[]', '', 'p29-35')", (pid35,)).lastrowid
+        c.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                  " VALUES (?, ?, 0, 120.0, 12000, 'controllo')", (pid35, vid35))
+        inv35 = _ledger35.ensure_invoice(c, pid35, vid35)
+        c.commit()
+        _ledger35.issue(c, inv35, "test-dentist", "dentist", due_date=day9_35)
+        _ledger35.plan_installments(c, inv35, 2, day7_35, "test-dentist", "dentist")
+        _ledger35.record_payment(c, inv35, 6000, "cash", "p29-35-pay", "test-dentist", "dentist")
+        summary35 = _ledger35.patient_summary(c, pid35)
+        open35 = [i for inv in summary35["invoices"] for i in inv["installments"] if i["open_cents"] > 0][0]
+        _handoff35.raise_request(c, pid35, "patient_asked", "appointment")
+        doc35 = c.execute(
+            "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size, status,"
+            " uploaded_by, uploaded_at, category) VALUES (?, 'png', 'x.png', 'x', 'x', 1, 'confirmed', 'fixture',"
+            " '2026-10-01T10:00:00+00:00', 'report')", (pid35,)).lastrowid
+        c.commit()
+        _pfiles35.publish(c, doc35, pid35, "fixture", "dentist")
+        c.close()
+
+        # 35b. home leads with the next visit, then what needs the patient
+        home35 = client35.get("/").text
+        hero35 = home35.split('<section class="pp-hero', 1)[1].split("</section>")[0]
+        assert "10:30" in hero35 and "dr rossi" in hero35, "35b: the hero is the next booked visit"
+        todo35 = home35.split('id="home-todo"')[1].split("</section>")[0]
+        assert _ledger35.fmt(open35["open_cents"], "it") in todo35 and \
+            app.jinja_env.filters["appt_day"](open35["due_date"], "it") in todo35, \
+            "35b: the open installment, not the paid one, is on the list"
+        assert app.jinja_env.filters["appt_day"](day9_35, "it") in todo35, "35b: the waiting request is listed"
+        assert on_page(t("handoff_topic_appointment", "it"), todo35), "35b: and the call-back topic"
+        assert "my own words" not in home35, "35b: home shows no free text"
+        assert on_page(_ledger35.fmt(summary35["outstanding_cents"], "it"), home35), "35b: still to pay card"
+        assert on_page(t("kpi_requests_wait", "it"), home35), "35b: the request card says one is waiting"
+        files_card35 = home35.split('id="home-files"')[1].split("</a>")[0]
+        assert ">1<" in files_card35.replace(" ", ""), "35b: one shared file is counted"
+
+        # 35c. appointments: one table with tabs, a details panel per row, a
+        # confirm step on cancel, and "ask again" only for a day still ahead
+        day12_35 = (datetime.now().date() + timedelta(days=12)).isoformat()
+        past_35 = (datetime.now().date() - timedelta(days=20)).isoformat()
+        c = raw_db()
+        future_declined = _appt35.request(c, cf35, day12_35, "morning", None)
+        _appt35.decline(c, future_declined, "STAFF-ONLY reason one")
+        past_declined = _appt35.request(c, cf35, day12_35, "afternoon", None)
+        _appt35.decline(c, past_declined, "STAFF-ONLY reason two")
+        c.execute("UPDATE appointments SET starts_at = ? WHERE id = ?", (f"{past_35}T00:00:00", past_declined))
+        c.commit()
+        c.close()
+        appt35 = client35.get("/appointments").text
+        rows35 = re.findall(r'<tr data-group="(\w+)"', appt35)
+        assert rows35.count("upcoming") == 1 and rows35.count("requests") == 1 and rows35.count("past") == 2, rows35
+        for group, n in (("all", 4), ("upcoming", 1), ("requests", 1), ("past", 2)):
+            assert re.search(rf'data-appt-tab="{group}"[^>]*>[^<]*<b>{n}</b>', appt35), f"35c: the {group} tab counts {n}"
+        opens35 = re.findall(r'data-dialog-open="(appt-d-[brh]\d+)"', appt35)
+        assert len(opens35) == 4 and all(f'<dialog class="pp-detail" id="{d}"' in appt35 for d in opens35), \
+            "35c: every row has a details panel"
+        assert "STAFF-ONLY" not in appt35, "35c: HARD FAIL - a staff decline reason reached the page"
+        assert appt35.count("data-confirm-danger") == 1 and appt35.count('form="cancel-') == 1, \
+            "35c: one cancel form, reached from the row and from its panel"
+        assert f'href="/appointments?day={day12_35}&amp;period=morning#request"' in appt35, \
+            "35c: a declined day still ahead can be asked again"
+        assert f"day={past_35}" not in appt35, "35c: a past day is never offered again"
+        pre35 = client35.get(f"/appointments?day={day12_35}&period=afternoon").text
+        assert f'value="{day12_35}"' in pre35 and re.search(r'id="period-afternoon"\s+value="afternoon"\s+checked', pre35), \
+            "35c: ask again fills the form"
+        for bad in ("day=1999-01-01&period=afternoon", "day=nonsense", "day=" + day12_35 + "&period=evening"):
+            page = client35.get("/appointments?" + bad).text
+            assert "1999-01-01" not in page and "nonsense" not in page and \
+                re.search(r'id="period-morning"\s+value="morning"\s+checked', page), f"35c: {bad} is ignored"
+
+        # 35d. payments: three cards, an invoices table with a button per row,
+        # and each invoice's detail - all ledger values, "unknown" where there are none
+        c = raw_db()
+        vid35b = c.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                           " VALUES (?, '2025-11-10', '[]', '', 'p29-35-legacy')", (pid35,)).lastrowid
+        c.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                  " VALUES (?, ?, 0, 80.0, 8000, 'igiene')", (pid35, vid35b))
+        legacy35 = _ledger35.ensure_invoice(c, pid35, vid35b, legacy=True)
+        c.commit()
+        summary35 = _ledger35.patient_summary(c, pid35)
+        c.close()
+        bill35 = client35.get("/billing").text
+        assert _ledger35.fmt(summary35["outstanding_cents"], "it") in bill35.split('id="bill-outstanding"')[1].split("</div>")[0], \
+            "35d: the still-to-pay card is the ledger's figure"
+        assert app.jinja_env.filters["appt_day"](open35["due_date"], "it") in bill35.split('id="bill-next"')[1].split("</div>")[0], \
+            "35d: the next-installment card is the first open one"
+        checking35 = bill35.split('id="bill-checking"')[1].split("</div>\n")[0]
+        assert ">1<" in checking35.replace(" ", "") and on_page(t("bill_not_in_total", "it"), checking35), \
+            "35d: the invoice being checked is counted and said to be outside the total"
+        rows35b = re.findall(r'<tr data-group="(\w+)" data-invoice-row="(\d+)">(.*?)</tr>', bill35, re.S)
+        assert sorted(int(r[1]) for r in rows35b) == sorted([inv35, legacy35]), "35d: one row per invoice"
+        for group, inv_id, row in rows35b:
+            assert f'aria-controls="inv-{inv_id}"' in row and on_page(t("bill_view_invoice", "it"), row), \
+                "35d: each row has its View invoice button"
+            assert f'<section class="pp-card pp-invoice" id="inv-{inv_id}"' in bill35, "35d: and its detail section"
+            if int(inv_id) == legacy35:
+                assert group == "other" and row.count(t("bill_unknown", "it")) == 2 and "€ 0,00" not in row, \
+                    "35d: being checked: paid and still-to-pay read unknown"
+            else:
+                assert group == "topay", "35d: an invoice with money open is under To pay"
+        detail35 = bill35.split(f'id="inv-{inv35}"')[1].split("</section>")[0]
+        assert detail35.count(t("bill_covered", "it")) == 1 and detail35.count(t("bill_open", "it")) == 1, \
+            "35d: each installment says covered or open"
+
+        # 35e/35f. files: every shared file has View and Download; the viewer
+        # shows images, text (as text, never as markup) and PDFs, and refuses
+        # anything the patient may not open with the same 404
+        from documents_selftest import pdf as _pdf35
+        saved_root35 = _docs34.DOC_ROOT
+        _docs34.DOC_ROOT = Path(tmp) / "documents35"
+        try:
+            def stored35(owner, data, kind, publish=True):
+                sha = hashlib.sha256(data).hexdigest()
+                path = Path(_docs34.DOC_ROOT) / f"{owner}/{sha}"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+                c = raw_db()
+                did = c.execute(
+                    "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size,"
+                    " status, uploaded_by, uploaded_at, category) VALUES (?, ?, 'PRIVATE-NAME', ?, ?, ?,"
+                    " 'confirmed', 'fixture', '2026-10-02T10:00:00+00:00', 'report')",
+                    (owner, kind, f"{owner}/{sha}", sha, len(data))).lastrowid
+                c.commit()
+                if publish:
+                    _pfiles35.publish(c, did, owner, "fixture", "dentist")
+                c.close()
+                return did
+
+            pdf35 = stored35(pid35, _pdf35(["Synthetic treatment plan"]), "pdf")
+            text35 = stored35(pid35, b"Synthetic letter <script>alert(1)</script> end", "text")
+            image35 = stored35(pid35, _png34(36), "png")
+            hidden35 = stored35(pid35, b"not shared", "text", publish=False)
+            foreign35 = stored35(pid34_other, _pdf35(["someone else"]), "pdf")
+
+            files35 = client35.get("/files").text
+            for did in (pdf35, text35, image35):
+                assert f'href="/files/{did}/view"' in files35 and f'href="/files/{did}/download"' in files35, \
+                    f"35e: shared file {did} has View and Download"
+            assert f"/files/{hidden35}/" not in files35 and f"/files/{foreign35}/" not in files35, \
+                "35e: unshared and foreign files are not listed"
+
+            view_pdf = client35.get(f"/files/{pdf35}/view")
+            assert view_pdf.status_code == 200 and f'data-pdf-src="/files/{pdf35}/raw"' in view_pdf.text, \
+                "35f: a PDF opens in the viewer and is fed from the raw route"
+            assert 'href="/files"' in view_pdf.text and "data-viewer-close" in view_pdf.text, "35f: the viewer closes back to the list"
+            view_text_resp = client35.get(f"/files/{text35}/view")
+            assert view_text_resp.headers.get("Cache-Control") == "no-store", \
+                "35f: a viewer page holds the document's text, so the browser must not keep it"
+            view_text = view_text_resp.text
+            assert "Synthetic letter &lt;script&gt;alert(1)&lt;/script&gt; end" in view_text and \
+                "<script>alert(1)" not in view_text, "35f: text is shown as text, never run"
+            view_img = client35.get(f"/files/{image35}/view").text
+            assert f'src="/files/{image35}/preview"' in view_img, "35f: an image opens in the viewer"
+            assert "PRIVATE-NAME" not in view_pdf.text + view_text + view_img, "35f: the original file name never shows"
+            denied35 = count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'")
+            for path in (f"/files/{foreign35}/view", f"/files/{hidden35}/view", "/files/999999/view",
+                         f"/files/{foreign35}/raw", f"/files/{text35}/raw", f"/files/{image35}/raw"):
+                assert client35.get(path).status_code == 404, f"35f: {path} is the same 404"
+            assert count("SELECT COUNT(*) FROM audit_log WHERE action = 'patient_file_denied'") == denied35 + 6, \
+                "35f: and every refusal is audited"
+            raw35 = client35.get(f"/files/{pdf35}/raw")
+            assert raw35.status_code == 200 and raw35.mimetype == "application/pdf" and raw35.data[:5] == b"%PDF-" and \
+                raw35.headers["Content-Security-Policy"] == "sandbox; default-src 'none'", \
+                "35f: the PDF's bytes come through the same gate, sandboxed"
+            with app.test_request_context():
+                assert patient_routes.local_return(f"/files/{pdf35}/raw") == "", "35f: login never returns to raw bytes"
+            lic35 = Path(patient_app.__file__).parent / "static" / "vendor" / "pdfjs" / "4.10.38" / "LICENSE"
+            assert lic35.exists() and "Apache License" in lic35.read_text(), "35f: pdf.js ships with its licence"
+            js35 = app.test_client().get("/static/vendor/pdfjs/4.10.38/pdf.min.mjs")
+            assert js35.status_code == 200 and js35.mimetype == "text/javascript", "35f: pdf.js is served as a module"
+        finally:
+            _docs34.DOC_ROOT = saved_root35
+
+        # 35g. assistant: an answer points to the page it came from, and a
+        # proposal can be answered with a button that sends the same words a
+        # patient would type. the answer itself is stubbed - no model here.
+        real_answer35 = patient_routes.chat.answer_question
+        reply35 = {}
+
+        def fake_answer35(question, pid, conn, lang, ip=None):
+            return dict(reply35)
+
+        patient_routes.chat.answer_question = fake_answer35
+        try:
+            empty_chat35 = client35.get("/chat").text
+            assert empty_chat35.count('class="chat-example"') == 4 and "chat-response" not in empty_chat35, \
+                "35g: the empty page keeps its four suggestions and no answer card"
+            assert on_page(t("chat_privacy_note", "it"), empty_chat35), "35g: the page says what the assistant reads"
+            for target, page_path, key in (("next_appointment", "/appointments", "chat_open_appointments"),
+                                           ("invoices", "/billing", "chat_open_billing"),
+                                           ("demographics", "/profile", "chat_open_profile")):
+                reply35.clear()
+                reply35.update({"state": "answer", "body": "stub answer", "target": target})
+                page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+                assert page.count('class="card chat-response') == 1 and "ds-turn-user" in page, "35g: one exchange"
+                assert re.search(rf'<a class="btn[^"]*" href="{page_path}">\s*{re.escape(t(key, "it"))}', page), \
+                    f"35g: a {target} answer links to {page_path}"
+            reply35.clear()
+            reply35.update({"state": "refusal", "body": None, "target": "unrouted"})
+            page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+            assert "chat-answer-link" not in page, "35g: a refusal points nowhere"
+            reply35.clear()
+            reply35.update({"state": "agent_propose", "kind": "book", "target": "book:proposed",
+                            "payload": {"day": day9_35, "period": "afternoon"}})
+            for lang, yes, no in (("it", "confermo", "lascia perdere"), ("en", "confirm", "never mind")):
+                client35.get(f"/lang/{lang}")
+                page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+                quick = re.findall(r'<form method="post" action="/chat" class="chat-quick">(.*?)</form>', page, re.S)
+                values = [re.search(r'name="question" value="([^"]+)"', q).group(1) for q in quick]
+                assert values == [yes, no], f"35g: the {lang} quick replies send {values}"
+                assert all('name="csrf_token"' in q for q in quick), "35g: and carry the csrf token"
+            client35.get("/lang/it")
+        finally:
+            patient_routes.chat.answer_question = real_answer35
+
+        # 35h. every page of the redesign in both languages, with no fragment
+        # of the other one; and the data-rights download on the profile is a button
+        keys35 = {
+            "/": ("tab_visits", "tab_bills", "tab_assistant", "home_next_label", "home_todo", "home_shared_files"),
+            "/appointments": ("appt_tab_all", "appt_tab_upcoming", "appt_tab_requests", "appt_col_date",
+                              "appt_details", "appt_detail_title", "appt_close", "appt_cancel_visit"),
+            "/billing": ("bill_next_installment", "bill_invoices_title", "bill_tab_all", "bill_tab_topay",
+                         "bill_view_invoice", "bill_col_visit", "bill_from_ledger"),
+            "/files": ("files_sort", "files_sort_new", "files_grid", "files_list", "files_view"),
+            "/chat": ("chat_privacy_note", "chat_examples_heading"),
+            f"/files/{pdf35}/view": ("viewer_close", "viewer_keys", "viewer_prev_page", "viewer_zoom_in"),
+            "/profile": ("profile_details_title", "rights_new"),
+        }
+        _docs34.DOC_ROOT = Path(tmp) / "documents35"
+        try:
+            for lang, other in (("en", "it"), ("it", "en")):
+                client35.get(f"/lang/{lang}")
+                for path, keys in keys35.items():
+                    text = client35.get(path).text
+                    for key in keys:
+                        assert on_page(t(key, lang), text), f"35h: {key} in {lang} on {path}"
+                        assert t(key, other) == t(key, lang) or not on_page(t(key, other), text), \
+                            f"35h: {other} {key} on the {lang} {path}"
+        finally:
+            _docs34.DOC_ROOT = saved_root35
+            client35.get("/lang/it")
+        assert re.search(r'<a class="btn[^"]*" href="/data-requests/\d+/download"', client32.get("/profile").text), \
+            "35h: the ready copy of the patient's data is downloaded with a button"
 
     print("selftest ok")
 

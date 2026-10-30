@@ -5,6 +5,7 @@ before_request function so the "don't trap the user" property lives in one
 place, the same shape app/__init__.py uses for CHANGE_PW_ALLOWED.
 """
 
+from datetime import date
 from pathlib import Path
 
 from flask import (Blueprint, Response, abort, current_app, g, redirect, render_template, request,
@@ -13,6 +14,7 @@ from werkzeug.exceptions import HTTPException
 
 from codice_fiscale import normalize as normalize_cf
 import appointments
+import clinic_time
 import consent
 import ledger
 import data_rights
@@ -98,7 +100,7 @@ def get_db():
 NO_RETURN = {
     "static", "vendor", "shared", "set_language", "patient.login", "patient.logout",
     "patient.change_pin", "patient.file_download", "patient.file_preview",
-    "patient.data_download",
+    "patient.file_raw", "patient.data_download",
 }
 
 
@@ -247,12 +249,12 @@ def files_page():
     return render_template("patient_files.html", files=files)
 
 
-def _published_file(doc_id, action, images_only=False):
+def _published_file(doc_id, action, kinds=None):
     conn = get_db()
     pid = g.patient["patient_id"]
     ip = net.from_request(request)
     row = patient_accessor.get_published_file(pid, doc_id, conn, ip=ip)
-    if row and images_only and row["kind"] not in ("png", "jpeg"):
+    if row and kinds and row["kind"] not in kinds:
         row = None
     data = documents.verified_bytes(row) if row else None
     if data is None:
@@ -280,8 +282,45 @@ def file_download(doc_id):
 
 @patient_bp.route("/files/<int:doc_id>/preview")
 def file_preview(doc_id):
-    row, data = _published_file(doc_id, "patient_file_preview", images_only=True)
+    row, data = _published_file(doc_id, "patient_file_preview", kinds=("png", "jpeg"))
     return _file_response(data, documents.MIMETYPES[row["kind"]])
+
+
+# P29: one viewer page for every shared file - an image, a text shown as text,
+# or a PDF drawn in the browser by the vendored pdf.js from the raw route below.
+# both go through _published_file, so a file the patient may not open is the
+# same audited 404 as everywhere else.
+TEXT_VIEW_LIMIT = 200_000
+
+
+@patient_bp.route("/files/<int:doc_id>/view")
+def file_view(doc_id):
+    row, data = _published_file(doc_id, "patient_file_view")
+    ids = [f["id"] for f in patient_accessor.get_published_files(
+        g.patient["patient_id"], get_db(), ip=net.from_request(request))]
+    pos = ids.index(doc_id) if doc_id in ids else 0
+    text = None
+    truncated = False
+    if row["kind"] == "text":
+        text = data.decode("utf-8", errors="replace")
+        truncated = len(text) > TEXT_VIEW_LIMIT
+        text = text[:TEXT_VIEW_LIMIT]
+    resp = Response(render_template(
+        "patient_file_view.html", f=row, text=text, truncated=truncated,
+        prev_id=ids[pos - 1] if pos > 0 else None,
+        next_id=ids[pos + 1] if pos + 1 < len(ids) else None,
+        position=pos + 1, total=len(ids)))
+    # the page can carry the document's own text: kept out of the browser cache
+    # like every other file response
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+
+@patient_bp.route("/files/<int:doc_id>/raw")
+def file_raw(doc_id):
+    # the PDF viewer's bytes: a PDF only, sandboxed like every other file response
+    row, data = _published_file(doc_id, "patient_file_view_pdf", kinds=("pdf",))
+    return _file_response(data, documents.MIMETYPES["pdf"])
 
 
 @patient_bp.route("/billing")
@@ -290,7 +329,21 @@ def billing():
     # scope-checked accessor the chat uses (P07.05)
     summary = patient_accessor.get_billing(g.patient["patient_id"], get_db(),
                                            ip=net.from_request(request))
-    return render_template("patient_billing.html", summary=summary, fmt=ledger.fmt)
+    return render_template("patient_billing.html", summary=summary, fmt=ledger.fmt,
+                           next_installment=next_installment(summary))
+
+
+def next_installment(summary):
+    """The earliest installment the ledger still shows open, as {due_date, amount_cents}, or None.
+
+    picked from the ledger's own values - nothing is added up or worked out here (P29).
+    """
+    found = None
+    for inv in (summary or {}).get("invoices", []):
+        for inst in inv["installments"]:
+            if inst["open_cents"] > 0 and (found is None or inst["due_date"] < found["due_date"]):
+                found = {"due_date": inst["due_date"], "amount_cents": inst["open_cents"]}
+    return found
 
 
 @patient_bp.route("/consent", methods=["POST"])
@@ -428,8 +481,11 @@ def chat_page():
     # exchange rather than a lone answer. presentational only - it is the
     # value already read above, jinja-escaped on the way out, and capped at
     # 500 characters by the truncation a few lines up.
+    # P29: target says which record answered, so the page can offer a button to
+    # that record's own page; it is a route name from the pipeline, never text
     return render_template(
         "patient_chat.html", state=result["state"], body=body, question=question,
+        target=result.get("target"),
         waiting=handoff.open_for_patient(conn, g.patient["patient_id"])
     )
 
@@ -468,13 +524,28 @@ def _appointment_history(conn, cf):
             for r in rows[:HISTORY_LIMIT]]
 
 
+def _prefill():
+    """P29: "ask again" fills the request form - only with a real day still ahead and a known period."""
+    # both or nothing: a refused day takes its period with it
+    day = request.args.get("day", "")
+    try:
+        if date.fromisoformat(day) < clinic_time.now().date():
+            return "", ""
+    except ValueError:
+        return "", ""
+    period = request.args.get("period", "")
+    return day, period if period in appointments.PERIODS else ""
+
+
 @patient_bp.route("/appointments")
 def appointments_page():
     cf = g.patient["codice_fiscale"]
     booked, requested = appointments.open_for_patient(get_db(), cf)
+    prefill_day, prefill_period = _prefill()
     return render_template("patient_appointments.html",
                            booked=booked, requested=requested,
-                           history=_appointment_history(get_db(), cf))
+                           history=_appointment_history(get_db(), cf),
+                           prefill_day=prefill_day, prefill_period=prefill_period)
 
 
 @patient_bp.route("/appointments/request", methods=["POST"])

@@ -10,51 +10,95 @@
   </div>
 </div>
 
-{# the patient's own two figures, read through the same scoped function the
-   appointments tab uses. a request is a count here - never a time. #}
-<div class="patient-kpis">
-  <a class="ds-kpi patient-kpi-link" href="{{ url_for('patient.appointments_page') }}">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-calendar-check"></i></span>
-    {% if next_appt %}
-    <p class="ds-kpi-value ds-numeral">{{ next_appt | appt_day(lang) }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">{{ t('kpi_next_appt', lang) }}</span>
-      <span class="ds-badge ds-badge-primary">{{ next_time }}</span>
-    </div>
-    {% else %}
-    <p class="ds-kpi-value ds-numeral">{{ t('kpi_next_none', lang) }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">{{ t('kpi_next_appt', lang) }}</span>
-      <span class="ds-badge ds-badge-neutral">{{ t('kpi_next_none_pill', lang) }}</span>
-    </div>
-    {% endif %}
-  </a>
-  <a class="ds-kpi patient-kpi-link" href="{{ url_for('patient.appointments_page') }}">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
-    <p class="ds-kpi-value ds-numeral">{{ request_count }}</p>
-    <div class="ds-kpi-foot">
-      <span class="ds-kpi-label">{{ t('kpi_requests', lang) }}</span>
-      {% if request_count %}
-      <span class="ds-badge ds-badge-warning">{{ t('kpi_requests_wait', lang) }}</span>
+{# P29 redesign: the next visit leads, then what needs the patient, with small
+   cards beside it. every figure is read by the same scoped function its own
+   page uses; a request is listed by its day, never a time. #}
+<div class="pp-home">
+  <div class="pp-home-main">
+    <section class="pp-hero{{ ' pp-hero--empty' if not next_row else '' }}" aria-labelledby="hero-title">
+      {% if next_row %}
+      <span class="pp-datetile" aria-hidden="true">{{ next_appt | appt_tile(lang) }}</span>
+      <div class="pp-hero-text">
+        <p class="pp-hero-k" id="hero-title">{{ t('home_next_label', lang) }}</p>
+        <p class="pp-hero-big">{{ next_appt | appt_when(lang) }}</p>
+        {% if next_row.dentist %}<p class="pp-hero-meta">{{ t('home_next_with', lang).format(dentist=next_row.dentist) }}</p>{% endif %}
+      </div>
+      <a class="btn btn-light pp-hero-btn" href="{{ url_for('patient.appointments_page') }}">{{ t('home_next_details', lang) }}</a>
       {% else %}
-      <span class="ds-badge ds-badge-neutral">{{ t('kpi_requests_clear', lang) }}</span>
+      <div class="pp-hero-text">
+        <p class="pp-hero-k" id="hero-title">{{ t('home_next_label', lang) }}</p>
+        <p class="pp-hero-big">{{ t('kpi_next_none', lang) }}</p>
+      </div>
+      <a class="btn btn-light pp-hero-btn" href="{{ url_for('patient.appointments_page') }}#request">{{ t('home_request_one', lang) }}</a>
       {% endif %}
-    </div>
-  </a>
-</div>
+    </section>
 
-<h2 class="patient-section-title">{{ t('ui_quick', lang) }}</h2>
-<div class="patient-cards">
-  {% for icon, title, body, endpoint, action in [
-    ('folder2-open', 'nav_files', 'ui_files_body', 'patient.files_page', 'ui_files_action'),
-    ('wallet2', 'nav_billing', 'ui_payments_body', 'patient.billing', 'ui_payments_action'),
-    ('chat-dots', 'overview_chat_title', 'overview_chat_body', 'patient.chat', 'home_cta')] %}
-  <section class="ds-card patient-entry"><div class="ds-card-body">
-    <span class="ds-kpi-icon" aria-hidden="true"><i class="bi bi-{{ icon }}"></i></span>
-    <h2 class="ds-card-title">{{ t(title, lang) }}</h2>
-    <p class="text-secondary">{{ t(body, lang) }}</p>
-    <a href="{{ url_for(endpoint) }}" class="patient-action">{{ t(action, lang) }} <i class="bi bi-arrow-up-right" aria-hidden="true"></i></a>
-  </div></section>
-  {% endfor %}
+    <section class="pp-card" id="home-todo" aria-labelledby="todo-title">
+      <div class="pp-card-head"><h2 id="todo-title">{{ t('home_todo', lang) }}</h2></div>
+      {% if next_installment or requested or waiting %}
+      <ul class="pp-todo pp-box" style="--h:320px">
+        {% if next_installment %}
+        <li>
+          <span class="pp-ico pp-ico--wait" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+          <span class="pp-todo-text"><b>{{ t('home_todo_installment', lang).format(amount=fmt(next_installment.amount_cents, lang), date=next_installment.due_date | appt_day(lang)) }}</b><span>{{ t('home_todo_installment_sub', lang) }}</span></span>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patient.billing') }}">{{ t('home_view_payment', lang) }}</a>
+        </li>
+        {% endif %}
+        {% for r in requested %}
+        <li>
+          <span class="pp-ico pp-ico--wait" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+          <span class="pp-todo-text"><b>{{ t('home_todo_request', lang).format(day=r.starts_at | appt_day(lang)) }}</b><span>{{ t('home_todo_request_sub', lang).format(period=t('appt_' ~ r.period, lang)) }}</span></span>
+          <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patient.appointments_page') }}">{{ t('home_view_request', lang) }}</a>
+        </li>
+        {% endfor %}
+        {% for h in waiting %}
+        <li>
+          <span class="pp-ico" aria-hidden="true"><i class="bi bi-telephone"></i></span>
+          <span class="pp-todo-text"><b>{{ t('home_todo_callback', lang).format(topic=t('handoff_topic_' ~ h.topic, lang)) }}</b><span>{{ t('handoff_since', lang).format(when=h.created_at | appt_when(lang)) }}</span></span>
+          <span class="pp-pill neutral">{{ t('home_in_queue', lang) }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="pp-muted mb-0">{{ t('home_nothing_to_do', lang) }}</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="pp-home-side">
+    <a class="pp-card pp-mini pp-link-card" href="{{ url_for('patient.billing') }}">
+      <span class="pp-ico" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+      <div>
+        <span class="pp-val">{{ fmt(billing.outstanding_cents, lang) if billing and billing.invoices else '-' }}</span>
+        <span class="pp-lab">{{ t('home_still_to_pay', lang) }}</span>
+        {% if billing and billing.unknown %}<span class="pp-pill neutral">{{ t('home_unknown_invoices', lang).format(n=billing.unknown) }}</span>{% endif %}
+        {% if next_installment %}<span class="pp-pill wait">{{ t('bill_due', lang) }} {{ next_installment.due_date | appt_day(lang) }}</span>{% endif %}
+        <span class="pp-link-text">{{ t('ui_payments_action', lang) }} <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+      </div>
+    </a>
+    <a class="pp-card pp-mini pp-link-card" href="{{ url_for('patient.appointments_page') }}">
+      <span class="pp-ico" aria-hidden="true"><i class="bi bi-hourglass-split"></i></span>
+      <div>
+        <span class="pp-val">{{ request_count }}</span>
+        <span class="pp-lab">{{ t('kpi_requests', lang) }}</span>
+        <span class="pp-pill {{ 'wait' if request_count else 'neutral' }}">{{ t('kpi_requests_wait', lang) if request_count else t('kpi_requests_clear', lang) }}</span>
+      </div>
+    </a>
+    <a class="pp-card pp-mini pp-link-card" id="home-files" href="{{ url_for('patient.files_page') }}">
+      <span class="pp-ico" aria-hidden="true"><i class="bi bi-folder2-open"></i></span>
+      <div>
+        <span class="pp-val">{{ file_count }}</span>
+        <span class="pp-lab">{{ t('home_shared_files', lang) }}</span>
+        <span class="pp-link-text">{{ t('ui_files_action', lang) }} <i class="bi bi-arrow-right" aria-hidden="true"></i></span>
+      </div>
+    </a>
+    <a class="pp-card pp-mini pp-link-card" href="{{ url_for('patient.chat') }}">
+      <span class="pp-ico" aria-hidden="true"><i class="bi bi-chat-dots"></i></span>
+      <div>
+        <span class="pp-lab"><b>{{ t('overview_chat_title', lang) }}</b></span>
+        <span class="pp-lab">{{ t('home_cta', lang) }}</span>
+      </div>
+    </a>
+  </div>
 </div>
 {% endblock %}

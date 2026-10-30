@@ -174,6 +174,8 @@ this file is stale.
 | GET | `/files` | `patient.files_page` |
 | GET | `/files/<int:doc_id>/download` | `patient.file_download` |
 | GET | `/files/<int:doc_id>/preview` | `patient.file_preview` |
+| GET | `/files/<int:doc_id>/raw` | `patient.file_raw` |
+| GET | `/files/<int:doc_id>/view` | `patient.file_view` |
 | GET | `/lang/<code>` | `set_language` |
 | GET,POST | `/login` | `patient.login` |
 | POST | `/logout` | `patient.logout` |
