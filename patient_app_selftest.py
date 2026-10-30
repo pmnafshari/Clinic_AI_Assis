@@ -2380,6 +2380,56 @@ def selftest():
             assert client35.get(path).status_code == 200, f"35a: {path} renders with no data"
         for path in ("/appointments", "/billing", "/files"):
             assert "<table" not in client35.get(path).text, f"35a: {path} draws no empty table"
+        empty35 = client35.get("/").text
+        assert on_page(t("home_nothing_to_do", "it"), empty35), "35a: an empty home says nothing is waiting"
+        assert on_page(t("kpi_next_none", "it"), empty35), "35a: and that nothing is booked"
+
+        # seeds shared by 35b-35h: a booking, a request, an invoice with two
+        # installments of which the first is paid, a call-back and a shared file
+        import appointments as _appt35
+        import handoff as _handoff35
+        import ledger as _ledger35
+        import patient_files as _pfiles35
+        day7_35 = (datetime.now().date() + timedelta(days=7)).isoformat()
+        day9_35 = (datetime.now().date() + timedelta(days=9)).isoformat()
+        c = raw_db()
+        _appt35.book(c, cf35, "dr rossi", f"{day7_35}T10:30", 30)
+        _appt35.request(c, cf35, day9_35, "afternoon", "my own words")
+        vid35 = c.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                          " VALUES (?, '2026-09-01', '[]', '', 'p29-35')", (pid35,)).lastrowid
+        c.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                  " VALUES (?, ?, 0, 120.0, 12000, 'controllo')", (pid35, vid35))
+        inv35 = _ledger35.ensure_invoice(c, pid35, vid35)
+        c.commit()
+        _ledger35.issue(c, inv35, "test-dentist", "dentist", due_date=day9_35)
+        _ledger35.plan_installments(c, inv35, 2, day7_35, "test-dentist", "dentist")
+        _ledger35.record_payment(c, inv35, 6000, "cash", "p29-35-pay", "test-dentist", "dentist")
+        summary35 = _ledger35.patient_summary(c, pid35)
+        open35 = [i for inv in summary35["invoices"] for i in inv["installments"] if i["open_cents"] > 0][0]
+        _handoff35.raise_request(c, pid35, "patient_asked", "appointment")
+        doc35 = c.execute(
+            "INSERT INTO patient_documents (patient_id, kind, display_name, stored_path, sha256, size, status,"
+            " uploaded_by, uploaded_at, category) VALUES (?, 'png', 'x.png', 'x', 'x', 1, 'confirmed', 'fixture',"
+            " '2026-10-01T10:00:00+00:00', 'report')", (pid35,)).lastrowid
+        c.commit()
+        _pfiles35.publish(c, doc35, pid35, "fixture", "dentist")
+        c.close()
+
+        # 35b. home leads with the next visit, then what needs the patient
+        home35 = client35.get("/").text
+        hero35 = home35.split('<section class="pp-hero', 1)[1].split("</section>")[0]
+        assert "10:30" in hero35 and "dr rossi" in hero35, "35b: the hero is the next booked visit"
+        todo35 = home35.split('id="home-todo"')[1].split("</section>")[0]
+        assert _ledger35.fmt(open35["open_cents"], "it") in todo35 and \
+            app.jinja_env.filters["appt_day"](open35["due_date"], "it") in todo35, \
+            "35b: the open installment, not the paid one, is on the list"
+        assert app.jinja_env.filters["appt_day"](day9_35, "it") in todo35, "35b: the waiting request is listed"
+        assert on_page(t("handoff_topic_appointment", "it"), todo35), "35b: and the call-back topic"
+        assert "my own words" not in home35, "35b: home shows no free text"
+        assert on_page(_ledger35.fmt(summary35["outstanding_cents"], "it"), home35), "35b: still to pay card"
+        assert on_page(t("kpi_requests_wait", "it"), home35), "35b: the request card says one is waiting"
+        files_card35 = home35.split('id="home-files"')[1].split("</a>")[0]
+        assert ">1<" in files_card35.replace(" ", ""), "35b: one shared file is counted"
 
     print("selftest ok")
 

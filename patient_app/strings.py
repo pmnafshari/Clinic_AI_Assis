@@ -52,6 +52,24 @@ STRINGS = {
     "tab_bills": {"it": "Pagamenti", "en": "Bills"},
     "tab_files": {"it": "File", "en": "Files"},
     "tab_assistant": {"it": "Assistente", "en": "Assistant"},
+    # P29 redesign: home. Italian awaits native-speaker review.
+    "home_next_label": {"it": "Il tuo prossimo appuntamento", "en": "Your next appointment"},
+    "home_next_with": {"it": "Orario confermato · con {dentist}", "en": "Confirmed time · with {dentist}"},
+    "home_next_details": {"it": "Vedi i dettagli", "en": "See details"},
+    "home_request_one": {"it": "Chiedi un appuntamento", "en": "Request an appointment"},
+    "home_todo": {"it": "Da fare", "en": "Things to do"},
+    "home_nothing_to_do": {"it": "Al momento non c'è nulla che ti aspetta.", "en": "Nothing needs you right now."},
+    "home_todo_installment": {"it": "Rata di {amount} in scadenza il {date}", "en": "Installment of {amount} due {date}"},
+    "home_todo_installment_sub": {"it": "Registrata dalla clinica", "en": "Recorded by the clinic"},
+    "home_todo_request": {"it": "La tua richiesta per il {day} è in attesa", "en": "Your request for {day} is waiting"},
+    "home_todo_request_sub": {"it": "Giorno richiesto · {period}", "en": "Requested day · {period}"},
+    "home_todo_callback": {"it": "Richiesta di contatto: {topic}", "en": "Call-back about {topic}"},
+    "home_view_payment": {"it": "Vedi il pagamento", "en": "View payment"},
+    "home_view_request": {"it": "Vedi la richiesta", "en": "View request"},
+    "home_still_to_pay": {"it": "Da pagare", "en": "Still to pay"},
+    "home_shared_files": {"it": "File condivisi", "en": "Shared files"},
+    "home_in_queue": {"it": "In coda", "en": "In queue"},
+    "home_unknown_invoices": {"it": "{n} in verifica, non conteggiate", "en": "{n} being checked, not counted"},
 
     # [ASSUMED] italian below written without native-speaker review, same
     # caveat as the rest of this module

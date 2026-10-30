@@ -11,11 +11,13 @@ from datetime import date, datetime
 
 from flask import Flask, g, redirect, render_template, request, send_from_directory, url_for
 from flask_wtf import CSRFProtect
+from markupsafe import Markup
 
 import clinic_time
 import patient_auth
 import storage
 from env_config import load_secret_key
+from ledger import fmt as ledger_fmt
 from shared import STATIC_ROOT as SHARED_STATIC_ROOT
 from shared.names import initials, tint
 
@@ -143,6 +145,23 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
             return ""
         return f"{appt_day(value, lang)}, {d.strftime('%H:%M')}"
 
+    # P29 redesign: the date tile on home - short month, day, short weekday.
+    # only constants and integers go into the markup.
+    SHORT = {
+        "it": (["gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic"],
+               ["lun", "mar", "mer", "gio", "ven", "sab", "dom"]),
+        "en": (["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+               ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
+    }
+
+    @app.template_filter("appt_tile")
+    def appt_tile(value, lang="it"):
+        d = _dt(value)
+        if d is None:
+            return ""
+        months, days = SHORT.get(lang, SHORT["it"])
+        return Markup(f"<small>{months[d.month - 1]}</small><b>{d.day}</b><small>{days[d.weekday()]}</small>")
+
     @app.route("/lang/<code>")
     def set_language(code):
         # redirect to a fixed in-app target, never to request.referrer - that
@@ -193,16 +212,42 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
         import appointments
 
         booked, requested = appointments.open_for_patient(get_db(), g.patient["patient_id"])
-        next_appt = booked[0]["starts_at"] if booked else None
+        next_row = booked[0] if booked else None
+        next_appt = next_row["starts_at"] if next_row else None
+
+        # P29 redesign: the things to do and the small cards. each is read by
+        # the same scoped function its own page uses, so home shows nothing
+        # the patient could not already see one tab over. money is printed as
+        # the ledger has it; the earliest open installment is picked, not worked out.
+        import handoff
+
+        pid = g.patient["patient_id"]
+        ip = net.from_request(_request)
+        billing = patient_accessor.get_billing(pid, get_db(), ip=ip)
+        next_installment = None
+        for inv in (billing or {}).get("invoices", []):
+            for inst in inv["installments"]:
+                if inst["open_cents"] > 0 and (next_installment is None
+                                               or inst["due_date"] < next_installment["due_date"]):
+                    next_installment = {"due_date": inst["due_date"], "amount_cents": inst["open_cents"]}
+        files = patient_accessor.get_published_files(pid, get_db(), ip=ip)
+
         # the clinic's wall time. slicing the stored instant would print the
         # UTC hour, and the overview and the appointments tab - one click
         # apart, same row - would disagree about when the patient is due.
         return render_template(
             "patient_home.html",
             name=name,
+            next_row=next_row,
             next_appt=next_appt,
             next_time=clinic_time.local_hhmm(next_appt) if next_appt else None,
+            requested=requested,
             request_count=len(requested),
+            billing=billing,
+            next_installment=next_installment,
+            file_count=len(files),
+            waiting=handoff.open_for_patient(get_db(), pid),
+            fmt=ledger_fmt,
         )
 
     return app

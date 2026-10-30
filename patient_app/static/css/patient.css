@@ -697,3 +697,29 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 .pp-mini .pp-lab { color: var(--pp-muted); font-size: .88rem; }
 .pp-mini .pp-pill { margin-top: 4px; }
 .pp-muted { color: var(--pp-muted); }
+
+/* home: the next visit leads, things to do below it, small cards beside */
+.pp-home { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+.pp-home-main, .pp-home-side { display: grid; gap: 18px; min-width: 0; }
+.pp-hero { background: var(--pp-ink); color: #fff; border-radius: 20px; padding: 22px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 20px; }
+.pp-hero-text { flex: 1 1 220px; min-width: 0; }
+.pp-hero-k { margin: 0; font-size: .74rem; letter-spacing: .08em; text-transform: uppercase; opacity: .8; }
+.pp-hero-big { margin: 2px 0; font-size: 1.35rem; font-weight: 650; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.pp-hero-meta { margin: 0; opacity: .85; font-size: .92rem; }
+.pp-hero-btn { color: var(--pp-ink); font-weight: 650; }
+.pp-datetile { display: grid; place-items: center; width: 68px; height: 74px; border-radius: 16px; background: rgba(255, 255, 255, .12); flex: none; text-align: center; line-height: 1.1; }
+.pp-datetile b { font-size: 1.6rem; }
+.pp-datetile small { font-size: .7rem; text-transform: uppercase; letter-spacing: .08em; opacity: .85; }
+.pp-todo { list-style: none; margin: 0; padding: 0; }
+.pp-todo li { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px; border-radius: 12px; }
+.pp-todo li:nth-child(even) { background: var(--pp-zebra); }
+.pp-todo-text { flex: 1 1 200px; min-width: 0; display: grid; }
+.pp-todo-text b { font-weight: 600; }
+.pp-todo-text span { color: var(--pp-muted); font-size: .86rem; }
+.pp-ico--wait { background: var(--pp-wait-bg); color: var(--pp-wait); }
+.pp-link-card { color: inherit; text-decoration: none; transition: border-color .15s ease; }
+.pp-link-card:hover { border-color: var(--pp-ink); color: inherit; }
+@media (max-width: 1100px) { .pp-home { grid-template-columns: 1fr; } .pp-home-side { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); } }
+.pp-link-text { margin-top: 6px; font-size: .86rem; font-weight: 650; color: var(--pp-ink); }
+.patient-signed-in .patient-nav { align-items: stretch; }
+.patient-signed-in .patient-nav .patient-nav-link { justify-content: flex-start; width: 100%; }
