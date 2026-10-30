@@ -154,6 +154,13 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
                ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]),
     }
 
+    @app.template_filter("appt_short")
+    def appt_short(value, lang="it"):
+        d = _dt(value)
+        if d is None:
+            return ""
+        return f"{d.day} {SHORT.get(lang, SHORT['it'])[0][d.month - 1]}"
+
     @app.template_filter("appt_tile")
     def appt_tile(value, lang="it"):
         d = _dt(value)
@@ -224,12 +231,6 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
         pid = g.patient["patient_id"]
         ip = net.from_request(_request)
         billing = patient_accessor.get_billing(pid, get_db(), ip=ip)
-        next_installment = None
-        for inv in (billing or {}).get("invoices", []):
-            for inst in inv["installments"]:
-                if inst["open_cents"] > 0 and (next_installment is None
-                                               or inst["due_date"] < next_installment["due_date"]):
-                    next_installment = {"due_date": inst["due_date"], "amount_cents": inst["open_cents"]}
         files = patient_accessor.get_published_files(pid, get_db(), ip=ip)
 
         # the clinic's wall time. slicing the stored instant would print the
@@ -244,7 +245,7 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
             requested=requested,
             request_count=len(requested),
             billing=billing,
-            next_installment=next_installment,
+            next_installment=routes.next_installment(billing),
             file_count=len(files),
             waiting=handoff.open_for_patient(get_db(), pid),
             fmt=ledger_fmt,

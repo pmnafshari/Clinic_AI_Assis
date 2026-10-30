@@ -185,7 +185,7 @@ def walk():
                     expect(page.get_by_text('Requested day').first).to_be_visible()
                     assert 'STAFF-ONLY' not in page.content()
                     page.goto(base + '/billing')
-                    expect(page.locator('table.patient-money').first).to_be_visible()
+                    expect(page.locator('table.pp-table').first).to_be_visible()
                     expect(page.get_by_text('unknown', exact=True).first).to_be_visible()
                     page.goto(base + '/chat')
                     expect(page.get_by_text('About: payments')).to_be_visible()

@@ -292,7 +292,21 @@ def billing():
     # scope-checked accessor the chat uses (P07.05)
     summary = patient_accessor.get_billing(g.patient["patient_id"], get_db(),
                                            ip=net.from_request(request))
-    return render_template("patient_billing.html", summary=summary, fmt=ledger.fmt)
+    return render_template("patient_billing.html", summary=summary, fmt=ledger.fmt,
+                           next_installment=next_installment(summary))
+
+
+def next_installment(summary):
+    """The earliest installment the ledger still shows open, as {due_date, amount_cents}, or None.
+
+    picked from the ledger's own values - nothing is added up or worked out here (P29).
+    """
+    found = None
+    for inv in (summary or {}).get("invoices", []):
+        for inst in inv["installments"]:
+            if inst["open_cents"] > 0 and (found is None or inst["due_date"] < found["due_date"]):
+                found = {"due_date": inst["due_date"], "amount_cents": inst["open_cents"]}
+    return found
 
 
 @patient_bp.route("/consent", methods=["POST"])

@@ -79,6 +79,22 @@
       });
     });
   });
+  // P29: one invoice's detail at a time; without script every detail stays on the page
+  const invoices = [...document.querySelectorAll('[data-invoice]')];
+  if (invoices.length) {
+    const show = id => invoices.forEach(section => { section.hidden = section.id !== id; });
+    show(invoices[0].id);
+    document.querySelectorAll('[data-invoice-open]').forEach(link => {
+      link.addEventListener('click', event => {
+        event.preventDefault();
+        const id = link.getAttribute('aria-controls');
+        show(id);
+        const target = document.getElementById(id);
+        target.scrollIntoView({ block: 'start' });
+        target.focus({ preventScroll: true });
+      });
+    });
+  }
   const filters = document.querySelector('[data-file-filters]');
   if (filters) {
     filters.hidden = false;

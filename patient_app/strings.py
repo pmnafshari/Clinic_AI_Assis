@@ -224,7 +224,7 @@ STRINGS = {
     "appt_confirm_yes": {"it": "Sì, disdici", "en": "Yes, cancel"},
     "appt_confirm_keep": {"it": "Mantienila", "en": "Keep it"},
     "appt_ask_again": {"it": "Chiedi di nuovo", "en": "Ask again"},
-    "appt_count": {"it": "{n} in totale · scorri per vederli tutti", "en": "{n} in total · scroll for more"},
+    "appt_count": {"it": "In totale: {n} · scorri per vederli tutti", "en": "In total: {n} · scroll for more"},
     "appt_declined_next": {
         "it": "La clinica non ha potuto confermare questa richiesta. Se ti serve ancora un"
               " appuntamento, invia una nuova richiesta o contatta lo studio.",
@@ -306,6 +306,18 @@ STRINGS = {
     "bill_due_date": {"it": "Scadenza", "en": "Due date"},
     "bill_lines_caption": {"it": "Voci e importi della visita del {date}",
                            "en": "Items and amounts for the visit of {date}"},
+    # P29 redesign: the payments page. Italian awaits native-speaker review.
+    "bill_next_installment": {"it": "Prossima rata", "en": "Next installment"},
+    "bill_checking_label": {"it": "Fatture in verifica", "en": "Being checked"},
+    "bill_not_in_total": {"it": "Non nel totale", "en": "Not in total"},
+    "bill_invoices_title": {"it": "Fatture", "en": "Invoices"},
+    "bill_tab_all": {"it": "Tutte", "en": "All"},
+    "bill_tab_topay": {"it": "Da saldare", "en": "To pay"},
+    "bill_tab_paid": {"it": "Pagate", "en": "Paid"},
+    "bill_col_visit": {"it": "Data della visita", "en": "Visit date"},
+    "bill_view_invoice": {"it": "Vedi la fattura", "en": "View invoice"},
+    "bill_count": {"it": "Fatture: {n} · scorri per le più vecchie", "en": "Invoices: {n} · scroll for older ones"},
+    "bill_from_ledger": {"it": "Importi dal registro della clinica", "en": "Figures from the clinic's ledger"},
     "bill_installments_caption": {"it": "Rate della visita del {date}",
                                   "en": "Installments for the visit of {date}"},
 

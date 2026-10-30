@@ -5,76 +5,133 @@
 {# every figure below is a ledger value printed as it is. where the ledger has
    no settled figure the page says "unknown" - it never works one out (P29) #}
 {% macro money(cents) %}{% if cents is none %}{{ t('bill_unknown', lang) }}{% else %}{{ fmt(cents, lang) }}{% endif %}{% endmacro %}
+{% macro state_pill(state) %}<span class="pp-pill {{ {'paid': 'ok', 'issued': 'wait', 'partially_paid': 'wait'}.get(state, 'neutral') }}">{{ t('bill_state_' ~ state, lang) }}</span>{% endmacro %}
 <div class="ds-page-head">
   <div>
     <p class="ds-page-eyebrow">{{ t('nav_billing', lang) }}</p>
     <h1 class="ds-page-title">{{ t('bill_heading', lang) }}</h1>
+    <p class="ds-page-meta">{{ t('bill_notice', lang) }}</p>
   </div>
 </div>
-<p class="small">{{ t('bill_notice', lang) }}</p>
 
 {% if summary and summary.invoices %}
-<section class="ds-card patient-profile-card mb-3">
-  <div class="ds-card-body">
-    <p class="mb-1">{{ t('bill_outstanding', lang) }}: <strong class="ds-numeral">{{ money(summary.outstanding_cents) }}</strong></p>
-    {% if summary.unknown %}<p class="small text-secondary mb-0">{{ t('bill_unknown_count', lang).format(n=summary.unknown) }}</p>{% endif %}
+<div class="pp-kpis mb-4">
+  <div class="pp-card pp-mini" id="bill-outstanding">
+    <span class="pp-ico" aria-hidden="true"><i class="bi bi-wallet2"></i></span>
+    <div><span class="pp-val">{{ money(summary.outstanding_cents) }}</span><span class="pp-lab">{{ t('bill_outstanding', lang) }}</span></div>
   </div>
-</section>
-<div class="patient-scroll patient-invoices" tabindex="0" role="region" aria-label="{{ t('bill_heading', lang) }}">
-{% for inv in summary.invoices %}
-{% set visit = inv.visit_date | appt_day(lang) if inv.visit_date else '-' %}
-{# an invoice still being checked or prepared has no settled payment figure #}
-{% set settled = inv.state not in ('unknown', 'draft') %}
-<section class="ds-card patient-profile-card mb-3" aria-labelledby="inv-{{ loop.index }}">
-  <div class="ds-card-body">
-    <div class="patient-invoice-head">
-      <h2 class="h6 mb-0" id="inv-{{ loop.index }}">{{ t('bill_visit', lang).format(date=visit) }}</h2>
-      <span class="ds-badge ds-badge-neutral">{{ t('bill_status', lang) }}: {{ t('bill_state_' ~ inv.state, lang) }}</span>
+  <div class="pp-card pp-mini" id="bill-next">
+    <span class="pp-ico" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
+    <div>
+      <span class="pp-val">{{ next_installment.due_date | appt_day(lang) if next_installment else '-' }}</span>
+      <span class="pp-lab">{{ t('bill_next_installment', lang) }}</span>
+      {% if next_installment %}<span class="pp-pill wait">{{ fmt(next_installment.amount_cents, lang) }}</span>{% endif %}
     </div>
-    <table class="table table-sm patient-money mb-2">
-      <caption class="visually-hidden">{{ t('bill_lines_caption', lang).format(date=visit) }}</caption>
-      <thead>
-        <tr><th scope="col">{{ t('bill_item', lang) }}</th><th scope="col" class="text-end">{{ t('bill_amount', lang) }}</th></tr>
-      </thead>
+  </div>
+  <div class="pp-card pp-mini" id="bill-checking">
+    <span class="pp-ico" aria-hidden="true"><i class="bi bi-receipt"></i></span>
+    <div>
+      <span class="pp-val">{{ summary.unknown }}</span>
+      <span class="pp-lab">{{ t('bill_checking_label', lang) }}</span>
+      {% if summary.unknown %}<span class="pp-pill neutral">{{ t('bill_not_in_total', lang) }}</span>{% endif %}
+    </div>
+  </div>
+</div>
+{% if summary.unknown %}<p class="pp-note mb-4">{{ t('bill_unknown_count', lang).format(n=summary.unknown) }}</p>{% endif %}
+
+{# newest first. "View invoice" is a link to the invoice's own section, so it
+   works without script; portal.js then shows one invoice at a time. #}
+<section class="pp-card mb-4" aria-labelledby="inv-list-title">
+  <div class="pp-card-head">
+    <h2 id="inv-list-title">{{ t('bill_invoices_title', lang) }}</h2>
+    <div class="pp-end">
+      <div class="pp-seg" role="group" aria-label="{{ t('appt_show', lang) }}" data-bill-tabs hidden>
+        <button type="button" data-bill-tab="all" aria-pressed="true">{{ t('bill_tab_all', lang) }}</button>
+        <button type="button" data-bill-tab="topay" aria-pressed="false">{{ t('bill_tab_topay', lang) }}</button>
+        <button type="button" data-bill-tab="paid" aria-pressed="false">{{ t('bill_tab_paid', lang) }}</button>
+      </div>
+    </div>
+  </div>
+  <div class="pp-box" style="--h:360px" tabindex="0" role="region" aria-labelledby="inv-list-title">
+    <table class="pp-table pp-table--stack">
+      <thead><tr>
+        <th scope="col">{{ t('bill_col_visit', lang) }}</th>
+        <th scope="col" class="pp-num">{{ t('bill_total', lang) }}</th>
+        <th scope="col" class="pp-num">{{ t('bill_paid', lang) }}</th>
+        <th scope="col" class="pp-num">{{ t('bill_outstanding', lang) }}</th>
+        <th scope="col">{{ t('bill_status', lang) }}</th>
+        <th scope="col" class="text-end">{{ t('appt_col_actions', lang) }}</th>
+      </tr></thead>
       <tbody>
-        {% for line in inv.lines %}
-        <tr><td>{{ line.description or '-' }}</td><td class="text-end ds-numeral">{{ money(line.amount_cents) }}</td></tr>
+        {% for inv in summary.invoices | reverse %}
+        {# an invoice still being checked or prepared has no settled payment figure #}
+        {% set settled = inv.state not in ('unknown', 'draft') %}
+        <tr data-group="{{ 'paid' if inv.state == 'paid' else ('topay' if inv.state in ('issued', 'partially_paid') else 'other') }}" data-invoice-row="{{ inv.id }}">
+          <td class="pp-nw" data-label="{{ t('bill_col_visit', lang) }}">{{ inv.visit_date | appt_day(lang) if inv.visit_date else '-' }}</td>
+          <td class="pp-num" data-label="{{ t('bill_total', lang) }}">{{ money(inv.total_cents) }}</td>
+          <td class="pp-num{{ ' pp-muted' if not settled else '' }}" data-label="{{ t('bill_paid', lang) }}">{{ money(inv.paid_cents if settled else none) }}</td>
+          <td class="pp-num{{ ' pp-muted' if not settled else '' }}" data-label="{{ t('bill_outstanding', lang) }}">{{ money(inv.outstanding_cents if settled else none) }}</td>
+          <td data-label="{{ t('bill_status', lang) }}">{{ state_pill(inv.state) }}</td>
+          <td data-label=""><div class="pp-acts"><a class="btn btn-outline-secondary btn-sm" href="#inv-{{ inv.id }}" aria-controls="inv-{{ inv.id }}" data-invoice-open>{{ t('bill_view_invoice', lang) }}<span class="visually-hidden">: {{ t('bill_visit', lang).format(date=inv.visit_date | appt_day(lang) if inv.visit_date else '-') }}</span></a></div></td>
+        </tr>
         {% endfor %}
       </tbody>
-      <tfoot>
-        <tr><th scope="row">{{ t('bill_total', lang) }}</th><td class="text-end ds-numeral">{{ money(inv.total_cents) }}</td></tr>
-        <tr><th scope="row">{{ t('bill_paid', lang) }}</th><td class="text-end ds-numeral">{{ money(inv.paid_cents if settled else none) }}</td></tr>
-        <tr><th scope="row">{{ t('bill_outstanding', lang) }}</th><td class="text-end ds-numeral">{{ money(inv.outstanding_cents if settled else none) }}</td></tr>
-        {% if inv.due_date and inv.outstanding_cents %}
-        <tr><th scope="row">{{ t('bill_due', lang) }}</th><td class="text-end">{{ inv.due_date | appt_day(lang) }}</td></tr>
-        {% endif %}
-      </tfoot>
     </table>
+  </div>
+  <p class="pp-scroll-foot"><span>{{ t('bill_count', lang).format(n=summary.invoices | length) }}</span><span>{{ t('bill_from_ledger', lang) }}</span></p>
+</section>
+
+{% for inv in summary.invoices | reverse %}
+{% set visit = inv.visit_date | appt_day(lang) if inv.visit_date else '-' %}
+{% set settled = inv.state not in ('unknown', 'draft') %}
+<section class="pp-card pp-invoice" id="inv-{{ inv.id }}" data-invoice aria-labelledby="inv-{{ inv.id }}-t" tabindex="-1">
+  <div class="pp-card-head"><h2 id="inv-{{ inv.id }}-t">{{ t('bill_visit', lang).format(date=visit) }}</h2>{{ state_pill(inv.state) }}</div>
+  <div class="pp-invoice-grid">
+    <div class="pp-box" style="--h:320px">
+      <table class="pp-table">
+        <caption class="visually-hidden">{{ t('bill_lines_caption', lang).format(date=visit) }}</caption>
+        <thead><tr><th scope="col">{{ t('bill_item', lang) }}</th><th scope="col" class="pp-num">{{ t('bill_amount', lang) }}</th></tr></thead>
+        <tbody>
+          {% for line in inv.lines %}<tr><td>{{ line.description or '-' }}</td><td class="pp-num">{{ money(line.amount_cents) }}</td></tr>{% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><th scope="row">{{ t('bill_total', lang) }}</th><td class="pp-num">{{ money(inv.total_cents) }}</td></tr>
+          <tr><th scope="row">{{ t('bill_paid', lang) }}</th><td class="pp-num">{{ money(inv.paid_cents if settled else none) }}</td></tr>
+          <tr><th scope="row">{{ t('bill_outstanding', lang) }}</th><td class="pp-num">{{ money(inv.outstanding_cents if settled else none) }}</td></tr>
+          {% if inv.due_date and inv.outstanding_cents %}<tr><th scope="row">{{ t('bill_due', lang) }}</th><td class="pp-num">{{ inv.due_date | appt_day(lang) }}</td></tr>{% endif %}
+        </tfoot>
+      </table>
+    </div>
     {% if inv.installments %}
-    <table class="table table-sm patient-money mb-0">
-      <caption class="patient-money-caption">{{ t('bill_installments', lang) }}<span class="visually-hidden"> - {{ t('bill_installments_caption', lang).format(date=visit) }}</span></caption>
-      <thead>
-        <tr>
-          <th scope="col">{{ t('bill_due_date', lang) }}</th>
-          <th scope="col" class="text-end">{{ t('bill_amount', lang) }}</th>
-          <th scope="col">{{ t('bill_status', lang) }}</th>
-        </tr>
-      </thead>
-      <tbody>
+    <div class="pp-installments">
+      <h3 class="pp-sub-h">{{ t('bill_installments', lang) }}</h3>
+      {# a picture of the table below it: one bar per installment, the first open one marked #}
+      {% set ns = namespace(marked=false) %}
+      <div class="pp-bars" aria-hidden="true">
         {% for i in inv.installments %}
-        <tr>
-          <td>{{ i.due_date | appt_day(lang) }}</td>
-          <td class="text-end ds-numeral">{{ money(i.amount_cents) }}</td>
-          <td>{{ t('bill_open', lang) if i.open_cents else t('bill_covered', lang) }}</td>
-        </tr>
+        {% set first_open = i.open_cents and not ns.marked %}
+        {% if first_open %}{% set ns.marked = true %}{% endif %}
+        <span class="pp-bar{{ ' is-open' if i.open_cents else '' }}{{ ' is-next' if first_open else '' }}">{% if first_open %}<span class="pp-bar-tip">{{ fmt(i.open_cents, lang) }}</span>{% endif %}</span>
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+      <div class="pp-bar-x" aria-hidden="true">{% for i in inv.installments %}<span>{{ i.due_date | appt_short(lang) }}</span>{% endfor %}</div>
+      <div class="pp-box" style="--h:240px">
+        <table class="pp-table">
+          <caption class="visually-hidden">{{ t('bill_installments_caption', lang).format(date=visit) }}</caption>
+          <thead><tr><th scope="col">{{ t('bill_due_date', lang) }}</th><th scope="col" class="pp-num">{{ t('bill_amount', lang) }}</th><th scope="col">{{ t('bill_status', lang) }}</th></tr></thead>
+          <tbody>
+            {% for i in inv.installments %}
+            <tr><td class="pp-nw">{{ i.due_date | appt_day(lang) }}</td><td class="pp-num">{{ money(i.amount_cents) }}</td>
+              <td><span class="pp-pill {{ 'wait' if i.open_cents else 'ok' }}">{{ t('bill_open', lang) if i.open_cents else t('bill_covered', lang) }}</span></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
     {% endif %}
   </div>
 </section>
 {% endfor %}
-</div>
 {% else %}
 <p>{{ t('bill_none', lang) }}</p>
 {% endif %}

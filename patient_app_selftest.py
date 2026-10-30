@@ -2470,6 +2470,40 @@ def selftest():
             assert "1999-01-01" not in page and "nonsense" not in page and \
                 re.search(r'id="period-morning"\s+value="morning"\s+checked', page), f"35c: {bad} is ignored"
 
+        # 35d. payments: three cards, an invoices table with a button per row,
+        # and each invoice's detail - all ledger values, "unknown" where there are none
+        c = raw_db()
+        vid35b = c.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                           " VALUES (?, '2025-11-10', '[]', '', 'p29-35-legacy')", (pid35,)).lastrowid
+        c.execute("INSERT INTO invoices (patient_id, visit_id, line_index, amount, amount_cents, description)"
+                  " VALUES (?, ?, 0, 80.0, 8000, 'igiene')", (pid35, vid35b))
+        legacy35 = _ledger35.ensure_invoice(c, pid35, vid35b, legacy=True)
+        c.commit()
+        summary35 = _ledger35.patient_summary(c, pid35)
+        c.close()
+        bill35 = client35.get("/billing").text
+        assert _ledger35.fmt(summary35["outstanding_cents"], "it") in bill35.split('id="bill-outstanding"')[1].split("</div>")[0], \
+            "35d: the still-to-pay card is the ledger's figure"
+        assert app.jinja_env.filters["appt_day"](open35["due_date"], "it") in bill35.split('id="bill-next"')[1].split("</div>")[0], \
+            "35d: the next-installment card is the first open one"
+        checking35 = bill35.split('id="bill-checking"')[1].split("</div>\n")[0]
+        assert ">1<" in checking35.replace(" ", "") and on_page(t("bill_not_in_total", "it"), checking35), \
+            "35d: the invoice being checked is counted and said to be outside the total"
+        rows35b = re.findall(r'<tr data-group="(\w+)" data-invoice-row="(\d+)">(.*?)</tr>', bill35, re.S)
+        assert sorted(int(r[1]) for r in rows35b) == sorted([inv35, legacy35]), "35d: one row per invoice"
+        for group, inv_id, row in rows35b:
+            assert f'aria-controls="inv-{inv_id}"' in row and on_page(t("bill_view_invoice", "it"), row), \
+                "35d: each row has its View invoice button"
+            assert f'<section class="pp-card pp-invoice" id="inv-{inv_id}"' in bill35, "35d: and its detail section"
+            if int(inv_id) == legacy35:
+                assert group == "other" and row.count(t("bill_unknown", "it")) == 2 and "€ 0,00" not in row, \
+                    "35d: being checked: paid and still-to-pay read unknown"
+            else:
+                assert group == "topay", "35d: an invoice with money open is under To pay"
+        detail35 = bill35.split(f'id="inv-{inv35}"')[1].split("</section>")[0]
+        assert detail35.count(t("bill_covered", "it")) == 1 and detail35.count(t("bill_open", "it")) == 1, \
+            "35d: each installment says covered or open"
+
     print("selftest ok")
 
 

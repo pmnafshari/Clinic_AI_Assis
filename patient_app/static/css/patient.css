@@ -763,3 +763,37 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 @media (min-width: 1101px) { .patient-split { grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr); } }
 .pp-table .pp-acts { flex-wrap: nowrap; }
 .pp-table td:first-child { min-width: 10.5rem; }
+
+/* payments: an invoice's items beside its installments */
+.pp-invoice { margin-bottom: 18px; }
+.pp-invoice:focus { outline: none; }
+.pp-invoice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; align-items: start; }
+.pp-installments { min-width: 0; }
+.pp-sub-h { font-size: .95rem; font-weight: 650; margin: 0 0 8px; }
+/* one bar per installment; the first open one carries its amount, its label opens inward on the last bar */
+.pp-bars { display: flex; justify-content: space-around; align-items: flex-end; gap: 10px; height: 120px; padding-top: 34px; }
+.pp-bar { width: 32px; height: 100%; border-radius: 999px; position: relative; background: repeating-linear-gradient(135deg, #9fc9b2 0 2px, #e3f2e8 2px 6px); }
+.pp-bar.is-open { background: repeating-linear-gradient(135deg, #c8cec9 0 2px, #eef0ed 2px 6px); }
+.pp-bar.is-next { background: repeating-linear-gradient(135deg, #2f855a 0 2px, #4fa678 2px 6px); }
+.pp-bar-tip { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); background: var(--pp-ink); color: #fff; font-size: .75rem; font-weight: 600; padding: 3px 8px; border-radius: 8px; white-space: nowrap; }
+.pp-bar:last-child .pp-bar-tip { left: auto; right: 0; transform: none; }
+.pp-bar:first-child .pp-bar-tip { left: 0; transform: none; }
+.pp-bar-x { display: flex; justify-content: space-around; font-size: .75rem; color: var(--pp-muted); margin: 6px 0 12px; }
+.pp-bar-x span { width: 48px; text-align: center; white-space: nowrap; }
+
+/* on a phone a table row becomes a small card: each cell says which column it is */
+@media (max-width: 575.98px) {
+  .pp-table--stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .pp-table--stack, .pp-table--stack tbody, .pp-table--stack tr, .pp-table--stack td { display: block; width: 100%; }
+  .pp-table--stack tbody tr { padding: 10px 12px; border-radius: 12px; }
+  .pp-table--stack tbody tr:nth-child(even) { background: var(--pp-zebra); }
+  .pp-table--stack tbody tr td, .pp-table--stack tbody tr:nth-child(even) td, .pp-table--stack tbody tr:hover td { background: none; border-radius: 0; }
+  .pp-table--stack td { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 4px 0; text-align: right; min-width: 0; }
+  .pp-table--stack td:first-child { min-width: 0; }
+  .pp-table--stack td::before { content: attr(data-label); color: var(--pp-muted); font-size: .8rem; text-align: left; flex: none; }
+  .pp-table--stack td[data-label=""]::before { content: none; }
+  .pp-table--stack td[data-label=""] { justify-content: flex-end; padding-top: 8px; }
+  /* the first cell leads the card: its own small label (requested day or confirmed time) stays above it */
+  .pp-table--stack td:first-child { display: block; text-align: left; font-weight: 600; }
+  .pp-table--stack td:first-child::before { content: none; }
+}
