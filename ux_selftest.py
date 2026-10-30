@@ -418,6 +418,65 @@ def selftest():
         # 11l. quick actions keep their labels on one line
         assert re.search(r"\.ux-quick-item \{[^}]*white-space: nowrap", css), "11l: quick actions wrap"
 
+        # 12. P29 staff redesign (the patient portal's direction, the staff palette kept)
+        css12 = (Path(__file__).parent / "app" / "static" / "css" / "app.css").read_text()
+        # 12a. sign out is always reachable: the account foot stays pinned while a long menu scrolls
+        foot12 = re.findall(r"\.app-side-foot\s*\{([^}]*)\}", css12)
+        assert any("position: sticky" in r and "bottom: 0" in r for r in foot12), "12a: sign out scrolls out of reach"
+        # 12b. a fixed-height box scrolls inside and keeps its header row in place
+        box12 = re.search(r"\.sx-box\s*\{([^}]*)\}", css12)
+        assert box12 and "overflow: auto" in box12.group(1) and "max-height" in box12.group(1) \
+            and "position: relative" in box12.group(1), "12b: no fixed-height scroll box"
+        assert re.search(r"\.sx-box[^{]*th\s*\{[^}]*position: sticky", css12), "12b: the header row scrolls away"
+        assert re.search(r"tbody tr:nth-child\(even\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
+
+        # 12c. home opens with what comes next for this person: the dentist's own next patient
+        home12 = clients["dentist"].get("/").get_data(as_text=True)
+        hero12 = _section(home12, "hero")
+        assert 'data-kind="dentist"' in home12 and "Anna Uno" in hero12 and "09:30" in hero12, \
+            "12c: the dentist's next patient does not lead home"
+        assert re.search(r'<a class="btn[^"]*" href="/patients/ZZUA800101010101"', hero12), "12c: no button to the record"
+        agenda12 = _section(home12, "agenda")
+        assert re.search(r'<a class="btn[^"]*" href="/patients/ZZUA800101010101"[^>]*>\s*Open', agenda12), \
+            "12c: an agenda row's Open is not a button"
+        assert 'class="sx-box' in agenda12, "12c: the agenda is not in a fixed-height box"
+        # 12d. reception's home opens with the front desk: requests and call-backs, each a button to where it is done
+        desk12 = clients["assistant"].get("/").get_data(as_text=True)
+        hero12 = _section(desk12, "hero")
+        waiting12 = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]
+        assert 'data-kind="desk"' in desk12 and \
+            f"{waiting12} request{'' if waiting12 == 1 else 's'} to confirm" in _text(hero12), "12d: the front desk does not lead"
+        assert re.search(r'<a class="btn[^"]*" href="/appointments[^"]*#requests"', hero12) and \
+            re.search(r'<a class="btn[^"]*" href="/handoffs"', hero12), "12d: the desk card's actions are not buttons"
+        assert "low on stock" not in _text(hero12), "12d: the stock alert is repeated in the desk card"
+
+        # 12e. the patient record is grouped into tabs; every section is still on the page (no script shows them all),
+        # and a role only gets the tabs it may open
+        for role12, expect12 in (("dentist", ["overview", "clinical", "files", "billing", "portal", "imaging"]),
+                                 ("assistant", ["overview", "files", "billing", "portal", "imaging"])):
+            rec12 = clients[role12].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            tabs12 = re.findall(r'<button type="button" role="tab" id="tabbtn-(\w+)" aria-controls="tab-(\w+)"', rec12)
+            assert [a for a, _ in tabs12] == expect12 and all(a == b for a, b in tabs12), f"12e: {role12} tabs {tabs12}"
+            for name in expect12:
+                assert f'id="tab-{name}" role="tabpanel" aria-labelledby="tabbtn-{name}"' in rec12, f"12e: no {name} panel"
+            for heading in ("Demographics", "Record timeline", "Consent", "Data requests", "Invoices", "Visit dates"):
+                assert f">{heading}" in rec12, f"12e: {role12} lost the {heading} section"
+            assert 'id="imaging"' in rec12 and 'id="editModal"' in rec12, "12e: a link target or the edit dialog is gone"
+            assert ("Clinical history" in rec12) == (role12 == "dentist"), "12e: clinical history shown to the wrong role"
+
+        # 12f. lists: a button opens each row, long lists keep their height and scroll inside, state filters are tabs
+        stock12 = clients["dentist"].get("/stock").get_data(as_text=True)
+        item12 = conn.execute("SELECT id FROM inventory_items WHERE name = 'guanti'").fetchone()[0]
+        assert len(re.findall(rf'<a class="btn[^"]*" href="/stock/{item12}"', stock12)) >= 2, \
+            "12f: the low alert and the item row do not open the item with a button"
+        assert len(re.findall(r'class="[^"]*\bsx-box\b', stock12)) >= 2, "12f: the stock lists are not in fixed-height boxes"
+        for path12 in ("/handoffs", "/reminders"):
+            page12 = clients["assistant"].get(path12).get_data(as_text=True)
+            assert re.search(r'<nav class="sx-tabs[^"]*"[^>]*aria-label="Show"', page12) and 'aria-current="page"' in page12, \
+                f"12f: {path12} states are not a tab control"
+        assert 'style="' not in _section(clients["dentist"].get("/").get_data(as_text=True), "agenda"), \
+            "12f: an inline style on home (app_selftest 21 forbids them)"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

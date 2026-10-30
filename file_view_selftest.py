@@ -95,10 +95,12 @@ def selftest():
         assert shown and f'src="{portal_preview}"' in shown, "3: the image is shown inside My files"
         assert 'alt="' in shown and "OPG" in shown, "3: the image has an accessible label"
         assert "patient-file-thumb" not in page, "3: no cropped 96px square any more"
-        full = re.search(r'<a[^>]*href="' + re.escape(portal_preview) + r'"[^>]*>', page)
-        assert full and 'target="_blank"' in full.group(0) and 'rel="noopener"' in full.group(0), \
-            "3: the full image opens in a new tab"
-        assert "Apri a grandezza intera" in page or "Open full size" in page, "3: the full-size link says what it does"
+        # P29 redesign: full size is the portal's own viewer (View), not a bare image in a new tab
+        assert re.search(r'<a[^>]*href="/files/' + str(img_id) + r'/view"[^>]*>[^<]*<i[^>]*></i>\s*(View|Visualizza)', page), \
+            "3: the full-size view is one tap away and says what it does"
+        viewer = p_rossi.get(f"/files/{img_id}/view").text
+        assert f'src="{portal_preview}"' in viewer and "for orientation only" in viewer.lower(), \
+            "3: the viewer shows the image itself, labelled for orientation only"
         assert f"/files/{img_id}/download" in page and f"/files/{pdf_id}/download" in page, "3: downloads still offered"
         assert f"/files/{pdf_id}/preview" not in page, "3: a PDF gets no image"
         pcss = Path("patient_app/static/css/patient.css").read_text()

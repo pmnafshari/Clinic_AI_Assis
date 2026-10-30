@@ -1355,3 +1355,72 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 .guide-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.875rem; }
 .guide-focus { outline: 2px solid var(--ds-border-strong); outline-offset: 2px; }
 @media (max-width: 767.98px) { .guide-page { grid-template-columns: 1fr; } }
+
+/* ===================================================================== */
+/* P29 staff redesign: the patient portal's direction, with the staff    */
+/* palette above kept as the owner set it (navy menu, blue actions).     */
+/* every other row shaded, a button for each row action, boxes that keep */
+/* their height and scroll inside with the header row in place, a dark   */
+/* card for what comes next, and tabs on the patient record.             */
+/* ===================================================================== */
+:root { --sx-zebra: #f3f6fb; --sx-hover: #e8eef9; --sx-muted: #4a5b73; }
+
+/* the menu: tighter rows so more of it fits, and the account foot pinned so sign out never scrolls away */
+.app-side-link { padding: 0.5rem 0.75rem; margin: 1px 0; }
+.app-side-group { margin: 0.875rem 0.5rem 0.375rem; }
+.app-side-foot { position: sticky; bottom: 0; z-index: 1; background: var(--app-navy); }
+
+/* lists and tables: every other row shaded, the row under the pointer a little more */
+.ds-rows .ds-row { border-radius: 10px; padding: 0.75rem 0.875rem; }
+.ds-rows .ds-row:nth-child(even) { background: var(--sx-zebra); }
+.ds-rows .ds-row:hover { background: var(--sx-hover); }
+.ux-table tbody tr:nth-child(even) td { background: var(--sx-zebra); }
+.ux-table tbody tr:hover td { background: var(--sx-hover); }
+.ds-row .sx-row-acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+
+/* a box keeps its height; more rows scroll inside it. relative: the screen-reader-only text in row buttons is
+   absolutely placed and must stay clipped by the box, or it widens the page */
+.sx-box { position: relative; max-height: var(--h, 26rem); overflow: auto; overscroll-behavior: contain; border-radius: 10px; scrollbar-width: thin; }
+.sx-box thead th { position: sticky; top: 0; z-index: 1; background: var(--ds-surface-sunken); }
+.sx-scroll-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem; margin: 0.625rem 0 0; padding-top: 0.625rem; border-top: 1px solid var(--ds-border); color: var(--sx-muted); font-size: 0.8125rem; }
+
+/* what comes next: one dark card at the top of home */
+.sx-hero { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.25rem; padding: 1.25rem 1.5rem; margin-bottom: 1.25rem; border-radius: 16px; background: var(--app-navy); color: #fff; }
+.sx-hero-text { flex: 1 1 16rem; min-width: 0; }
+.sx-hero-k { margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-navy-muted); }
+.sx-hero-big { margin: 0.125rem 0; font-size: 1.375rem; font-weight: 700; overflow-wrap: anywhere; }
+.sx-hero-meta { margin: 0; color: var(--app-navy-text); }
+.sx-hero-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sx-hero .btn-light { color: var(--app-navy); font-weight: 600; }
+.sx-hero .btn-outline-light { font-weight: 600; }
+.sx-tile { display: grid; place-items: center; width: 4.25rem; height: 4.5rem; border-radius: 14px; background: rgba(255, 255, 255, 0.1); flex: none; text-align: center; line-height: 1.1; }
+.sx-tile b { font-size: 1.25rem; }
+.sx-tile small { font-size: 0.6875rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--app-navy-muted); }
+.sx-hero .ds-avatar { flex: none; }
+
+/* tabs and filters: one segmented control, the current choice in the menu's navy */
+.sx-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; margin-bottom: 1rem; width: fit-content; max-width: 100%; background: var(--ds-surface-sunken); border: 1px solid var(--ds-border); border-radius: 12px; }
+.sx-tabs [role="tab"], .sx-tabs button { border: 0; background: transparent; color: var(--sx-muted); font-weight: 500; font-size: 0.9375rem; padding: 0.5rem 0.875rem; min-height: 40px; border-radius: 9px; display: inline-flex; align-items: center; gap: 0.4rem; }
+.sx-tabs [aria-selected="true"], .sx-tabs [aria-pressed="true"] { background: var(--app-navy-active); color: #fff; }
+.sx-tabs [role="tab"]:focus-visible, .sx-tabs button:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.sx-tabs .sx-count { font-size: 0.75rem; font-weight: 700; padding: 0 0.45rem; border-radius: 999px; background: rgba(20, 32, 54, 0.08); }
+.sx-tabs [aria-selected="true"] .sx-count, .sx-tabs [aria-pressed="true"] .sx-count { background: rgba(255, 255, 255, 0.2); }
+.sx-panel { display: grid; gap: 1rem; align-content: start; }
+@media (min-width: 1200px) { .sx-panel-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+.sx-panel > *, .sx-panel-col > * { min-width: 0; }
+.sx-panel-col { display: grid; gap: 1rem; align-content: start; }
+/* a record tab panel: no outline when focus lands on it from the tab bar */
+.sx-panel[role="tabpanel"]:focus { outline: none; }
+.sx-panel[role="tabpanel"]:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 14px; }
+.sx-panel + .sx-panel { margin-top: 1rem; }
+/* tab controls made of links (states, filters): the same look as the record tabs */
+.sx-tabs a { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 36px; padding: 0.375rem 0.75rem; border-radius: 9px; color: var(--sx-muted); font-weight: 500; text-decoration: none; }
+.sx-tabs a:hover { background: rgba(20, 32, 54, 0.06); color: var(--ds-text); }
+.sx-tabs a[aria-current="page"] { background: var(--app-navy-active); color: #fff; }
+.sx-tabs a:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.sx-tabs a[aria-current="page"] .sx-count { background: rgba(255, 255, 255, 0.2); }
+.sx-tabs-sm { margin-bottom: 0; }
+.dash-card-head .sx-tabs { margin-left: auto; }
+.sx-box-md { --h: 18rem; }
+.sx-box-agenda { --h: 22rem; }
+.ds-rows.sx-box { padding-right: 2px; }
