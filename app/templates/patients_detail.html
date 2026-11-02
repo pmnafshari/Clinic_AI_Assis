@@ -7,29 +7,29 @@
   </ol>
 </nav>
 
-<div class="ds-page-head">
-  <div class="d-flex align-items-center gap-3 min-w-0">
-    <span class="ds-avatar ds-avatar-lg {{ patient.patient_name | tint }}" aria-hidden="true">{{ patient.patient_name | initials }}</span>
-    <div class="min-w-0">
-      <p class="ds-page-eyebrow">Patient record</p>
-      <h1 class="ds-page-title text-break">{{ patient.patient_name }}</h1>
-      <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %} · {{ patient.phone|phone }}{% endif %}</p>
-    </div>
+{# P30: the record opens on a dark band - who this is, when they come next, and the record's own actions #}
+<div class="sx-rec-head" data-ux="record-head">
+  <span class="ds-avatar ds-avatar-lg {{ patient.patient_name | tint }}" aria-hidden="true">{{ patient.patient_name | initials }}</span>
+  <div class="sx-rec-text">
+    <p class="sx-rec-k">Patient record</p>
+    <h1 class="sx-rec-name text-break">{{ patient.patient_name }}</h1>
+    <p class="sx-rec-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %}<span>{{ patient.phone|phone }}</span>{% endif %}<span>{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></p>
   </div>
-  {% if authorize(g.user.role, 'append_note') or authorize(g.user.role, 'review_summary') %}
-  <div class="ds-page-actions">
+  <p class="sx-rec-next"><span>Next appointment</span><strong>{{ next_booked or 'No booking' }}</strong></p>
+  {% if authorize(g.user.role, 'append_note') or authorize(g.user.role, 'review_summary') or authorize(g.user.role, 'read_clinical') %}
+  <div class="sx-rec-acts">
     {% if authorize(g.user.role, 'review_summary') %}
-    <a href="{{ url_for('summary.page', cf=cf) }}" class="btn btn-outline-secondary"><i class="bi bi-card-checklist"></i> Next-visit summary</a>
+    <a href="{{ url_for('summary.page', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-card-checklist" aria-hidden="true"></i> Next-visit summary</a>
     {% endif %}
     {% if authorize(g.user.role, 'read_clinical') %}
-    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn btn-outline-secondary"><i class="bi bi-folder2-open"></i> Documents</a>
+    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-folder2-open" aria-hidden="true"></i> Documents</a>
     {% endif %}
     {% if authorize(g.user.role, 'append_note') %}
-    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-primary"><i class="bi bi-journal-plus"></i> Add note</a>
+    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-light"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add note</a>
     {% endif %}
   </div>
   {% endif %}
-</div>
+<!--/record-head--></div>
 
 
 {# P29 redesign: the record grouped into tabs, like the patient portal's pages. every section is the same markup it
@@ -48,6 +48,20 @@
 </div>
 
 <div class="sx-panel sx-panel-2" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview" tabindex="0">
+  {% set billed = patient.invoices | sum(attribute='amount') %}
+  {# a visit filed without a date still counts as a visit; only dated ones say when #}
+  {% set dated = patient.visit_dates | reject('none') | sort | list %}
+  <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="overview-tiles">
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Next appointment</span>
+      <span class="ux-kpi-value">{{ next_booked[:10] if next_booked else 'No booking' }}</span>
+      <span class="ux-kpi-sub">{{ ('at ' ~ next_booked[11:]) if next_booked else 'nothing booked yet' }}</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Last visit</span>
+      <span class="ux-kpi-value">{{ dated | last if dated else ('Date unknown' if patient.visit_dates else 'No visit yet') }}</span>
+      <span class="ux-kpi-sub">{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed</span>
+      <span class="ux-kpi-value">€ {{ "%.2f" | format(billed) }}</span>
+      <span class="ux-kpi-sub">{{ patient.invoices | length }} line{{ 's' if patient.invoices | length != 1 }} · no paid status here</span></div>
+  <!--/tiles--></div>
   <div class="sx-panel-col">
     <section class="card dash-card sx-h-s" aria-labelledby="profile-title">
       <div class="dash-card-head">
@@ -221,6 +235,15 @@
 {% endif %}
 
 <div class="sx-panel" id="tab-billing" role="tabpanel" aria-labelledby="tabbtn-billing" tabindex="0">
+  <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="billing-tiles">
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed in total</span>
+      <span class="ux-kpi-value">€ {{ "%.2f" | format(patient.invoices | sum(attribute='amount')) }}</span>
+      <span class="ux-kpi-sub">no paid status is recorded here</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed lines</span>
+      <span class="ux-kpi-value">{{ patient.invoices | length }}</span><span class="ux-kpi-sub">from the filed notes</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Visits on record</span>
+      <span class="ux-kpi-value">{{ patient.visit_dates | length }}</span><span class="ux-kpi-sub">{% set dated_b = patient.visit_dates | reject('none') | sort | list %}{{ ('last ' ~ (dated_b | last)) if dated_b else ('no date filed' if patient.visit_dates else 'none yet') }}</span></div>
+  <!--/tiles--></div>
     <section class="card dash-card sx-h-m" aria-labelledby="invoices-title">
       <div class="dash-card-head">
         <div>
@@ -366,6 +389,14 @@
 
     {% if authorize(g.user.role, 'view_imaging_requests') %}
     <div class="sx-panel" id="tab-imaging" role="tabpanel" aria-labelledby="tabbtn-imaging" tabindex="0">
+    <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="imaging-tiles">
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Active requests</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'active') | list | length }}</span><span class="ux-kpi-sub">ready to book</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Drafts</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'draft') | list | length }}</span><span class="ux-kpi-sub">not active yet</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Earlier versions</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'in', ['superseded', 'cancelled']) | list | length }}</span><span class="ux-kpi-sub">superseded or cancelled</span></div>
+    <!--/tiles--></div>
     <section class="card dash-card sx-h-m" aria-labelledby="imaging-title" id="imaging">
       <div class="dash-card-head">
         <div>

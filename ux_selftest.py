@@ -618,6 +618,32 @@ def selftest():
             assert "table-responsive" not in page15, f"15c: {path15} wraps its table the old way"
         assert re.search(r"\.sx-box-table\s*\{\s*--h: \d+rem", css15), "15c: the table box has no height"
 
+        # 16. P30 record head and tiles: the record opens on a dark band with who this is and when they come next, and the
+        # Overview, Billing and Imaging tabs open on a strip of equal tiles whose numbers are the record's own
+        anna16 = patient_id.resolve(conn, "ZZUA800101010101")
+        billed16 = conn.execute("SELECT COALESCE(SUM(amount), 0), COUNT(*) FROM invoices WHERE patient_id = ?", (anna16,)).fetchone()
+        last16 = conn.execute("SELECT MAX(visit_date) FROM visits WHERE patient_id = ?", (anna16,)).fetchone()[0]
+        import appointments as appts16
+        next16 = appts16.next_booked_local(conn, anna16)
+        for role16 in ("dentist", "assistant"):
+            rec16 = clients[role16].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            head16 = _section(rec16, "record-head")
+            assert 'class="sx-rec-head' in rec16 and "Anna Uno</h1>" in head16 and "ZZUA800101010101" in head16, f"16a: {role16} record head"
+            assert (next16 or "No booking") in _text(head16), f"16a: {role16} record head does not say when Anna comes next ({next16})"
+            assert "/notes/new" in head16, f"16a: {role16} lost Add note"
+            for tab16, labels16 in (("overview", ("Next appointment", "Last visit", "Billed")),
+                                    ("billing", ("Billed in total", "Billed lines", "Visits on record"))):
+                panel16 = rec16.split(f'id="tab-{tab16}"')[1].split('role="tabpanel"', 1)[1]
+                tiles16 = re.search(r'<div class="ux-kpis ux-kpis-3 sx-wide"[^>]*>(.*?)<!--/tiles-->', panel16, re.S)
+                assert tiles16, f"16b: {role16} {tab16} tab has no tile strip"
+                text16 = _text(tiles16.group(1))
+                assert all(l in text16 for l in labels16) and tiles16.group(1).count('class="ux-kpi ') == 3, f"16b: {role16} {tab16} tiles: {text16}"
+            ov16 = _text(rec16.split('id="tab-overview"')[1].split("<!--/tiles-->")[0])
+            assert f"{billed16[0]:.2f}" in ov16 and (last16 or "No visit yet") in ov16, f"16b: the overview tiles are not the record's numbers: {ov16}"
+            if 'id="tab-imaging"' in rec16:
+                img16 = rec16.split('id="tab-imaging"')[1].split('aria-labelledby="imaging-title"')[0]
+                assert '<div class="ux-kpis ux-kpis-3 sx-wide"' in img16, f"16b: {role16} imaging tab has no tile strip"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

@@ -1519,3 +1519,19 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 .sx-wide { grid-column: 1 / -1; }
 /* the patients and billing tables: a box that scrolls inside once the list is long, header row kept */
 .sx-box-table { --h: 32rem; }
+
+/* P30 record head: the dark band - who, when next, the record's actions */
+.sx-rec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.25rem; padding: 1.125rem 1.375rem; margin-bottom: 1.25rem;
+  border-radius: 16px; background: var(--app-navy); color: #fff; }
+.sx-rec-head .ds-avatar { width: 3.5rem; height: 3.5rem; font-size: 1.125rem; }
+.sx-rec-text { flex: 1; min-width: 13rem; }
+.sx-rec-k { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #c9d3e4; }
+.sx-rec-name { margin: 0.125rem 0 0; font-size: 1.625rem; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
+.sx-rec-meta { margin: 0.25rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.875rem; font-size: 0.8125rem; color: #c9d3e4; }
+.sx-rec-next { margin: 0; padding: 0.5rem 0.875rem; border-radius: 12px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); font-size: 0.8125rem; color: #c9d3e4; }
+.sx-rec-next strong { display: block; color: #fff; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.sx-rec-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sx-btn-ghost { border: 1px solid rgba(255, 255, 255, 0.45); color: #fff; background: transparent; }
+.sx-btn-ghost:hover, .sx-btn-ghost:focus-visible { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.sx-panel > .ux-kpis { margin: 0; }
+@media (max-width: 575.98px) { .sx-rec-acts { width: 100%; } .sx-rec-acts .btn { flex: 1; } }

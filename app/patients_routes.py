@@ -246,10 +246,13 @@ def detail_view(cf):
     log_audit(conn, g.user["username"], g.user["role"],
               "view_record_clinical" if show_clinical else "view_record", cf, allowed=1)
 
+    import appointments
     return render_template(
         "patients_detail.html",
         cf=cf,
         patient=patient,
+        # P30: the record head says when the patient comes next - a booking, never a waiting request
+        next_booked=appointments.next_booked_local(conn, pid),
         clinical=clinical,
         show_clinical=show_clinical,
         # the timeline follows the SAME gate as the clinical card above, rather
