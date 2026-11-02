@@ -74,6 +74,8 @@ def list_view():
                      "request": f"{req['starts_at'][:10]} ({req['period']})" if req else None,
                      "possible_duplicate": p["codice_fiscale"] in flagged,
                      "visit_band": _visit_band(p["last_visit"], today)})
+    # P30 tiles: counted over every patient, before a search narrows the rows
+    figures = {"booked": sum(1 for r in rows if r["next_appointment"]), "no_phone": sum(1 for r in rows if not r["phone"])}
     q = (request.args.get("q") or "").strip().lower()
     if q:
         rows = [r for r in rows if q in r["patient_name"].lower() or q in r["codice_fiscale"].lower()]
@@ -84,7 +86,7 @@ def list_view():
     elif sort == "last":
         rows.sort(key=lambda r: (r["last_visit"] or ""), reverse=True)
     return render_template("patients_list.html", patients=rows, sort=sort, q=request.args.get("q") or "",
-                           total=len(patients))
+                           total=len(patients), figures=figures)
 
 
 def _visit_band(last_visit, today):

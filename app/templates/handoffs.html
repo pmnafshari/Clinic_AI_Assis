@@ -17,6 +17,15 @@
   records <strong>why</strong> and <strong>what about</strong> — never what the patient typed.</div>
 </div>
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Open</span>
+    <span class="ux-kpi-value">{{ counts.get('open', 0) }}</span><span class="ux-kpi-sub">nobody has taken it</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Taken</span>
+    <span class="ux-kpi-value">{{ counts.get('claimed', 0) }}</span><span class="ux-kpi-sub">someone is on it</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Done</span>
+    <span class="ux-kpi-value">{{ counts.get('resolved', 0) }}</span><span class="ux-kpi-sub">closed by staff</span></div>
+<!--/page-tiles--></div>
+
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' call-backs') if status else 'The queue' }}</h2>

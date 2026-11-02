@@ -23,7 +23,9 @@ def index():
         return _refuse("view_stock")
     conn = get_db()
     low_only = request.args.get("show") == "low"
+    every = inventory.items(conn, False)      # P30 tiles: the whole stock, whichever tab is open
     return render_template("stock.html", items=inventory.items(conn, low_only), low_only=low_only,
+                           item_count=len(every), low_count=sum(1 for i in every if i["low"]),
                            alerts=inventory.open_alerts(conn), last_run=inventory.last_run(conn),
                            schedule=inventory_job.SCHEDULE, units=inventory.UNITS,
                            can_manage=authorize(g.user["role"], "manage_inventory"))

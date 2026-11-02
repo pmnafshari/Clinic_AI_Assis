@@ -14,6 +14,15 @@
   check runs when <strong>inventory_job.py</strong> is run; no automatic schedule is set up.</div>
 </div>
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Items</span>
+    <span class="ux-kpi-value">{{ item_count }}</span><span class="ux-kpi-sub">tracked supplies</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Low on stock</span>
+    <span class="ux-kpi-value">{{ low_count }}</span><span class="ux-kpi-sub">at or below the alert level</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Open alerts</span>
+    <span class="ux-kpi-value">{{ alerts | length }}</span><span class="ux-kpi-sub">{{ alerts | rejectattr('acknowledged_at') | list | length }} not seen yet</span></div>
+<!--/page-tiles--></div>
+
 {% if alerts %}
 <section class="card dash-card mb-3" aria-labelledby="alerts-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="alerts-title">Low stock ({{ alerts | length }})</h2></div>

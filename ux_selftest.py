@@ -677,6 +677,27 @@ def selftest():
                 f"17c: {role17}: billed lines are not a table"
             assert bill17.count("<tr data-line") == lines17, f"17c: {role17}: {bill17.count('<tr data-line')} rows for {lines17} lines"
 
+        # 18. P30 page tiles: Patients, Appointments, Stock and Call-backs open on three equal tiles, each a number the
+        # database holds - never one the page invents
+        import inventory as inv18
+        want18 = {
+            "/patients": ("dentist", {"On record": conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0],
+                                      "No phone on file": conn.execute("SELECT COUNT(*) FROM patients WHERE phone IS NULL OR phone = ''").fetchone()[0]}),
+            f"/appointments?view=day&day={DAY}": ("assistant", {"Requests to confirm": conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]}),
+            "/stock": ("dentist", {"Items": conn.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0],
+                                   "Open alerts": len(inv18.open_alerts(conn))}),
+            "/handoffs": ("assistant", {s18.capitalize() if s18 != "claimed" else "Taken": n18 for s18, n18 in
+                                        {r[0]: r[1] for r in conn.execute("SELECT status, COUNT(*) FROM handoff_requests GROUP BY status")}.items()
+                                        if s18 in ("open", "claimed")}),
+        }
+        for path18, (role18, figures18) in want18.items():
+            page18 = clients[role18].get(path18).get_data(as_text=True)
+            tiles18 = re.search(r'<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">(.*?)<!--/page-tiles-->', page18, re.S)
+            assert tiles18 and tiles18.group(1).count('class="ux-kpi ') == 3, f"18: {path18} has no strip of three tiles"
+            for label18, n18 in figures18.items():
+                tile18 = re.search(rf'<span class="ux-kpi-label">{re.escape(label18)}</span>\s*<span class="ux-kpi-value">([^<]+)</span>', tiles18.group(1))
+                assert tile18 and tile18.group(1).strip() == str(n18), f"18: {path18} {label18} shows {tile18 and tile18.group(1)}, the database has {n18}"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

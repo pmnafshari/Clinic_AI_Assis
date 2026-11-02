@@ -16,6 +16,15 @@
   </div>
 <!--/page-head--></div>
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">On record</span>
+    <span class="ux-kpi-value">{{ total }}</span><span class="ux-kpi-sub">active patients</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Booked</span>
+    <span class="ux-kpi-value">{{ figures.booked }}</span><span class="ux-kpi-sub">with a confirmed time</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">No phone on file</span>
+    <span class="ux-kpi-value">{{ figures.no_phone }}</span><span class="ux-kpi-sub">ask at the next visit</span></div>
+<!--/page-tiles--></div>
+
 <section class="card ux-card">
   <form class="ux-search-form" method="get" action="{{ url_for('patients.list_view') }}" aria-label="Filter this list">
     <label class="form-label ux-filter-label" for="patients-q">Filter this list</label>

@@ -84,6 +84,15 @@
 </div>
 {% endmacro %}
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Booked</span>
+    <span class="ux-kpi-value">{{ total }}</span><span class="ux-kpi-sub">{{ {'day': 'on this day', 'week': 'this week', 'month': 'this month'}[view] }}{{ ' · ' ~ dentist if dentist else '' }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Requests to confirm</span>
+    <span class="ux-kpi-value">{{ requests_pending | length }}</span><span class="ux-kpi-sub">{{ ('earliest ' ~ (requests_pending[0].starts_at[:10] | appt_date_label)) if requests_pending else 'none waiting' }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Patients on record</span>
+    <span class="ux-kpi-value">{{ patients | length }}</span><span class="ux-kpi-sub">to book from the list</span></div>
+<!--/page-tiles--></div>
+
 <div class="ux-appt-layout">
   <div class="ux-appt-main">
     {% if view == 'day' %}
