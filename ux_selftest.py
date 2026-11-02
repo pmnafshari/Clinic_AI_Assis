@@ -726,6 +726,22 @@ def selftest():
         if "alerts" in boxes19 and "new" in boxes19:
             assert size19(boxes19["alerts"]) and size19(boxes19["alerts"]) == size19(boxes19["new"]), "19c: alerts and Add an item are not one size"
 
+        # 20. P30 billing is one box: All / Outstanding / To reconcile / Drafts choose what shows inside it (every section
+        # shows without script, and each keeps its own marker), and the box has a fixed height whose body scrolls
+        bill20 = clients["dentist"].get("/billing").get_data(as_text=True)
+        box20 = re.search(r'<section class="card ux-card sx-bill sx-h-l" aria-labelledby="bill-title">(.*?)<!--/bill-box--></section>', bill20, re.S)
+        assert box20, "20: the invoices are not one fixed-height box"
+        for key20 in ("owed", "unknown", "draft"):
+            assert f'data-ux="billing-{key20}"' in box20.group(1), f"20: the {key20} section is not inside the box"
+            panel20 = re.search(rf'<div class="sx-bill-panel"[^>]*data-bill-panel="{key20}"[^>]*>', box20.group(1))
+            assert panel20 and " hidden" not in panel20.group(0), f"20: the {key20} section is hidden without script"
+        group20 = re.search(r'<div class="sx-tabs sx-tabs-sm"[^>]*data-bill-show[^>]*>(.*?)</div>', box20.group(1), re.S)
+        assert group20 and " hidden" in group20.group(0).split(">")[0], "20: the show control is not added by the script"
+        labels20 = re.findall(r'<button type="button" data-show="(\w+)" aria-pressed="(true|false)">([^<]+)', group20.group(1))
+        assert [(k, l.strip()) for k, _p, l in labels20] == [("all", "All"), ("owed", "Outstanding"), ("unknown", "To reconcile"), ("draft", "Drafts")] \
+            and labels20[0][1] == "true", f"20: show buttons {labels20}"
+        assert '<div class="sx-card-body">' in box20.group(1), "20: the box's body does not scroll inside"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

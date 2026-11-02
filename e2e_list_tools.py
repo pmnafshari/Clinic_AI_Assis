@@ -100,6 +100,14 @@ def main():
                 tools.locator(".sx-menu-item:has-text('Amount (highest first)')").click()
                 assert cents() == sorted(cents(), reverse=True), cents()
 
+                # billing is one box: Drafts shows only the drafts, All brings every group back
+                page.locator("[data-bill-show] [data-show=draft]").click()
+                expect(page.locator("[data-bill-panel=draft]")).to_be_visible()
+                expect(page.locator("[data-bill-panel=owed]")).to_be_hidden()
+                expect(page.locator("[data-bill-panel=unknown]")).to_be_hidden()
+                page.locator("[data-bill-show] [data-show=all]").click()
+                expect(page.locator("[data-bill-panel=owed]")).to_be_visible()
+
                 # stock: the Search button finds an item, the line below says how many show
                 page.goto(base + "/stock")
                 total = len(shown(page, "#stock-rows li"))

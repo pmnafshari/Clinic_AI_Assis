@@ -41,14 +41,30 @@
   </div>
 <!--/billing-totals--></div>
 
+{# P30: the three groups live in one box. All / Outstanding / To reconcile / Drafts choose which shows (app.js adds the
+   control; without it every group shows, as before). each group keeps its own table, tools and marker. #}
+<section class="card ux-card sx-bill sx-h-l" aria-labelledby="bill-title">
+  <div class="ux-card-head">
+    <div>
+      <h2 class="ux-card-title" id="bill-title">Invoices</h2>
+      <p class="ux-card-meta">Only issued invoices with money outstanding are counted as owed</p>
+    </div>
+    <div class="sx-tabs sx-tabs-sm" role="group" aria-label="Show" data-bill-show hidden>
+      <button type="button" data-show="all" aria-pressed="true">All <span class="sx-count">{{ work.owed | length + work.unknown | length + work.draft | length }}</span></button>
+      <button type="button" data-show="owed" aria-pressed="false">Outstanding <span class="sx-count">{{ work.owed | length }}</span></button>
+      <button type="button" data-show="unknown" aria-pressed="false">To reconcile <span class="sx-count">{{ work.unknown | length }}</span></button>
+      <button type="button" data-show="draft" aria-pressed="false">Drafts <span class="sx-count">{{ work.draft | length }}</span></button>
+    </div>
+  </div>
+  <div class="sx-card-body">
 {% for key, title, meta, empty in [
      ('owed', 'Issued and outstanding', 'By due date. Only these are counted as owed.', 'Nothing owed on issued invoices.'),
      ('unknown', 'Needs reconciliation', 'From before the ledger. Not counted as owed until reconciled.', 'Nothing to reconcile.'),
      ('draft', 'Drafts', 'Not yet issued. Not counted as owed.', 'No drafts.')] %}
-<section class="card ux-card mb-3" aria-labelledby="bill-{{ key }}">
+<div class="sx-bill-panel" data-bill-panel="{{ key }}" role="region" aria-labelledby="bill-{{ key }}">
   <div class="ux-card-head">
     <div>
-      <h2 class="ux-card-title" id="bill-{{ key }}">{{ title }} <span class="ux-count">{{ work[key] | length }}</span></h2>
+      <h3 class="ux-card-title" id="bill-{{ key }}">{{ title }} <span class="ux-count">{{ work[key] | length }}</span></h3>
       <p class="ux-card-meta">{{ meta }}</p>
     </div>
     {# P30: Sort and Filter on this section's rows #}
@@ -99,6 +115,8 @@
   <p class="ux-empty">{{ empty }}</p>
   {% endif %}
   <!--/billing-{{ key }}--></div>
-</section>
+</div>
 {% endfor %}
+  </div>
+<!--/bill-box--></section>
 {% endblock %}

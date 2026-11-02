@@ -208,3 +208,19 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
     });
   });
 })();
+
+// P30 billing: All / Outstanding / To reconcile / Drafts choose which group shows inside the one box.
+(function () {
+  var group = document.querySelector("[data-bill-show]");
+  if (!group) return;
+  var panels = Array.prototype.slice.call(document.querySelectorAll("[data-bill-panel]"));
+  var buttons = Array.prototype.slice.call(group.querySelectorAll("[data-show]"));
+  group.hidden = false;
+  buttons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      var show = button.getAttribute("data-show");
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+      panels.forEach(function (panel) { panel.hidden = !(show === "all" || panel.getAttribute("data-bill-panel") === show); });
+    });
+  });
+})();
