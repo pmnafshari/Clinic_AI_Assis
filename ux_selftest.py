@@ -486,6 +486,36 @@ def selftest():
         assert "border:" in summary12 and "border-radius" in summary12, \
             "12g: an expanding section opens with a line of link text"
 
+        # 13. P30 top bar (the assistant-panel mockup): a Search button, the clinic clock, what is waiting, the account.
+        # every number is one the sidebar and Home already count, for a role that may open the page it counts
+        for role13 in ("dentist", "assistant"):
+            bar13 = _section(clients[role13].get("/").get_data(as_text=True), "topbar")
+            form13 = re.search(r'<form[^>]*role="search"[^>]*action="/patients"[^>]*method="get"|'
+                               r'<form[^>]*method="get"[^>]*action="/patients"[^>]*role="search"', bar13)
+            assert form13 and re.search(r'<input[^>]*name="q"', bar13) and re.search(r'<button[^>]*type="submit"[^>]*>[^<]*(?:<[^>]+>[^<]*)*Search', bar13), \
+                f"13a: {role13}'s top bar search has no Search button"
+            assert re.search(r'data-clock[^>]*data-minutes="540"', bar13) and ">09:00<" in bar13 and "Wed 5 Mar" in bar13 \
+                and "Europe/Rome" not in bar13 and "clinic time" not in bar13, \
+                f"13b: {role13}'s top bar does not show the clinic time"
+            assert 'class="dropdown-menu' in bar13 and 'href="/change-password"' in bar13 and 'action="/logout"' in bar13 \
+                and 'name="csrf_token"' in bar13 and f">{role13}<" in bar13, \
+                f"13d: {role13}'s top bar has no account menu"
+        waiting13 = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]
+        reviews13 = conn.execute("SELECT COUNT(*) FROM note_reviews WHERE status IN ('pending', 'extraction_failed', 'confirming')").fetchone()[0]
+        dbar13 = _section(clients["dentist"].get("/").get_data(as_text=True), "topbar")
+        abar13 = _section(clients["assistant"].get("/").get_data(as_text=True), "topbar")
+        assert waiting13 and f"{waiting13} pending request" in dbar13 and 'href="/appointments#requests"' in dbar13, \
+            "13c: the bell does not list the waiting requests"
+        assert ("notes to review" in dbar13 or "note to review" in dbar13) == bool(reviews13), "13c: the review count is not the sidebar's"
+        assert "to review" not in re.sub(r"imported file[^<]*to review", "", abar13), "13c: the assistant is told about notes only a dentist can open"
+        for text13 in ("Mark all as read", "localStorage", "sessionStorage"):
+            assert text13 not in dbar13, f"13c: {text13} - nothing is kept in the browser or on the server"
+        items13 = len(re.findall(r'class="app-notif-item', dbar13))
+        assert items13 and re.search(rf'class="app-bell-count"[^>]*>{items13}<', dbar13), "13c: the badge is not the number of things waiting"
+        adm13 = _section(clients["admin"].get("/admin/users").get_data(as_text=True), "topbar")
+        assert 'class="app-notif-item' not in adm13 and "Nothing needs you right now" in adm13 and 'role="search"' not in adm13, \
+            "13c: admin has nothing waiting and no record search"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

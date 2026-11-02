@@ -170,3 +170,23 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   select(start || tabs[0], false);
   if (target) target.scrollIntoView();
 });
+
+// P30 top bar clock: the server sends the clinic's time as minutes since midnight; this keeps it ticking.
+// no zone is needed and nothing is stored. past midnight the date line is dropped rather than shown stale.
+(function () {
+  var clock = document.querySelector("[data-clock]");
+  if (!clock) return;
+  var time = clock.querySelector("[data-clock-time]");
+  var day = clock.querySelector("[data-clock-day]");
+  var start = parseInt(clock.getAttribute("data-minutes"), 10);
+  var loaded = Date.now();
+  if (isNaN(start) || !time) return;
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function tick() {
+    var m = start + Math.floor((Date.now() - loaded) / 60000);
+    if (m >= 1440 && day) day.hidden = true;
+    m = m % 1440;
+    time.textContent = pad(Math.floor(m / 60)) + ":" + pad(m % 60);
+  }
+  window.setInterval(tick, 15000);
+})();
