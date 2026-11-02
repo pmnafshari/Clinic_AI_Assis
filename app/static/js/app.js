@@ -170,3 +170,57 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   select(start || tabs[0], false);
   if (target) target.scrollIntoView();
 });
+
+// P30 top bar clock: the server sends the clinic's time as minutes since midnight; this keeps it ticking.
+// no zone is needed and nothing is stored. past midnight the date line is dropped rather than shown stale.
+(function () {
+  var clock = document.querySelector("[data-clock]");
+  if (!clock) return;
+  var time = clock.querySelector("[data-clock-time]");
+  var day = clock.querySelector("[data-clock-day]");
+  var start = parseInt(clock.getAttribute("data-minutes"), 10);
+  var loaded = Date.now();
+  if (isNaN(start) || !time) return;
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function tick() {
+    var m = start + Math.floor((Date.now() - loaded) / 60000);
+    if (m >= 1440 && day) day.hidden = true;
+    m = m % 1440;
+    time.textContent = pad(Math.floor(m / 60)) + ":" + pad(m % 60);
+  }
+  window.setInterval(tick, 15000);
+})();
+
+// P30 consent wording: every wording row is on the page; this folds each behind its row's Read out button.
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll("[data-read-out]"), function (button) {
+    var row = document.getElementById(button.getAttribute("aria-controls"));
+    if (!row) return;
+    var word = button.firstChild;
+    button.hidden = false;
+    row.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", function () {
+      var open = row.hidden;
+      row.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      word.textContent = open ? "Hide wording" : "Read out";
+    });
+  });
+})();
+
+// P30 billing: All / Outstanding / To reconcile / Drafts choose which group shows inside the one box.
+(function () {
+  var group = document.querySelector("[data-bill-show]");
+  if (!group) return;
+  var panels = Array.prototype.slice.call(document.querySelectorAll("[data-bill-panel]"));
+  var buttons = Array.prototype.slice.call(group.querySelectorAll("[data-show]"));
+  group.hidden = false;
+  buttons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      var show = button.getAttribute("data-show");
+      buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+      panels.forEach(function (panel) { panel.hidden = !(show === "all" || panel.getAttribute("data-bill-panel") === show); });
+    });
+  });
+})();

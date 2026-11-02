@@ -265,6 +265,8 @@ def selftest():
         batch = li.stage(conn, folder, *A, now=T0)
         page = dentist.get("/imports").text
         assert "Proposed" in page and "Conflict" in page and "Unmatched" in page, "10: the dentist's queue"
+        from ux_selftest import assert_list_tools
+        assert_list_tools(page, "/imports", {"no", "name"})     # P30: the queue can be filtered and sorted
         item = next(r for r in li.items(conn, batch) if r["rel_path"] == cases["E01"][0])
         page = dentist.get(f"/imports/items/{item['id']}").text
         assert fx.CF["rossi"] in page and "line" in page and "Mario Rossi" in page, "10: evidence with sources"

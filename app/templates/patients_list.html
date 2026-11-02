@@ -16,17 +16,38 @@
   </div>
 <!--/page-head--></div>
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">On record</span>
+    <span class="ux-kpi-value">{{ total }}</span><span class="ux-kpi-sub">active patients</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Booked</span>
+    <span class="ux-kpi-value">{{ figures.booked }}</span><span class="ux-kpi-sub">with a confirmed time</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">No phone on file</span>
+    <span class="ux-kpi-value">{{ figures.no_phone }}</span><span class="ux-kpi-sub">ask at the next visit</span></div>
+<!--/page-tiles--></div>
+
 <section class="card ux-card">
   <form class="ux-search-form" method="get" action="{{ url_for('patients.list_view') }}" aria-label="Filter this list">
     <label class="form-label ux-filter-label" for="patients-q">Filter this list</label>
     <input type="search" id="patients-q" name="q" value="{{ q }}" class="form-control" placeholder="Name or codice fiscale" aria-describedby="patients-q-help">
     <input type="hidden" name="sort" value="{{ sort }}">
-    <button type="submit" class="btn btn-outline-secondary">Filter</button>
+    <button type="submit" class="btn btn-primary">Search</button>
     <span class="ux-muted" id="patients-q-help">Matches part of a name or a whole codice fiscale.</span>
     {% if q %}<a class="ux-link" href="{{ url_for('patients.list_view', sort=sort) }}">Clear</a>{% endif %}
   </form>
+  {# P30: Filter and Sort on the rows loaded here; the form above searches the whole list on the server #}
+  {% if patients %}
+  {% set sorts = [['name', 'text', 1, 'Name (A-Z)'], ['name', 'text', -1, 'Name (Z-A)'], ['next', 'text', 1, 'Next appointment (soonest)'],
+                  ['last', 'text', -1, 'Last visit (newest)'], ['last', 'text', 1, 'Last visit (oldest)']] %}
+  {% set filters = [['phone', 'Phone', [['yes', 'Has a phone'], ['no', 'No phone']]],
+                    ['booking', 'Next appointment', [['booked', 'Booked'], ['requested', 'Requested, not booked'], ['none', 'None']]],
+                    ['visit', 'Last visit', [['recent', 'In the last 30 days'], ['mid', '31 to 60 days ago'], ['old', 'Over 60 days ago'], ['none', 'No visit yet']]]] %}
+  <div class="sx-tools" data-list-tools data-for="patients-rows" data-noun="patient|patients"
+       data-sorts='{{ sorts | tojson }}' data-filters='{{ filters | tojson }}'
+       data-sort-initial="{{ {'name': 0, 'next': 2, 'last': 3}[sort] }}"></div>
+  {% endif %}
   <div data-ux="patient-rows">
   {% if patients %}
+  <div class="sx-box sx-box-table">
   <table class="ux-table ux-table-page">
     <caption class="visually-hidden">Patients, sorted by {{ {'name': 'name', 'next': 'next appointment', 'last': 'last visit'}[sort] }}</caption>
     <thead><tr>
@@ -37,9 +58,11 @@
       <th scope="col">{{ sort_link('last', 'Last visit') }}</th>
       <th scope="col"><span class="visually-hidden">Open</span></th>
     </tr></thead>
-    <tbody>
+    <tbody id="patients-rows">
     {% for p in patients %}
-    <tr data-patient="{{ p.patient_id }}">
+    <tr data-patient="{{ p.patient_id }}" data-name="{{ p.patient_name }}" data-next="{{ p.next_appointment or '9999' }}"
+        data-last="{{ p.last_visit or '0000-00-00' }}" data-phone="{{ 'yes' if p.phone else 'no' }}"
+        data-booking="{{ 'booked' if p.next_appointment else 'requested' if p.request else 'none' }}" data-visit="{{ p.visit_band }}">
       <td data-label="Patient"><span class="ds-avatar ds-avatar-sm {{ p.patient_name | tint }}" aria-hidden="true">{{ p.patient_name | initials }}</span>
         <strong>{{ p.patient_name }}</strong>
         {% if p.possible_duplicate %}<span class="ux-badge ux-badge-requested" title="The duplicate review lists this record; an admin merges or dismisses it">Possible duplicate</span>{% endif %}</td>
@@ -55,6 +78,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% elif q %}
   <p class="ux-empty">No patient matches "{{ q }}".</p>
   {% else %}

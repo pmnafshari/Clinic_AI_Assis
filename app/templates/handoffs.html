@@ -17,6 +17,15 @@
   records <strong>why</strong> and <strong>what about</strong> — never what the patient typed.</div>
 </div>
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Open</span>
+    <span class="ux-kpi-value">{{ counts.get('open', 0) }}</span><span class="ux-kpi-sub">nobody has taken it</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Taken</span>
+    <span class="ux-kpi-value">{{ counts.get('claimed', 0) }}</span><span class="ux-kpi-sub">someone is on it</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Done</span>
+    <span class="ux-kpi-value">{{ counts.get('resolved', 0) }}</span><span class="ux-kpi-sub">closed by staff</span></div>
+<!--/page-tiles--></div>
+
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' call-backs') if status else 'The queue' }}</h2>
@@ -28,11 +37,19 @@
       {% endfor %}
     </nav>
   </div>
+  {# P30: Sort and Filter on the rows loaded here (the tabs above choose a state on the server) #}
+  {% if rows %}
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="handoff-rows" data-noun="call-back|call-backs"
+       data-sorts='{{ [['raised', 'text', 1, 'Oldest first'], ['raised', 'text', -1, 'Newest first'], ['state', 'num', 1, 'Open first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
+       data-filters='{{ [['about', 'About', [['appointment', 'Appointment'], ['billing', 'Billing'], ['clinical', 'Clinical'], ['records', 'Records'], ['other', 'Other']]],
+                         ['why', 'Why', [['patient_asked', 'Asked for a person'], ['payment_unknown', 'Payment unknown'], ['no_content', 'Not covered'], ['symptom', 'Symptom'], ['treatment', 'Treatment'], ['advice', 'Advice']]]] | tojson }}'></div>
+  {% endif %}
   <div class="dash-card-body">
     {% if rows %}
-    <ul class="ds-rows sx-box">
+    <ul class="ds-rows sx-box" id="handoff-rows">
       {% for r in rows %}
-      <li class="ds-row">
+      <li class="ds-row" data-name="{{ r.patient_name or 'Erased patient' }}" data-raised="{{ r.created_at }}" data-about="{{ r.topic }}"
+          data-why="{{ r.reason }}" data-state="{{ {'open': 0, 'claimed': 1, 'resolved': 2}[r.status] }}">
         <span class="ds-row-main">
           <span class="ds-row-title">{{ r.patient_name or 'Erased patient' }} · {{ r.topic }}</span>
           <span class="ds-row-sub">

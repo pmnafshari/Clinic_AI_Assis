@@ -84,7 +84,16 @@
 </div>
 {% endmacro %}
 
-<div class="ux-appt-layout">
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Booked</span>
+    <span class="ux-kpi-value">{{ total }}</span><span class="ux-kpi-sub">{{ {'day': 'on this day', 'week': 'this week', 'month': 'this month'}[view] }}{{ ' · ' ~ dentist if dentist else '' }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Requests to confirm</span>
+    <span class="ux-kpi-value">{{ requests_pending | length }}</span><span class="ux-kpi-sub">{{ ('earliest ' ~ (requests_pending[0].starts_at[:10] | appt_date_label)) if requests_pending else 'none waiting' }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Patients on record</span>
+    <span class="ux-kpi-value">{{ patients | length }}</span><span class="ux-kpi-sub">to book from the list</span></div>
+<!--/page-tiles--></div>
+
+<div class="ux-appt-layout ux-appt-stacked">
   <div class="ux-appt-main">
     {% if view == 'day' %}
     <section class="card ux-card" aria-labelledby="day-title">
@@ -186,11 +195,18 @@
         <h2 class="ux-card-title" id="requests-title">Patient requests <span class="ux-count" aria-label="{{ requests_pending | length }} request{{ 's' if requests_pending | length != 1 else '' }} waiting">{{ requests_pending | length }}</span></h2>
         <p class="ux-card-meta">Requests are not bookings: a preferred day and part of the day, no time and no clinician. Earliest preferred day first.</p>
       </div></div>
+      {# P30: Sort and Filter on the requests loaded here #}
+      {% if requests_pending %}
+      <div class="sx-tools sx-tools-row" data-list-tools data-for="request-rows" data-noun="request|requests"
+           data-sorts='{{ [['day', 'text', 1, 'Preferred day (soonest)'], ['day', 'text', -1, 'Preferred day (latest)'], ['asked', 'text', -1, 'Asked (newest)'],
+                           ['asked', 'text', 1, 'Asked (oldest)'], ['name', 'text', 1, 'Name (A-Z)']] | tojson }}'
+           data-filters='{{ [['period', 'Part of the day', [['morning', 'Morning'], ['afternoon', 'Afternoon']]]] | tojson }}'></div>
+      {% endif %}
       <div>
       {% if requests_pending %}
-      <ul class="ux-list ux-requests">
+      <ul class="ux-list ux-requests sx-box" id="request-rows">
         {% for r in requests_pending %}
-        <li class="ux-request">
+        <li class="ux-request" data-name="{{ r.patient_name }}" data-day="{{ r.starts_at[:10] }}" data-asked="{{ r.created_at[:10] }}" data-period="{{ r.period }}">
           <div class="ux-request-top"><strong class="ux-request-name">{{ r.patient_name }}</strong>
             <span class="ux-badge ux-badge-requested">Requested - not booked</span></div>
           <p class="ux-request-when">Preferred day: {{ r.starts_at[:10] | appt_date_label }} · {{ r.period }}</p>

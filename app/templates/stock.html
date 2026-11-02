@@ -14,8 +14,19 @@
   check runs when <strong>inventory_job.py</strong> is run; no automatic schedule is set up.</div>
 </div>
 
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Items</span>
+    <span class="ux-kpi-value">{{ item_count }}</span><span class="ux-kpi-sub">tracked supplies</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Low on stock</span>
+    <span class="ux-kpi-value">{{ low_count }}</span><span class="ux-kpi-sub">at or below the alert level</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Open alerts</span>
+    <span class="ux-kpi-value">{{ alerts | length }}</span><span class="ux-kpi-sub">{{ alerts | rejectattr('acknowledged_at') | list | length }} not seen yet</span></div>
+<!--/page-tiles--></div>
+
+{# P30: Low stock beside Add an item, one size; the item list full width below #}
+<div class="sx-panel sx-panel-2 sx-page">
 {% if alerts %}
-<section class="card dash-card mb-3" aria-labelledby="alerts-title">
+<section class="card dash-card {{ 'sx-h-m' if can_manage else 'sx-h-m sx-wide' }} sx-order-1" aria-labelledby="alerts-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="alerts-title">Low stock ({{ alerts | length }})</h2></div>
   <div class="dash-card-body"><ul class="ds-rows sx-box sx-box-md">
     {% for a in alerts %}
@@ -39,16 +50,25 @@
 </section>
 {% endif %}
 
-<section class="card dash-card mb-3" aria-labelledby="items-title">
+<section class="card dash-card sx-h-l sx-wide sx-order-3" aria-labelledby="items-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="items-title">Items</h2>
     <nav class="sx-tabs sx-tabs-sm" aria-label="Filter"><a href="{{ url_for('stock.index') }}" {% if not low_only %}aria-current="page"{% endif %}>All</a><a href="{{ url_for('stock.index', show='low') }}" {% if low_only %}aria-current="page"{% endif %}>Low only</a></nav>
   </div>
+  {# P30: search, Filter by unit and Sort on the items loaded here #}
+  {% if items %}
+  {% set unit_options = [] %}{% for u in units %}{% set _ = unit_options.append([u, u]) %}{% endfor %}
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="stock-rows" data-noun="item|items" data-search="Find an item" data-find="name"
+       data-sorts='{{ [['status', 'num', 1, 'Needs attention first'], ['ratio', 'num', 1, 'Stock left (lowest first)'], ['ratio', 'num', -1, 'Stock left (highest first)'],
+                       ['name', 'text', 1, 'Name (A-Z)'], ['name', 'text', -1, 'Name (Z-A)']] | tojson }}'
+       data-filters='{{ [['unit', 'Unit', unit_options]] | tojson }}'></div>
+  {% endif %}
   <div class="dash-card-body">
     {% if items %}
-    <ul class="ds-rows sx-box">
+    <ul class="ds-rows sx-box" id="stock-rows">
       {% for i in items %}
-      <li class="ds-row">
+      <li class="ds-row" data-name="{{ i.name }}" data-unit="{{ i.unit }}" data-status="{{ 0 if i.low else 1 }}"
+          data-ratio="{{ '%.3f' | format(i.balance / i.threshold if i.threshold else 99) }}">
         <span class="ds-row-main">
           <span class="ds-row-title">{{ i.name }}</span>
           <span class="ds-row-sub">threshold {{ i.threshold }} {{ i.unit }}{% if i.low %} · <strong>low</strong>{% endif %}</span>
@@ -67,7 +87,7 @@
 </section>
 
 {% if can_manage %}
-<section class="card dash-card" aria-labelledby="new-title">
+<section class="card dash-card {{ 'sx-h-m' if alerts else 'sx-h-s sx-wide' }} sx-order-2" aria-labelledby="new-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="new-title">Add an item</h2></div>
   <div class="dash-card-body">
     <form method="post" action="{{ url_for('stock.create') }}" class="d-flex flex-wrap gap-2 align-items-end">
@@ -80,4 +100,5 @@
   </div>
 </section>
 {% endif %}
+</div>
 {% endblock %}

@@ -4,10 +4,12 @@ a temporary synthetic clinic, the real app through its test client, a pinned cli
 different day from the machine's (so a page that reads the server date instead of the clinic's shows the wrong day).
 """
 
+import json
 import re
 import sys
 import tempfile
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
@@ -42,6 +44,64 @@ def _section(html, marker):
     m = re.search(rf'<[^>]+data-ux="{marker}"[^>]*>(.*?)<!--/{marker}-->', html, re.S)
     assert m, f"no data-ux={marker} section"
     return m.group(1)
+
+
+class _Lists(HTMLParser):
+    """every [data-list-tools] on a page, and the rows (direct children) of each tbody/ul that has an id."""
+
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__()
+        self.tools, self.rows, self._stack = [], {}, []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if "data-list-tools" in a:
+            self.tools.append(a)
+        parent = self._stack[-1] if self._stack else (None, None)
+        if tag in ("tr", "li") and parent[0] in ("tbody", "ul") and parent[1]:
+            self.rows[parent[1]].append(a)
+        if tag in self.VOID:
+            return
+        if tag in ("tbody", "ul") and a.get("id"):
+            self.rows[a["id"]] = []
+        self._stack.append((tag, a.get("id")))
+
+    def handle_endtag(self, tag):
+        for i in range(len(self._stack) - 1, -1, -1):
+            if self._stack[i][0] == tag:
+                del self._stack[i:]
+                break
+
+
+def _lists(html):
+    parser = _Lists()
+    parser.feed(html)
+    return parser.tools, parser.rows
+
+
+def assert_list_tools(html, where, keys):
+    """every list tool on a page works on rows that can answer it: each sort key on every row, each row's filter value
+    reachable by a choice, a noun for the count - and the page offers at least the sorts named in keys."""
+    tools, rows = _lists(html)
+    assert tools, f"14a: {where} has no list tools"
+    seen = set()
+    for tool in tools:
+        target = tool["data-for"]
+        assert rows.get(target), f"14a: {where} {target} has no rows to work on"
+        sorts = json.loads(tool["data-sorts"])
+        filters = json.loads(tool.get("data-filters") or "[]")
+        assert sorts and all(len(x) == 4 and x[1] in ("text", "num") and x[2] in (1, -1) for x in sorts), f"14a: {where} sorts {sorts}"
+        for key, _kind, _dir, label in sorts:
+            seen.add(key)
+            assert all(f"data-{key}" in r for r in rows[target]), f"14a: {where} {target}: a row has no data-{key} ({label})"
+        for key, _group, options in filters:
+            assert all(f"data-{key}" in r for r in rows[target]), f"14a: {where} {target}: a row has no data-{key}"
+            held = {r.get(f"data-{key}") for r in rows[target]}
+            assert held <= {v for v, _l in options}, f"14a: {where} {target}: a {key} value no choice reaches: {held}"
+        assert "|" in tool["data-noun"], f"14a: {where} {target} has no noun for its count"
+    assert set(keys) <= seen, f"14a: {where} is missing sorts {set(keys) - seen}"
 
 
 def _client(app, user, password):
@@ -239,7 +299,8 @@ def selftest():
             clinic_time.now = real_now
         assert "Nothing booked today" in quiet and f"day={DAY}" in quiet and "5 Mar" in _text(quiet), \
             f"10b: the quiet day does not offer the next booked day: {_text(quiet)}"
-        # 10c. patients: one list filter, one record lookup, differently named; no page action; no inner scroll;
+        # 10c. patients: one list filter, one record lookup, differently named; no page action; the table in a scroll box (P30:
+        # the owner now wants every table and box a fixed size that scrolls inside - 15c asserts the box);
         # the codice fiscale shortened in the list and still searchable in full
         pl = dentist.get("/patients").get_data(as_text=True)
         assert len(re.findall(r'class="[^"]*\bapp-primary\b', _section(pl, "page-head"))) == 0, "10c: page-level Add note"
@@ -428,7 +489,7 @@ def selftest():
         assert box12 and "overflow: auto" in box12.group(1) and "max-height" in box12.group(1) \
             and "position: relative" in box12.group(1), "12b: no fixed-height scroll box"
         assert re.search(r"\.sx-box[^{]*th\s*\{[^}]*position: sticky", css12), "12b: the header row scrolls away"
-        assert re.search(r"tbody tr:nth-child\(even\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
+        assert re.search(r"tbody tr:nth-child\(even(?: of :not\(\[hidden\]\))?\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
 
         # 12c. home opens with what comes next for this person: the dentist's own next patient
         home12 = clients["dentist"].get("/").get_data(as_text=True)
@@ -485,6 +546,215 @@ def selftest():
                              if ".ux-upload summary" in [s.strip() for s in sel.split(",")])
         assert "border:" in summary12 and "border-radius" in summary12, \
             "12g: an expanding section opens with a line of link text"
+
+        # 13. P30 top bar (the assistant-panel mockup): a Search button, the clinic clock, what is waiting, the account.
+        # every number is one the sidebar and Home already count, for a role that may open the page it counts
+        for role13 in ("dentist", "assistant"):
+            bar13 = _section(clients[role13].get("/").get_data(as_text=True), "topbar")
+            form13 = re.search(r'<form[^>]*role="search"[^>]*action="/patients"[^>]*method="get"|'
+                               r'<form[^>]*method="get"[^>]*action="/patients"[^>]*role="search"', bar13)
+            assert form13 and re.search(r'<input[^>]*name="q"', bar13) and re.search(r'<button[^>]*type="submit"[^>]*>[^<]*(?:<[^>]+>[^<]*)*Search', bar13), \
+                f"13a: {role13}'s top bar search has no Search button"
+            assert re.search(r'data-clock[^>]*data-minutes="540"', bar13) and ">09:00<" in bar13 and "Wed 5 Mar" in bar13 \
+                and "Europe/Rome" not in bar13 and "clinic time" not in bar13, \
+                f"13b: {role13}'s top bar does not show the clinic time"
+            assert 'class="dropdown-menu' in bar13 and 'href="/change-password"' in bar13 and 'action="/logout"' in bar13 \
+                and 'name="csrf_token"' in bar13 and f">{role13}<" in bar13, \
+                f"13d: {role13}'s top bar has no account menu"
+        waiting13 = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]
+        reviews13 = conn.execute("SELECT COUNT(*) FROM note_reviews WHERE status IN ('pending', 'extraction_failed', 'confirming')").fetchone()[0]
+        dbar13 = _section(clients["dentist"].get("/").get_data(as_text=True), "topbar")
+        abar13 = _section(clients["assistant"].get("/").get_data(as_text=True), "topbar")
+        assert waiting13 and f"{waiting13} pending request" in dbar13 and 'href="/appointments#requests"' in dbar13, \
+            "13c: the bell does not list the waiting requests"
+        assert ("notes to review" in dbar13 or "note to review" in dbar13) == bool(reviews13), "13c: the review count is not the sidebar's"
+        assert "to review" not in re.sub(r"imported file[^<]*to review", "", abar13), "13c: the assistant is told about notes only a dentist can open"
+        for text13 in ("Mark all as read", "localStorage", "sessionStorage"):
+            assert text13 not in dbar13, f"13c: {text13} - nothing is kept in the browser or on the server"
+        items13 = len(re.findall(r'class="app-notif-item', dbar13))
+        assert items13 and re.search(rf'class="app-bell-count"[^>]*>{items13}<', dbar13), "13c: the badge is not the number of things waiting"
+        adm13 = _section(clients["admin"].get("/admin/users").get_data(as_text=True), "topbar")
+        assert 'class="app-notif-item' not in adm13 and "Nothing needs you right now" in adm13 and 'role="search"' not in adm13, \
+            "13c: admin has nothing waiting and no record search"
+
+        # 14. P30 lists: every list can be searched, filtered and sorted. one script reads what each list declares; the page
+        # declares only choices its own rows can answer (a sort key every row carries, a filter value some row holds)
+        import handoff
+        pid14 = patient_id.resolve(conn, "ZZUA800101010101")
+        handoff.raise_request(conn, pid14, "patient_asked", "billing")
+        pages14 = {"/patients": ("dentist", {"name", "next", "last"}), "/billing": ("dentist", {"amount", "name"}),
+                   "/stock": ("dentist", {"name", "status"}), "/handoffs": ("assistant", {"raised", "name"}),
+                   "/appointments": ("assistant", {"day", "asked", "name"})}
+        for path14, (role14, keys14) in pages14.items():
+            assert_list_tools(clients[role14].get(path14).get_data(as_text=True), path14, keys14)
+        assert 'js/list_tools.js' in dentist.get("/patients").get_data(as_text=True), "14b: the lists script is not loaded"
+        tools_js14 = (Path(__file__).parent / "app" / "static" / "js" / "list_tools.js").read_text()
+        assert "bootstrap" not in tools_js14.lower() or "data-bs-toggle" in tools_js14, "14b: panels open with the page's own dropdown"
+        assert not re.search(r"localStorage|sessionStorage|indexedDB|innerHTML\s*=\s*[^;]*\b(?:value|textContent|dataset)", tools_js14), \
+            "14b: nothing is stored in the browser and no row text is written back as markup"
+        assert "of :not([hidden])" in css12, "14c: shaded rows are counted among the rows that show"
+        assert "Search" in re.sub(r"<[^>]+>", " ", dentist.get("/patients").get_data(as_text=True).split('data-ux="patient-rows"')[0]), \
+            "14d: the patients box has a Search button"
+
+        # 15. P30 equal boxes: every box on the record has one of three fixed heights and boxes that share a row match; the long
+        # tables (patients, invoices) scroll inside a box instead of growing the page
+        for role15 in ("dentist", "assistant"):
+            rec15 = clients[role15].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            for tab15 in re.finditer(r'<div class="sx-panel[^"]*" id="tab-(\w+)" role="tabpanel"(.*?)(?=<div class="sx-panel[^"]*" id="tab-\w+" role="tabpanel"|<dialog|<div class="modal|\Z)', rec15, re.S):
+                cards15 = re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="([^"]+)"', tab15.group(2))
+                assert cards15, f"15a: {role15} {tab15.group(1)} tab has no boxes"
+                for classes15, ident15 in cards15:
+                    assert re.search(r"\bsx-h-[sml]\b", classes15), f"15a: {role15}: the {ident15} box has no fixed height"
+            order15 = re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="(access|rights|consent)-title"', rec15)
+            if role15 == "dentist":
+                assert [i for _c, i in order15] == ["access", "rights", "consent"], f"15a: portal boxes are in the order {order15}"
+                assert "sx-wide" in order15[2][0] and order15[0][0].split()[0] == order15[1][0].split()[0], \
+                    "15a: the two small portal boxes are not the same size, or consent is not the full-width box below them"
+                assert re.search(r'dash-card (sx-h-m sx-wide)" aria-labelledby="timeline-title"', rec15), "15a: the timeline is not full width"
+        css15 = css12
+        assert re.search(r"\.sx-panel \.dash-card\s*\{[^}]*height: var\(--sx-h", css15) and re.search(r"\.sx-panel-col\s*\{\s*display: contents", css15), \
+            "15b: record boxes are not a grid of fixed-height boxes"
+        assert re.search(r"\.sx-panel \.dash-card > \.dash-card-body\s*\{[^}]*overflow: auto", css15), "15b: a box's body does not scroll inside"
+        assert all(re.search(rf"--sx-h-{k}: \d+rem", css15) for k in "sml"), "15b: the three box heights are not defined"
+        for path15, role15 in (("/patients", "dentist"), ("/billing", "dentist")):
+            page15 = clients[role15].get(path15).get_data(as_text=True)
+            tables15 = re.findall(r'(<div class="sx-box sx-box-table">\s*<table)', page15)
+            assert len(tables15) == len(re.findall(r"<table", page15)) and tables15, f"15c: a {path15} table is not in a scroll box"
+            assert "table-responsive" not in page15, f"15c: {path15} wraps its table the old way"
+        assert re.search(r"\.sx-box-table\s*\{\s*--h: \d+rem", css15), "15c: the table box has no height"
+
+        # 16. P30 record head and tiles: the record opens on a dark band with who this is and when they come next, and the
+        # Overview, Billing and Imaging tabs open on a strip of equal tiles whose numbers are the record's own
+        anna16 = patient_id.resolve(conn, "ZZUA800101010101")
+        billed16 = conn.execute("SELECT COALESCE(SUM(amount), 0), COUNT(*) FROM invoices WHERE patient_id = ?", (anna16,)).fetchone()
+        last16 = conn.execute("SELECT MAX(visit_date) FROM visits WHERE patient_id = ?", (anna16,)).fetchone()[0]
+        import appointments as appts16
+        next16 = appts16.next_booked_local(conn, anna16)
+        for role16 in ("dentist", "assistant"):
+            rec16 = clients[role16].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            head16 = _section(rec16, "record-head")
+            assert 'class="sx-rec-head' in rec16 and "Anna Uno</h1>" in head16 and "ZZUA800101010101" in head16, f"16a: {role16} record head"
+            assert (next16 or "No booking") in _text(head16), f"16a: {role16} record head does not say when Anna comes next ({next16})"
+            assert "/notes/new" in head16, f"16a: {role16} lost Add note"
+            for tab16, labels16 in (("overview", ("Next appointment", "Last visit", "Billed")),
+                                    ("billing", ("Billed in total", "Billed lines", "Visits on record"))):
+                panel16 = rec16.split(f'id="tab-{tab16}"')[1].split('role="tabpanel"', 1)[1]
+                tiles16 = re.search(r'<div class="ux-kpis ux-kpis-3 sx-wide"[^>]*>(.*?)<!--/tiles-->', panel16, re.S)
+                assert tiles16, f"16b: {role16} {tab16} tab has no tile strip"
+                text16 = _text(tiles16.group(1))
+                assert all(l in text16 for l in labels16) and tiles16.group(1).count('class="ux-kpi ') == 3, f"16b: {role16} {tab16} tiles: {text16}"
+            ov16 = _text(rec16.split('id="tab-overview"')[1].split("<!--/tiles-->")[0])
+            assert f"{billed16[0]:.2f}" in ov16 and (last16 or "No visit yet") in ov16, f"16b: the overview tiles are not the record's numbers: {ov16}"
+            if 'id="tab-imaging"' in rec16:
+                img16 = rec16.split('id="tab-imaging"')[1].split('aria-labelledby="imaging-title"')[0]
+                assert '<div class="ux-kpis ux-kpis-3 sx-wide"' in img16, f"16b: {role16} imaging tab has no tile strip"
+
+        # 17. P30 record details: consent is a table whose wording opens under its row with a Read out button (all wording
+        # shows without script); reception's Files tab pairs Upload with what happens next; the billed lines are a table
+        anna17 = patient_id.resolve(conn, "ZZUA800101010101")
+        lines17 = conn.execute("SELECT COUNT(*) FROM invoices WHERE patient_id = ?", (anna17,)).fetchone()[0]
+        for role17 in ("dentist", "assistant"):
+            rec17 = clients[role17].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            box17 = rec17.split('aria-labelledby="consent-title"')[1].split("</section>")[0]
+            table17 = re.search(r"<table[^>]*>(.*?)</table>", box17, re.S)
+            assert table17 and all(h in _text(table17.group(1)) for h in ("Consent", "Status", "Last change", "Wording")), \
+                f"17a: {role17}: consent is not a table"
+            rows17 = re.findall(r'<tr data-consent="(\w+)"', box17)
+            assert sorted(rows17) == ["ai_assistant", "messaging", "recording"], f"17a: consent rows {rows17}"
+            for purpose17 in rows17:
+                assert re.search(rf'<button[^>]*data-read-out[^>]*aria-controls="wording-{purpose17}"[^>]*hidden', box17) or \
+                    re.search(rf'<button[^>]*aria-controls="wording-{purpose17}"[^>]*data-read-out[^>]*hidden', box17), \
+                    f"17a: no Read out button for {purpose17} (rendered hidden, shown by the script)"
+                wording17 = re.search(rf'<tr id="wording-{purpose17}"[^>]*>(.*?)</tr>', box17, re.S)
+                assert wording17 and "Wording to read out" in wording17.group(1) and " hidden" not in wording17.group(0).split(">")[0], \
+                    f"17a: the {purpose17} wording is not on the page without script"
+            assert re.search(r'class="ds-badge [^"]*"[^>]*>(Not asked|Given|Withdrawn|Ask again)<', box17), "17a: a consent's status is not a badge"
+            files17 = rec17.split('id="tab-files"')[1].split('id="tab-')[0]
+            boxes17 = re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="([^"]+)"', files17)
+            if role17 == "assistant":
+                assert [b for _c, b in boxes17] == ["upload-title", "next-steps-title"] and boxes17[0][0] == boxes17[1][0] \
+                    and "sx-wide" not in boxes17[0][0], f"17b: reception's Files tab is not Upload beside what happens next: {boxes17}"
+                assert "Show to patient" in _text(files17), "17b: the steps do not say the patient sees nothing until a dentist shares it"
+            else:
+                assert "next-steps-title" not in files17, "17b: the dentist does not need reception's steps"
+            bill17 = rec17.split('aria-labelledby="invoices-title"')[1].split("</section>")[0]
+            assert re.search(r'<table class="ux-table[^"]*"', bill17) and "Description" in bill17 and "Amount" in bill17, \
+                f"17c: {role17}: billed lines are not a table"
+            assert bill17.count("<tr data-line") == lines17, f"17c: {role17}: {bill17.count('<tr data-line')} rows for {lines17} lines"
+
+        # 18. P30 page tiles: Patients, Appointments, Stock and Call-backs open on three equal tiles, each a number the
+        # database holds - never one the page invents
+        import inventory as inv18
+        want18 = {
+            "/patients": ("dentist", {"On record": conn.execute("SELECT COUNT(*) FROM patients").fetchone()[0],
+                                      "No phone on file": conn.execute("SELECT COUNT(*) FROM patients WHERE phone IS NULL OR phone = ''").fetchone()[0]}),
+            f"/appointments?view=day&day={DAY}": ("assistant", {"Requests to confirm": conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]}),
+            "/stock": ("dentist", {"Items": conn.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0],
+                                   "Open alerts": len(inv18.open_alerts(conn))}),
+            "/handoffs": ("assistant", {s18.capitalize() if s18 != "claimed" else "Taken": n18 for s18, n18 in
+                                        {r[0]: r[1] for r in conn.execute("SELECT status, COUNT(*) FROM handoff_requests GROUP BY status")}.items()
+                                        if s18 in ("open", "claimed")}),
+        }
+        for path18, (role18, figures18) in want18.items():
+            page18 = clients[role18].get(path18).get_data(as_text=True)
+            tiles18 = re.search(r'<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">(.*?)<!--/page-tiles-->', page18, re.S)
+            assert tiles18 and tiles18.group(1).count('class="ux-kpi ') == 3, f"18: {path18} has no strip of three tiles"
+            for label18, n18 in figures18.items():
+                tile18 = re.search(rf'<span class="ux-kpi-label">{re.escape(label18)}</span>\s*<span class="ux-kpi-value">([^<]+)</span>', tiles18.group(1))
+                assert tile18 and tile18.group(1).strip() == str(n18), f"18: {path18} {label18} shows {tile18 and tile18.group(1)}, the database has {n18}"
+
+        # 19. P30 equal boxes on the pages: Home pairs agenda with requests and activity with quick actions, the chart runs
+        # full width; each request opens its preferred day; Appointments stacks the calendar over the requests; Stock pairs
+        # its alerts with Add an item over the full-width item list
+        def cards19(html, pattern):
+            return re.findall(r'<section class="card ux-card ([^"]*)"[^>]*aria-labelledby="(' + pattern + r')-title"', html)
+        home19 = clients["assistant"].get("/").get_data(as_text=True)
+        got19 = dict((t, c) for c, t in cards19(home19, "agenda|requests|chart|activity|quick"))
+        assert set(got19) == {"agenda", "requests", "chart", "activity", "quick"}, f"19a: home boxes {got19}"
+        size19 = lambda c: re.search(r"\bsx-h-[sml]\b", c).group(0) if re.search(r"\bsx-h-[sml]\b", c) else None
+        assert size19(got19["agenda"]) and size19(got19["agenda"]) == size19(got19["requests"]), "19a: agenda and requests are not one size"
+        assert size19(got19["activity"]) and size19(got19["activity"]) == size19(got19["quick"]), "19a: activity and quick actions are not one size"
+        assert "sx-wide" in got19["chart"], "19a: the chart is not full width"
+        waiting19 = conn.execute("SELECT substr(starts_at, 1, 10) FROM appointments WHERE status = 'requested' ORDER BY starts_at").fetchall()
+        req19 = home19.split('aria-labelledby="requests-title"')[1].split("</section>")[0]
+        for (day19,) in waiting19[:3]:
+            assert re.search(rf'<a class="btn[^"]*" href="/appointments\?view=day&amp;day={day19}#requests"', req19), \
+                f"19a: the request for {day19} has no button to its day"
+        assert re.search(r"\.ux-home-main, \.ux-home-side \{ display: contents; \}\s*\n", css12.split("P30 equal boxes on the pages")[1]), \
+            "19a: home is still two free-height columns"
+        appt19 = clients["assistant"].get(f"/appointments?view=day&day={DAY}").get_data(as_text=True)
+        assert 'class="ux-appt-layout ux-appt-stacked"' in appt19 and re.search(r'<ul class="ux-list ux-requests sx-box[^"]*" id="request-rows"', appt19), \
+            "19b: appointments does not stack the calendar over a requests box"
+        stock19 = clients["dentist"].get("/stock").get_data(as_text=True)
+        boxes19 = dict((t, c) for c, t in re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="(alerts|items|new)-title"', stock19))
+        assert 'class="sx-panel sx-panel-2 sx-page"' in stock19 and "sx-wide" in boxes19.get("items", ""), f"19c: stock boxes {boxes19}"
+        if "alerts" in boxes19 and "new" in boxes19:
+            assert size19(boxes19["alerts"]) and size19(boxes19["alerts"]) == size19(boxes19["new"]), "19c: alerts and Add an item are not one size"
+
+        # 20. P30 billing is one box: All / Outstanding / To reconcile / Drafts choose what shows inside it (every section
+        # shows without script, and each keeps its own marker), and the box has a fixed height whose body scrolls
+        bill20 = clients["dentist"].get("/billing").get_data(as_text=True)
+        box20 = re.search(r'<section class="card ux-card sx-bill sx-h-l" aria-labelledby="bill-title">(.*?)<!--/bill-box--></section>', bill20, re.S)
+        assert box20, "20: the invoices are not one fixed-height box"
+        for key20 in ("owed", "unknown", "draft"):
+            assert f'data-ux="billing-{key20}"' in box20.group(1), f"20: the {key20} section is not inside the box"
+            panel20 = re.search(rf'<div class="sx-bill-panel"[^>]*data-bill-panel="{key20}"[^>]*>', box20.group(1))
+            assert panel20 and " hidden" not in panel20.group(0), f"20: the {key20} section is hidden without script"
+        group20 = re.search(r'<div class="sx-tabs sx-tabs-sm"[^>]*data-bill-show[^>]*>(.*?)</div>', box20.group(1), re.S)
+        assert group20 and " hidden" in group20.group(0).split(">")[0], "20: the show control is not added by the script"
+        labels20 = re.findall(r'<button type="button" data-show="(\w+)" aria-pressed="(true|false)">([^<]+)', group20.group(1))
+        assert [(k, l.strip()) for k, _p, l in labels20] == [("all", "All"), ("owed", "Outstanding"), ("unknown", "To reconcile"), ("draft", "Drafts")] \
+            and labels20[0][1] == "true", f"20: show buttons {labels20}"
+        assert '<div class="sx-card-body">' in box20.group(1), "20: the box's body does not scroll inside"
+
+        # 21. P30 the remaining lists - notes to review and data requests - get the same tools (the import queue's are
+        # checked in patient_files_selftest, which stages a real import)
+        import data_rights
+        import note_review
+        data_rights.file_request(conn, patient_id.resolve(conn, "ZZUA800101010101"), "access", "dentist", "dentist", "synthetic")
+        note_review.record_failed(conn, Path(tmp) / "unreadable.txt", "needs_review", "assistant", "assistant")
+        assert_list_tools(dentist.get("/reviews").get_data(as_text=True), "/reviews", {"created", "name"})
+        assert_list_tools(dentist.get("/data-requests").get_data(as_text=True), "/data-requests", {"filed", "name"})
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

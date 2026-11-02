@@ -60,14 +60,55 @@ def _counts(conn, role):
     return out
 
 
+def _request_counts():
+    """the sidebar's counts for the signed-in role, read once per request (the top bar lists the same ones)."""
+    if not hasattr(g, "_nav_counts"):
+        from .db import get_db
+        g._nav_counts = _counts(get_db(), g.user["role"])
+    return g._nav_counts
+
+
+def notifications():
+    """-> [item dict] of what is waiting for the signed-in role: the sidebar's counts, plus the call-backs and stock alerts
+    Home already counts. each is a number the role may open the page for, never a message about a patient."""
+    user = getattr(g, "user", None)
+    if not user:
+        return []
+    import inventory
+    from .db import get_db
+    role = user["role"]
+    conn = get_db()
+    counts = dict(_request_counts())
+    if authorize(role, "handle_handoff"):
+        counts["callbacks"] = conn.execute("SELECT COUNT(*) FROM handoff_requests WHERE status IN ('open', 'claimed')").fetchone()[0]
+    if authorize(role, "use_inventory"):
+        counts["stock"] = len(inventory.open_alerts(conn))
+    out = []
+    for key, icon, noun, detail, path, warn in NOTIFY:
+        n = counts.get(key)
+        if n:
+            out.append({"icon": icon, "title": f"{n} {noun[n != 1]}", "detail": detail, "path": path, "warn": warn})
+    return out
+
+
+# (count key, icon, (one, many), detail line, where it is done, amber or blue)
+NOTIFY = [
+    ("requests", "bi-inbox", ("pending request", "pending requests"), "Patients asked for a day; these are not bookings yet", "/appointments#requests", False),
+    ("callbacks", "bi-telephone", ("call-back open", "call-backs open"), "A patient asked for a person", "/handoffs", True),
+    ("reviews", "bi-clipboard-check", ("note to review", "notes to review"), "Waiting for a dentist's decision", "/reviews", False),
+    ("imports", "bi-folder-symlink", ("imported file to review", "imported files to review"), "Waiting for a dentist's decision", "/imports", False),
+    ("imaging", "bi-calendar2-check", ("imaging task", "imaging tasks"), "Reception needs to act on a booking", "/imaging/tasks", True),
+    ("stock", "bi-box-seam", ("stock alert", "stock alerts"), "An item is under its reorder level", "/stock", True),
+]
+
+
 def sidebar():
     """-> [(group, [item dict])] for the signed-in user, or [] on a chromeless page."""
     user = getattr(g, "user", None)
     if not user:
         return []
-    from .db import get_db
     role = user["role"]
-    counts = _counts(get_db(), role)
+    counts = _request_counts()
     endpoint = request.endpoint or ""
     groups = []
     for group, label, _ep, path, icon, gate, count_key, prefixes in ITEMS:

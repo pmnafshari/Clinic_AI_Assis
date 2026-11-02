@@ -26,11 +26,17 @@
       {% endfor %}
     </nav>
   </div>
+  {# P30: Sort and Filter on the rows loaded here (the tabs above choose a state on the server) #}
+  {% if jobs %}
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="reminder-rows" data-noun="reminder|reminders"
+       data-sorts='{{ [['send', 'text', 1, 'Due soonest'], ['send', 'text', -1, 'Due latest'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
+       data-filters='{{ [['kind', 'About', [['appointment', 'Appointment'], ['invoice', 'Invoice'], ['installment', 'Installment']]]] | tojson }}'></div>
+  {% endif %}
   <div class="dash-card-body">
     {% if jobs %}
-    <ul class="ds-rows sx-box">
+    <ul class="ds-rows sx-box" id="reminder-rows">
       {% for j in jobs %}
-      <li class="ds-row">
+      <li class="ds-row" data-name="{{ j.patient_name or 'Erased patient' }}" data-send="{{ j.send_at }}" data-kind="{{ j.kind }}">
         <span class="ds-row-main">
           <span class="ds-row-title">{{ j.patient_name or 'Erased patient' }} · {{ j.kind }}</span>
           <span class="ds-row-sub">

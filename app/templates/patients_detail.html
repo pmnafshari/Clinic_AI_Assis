@@ -7,29 +7,29 @@
   </ol>
 </nav>
 
-<div class="ds-page-head">
-  <div class="d-flex align-items-center gap-3 min-w-0">
-    <span class="ds-avatar ds-avatar-lg {{ patient.patient_name | tint }}" aria-hidden="true">{{ patient.patient_name | initials }}</span>
-    <div class="min-w-0">
-      <p class="ds-page-eyebrow">Patient record</p>
-      <h1 class="ds-page-title text-break">{{ patient.patient_name }}</h1>
-      <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %} · {{ patient.phone|phone }}{% endif %}</p>
-    </div>
+{# P30: the record opens on a dark band - who this is, when they come next, and the record's own actions #}
+<div class="sx-rec-head" data-ux="record-head">
+  <span class="ds-avatar ds-avatar-lg {{ patient.patient_name | tint }}" aria-hidden="true">{{ patient.patient_name | initials }}</span>
+  <div class="sx-rec-text">
+    <p class="sx-rec-k">Patient record</p>
+    <h1 class="sx-rec-name text-break">{{ patient.patient_name }}</h1>
+    <p class="sx-rec-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %}<span>{{ patient.phone|phone }}</span>{% endif %}<span>{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></p>
   </div>
-  {% if authorize(g.user.role, 'append_note') or authorize(g.user.role, 'review_summary') %}
-  <div class="ds-page-actions">
+  <p class="sx-rec-next"><span>Next appointment</span><strong>{{ next_booked or 'No booking' }}</strong></p>
+  {% if authorize(g.user.role, 'append_note') or authorize(g.user.role, 'review_summary') or authorize(g.user.role, 'read_clinical') %}
+  <div class="sx-rec-acts">
     {% if authorize(g.user.role, 'review_summary') %}
-    <a href="{{ url_for('summary.page', cf=cf) }}" class="btn btn-outline-secondary"><i class="bi bi-card-checklist"></i> Next-visit summary</a>
+    <a href="{{ url_for('summary.page', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-card-checklist" aria-hidden="true"></i> Next-visit summary</a>
     {% endif %}
     {% if authorize(g.user.role, 'read_clinical') %}
-    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn btn-outline-secondary"><i class="bi bi-folder2-open"></i> Documents</a>
+    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-folder2-open" aria-hidden="true"></i> Documents</a>
     {% endif %}
     {% if authorize(g.user.role, 'append_note') %}
-    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-primary"><i class="bi bi-journal-plus"></i> Add note</a>
+    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-light"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add note</a>
     {% endif %}
   </div>
   {% endif %}
-</div>
+<!--/record-head--></div>
 
 
 {# P29 redesign: the record grouped into tabs, like the patient portal's pages. every section is the same markup it
@@ -48,8 +48,22 @@
 </div>
 
 <div class="sx-panel sx-panel-2" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview" tabindex="0">
+  {% set billed = patient.invoices | sum(attribute='amount') %}
+  {# a visit filed without a date still counts as a visit; only dated ones say when #}
+  {% set dated = patient.visit_dates | reject('none') | sort | list %}
+  <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="overview-tiles">
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Next appointment</span>
+      <span class="ux-kpi-value">{{ next_booked[:10] if next_booked else 'No booking' }}</span>
+      <span class="ux-kpi-sub">{{ ('at ' ~ next_booked[11:]) if next_booked else 'nothing booked yet' }}</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Last visit</span>
+      <span class="ux-kpi-value">{{ dated | last if dated else ('Date unknown' if patient.visit_dates else 'No visit yet') }}</span>
+      <span class="ux-kpi-sub">{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed</span>
+      <span class="ux-kpi-value">€ {{ "%.2f" | format(billed) }}</span>
+      <span class="ux-kpi-sub">{{ patient.invoices | length }} line{{ 's' if patient.invoices | length != 1 }} · no paid status here</span></div>
+  <!--/tiles--></div>
   <div class="sx-panel-col">
-    <section class="card dash-card" aria-labelledby="profile-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="profile-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="profile-title">Demographics</h2>
         <button type="button" class="btn btn-outline-secondary btn-sm"
@@ -65,7 +79,7 @@
       </div>
     </section>
 
-    <section class="card dash-card" aria-labelledby="visits-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="visits-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="visits-title">Visit dates</h2>
       </div>
@@ -90,7 +104,7 @@
        isolation, and none of them answer "what happened to this person, in
        order" - which is the question actually being asked when a record is
        opened. #}
-    <section class="card dash-card" aria-labelledby="timeline-title">
+    <section class="card dash-card sx-h-m sx-wide" aria-labelledby="timeline-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
@@ -121,7 +135,7 @@
 
 {% if show_clinical %}
 <div class="sx-panel" id="tab-clinical" role="tabpanel" aria-labelledby="tabbtn-clinical" tabindex="0">
-    <section class="card dash-card" aria-labelledby="clinical-title">
+    <section class="card dash-card sx-h-l" aria-labelledby="clinical-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="clinical-title">Clinical history</h2>
@@ -161,7 +175,7 @@
 <div class="sx-panel sx-panel-2" id="tab-files" role="tabpanel" aria-labelledby="tabbtn-files" tabindex="0">
   {% if show_clinical %}
   <div class="sx-panel-col">
-    <section class="card dash-card" aria-labelledby="timeline-files-title">
+    <section class="card dash-card sx-h-m" aria-labelledby="timeline-files-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="timeline-files-title">File timeline</h2>
@@ -190,7 +204,7 @@
   {% endif %}
   <div class="sx-panel-col">
   {% if show_clinical %}
-    <section class="card dash-card" aria-labelledby="files-title">
+    <section class="card dash-card sx-h-m" aria-labelledby="files-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="files-title">Files</h2>
@@ -203,7 +217,7 @@
     </section>
   {% endif %}
     {% if authorize(g.user.role, 'upload_file') %}
-    <section class="card dash-card" aria-labelledby="upload-title">
+    <section class="card dash-card {{ 'sx-h-s sx-wide' if show_clinical else 'sx-h-m' }}" aria-labelledby="upload-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="upload-title">Upload files</h2>
@@ -215,13 +229,40 @@
         <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
       </div>
     </section>
+    {% if not show_clinical %}
+    {# P30: reception does not see the clinical files, so the box beside Upload says what happens to an upload #}
+    <section class="card dash-card sx-h-m" aria-labelledby="next-steps-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="next-steps-title">What happens next</h2>
+          <p class="ds-card-sub">Your part ends at the upload</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        <ol class="sx-steps">
+          <li><span class="sx-step-n" aria-hidden="true">1</span><span><strong>You upload</strong><small>The file is stored for this patient, on this machine.</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">2</span><span><strong>It is read and sorted</strong><small>A note waits for a dentist's review; a file that cannot be read is marked as needing review. Your Home shows each upload's state.</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">3</span><span><strong>The patient sees nothing yet</strong><small>A file reaches the patient's portal only when a dentist chooses Show to patient.</small></span></li>
+        </ol>
+      </div>
+    </section>
+    {% endif %}
     {% endif %}
   </div>
 </div>
 {% endif %}
 
 <div class="sx-panel" id="tab-billing" role="tabpanel" aria-labelledby="tabbtn-billing" tabindex="0">
-    <section class="card dash-card" aria-labelledby="invoices-title">
+  <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="billing-tiles">
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed in total</span>
+      <span class="ux-kpi-value">€ {{ "%.2f" | format(patient.invoices | sum(attribute='amount')) }}</span>
+      <span class="ux-kpi-sub">no paid status is recorded here</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed lines</span>
+      <span class="ux-kpi-value">{{ patient.invoices | length }}</span><span class="ux-kpi-sub">from the filed notes</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Visits on record</span>
+      <span class="ux-kpi-value">{{ patient.visit_dates | length }}</span><span class="ux-kpi-sub">{% set dated_b = patient.visit_dates | reject('none') | sort | list %}{{ ('last ' ~ (dated_b | last)) if dated_b else ('no date filed' if patient.visit_dates else 'none yet') }}</span></div>
+  <!--/tiles--></div>
+    <section class="card dash-card sx-h-m" aria-labelledby="invoices-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
@@ -230,15 +271,16 @@
       </div>
       <div class="dash-card-body">
         {% if patient.invoices %}
-        <ul class="ds-rows">
+        <table class="ux-table sx-lines">
+          <caption class="visually-hidden">Billed lines</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">Description</th><th scope="col" class="ux-num">Amount</th></tr></thead>
+          <tbody>
           {% for inv in patient.invoices %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-receipt"></i></span>
-            <span class="ds-row-main"><span class="ds-row-title">{{ inv.description }}</span></span>
-            <span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span>
-          </li>
+          <tr data-line><td data-label="#" class="ux-muted">{{ loop.index }}</td><td data-label="Description"><strong>{{ inv.description }}</strong></td>
+            <td data-label="Amount" class="ux-num"><span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span></td></tr>
           {% endfor %}
-        </ul>
+          </tbody>
+        </table>
         {% else %}
         <p class="dash-empty-line">No invoices on record.</p>
         {% endif %}
@@ -249,7 +291,7 @@
 <div class="sx-panel sx-panel-2" id="tab-portal" role="tabpanel" aria-labelledby="tabbtn-portal" tabindex="0">
   <div class="sx-panel-col">
     {% if authorize(g.user.role, 'issue_patient_pin') or authorize(g.user.role, 'revoke_patient_pin') %}
-    <section class="card dash-card" aria-labelledby="access-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="access-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="access-title">Patient portal access</h2>
@@ -284,46 +326,9 @@
     </section>
     {% endif %}
 
-    <section class="card dash-card" aria-labelledby="consent-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="consent-title">Consent</h2>
-          <p class="ds-card-sub">Demo template wording - not a real clinic's consent text</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        <ul class="ds-rows">
-          {% for c in consents %}
-          <li class="ds-row">
-            <span class="ds-row-main">
-              <span class="ds-row-title">{{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}</span>
-              <span class="ds-row-sub">
-                {% if c.granted and not c.outdated %}Given{% elif c.outdated %}Given to older wording - ask again{% elif c.recorded %}Withdrawn{% else %}Not asked{% endif %}
-                {% if c.ts %} · {{ c.ts | appt_date }} by {{ c.actor_role }}{% endif %}
-              </span>
-              <details class="small text-secondary"><summary>Wording to read out ({{ c.version }})</summary>{{ c.text }}</details>
-            </span>
-            {% if authorize(g.user.role, 'record_consent') %}
-            <form method="post" action="{{ url_for('patients.consent_submit', cf=cf) }}" class="ms-auto">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="purpose" value="{{ c.purpose }}">
-              {% if c.granted and not c.outdated %}
-              <input type="hidden" name="granted" value="0">
-              <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Record withdrawal: {{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}">Record withdrawal</button>
-              {% else %}
-              <input type="hidden" name="granted" value="1">
-              <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="Record consent: {{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}">Record consent</button>
-              {% endif %}
-            </form>
-            {% endif %}
-          </li>
-          {% endfor %}
-        </ul>
-      </div>
-    </section>
   </div>
   <div class="sx-panel-col">
-    <section class="card dash-card" aria-labelledby="rights-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="rights-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="rights-title">Data requests</h2>
@@ -360,12 +365,67 @@
         {% endif %}
       </div>
     </section>
+
+    <section class="card dash-card sx-h-m sx-wide" aria-labelledby="consent-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="consent-title">Consent</h2>
+          <p class="ds-card-sub">Demo template wording - not a real clinic's consent text</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {# P30: a table. every consent's wording shows under its row; app.js folds it behind a Read out button #}
+        <table class="ux-table sx-consent">
+          <caption class="visually-hidden">Consent recorded for this patient</caption>
+          <thead><tr><th scope="col">Consent</th><th scope="col">Status</th><th scope="col">Last change</th><th scope="col">Wording</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+          <tbody>
+          {% for c in consents %}
+          {% set label = {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] %}
+          <tr data-consent="{{ c.purpose }}">
+            <td data-label="Consent"><strong>{{ label }}</strong></td>
+            <td data-label="Status">
+              {% if c.granted and not c.outdated %}<span class="ds-badge ds-badge-success">Given</span>
+              {% elif c.outdated %}<span class="ds-badge ds-badge-warning">Ask again</span> <span class="ux-muted">given to older wording</span>
+              {% elif c.recorded %}<span class="ds-badge ds-badge-danger">Withdrawn</span>
+              {% else %}<span class="ds-badge ds-badge-neutral">Not asked</span>{% endif %}</td>
+            <td data-label="Last change">{% if c.ts %}{{ c.ts | appt_date }} · by {{ c.actor_role }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>
+            <td data-label="Wording"><button type="button" class="btn btn-outline-secondary btn-sm" data-read-out aria-expanded="true" aria-controls="wording-{{ c.purpose }}" hidden>Read out<span class="visually-hidden">: {{ label }}</span></button></td>
+            <td data-label="Action">
+              {% if authorize(g.user.role, 'record_consent') %}
+              <form method="post" action="{{ url_for('patients.consent_submit', cf=cf) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="purpose" value="{{ c.purpose }}">
+                {% if c.granted and not c.outdated %}
+                <input type="hidden" name="granted" value="0">
+                <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Record withdrawal: {{ label }}">Record withdrawal</button>
+                {% else %}
+                <input type="hidden" name="granted" value="1">
+                <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="Record consent: {{ label }}">Record consent</button>
+                {% endif %}
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          <tr id="wording-{{ c.purpose }}" class="sx-wording"><td colspan="5"><strong>Wording to read out ({{ c.version }}):</strong> {{ c.text }}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
   </div>
 </div>
 
     {% if authorize(g.user.role, 'view_imaging_requests') %}
     <div class="sx-panel" id="tab-imaging" role="tabpanel" aria-labelledby="tabbtn-imaging" tabindex="0">
-    <section class="card dash-card" aria-labelledby="imaging-title" id="imaging">
+    <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="imaging-tiles">
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Active requests</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'active') | list | length }}</span><span class="ux-kpi-sub">ready to book</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Drafts</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'draft') | list | length }}</span><span class="ux-kpi-sub">not active yet</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Earlier versions</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'in', ['superseded', 'cancelled']) | list | length }}</span><span class="ux-kpi-sub">superseded or cancelled</span></div>
+    <!--/tiles--></div>
+    <section class="card dash-card sx-h-m" aria-labelledby="imaging-title" id="imaging">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="imaging-title">Imaging requests (demo)</h2>

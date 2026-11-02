@@ -18,11 +18,18 @@
 
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="queue-title">Waiting</h2></div>
+  {# P30: Sort and Filter on the notes waiting here #}
+  {% if rows %}
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="review-rows" data-noun="note|notes"
+       data-sorts='{{ [['created', 'text', 1, 'Oldest first'], ['created', 'text', -1, 'Newest first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
+       data-filters='{{ [['kind', 'Kind', [['upload', 'New upload'], ['failed', 'Could not be read'], ['confirming', 'Being filed'], ['legacy', 'Earlier note']]]] | tojson }}'></div>
+  {% endif %}
   <div class="dash-card-body">
     {% if rows %}
-    <ul class="ds-rows sx-box">
+    <ul class="ds-rows sx-box" id="review-rows">
       {% for r in rows %}
-      <li class="ds-row">
+      <li class="ds-row" data-name="{{ r.patient_name or 'Patient not identified' }}" data-created="{{ r.created_at }}"
+          data-kind="{{ 'legacy' if r.origin == 'legacy' else 'failed' if r.status == 'extraction_failed' else 'confirming' if r.status == 'confirming' else 'upload' }}">
         <span class="ds-row-main">
           <span class="ds-row-title">{{ r.patient_name or 'Patient not identified' }}</span>
           <span class="ds-row-sub">

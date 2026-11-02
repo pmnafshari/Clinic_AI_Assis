@@ -1,8 +1,10 @@
 {# P23 - a compact top bar: the menu button below lg, and a record lookup (jump to one patient) for roles that may
-   look anyone up - not a list filter and not a global search; its results are links to records.
-   correction 2: the static "Europe/Rome" label is gone (it did nothing); pages that show times say "clinic time" once.
-   the account, change password and sign out live in the sidebar foot; the page's one primary action lives in its head. #}
-<header class="app-topbar">
+   look anyone up. P30: the lookup has its own Search button (it opens the patients list on what was typed; the live
+   results under the box still work), the clinic clock, what is waiting for this role (the same counts the sidebar
+   shows, as a list of links) and the account menu. nothing here is kept in the browser. #}
+{% set waiting = top_notifications() %}
+{% set clock = clinic_clock() %}
+<header class="app-topbar" data-ux="topbar">
   <div class="app-topbar-inner">
     <button class="btn btn-link app-topbar-toggle d-lg-none" type="button" data-bs-toggle="offcanvas"
             data-bs-target="#app-side" aria-controls="app-side" aria-label="Open navigation">
@@ -13,14 +15,56 @@
       <span class="app-brand-text"><span class="app-brand-name">Dental AI</span></span>
     </a>
     {% if authorize(g.user.role, 'read_notes') %}
-    <div class="app-search" role="search">
-      <i class="bi bi-search" aria-hidden="true"></i>
-      <input type="search" name="q" class="form-control" placeholder="Go to a patient record…"
-             aria-label="Go to a patient record" autocomplete="off"
-             hx-get="{{ url_for('patients.search_fragment') }}"
-             hx-trigger="keyup changed delay:300ms, search" hx-target="#app-search-results">
-      <div id="app-search-results" class="app-search-results"></div>
-    </div>
+    <form class="app-search-form" role="search" action="{{ url_for('patients.list_view') }}" method="get">
+      <div class="app-search">
+        <i class="bi bi-search" aria-hidden="true"></i>
+        <input type="search" name="q" class="form-control" placeholder="Find a patient by name or codice fiscale"
+               aria-label="Go to a patient record" autocomplete="off"
+               hx-get="{{ url_for('patients.search_fragment') }}"
+               hx-trigger="keyup changed delay:300ms, search" hx-target="#app-search-results">
+        <div id="app-search-results" class="app-search-results"></div>
+      </div>
+      <button type="submit" class="btn btn-primary app-search-go"><i class="bi bi-search" aria-hidden="true"></i><span class="app-search-word">Search</span></button>
+    </form>
     {% endif %}
-  </div>
+    <div class="app-topbar-right">
+      <p class="app-clock" data-clock data-minutes="{{ clock.minutes }}">
+        <strong data-clock-time>{{ clock.time }}</strong><small data-clock-day>{{ clock.day }}</small>
+      </p>
+      <span class="app-topbar-sep" aria-hidden="true"></span>
+      <div class="dropdown">
+        <button class="app-bell" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+                aria-label="{{ 'Notifications, ' ~ waiting | length ~ (' thing waiting' if waiting | length == 1 else ' things waiting') if waiting else 'Notifications, nothing waiting' }}">
+          <i class="bi bi-bell" aria-hidden="true"></i>
+          {% if waiting %}<span class="app-bell-count" aria-hidden="true">{{ waiting | length }}</span>{% endif %}
+        </button>
+        <div class="dropdown-menu dropdown-menu-end app-notif">
+          <p class="app-notif-head">Waiting for you</p>
+          {% for n in waiting %}
+          <a class="app-notif-item" href="{{ n.path }}">
+            <span class="app-notif-ico{{ ' warn' if n.warn else '' }}" aria-hidden="true"><i class="bi {{ n.icon }}"></i></span>
+            <span><strong>{{ n.title }}</strong><small>{{ n.detail }}</small></span>
+          </a>
+          {% else %}
+          <p class="app-notif-empty">Nothing needs you right now.</p>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="dropdown">
+        <button class="app-account" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Your account">
+          <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}" aria-hidden="true">{{ g.user.username | initials }}</span>
+          <span class="app-account-text"><strong>{{ g.user.username }}</strong><small>{{ g.user.role }}</small></span>
+          <i class="bi bi-chevron-down" aria-hidden="true"></i>
+        </button>
+        <div class="dropdown-menu dropdown-menu-end app-account-menu">
+          <p class="app-notif-head"><span>{{ g.user.username }}</span> · {{ g.user.role }}</p>
+          <a class="dropdown-item" href="{{ url_for('auth.change_password') }}"><i class="bi bi-key" aria-hidden="true"></i> Change password</a>
+          <form method="post" action="/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sign out</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  <!--/topbar--></div>
 </header>

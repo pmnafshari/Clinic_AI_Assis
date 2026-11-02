@@ -1,3 +1,4 @@
+from datetime import date
 from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
@@ -7,6 +8,7 @@ import sqlite3
 
 import agent
 import ask
+import clinic_time
 import consent
 import data_rights
 import imaging_requests
@@ -65,11 +67,15 @@ def list_view():
         flagged.add(pair["a"]["codice_fiscale"])
         flagged.add(pair["b"]["codice_fiscale"])
     rows = []
+    today = clinic_time.now().date()
     for p in patients:
         req = requested.get(p["patient_id"])
         rows.append({**dict(p), "next_appointment": appointments.next_booked_local(conn, p["patient_id"]),
                      "request": f"{req['starts_at'][:10]} ({req['period']})" if req else None,
-                     "possible_duplicate": p["codice_fiscale"] in flagged})
+                     "possible_duplicate": p["codice_fiscale"] in flagged,
+                     "visit_band": _visit_band(p["last_visit"], today)})
+    # P30 tiles: counted over every patient, before a search narrows the rows
+    figures = {"booked": sum(1 for r in rows if r["next_appointment"]), "no_phone": sum(1 for r in rows if not r["phone"])}
     q = (request.args.get("q") or "").strip().lower()
     if q:
         rows = [r for r in rows if q in r["patient_name"].lower() or q in r["codice_fiscale"].lower()]
@@ -80,7 +86,15 @@ def list_view():
     elif sort == "last":
         rows.sort(key=lambda r: (r["last_visit"] or ""), reverse=True)
     return render_template("patients_list.html", patients=rows, sort=sort, q=request.args.get("q") or "",
-                           total=len(patients))
+                           total=len(patients), figures=figures)
+
+
+def _visit_band(last_visit, today):
+    """how long ago the last visit was, for the list's Filter: the page filters on it, the record says the date."""
+    if not last_visit:
+        return "none"
+    days = (today - date.fromisoformat(last_visit[:10])).days
+    return "recent" if days <= 30 else "mid" if days <= 60 else "old"
 
 
 @patients_bp.route("/patients/search")
@@ -234,10 +248,13 @@ def detail_view(cf):
     log_audit(conn, g.user["username"], g.user["role"],
               "view_record_clinical" if show_clinical else "view_record", cf, allowed=1)
 
+    import appointments
     return render_template(
         "patients_detail.html",
         cf=cf,
         patient=patient,
+        # P30: the record head says when the patient comes next - a booking, never a waiting request
+        next_booked=appointments.next_booked_local(conn, pid),
         clinical=clinical,
         show_clinical=show_clinical,
         # the timeline follows the SAME gate as the clinical card above, rather

@@ -7,9 +7,9 @@
    this week, the attention line is the only alert list (no second card), one activity entry per file with older
    work labelled, a 14-day chart of confirmed bookings with its table, quick actions on one line each. #}
 {% macro activity_card() %}
-  <section class="card ux-card ux-home-activity" aria-labelledby="activity-title">
+  <section class="card ux-card ux-home-activity sx-h-s" aria-labelledby="activity-title">
     <div class="ux-card-head"><h2 class="ux-card-title" id="activity-title">Your recent activity</h2></div>
-    <div data-ux="activity">
+    <div class="sx-card-body" data-ux="activity">
     {% if activity %}
     {% set recent = activity | rejectattr('older') | list %}
     {% if not recent %}<p class="ux-muted ux-activity-quiet">Nothing in the last 7 days.</p>{% endif %}
@@ -120,7 +120,7 @@
 <div class="ux-home">
   <div class="ux-home-main">
   {% if may_book %}
-  <section class="card ux-card ux-home-agenda" aria-labelledby="agenda-title">
+  <section class="card ux-card ux-home-agenda sx-h-m" aria-labelledby="agenda-title">
     <div class="ux-card-head">
       <div>
         <h2 class="ux-card-title" id="agenda-title">Today's agenda</h2>
@@ -128,7 +128,7 @@
       </div>
       <a class="ux-link" href="{{ url_for('appointments.index', view='week', day=today_iso) }}">All appointments <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     </div>
-    <div data-ux="agenda">
+    <div class="sx-card-body" data-ux="agenda">
     {% if agenda %}
     <div class="sx-box sx-box-agenda">
     <table class="ux-table ux-agenda">
@@ -156,7 +156,7 @@
     {% endif %}
     <!--/agenda--></div>
   </section>
-  <section class="card ux-card ux-home-chart" aria-labelledby="chart-title" data-ux="bookings-14d">
+  <section class="card ux-card ux-home-chart sx-wide" aria-labelledby="chart-title" data-ux="bookings-14d">
     <div class="ux-card-head"><div>
       <h2 class="ux-card-title" id="chart-title">Confirmed bookings, next 14 days</h2>
       <p class="ux-card-meta">{{ chart.period }} · {{ chart.total }} in total · all clinicians · booked only (requests and cancellations are not counted) · source: the appointment book</p>
@@ -191,7 +191,7 @@
 
   <div class="ux-home-side">
   {% if may_book %}
-    <section class="card ux-card" aria-labelledby="requests-title">
+    <section class="card ux-card ux-home-requests sx-h-m" aria-labelledby="requests-title">
       <div class="ux-card-head">
         <div>
           <h2 class="ux-card-title" id="requests-title">Requests to confirm</h2>
@@ -199,21 +199,26 @@
         </div>
         {% if request_total %}<span class="ux-badge ux-badge-requested">{{ request_total }} waiting</span>{% endif %}
       </div>
+      <div class="sx-card-body">
       {% if requests %}
-      <ul class="ux-list">
+      {# P30: each request opens its preferred day, where the free slots and the confirm form are #}
+      <ul class="ux-list ux-home-request-list">
         {% for r in requests %}
-        <li><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred day: {{ r.day | appt_date_label }} · {{ r.period }}</span></li>
+        <li class="ux-request-row"><span><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred day: {{ r.day | appt_date_label }} · {{ r.period }}</span></span>
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests">Open day<span class="visually-hidden">: {{ r.patient_name }}'s request for {{ r.day | appt_date_label }}</span></a></li>
         {% endfor %}
       </ul>
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('appointments.index', view='day', day=today_iso) }}#requests">Confirm or decline <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
       {% else %}
       <p class="ux-empty">No requests waiting.</p>
       {% endif %}
+      </div>
     </section>
   {% endif %}
 
-  <section class="card ux-card ux-home-quick" aria-labelledby="quick-title">
+  <section class="card ux-card ux-home-quick sx-h-s" aria-labelledby="quick-title">
     <div class="ux-card-head"><h2 class="ux-card-title" id="quick-title">Quick actions</h2></div>
+    <div class="sx-card-body">
     <div class="ux-quick">
       <a class="ux-quick-item ux-quick-main" href="{{ url_for('notes.new_note') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i> Add a note</a>
       <a class="ux-quick-item" href="{{ url_for('patients.list_view') }}">Search patient records <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
@@ -225,6 +230,7 @@
       <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
     </details>
     {% endif %}
+    </div>
   </section>
   </div>
 </div>

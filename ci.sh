@@ -69,6 +69,7 @@ case " $* " in *" --full "*)
   step eval-chat $PY eval_chat.py
   step flow $PY e2e_flow_appt.py
   step calendar-keys $PY e2e_cal_keys.py
+  step list-tools $PY e2e_list_tools.py
   step shots $PY shot_pages.py --width 390 --width 1440
   step a11y-1440 $PY a11y_audit.py
   step a11y-390 $PY a11y_audit.py --width 390

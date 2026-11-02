@@ -79,8 +79,17 @@ def create_app():
 
     # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
-    from .nav import sidebar
+    from .nav import notifications, sidebar
     app.jinja_env.globals["side_nav"] = sidebar             # P23: the role-aware sidebar
+    app.jinja_env.globals["top_notifications"] = notifications   # P30: what is waiting, for the top bar's bell
+
+
+    def clinic_clock():
+        """the top bar's clock: the clinic's own time (one clock, clinic_time) as minutes since midnight, so the page can keep
+        it ticking without knowing a zone (P23 correction 2: no zone text in the top bar)."""
+        now = clinic_time.now()
+        return {"time": f"{now:%H:%M}", "day": f"{now:%a} {now.day} {now:%b}", "minutes": now.hour * 60 + now.minute}
+    app.jinja_env.globals["clinic_clock"] = clinic_clock
     # read per render, so the switch is the environment the app was started with
     app.jinja_env.globals["similar_cases_enabled"] = similar_cases.enabled
     # avatars: initials on a stable tint (phase 43). presentation, not a figure

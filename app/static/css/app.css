@@ -1372,9 +1372,9 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 
 /* lists and tables: every other row shaded, the row under the pointer a little more */
 .ds-rows .ds-row { border-radius: 10px; padding: 0.75rem 0.875rem; }
-.ds-rows .ds-row:nth-child(even) { background: var(--sx-zebra); }
+.ds-rows .ds-row:nth-child(even of :not([hidden])) { background: var(--sx-zebra); }
 .ds-rows .ds-row:hover { background: var(--sx-hover); }
-.ux-table tbody tr:nth-child(even) td { background: var(--sx-zebra); }
+.ux-table tbody tr:nth-child(even of :not([hidden])) td { background: var(--sx-zebra); }
 .ux-table tbody tr:hover td { background: var(--sx-hover); }
 .ds-row .sx-row-acts { margin-left: auto; display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 
@@ -1406,9 +1406,10 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 .sx-tabs .sx-count { font-size: 0.75rem; font-weight: 700; padding: 0 0.45rem; border-radius: 999px; background: rgba(20, 32, 54, 0.08); }
 .sx-tabs [aria-selected="true"] .sx-count, .sx-tabs [aria-pressed="true"] .sx-count { background: rgba(255, 255, 255, 0.2); }
 .sx-panel { display: grid; gap: 1rem; align-content: start; }
-@media (min-width: 1200px) { .sx-panel-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+@media (min-width: 1200px) { .sx-panel-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; } }
 .sx-panel > *, .sx-panel-col > * { min-width: 0; }
-.sx-panel-col { display: grid; gap: 1rem; align-content: start; }
+/* P30: the columns dissolve - the record's boxes are a grid of equal ones, in the order they are written */
+.sx-panel-col { display: contents; }
 /* a record tab panel: no outline when focus lands on it from the tab bar */
 .sx-panel[role="tabpanel"]:focus { outline: none; }
 .sx-panel[role="tabpanel"]:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 14px; }
@@ -1434,6 +1435,137 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 .ux-upload summary::after, .ux-bars-table summary::after { content: "\25BE"; }
 .ux-upload[open] summary, .ux-bars-table[open] summary { margin-bottom: 0.75rem; }
 .ux-panel > summary::after { padding: 0.25rem 0.75rem; border: 1px solid var(--ds-border); border-radius: 9px; background: var(--ds-surface); color: var(--ds-text); }
-.ux-request:nth-child(even) { background: var(--sx-zebra); border-radius: 10px; }
+.ux-request:nth-child(even of :not([hidden])) { background: var(--sx-zebra); border-radius: 10px; }
 .ux-request { padding: 0.75rem 0.875rem; }
 .appt-more > summary:focus-visible, .ux-upload summary:focus-visible, .ux-bars-table summary:focus-visible, .dup-merge > summary:focus-visible { border-radius: 9px; }
+
+/* P30 top bar: a Search button, the clinic clock, what is waiting, the account menu */
+.app-search-form { flex: 1; display: flex; gap: 0.5rem; max-width: 34rem; min-width: 0; }
+.app-main .app-search-form .app-search { flex: 1; max-width: none; min-width: 0; }
+.app-search-go { display: inline-flex; align-items: center; gap: 0.4rem; height: 2.625rem; border-radius: 12px; padding: 0 1rem; font-weight: 600; white-space: nowrap; }
+.app-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 0.75rem; }
+.app-clock { margin: 0; text-align: right; line-height: 1.2; white-space: nowrap; }
+.app-clock strong { display: block; font-size: 1.0625rem; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.app-clock small { display: block; font-size: 0.75rem; color: var(--sx-muted); }
+.app-topbar-sep { width: 1px; height: 1.875rem; background: var(--ds-border); }
+.app-bell, .app-account { position: relative; border: 1px solid var(--ds-border); background: var(--ds-surface); color: var(--ds-text); border-radius: 12px; display: inline-flex; align-items: center; cursor: pointer; }
+.app-bell:hover, .app-account:hover, .app-bell[aria-expanded="true"], .app-account[aria-expanded="true"] { background: var(--sx-hover); }
+.app-bell:focus-visible, .app-account:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.app-bell { width: 2.5rem; height: 2.5rem; justify-content: center; font-size: 1.125rem; }
+.app-bell-count { position: absolute; top: -0.4rem; right: -0.4rem; min-width: 1.2rem; height: 1.2rem; padding: 0 0.3rem; border-radius: 999px; background: var(--ds-danger); color: #fff; border: 2px solid var(--ds-surface); font-size: 0.6875rem; font-weight: 700; display: grid; place-items: center; }
+.app-account { gap: 0.55rem; padding: 0.25rem 0.625rem 0.25rem 0.25rem; }
+.app-account-text { text-align: left; line-height: 1.2; }
+.app-account-text strong { display: block; font-size: 0.8125rem; }
+.app-account-text small { display: block; font-size: 0.75rem; color: var(--sx-muted); }
+.app-account .bi-chevron-down { font-size: 0.75rem; opacity: 0.6; }
+.app-notif, .app-account-menu { padding: 0.375rem; border: 1px solid var(--ds-border); border-radius: 12px; box-shadow: 0 16px 34px rgba(18, 35, 61, 0.18); }
+.app-notif { min-width: min(22rem, 92vw); }
+.app-account-menu { min-width: 14rem; }
+.app-notif-head { margin: 0; padding: 0.5rem 0.625rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sx-muted); border-bottom: 1px solid var(--ds-border); margin-bottom: 0.25rem; }
+.app-account-menu .app-notif-head { text-transform: none; letter-spacing: 0; font-size: 0.8125rem; }
+.app-account-menu .app-notif-head span { font-weight: 700; color: var(--ds-text); }
+.app-notif-item { display: flex; gap: 0.625rem; align-items: flex-start; padding: 0.5rem 0.625rem; border-radius: 10px; color: var(--ds-text); text-decoration: none; }
+.app-notif-item:hover, .app-notif-item:focus-visible { background: var(--sx-hover); outline: none; }
+.app-notif-item strong { display: block; font-size: 0.875rem; }
+.app-notif-item small { display: block; font-size: 0.75rem; color: var(--sx-muted); }
+.app-notif-ico { width: 2rem; height: 2rem; border-radius: 9px; display: grid; place-items: center; flex: none; background: var(--ds-info-surface); color: var(--ds-info); }
+.app-notif-ico.warn { background: var(--ds-warning-surface); color: var(--ds-warning); }
+.app-notif-empty { margin: 0; padding: 0.75rem 0.625rem; color: var(--sx-muted); font-size: 0.875rem; }
+.app-account-menu .dropdown-item { display: flex; align-items: center; gap: 0.5rem; border-radius: 9px; padding: 0.5rem 0.625rem; font-size: 0.875rem; }
+@media (max-width: 991.98px) { .app-clock, .app-topbar-sep, .app-account-text, .app-account .bi-chevron-down { display: none; } .app-account { padding: 0.25rem; } }
+@media (max-width: 575.98px) { .app-search-word { display: none; } .app-search-go { padding: 0 0.75rem; } .app-topbar-right { gap: 0.5rem; } .app-brand-text { display: none; } }
+
+/* P30 list tools: search, Filter, Sort, the chips under them and the line below the list */
+.sx-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.sx-tools-row { padding: 0 1.25rem 0.75rem; }
+.ux-card-head .sx-tools { margin-left: auto; }
+.sx-search { display: flex; gap: 0.375rem; flex: 1; min-width: 12rem; max-width: 22rem; }
+.sx-search .form-control { min-width: 0; }
+.sx-tool-btn { display: inline-flex; align-items: center; gap: 0.4rem; font-weight: 600; }
+.sx-tool-btn.is-on, .sx-tool-btn[aria-expanded="true"] { border-color: #b9c9f1; background: #e8eefc; color: var(--ds-primary); }
+.sx-tool-count { background: var(--ds-primary); color: #fff; border-radius: 999px; font-size: 0.6875rem; padding: 0 0.375rem; line-height: 1.1rem; }
+.sx-tool-menu { min-width: 16rem; max-height: 22rem; overflow: auto; padding: 0.375rem; border: 1px solid var(--ds-border); border-radius: 12px; box-shadow: 0 16px 34px rgba(18, 35, 61, 0.18); }
+.sx-tool-k { margin: 0; padding: 0.5rem 0.5rem 0.25rem; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sx-muted); }
+.sx-opt { display: flex; align-items: center; gap: 0.5rem; padding: 0.4rem 0.5rem; border-radius: 8px; cursor: pointer; font-size: 0.875rem; margin: 0; }
+.sx-opt:hover { background: var(--sx-hover); }
+.sx-opt input { width: 1rem; height: 1rem; accent-color: var(--ds-primary); margin: 0; }
+.sx-opt-n { margin-left: auto; color: var(--sx-muted); font-size: 0.75rem; font-variant-numeric: tabular-nums; }
+.sx-tool-foot { display: flex; justify-content: space-between; border-top: 1px solid var(--ds-border); margin-top: 0.375rem; padding: 0.5rem 0.25rem 0.125rem; }
+.sx-menu-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; border: 0; background: none; text-align: left; padding: 0.5rem 0.625rem; border-radius: 8px; font-size: 0.875rem; color: var(--ds-text); }
+.sx-menu-item:hover { background: var(--sx-hover); }
+.sx-menu-item .bi-check2 { visibility: hidden; }
+.sx-menu-item.is-on { color: var(--ds-primary); font-weight: 600; background: #e8eefc; }
+.sx-menu-item.is-on .bi-check2 { visibility: visible; }
+.sx-chips { display: flex; flex-wrap: wrap; gap: 0.375rem; align-items: center; padding: 0.5rem 0; }
+.sx-chip { display: inline-flex; align-items: center; gap: 0.375rem; border: 1px solid #b9c9f1; background: #e8eefc; color: var(--ds-primary); border-radius: 999px; padding: 0.125rem 0.3rem 0.125rem 0.625rem; font-size: 0.75rem; font-weight: 600; }
+.sx-chip-x { width: 1.0625rem; height: 1.0625rem; border-radius: 50%; display: grid; place-items: center; background: rgba(36, 83, 212, 0.14); font-size: 0.8125rem; line-height: 1; }
+.sx-list-status { margin: 0.5rem 0 0; font-size: 0.75rem; color: var(--sx-muted); }
+.sx-list-empty { margin: 0.75rem 0 0; color: var(--sx-muted); }
+.sx-th { border: 0; background: none; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; display: inline-flex; align-items: center; gap: 0.3rem; padding: 0; cursor: pointer; border-radius: 4px; }
+.sx-th:hover { color: var(--ds-text); }
+.sx-th:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.sx-th-arrow { opacity: 0.45; }
+th[aria-sort] .sx-th { color: var(--ds-primary); }
+th[aria-sort] .sx-th-arrow { opacity: 1; }
+@media (max-width: 575.98px) { .ux-card-head .sx-tools { margin-left: 0; width: 100%; } .sx-search { max-width: none; } }
+
+/* P30 equal boxes: on the record every box has one of three fixed heights, the body scrolls inside and the head stays,
+   so boxes that share a row are the same size and a long history never grows the page */
+:root { --sx-h-s: 17rem; --sx-h-m: 26rem; --sx-h-l: 34rem; }
+.sx-h-s { --sx-h: var(--sx-h-s); } .sx-h-m { --sx-h: var(--sx-h-m); } .sx-h-l { --sx-h: var(--sx-h-l); }
+.sx-panel .dash-card { height: var(--sx-h, var(--sx-h-m)); display: flex; flex-direction: column; min-height: 0; }
+.sx-panel .dash-card > .dash-card-head { flex: none; }
+.sx-panel .dash-card > .dash-card-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.sx-wide { grid-column: 1 / -1; }
+/* the patients and billing tables: a box that scrolls inside once the list is long, header row kept */
+.sx-box-table { --h: 32rem; }
+
+/* P30 record head: the dark band - who, when next, the record's actions */
+.sx-rec-head { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem 1.25rem; padding: 1.125rem 1.375rem; margin-bottom: 1.25rem;
+  border-radius: 16px; background: var(--app-navy); color: #fff; }
+.sx-rec-head .ds-avatar { width: 3.5rem; height: 3.5rem; font-size: 1.125rem; }
+.sx-rec-text { flex: 1; min-width: 13rem; }
+.sx-rec-k { margin: 0; font-size: 0.6875rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #c9d3e4; }
+.sx-rec-name { margin: 0.125rem 0 0; font-size: 1.625rem; font-weight: 700; letter-spacing: -0.01em; color: #fff; }
+.sx-rec-meta { margin: 0.25rem 0 0; display: flex; flex-wrap: wrap; gap: 0.25rem 0.875rem; font-size: 0.8125rem; color: #c9d3e4; }
+.sx-rec-next { margin: 0; padding: 0.5rem 0.875rem; border-radius: 12px; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.16); font-size: 0.8125rem; color: #c9d3e4; }
+.sx-rec-next strong { display: block; color: #fff; font-size: 0.9375rem; font-variant-numeric: tabular-nums; }
+.sx-rec-acts { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.sx-btn-ghost { border: 1px solid rgba(255, 255, 255, 0.45); color: #fff; background: transparent; }
+.sx-btn-ghost:hover, .sx-btn-ghost:focus-visible { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.sx-panel > .ux-kpis { margin: 0; }
+@media (max-width: 575.98px) { .sx-rec-acts { width: 100%; } .sx-rec-acts .btn { flex: 1; } }
+
+/* P30 record details: the consent table and its wording rows, reception's steps, the billed lines */
+.sx-consent td, .sx-lines td { vertical-align: middle; }
+.sx-consent form { margin: 0; }
+.sx-wording td { background: var(--ds-surface-sunken) !important; color: var(--sx-muted); font-size: 0.8125rem; white-space: normal; }
+.sx-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.sx-steps li { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.625rem 0.75rem; border-radius: 10px; }
+.sx-steps li:nth-child(even) { background: var(--sx-zebra); }
+.sx-steps strong { display: block; font-size: 0.9375rem; }
+.sx-steps small { display: block; color: var(--sx-muted); font-size: 0.8125rem; }
+.sx-step-n { width: 1.75rem; height: 1.75rem; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--ds-info-surface); color: var(--ds-info); font-weight: 700; font-size: 0.8125rem; }
+
+/* P30 equal boxes on the pages. Home: agenda beside requests, the chart full width, activity beside quick actions - each
+   pair one fixed height whose body scrolls; on a narrow screen the same boxes stack in that order */
+.ux-home { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: stretch; }
+.ux-home-main, .ux-home-side { display: contents; }
+.ux-home-agenda { order: 1; } .ux-home-requests { order: 2; } .ux-home-chart { order: 3; } .ux-home-activity { order: 4; } .ux-home-quick { order: 5; }
+@media (max-width: 1199.98px) { .ux-home { grid-template-columns: minmax(0, 1fr); } }
+.ux-card.sx-h-s, .ux-card.sx-h-m, .ux-card.sx-h-l { height: var(--sx-h); display: flex; flex-direction: column; min-height: 0; margin: 0; }
+.ux-card > .sx-card-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.sx-card-body .sx-box, .sx-panel .dash-card-body .sx-box { max-height: none; overflow: visible; }
+.ux-request-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.ux-request-row > span { min-width: 0; display: flex; flex-direction: column; }
+.ux-home-requests .sx-card-body > .btn { margin-top: 0.75rem; }
+/* Appointments: the calendar full width, the requests and the booking form below it */
+.ux-appt-stacked { grid-template-columns: minmax(0, 1fr); }
+.ux-appt-stacked .ux-appt-side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.ux-requests.sx-box { --h: 24rem; }
+/* Stock: alerts, then Add an item, then the item list, whatever order the page writes them in */
+.sx-order-1 { order: 1; } .sx-order-2 { order: 2; } .sx-order-3 { order: 3; }
+/* Billing: one box, its groups one under the other inside the scrolling body */
+.sx-bill .sx-bill-panel + .sx-bill-panel { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--ds-border); }
+.sx-bill .sx-bill-panel .ux-card-head { padding-left: 0; padding-right: 0; }
+.sx-bill .sx-tools-row { padding-left: 0; padding-right: 0; }
