@@ -1406,9 +1406,10 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 .sx-tabs .sx-count { font-size: 0.75rem; font-weight: 700; padding: 0 0.45rem; border-radius: 999px; background: rgba(20, 32, 54, 0.08); }
 .sx-tabs [aria-selected="true"] .sx-count, .sx-tabs [aria-pressed="true"] .sx-count { background: rgba(255, 255, 255, 0.2); }
 .sx-panel { display: grid; gap: 1rem; align-content: start; }
-@media (min-width: 1200px) { .sx-panel-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+@media (min-width: 1200px) { .sx-panel-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: stretch; } }
 .sx-panel > *, .sx-panel-col > * { min-width: 0; }
-.sx-panel-col { display: grid; gap: 1rem; align-content: start; }
+/* P30: the columns dissolve - the record's boxes are a grid of equal ones, in the order they are written */
+.sx-panel-col { display: contents; }
 /* a record tab panel: no outline when focus lands on it from the tab bar */
 .sx-panel[role="tabpanel"]:focus { outline: none; }
 .sx-panel[role="tabpanel"]:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); border-radius: 14px; }
@@ -1507,3 +1508,14 @@ ul.appt-cal-key li { display: flex; flex-wrap: wrap; align-items: center; gap: 0
 th[aria-sort] .sx-th { color: var(--ds-primary); }
 th[aria-sort] .sx-th-arrow { opacity: 1; }
 @media (max-width: 575.98px) { .ux-card-head .sx-tools { margin-left: 0; width: 100%; } .sx-search { max-width: none; } }
+
+/* P30 equal boxes: on the record every box has one of three fixed heights, the body scrolls inside and the head stays,
+   so boxes that share a row are the same size and a long history never grows the page */
+:root { --sx-h-s: 17rem; --sx-h-m: 26rem; --sx-h-l: 34rem; }
+.sx-h-s { --sx-h: var(--sx-h-s); } .sx-h-m { --sx-h: var(--sx-h-m); } .sx-h-l { --sx-h: var(--sx-h-l); }
+.sx-panel .dash-card { height: var(--sx-h, var(--sx-h-m)); display: flex; flex-direction: column; min-height: 0; }
+.sx-panel .dash-card > .dash-card-head { flex: none; }
+.sx-panel .dash-card > .dash-card-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.sx-wide { grid-column: 1 / -1; }
+/* the patients and billing tables: a box that scrolls inside once the list is long, header row kept */
+.sx-box-table { --h: 32rem; }

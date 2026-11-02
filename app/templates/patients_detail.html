@@ -49,7 +49,7 @@
 
 <div class="sx-panel sx-panel-2" id="tab-overview" role="tabpanel" aria-labelledby="tabbtn-overview" tabindex="0">
   <div class="sx-panel-col">
-    <section class="card dash-card" aria-labelledby="profile-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="profile-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="profile-title">Demographics</h2>
         <button type="button" class="btn btn-outline-secondary btn-sm"
@@ -65,7 +65,7 @@
       </div>
     </section>
 
-    <section class="card dash-card" aria-labelledby="visits-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="visits-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="visits-title">Visit dates</h2>
       </div>
@@ -90,7 +90,7 @@
        isolation, and none of them answer "what happened to this person, in
        order" - which is the question actually being asked when a record is
        opened. #}
-    <section class="card dash-card" aria-labelledby="timeline-title">
+    <section class="card dash-card sx-h-m sx-wide" aria-labelledby="timeline-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
@@ -121,7 +121,7 @@
 
 {% if show_clinical %}
 <div class="sx-panel" id="tab-clinical" role="tabpanel" aria-labelledby="tabbtn-clinical" tabindex="0">
-    <section class="card dash-card" aria-labelledby="clinical-title">
+    <section class="card dash-card sx-h-l" aria-labelledby="clinical-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="clinical-title">Clinical history</h2>
@@ -161,7 +161,7 @@
 <div class="sx-panel sx-panel-2" id="tab-files" role="tabpanel" aria-labelledby="tabbtn-files" tabindex="0">
   {% if show_clinical %}
   <div class="sx-panel-col">
-    <section class="card dash-card" aria-labelledby="timeline-files-title">
+    <section class="card dash-card sx-h-m" aria-labelledby="timeline-files-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="timeline-files-title">File timeline</h2>
@@ -190,7 +190,7 @@
   {% endif %}
   <div class="sx-panel-col">
   {% if show_clinical %}
-    <section class="card dash-card" aria-labelledby="files-title">
+    <section class="card dash-card sx-h-m" aria-labelledby="files-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="files-title">Files</h2>
@@ -203,7 +203,7 @@
     </section>
   {% endif %}
     {% if authorize(g.user.role, 'upload_file') %}
-    <section class="card dash-card" aria-labelledby="upload-title">
+    <section class="card dash-card sx-h-s sx-wide" aria-labelledby="upload-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="upload-title">Upload files</h2>
@@ -221,7 +221,7 @@
 {% endif %}
 
 <div class="sx-panel" id="tab-billing" role="tabpanel" aria-labelledby="tabbtn-billing" tabindex="0">
-    <section class="card dash-card" aria-labelledby="invoices-title">
+    <section class="card dash-card sx-h-m" aria-labelledby="invoices-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
@@ -249,7 +249,7 @@
 <div class="sx-panel sx-panel-2" id="tab-portal" role="tabpanel" aria-labelledby="tabbtn-portal" tabindex="0">
   <div class="sx-panel-col">
     {% if authorize(g.user.role, 'issue_patient_pin') or authorize(g.user.role, 'revoke_patient_pin') %}
-    <section class="card dash-card" aria-labelledby="access-title">
+    <section class="card dash-card sx-h-s" aria-labelledby="access-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="access-title">Patient portal access</h2>
@@ -284,7 +284,47 @@
     </section>
     {% endif %}
 
-    <section class="card dash-card" aria-labelledby="consent-title">
+  </div>
+  <div class="sx-panel-col">
+    <section class="card dash-card sx-h-s" aria-labelledby="rights-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="rights-title">Data requests</h2>
+          <p class="ds-card-sub">Access, copy, correction or erasure - reviewed by a dentist</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        {% if requests %}
+        <ul class="ds-rows">
+          {% for r in requests %}
+          <li class="ds-row"><span class="ds-row-main">
+            <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
+            <span class="ds-row-sub">filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}{% if r.reason %} · {{ r.reason }}{% endif %}</span>
+          </span></li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty-line">No requests.</p>
+        {% endif %}
+        {% if authorize(g.user.role, 'file_data_request') %}
+        <form method="post" action="{{ url_for('data_requests.file_for_patient', cf=cf) }}" class="d-flex gap-2 flex-wrap mt-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="ds-sr-only" for="rights-kind">Request</label>
+          <select class="form-select form-select-sm w-auto" id="rights-kind" name="kind">
+            <option value="access">Access</option>
+            <option value="export">Copy of data</option>
+            <option value="amend">Correction</option>
+            <option value="erasure">Erasure</option>
+          </select>
+          <label class="ds-sr-only" for="rights-detail">Details</label>
+          <input type="text" class="form-control form-control-sm w-auto flex-grow-1" id="rights-detail" name="detail" placeholder="What the patient asked for" maxlength="1000">
+          <button type="submit" class="btn btn-outline-primary btn-sm">File request</button>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card dash-card sx-h-m sx-wide" aria-labelledby="consent-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="consent-title">Consent</h2>
@@ -322,50 +362,11 @@
       </div>
     </section>
   </div>
-  <div class="sx-panel-col">
-    <section class="card dash-card" aria-labelledby="rights-title">
-      <div class="dash-card-head">
-        <div>
-          <h2 class="ds-card-title" id="rights-title">Data requests</h2>
-          <p class="ds-card-sub">Access, copy, correction or erasure - reviewed by a dentist</p>
-        </div>
-      </div>
-      <div class="dash-card-body">
-        {% if requests %}
-        <ul class="ds-rows">
-          {% for r in requests %}
-          <li class="ds-row"><span class="ds-row-main">
-            <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
-            <span class="ds-row-sub">filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}{% if r.reason %} · {{ r.reason }}{% endif %}</span>
-          </span></li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="dash-empty-line">No requests.</p>
-        {% endif %}
-        {% if authorize(g.user.role, 'file_data_request') %}
-        <form method="post" action="{{ url_for('data_requests.file_for_patient', cf=cf) }}" class="d-flex gap-2 flex-wrap mt-3">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label class="ds-sr-only" for="rights-kind">Request</label>
-          <select class="form-select form-select-sm w-auto" id="rights-kind" name="kind">
-            <option value="access">Access</option>
-            <option value="export">Copy of data</option>
-            <option value="amend">Correction</option>
-            <option value="erasure">Erasure</option>
-          </select>
-          <label class="ds-sr-only" for="rights-detail">Details</label>
-          <input type="text" class="form-control form-control-sm w-auto flex-grow-1" id="rights-detail" name="detail" placeholder="What the patient asked for" maxlength="1000">
-          <button type="submit" class="btn btn-outline-primary btn-sm">File request</button>
-        </form>
-        {% endif %}
-      </div>
-    </section>
-  </div>
 </div>
 
     {% if authorize(g.user.role, 'view_imaging_requests') %}
     <div class="sx-panel" id="tab-imaging" role="tabpanel" aria-labelledby="tabbtn-imaging" tabindex="0">
-    <section class="card dash-card" aria-labelledby="imaging-title" id="imaging">
+    <section class="card dash-card sx-h-m" aria-labelledby="imaging-title" id="imaging">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="imaging-title">Imaging requests (demo)</h2>

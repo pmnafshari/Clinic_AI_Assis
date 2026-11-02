@@ -276,7 +276,8 @@ def selftest():
             clinic_time.now = real_now
         assert "Nothing booked today" in quiet and f"day={DAY}" in quiet and "5 Mar" in _text(quiet), \
             f"10b: the quiet day does not offer the next booked day: {_text(quiet)}"
-        # 10c. patients: one list filter, one record lookup, differently named; no page action; no inner scroll;
+        # 10c. patients: one list filter, one record lookup, differently named; no page action; the table in a scroll box (P30:
+        # the owner now wants every table and box a fixed size that scrolls inside - 15c asserts the box);
         # the codice fiscale shortened in the list and still searchable in full
         pl = dentist.get("/patients").get_data(as_text=True)
         assert len(re.findall(r'class="[^"]*\bapp-primary\b', _section(pl, "page-head"))) == 0, "10c: page-level Add note"
@@ -589,6 +590,33 @@ def selftest():
         assert "of :not([hidden])" in css12, "14c: shaded rows are counted among the rows that show"
         assert "Search" in re.sub(r"<[^>]+>", " ", dentist.get("/patients").get_data(as_text=True).split('data-ux="patient-rows"')[0]), \
             "14d: the patients box has a Search button"
+
+        # 15. P30 equal boxes: every box on the record has one of three fixed heights and boxes that share a row match; the long
+        # tables (patients, invoices) scroll inside a box instead of growing the page
+        for role15 in ("dentist", "assistant"):
+            rec15 = clients[role15].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            for tab15 in re.finditer(r'<div class="sx-panel[^"]*" id="tab-(\w+)" role="tabpanel"(.*?)(?=<div class="sx-panel[^"]*" id="tab-\w+" role="tabpanel"|<dialog|<div class="modal|\Z)', rec15, re.S):
+                cards15 = re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="([^"]+)"', tab15.group(2))
+                assert cards15, f"15a: {role15} {tab15.group(1)} tab has no boxes"
+                for classes15, ident15 in cards15:
+                    assert re.search(r"\bsx-h-[sml]\b", classes15), f"15a: {role15}: the {ident15} box has no fixed height"
+            order15 = re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="(access|rights|consent)-title"', rec15)
+            if role15 == "dentist":
+                assert [i for _c, i in order15] == ["access", "rights", "consent"], f"15a: portal boxes are in the order {order15}"
+                assert "sx-wide" in order15[2][0] and order15[0][0].split()[0] == order15[1][0].split()[0], \
+                    "15a: the two small portal boxes are not the same size, or consent is not the full-width box below them"
+                assert re.search(r'dash-card (sx-h-m sx-wide)" aria-labelledby="timeline-title"', rec15), "15a: the timeline is not full width"
+        css15 = css12
+        assert re.search(r"\.sx-panel \.dash-card\s*\{[^}]*height: var\(--sx-h", css15) and re.search(r"\.sx-panel-col\s*\{\s*display: contents", css15), \
+            "15b: record boxes are not a grid of fixed-height boxes"
+        assert re.search(r"\.sx-panel \.dash-card > \.dash-card-body\s*\{[^}]*overflow: auto", css15), "15b: a box's body does not scroll inside"
+        assert all(re.search(rf"--sx-h-{k}: \d+rem", css15) for k in "sml"), "15b: the three box heights are not defined"
+        for path15, role15 in (("/patients", "dentist"), ("/billing", "dentist")):
+            page15 = clients[role15].get(path15).get_data(as_text=True)
+            tables15 = re.findall(r'(<div class="sx-box sx-box-table">\s*<table)', page15)
+            assert len(tables15) == len(re.findall(r"<table", page15)) and tables15, f"15c: a {path15} table is not in a scroll box"
+            assert "table-responsive" not in page15, f"15c: {path15} wraps its table the old way"
+        assert re.search(r"\.sx-box-table\s*\{\s*--h: \d+rem", css15), "15c: the table box has no height"
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

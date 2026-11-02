@@ -63,6 +63,7 @@
   </div>
   <div data-ux="billing-{{ key }}">
   {% if work[key] %}
+  <div class="sx-box sx-box-table">
   <table class="ux-table ux-table-page ux-bill">
     <caption class="visually-hidden">{{ title }}</caption>
     <thead><tr>
@@ -93,6 +94,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% else %}
   <p class="ux-empty">{{ empty }}</p>
   {% endif %}

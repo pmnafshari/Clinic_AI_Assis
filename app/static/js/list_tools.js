@@ -51,6 +51,7 @@
     var noun = (box.getAttribute("data-noun") || "row|rows").split("|");
     var find = (box.getAttribute("data-find") || "name").split(" ");
     var root = list.closest("table") || list;
+    root = root.closest(".sx-box") || root;      // the scroll box, so chips and the count stay put while the rows scroll
     var rows = Array.prototype.slice.call(list.children);
     rows.forEach(function (row, i) { row._order = i; });
 

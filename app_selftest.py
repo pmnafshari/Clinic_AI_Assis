@@ -901,11 +901,12 @@ def selftest():
 
         adm_tbl = client_adm.get("/admin/users")
         pat_tbl = client_dent.get("/patients")
-        # P23 follow-up (owner review): the patients table belongs to the page - no scroll box inside the card.
+        # P23 follow-up (owner review): the patients table never scrolls sideways - no table-responsive wrapper.
+        # P30 (owner): it now sits in a fixed-height box that scrolls up and down once the list is long (ux_selftest 15c).
         # it cannot overflow because below 768px every cell stacks under its label; that needs a label on every cell
         pat_body = pat_tbl.data.split(b"<tbody", 1)[1].split(b"</tbody>", 1)[0]
         assert b"table-responsive" not in pat_tbl.data and b"<td" in pat_body, \
-            "21: the patients table scrolls inside its card again"
+            "21: the patients table is wrapped for sideways scrolling again"
         assert pat_body.count(b"<td") == pat_body.count(b"<td data-label="), \
             "21: a patients cell has no label to stack under on a phone"
         assert b"table-responsive" in adm_tbl.data, \

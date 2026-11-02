@@ -38,6 +38,7 @@
   {% endif %}
   <div data-ux="patient-rows">
   {% if patients %}
+  <div class="sx-box sx-box-table">
   <table class="ux-table ux-table-page">
     <caption class="visually-hidden">Patients, sorted by {{ {'name': 'name', 'next': 'next appointment', 'last': 'last visit'}[sort] }}</caption>
     <thead><tr>
@@ -68,6 +69,7 @@
     {% endfor %}
     </tbody>
   </table>
+  </div>
   {% elif q %}
   <p class="ux-empty">No patient matches "{{ q }}".</p>
   {% else %}
