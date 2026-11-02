@@ -190,3 +190,21 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   }
   window.setInterval(tick, 15000);
 })();
+
+// P30 consent wording: every wording row is on the page; this folds each behind its row's Read out button.
+(function () {
+  Array.prototype.forEach.call(document.querySelectorAll("[data-read-out]"), function (button) {
+    var row = document.getElementById(button.getAttribute("aria-controls"));
+    if (!row) return;
+    var word = button.firstChild;
+    button.hidden = false;
+    row.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    button.addEventListener("click", function () {
+      var open = row.hidden;
+      row.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      word.textContent = open ? "Hide wording" : "Read out";
+    });
+  });
+})();

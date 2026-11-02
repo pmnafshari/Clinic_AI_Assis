@@ -126,11 +126,22 @@ def main():
                 assert page.locator("[data-clock-time]").inner_text() == page.locator("[data-clock]").evaluate(
                     "e => String(Math.floor(e.dataset.minutes / 60)).padStart(2, '0') + ':' + String(e.dataset.minutes % 60).padStart(2, '0')")
 
+                # the record: consent wording is folded behind Read out and opens under its own row
+                page.goto(base + "/patients")
+                page.goto(base + page.locator("#patients-rows a.btn").first.get_attribute("href"))
+                page.get_by_role("tab", name="Portal & consent").click()
+                wording = page.locator("#wording-recording")
+                expect(wording).to_be_hidden()
+                read_out = page.locator("[data-read-out][aria-controls=wording-recording]")
+                read_out.click()
+                expect(wording).to_be_visible()
+                expect(read_out).to_have_attribute("aria-expanded", "true")
+
                 # a phone: nothing runs off the side, and the top bar keeps its Search button
                 phone = browser.new_context(viewport={"width": 390, "height": 844})
                 phone.add_cookies([{"name": web_session.COOKIE_NAME, "value": token, "url": base}])
                 small = phone.new_page()
-                for path in ("/", "/patients", "/billing", "/stock"):
+                for path in ("/", "/patients", "/billing", "/stock", page.url.replace(base, "")):
                     small.goto(base + path)
                     assert small.evaluate("document.documentElement.scrollWidth <= innerWidth"), f"{path} overflows at 390px"
                 expect(small.locator(".app-search-go")).to_be_visible()

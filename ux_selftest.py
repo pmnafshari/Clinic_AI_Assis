@@ -644,6 +644,39 @@ def selftest():
                 img16 = rec16.split('id="tab-imaging"')[1].split('aria-labelledby="imaging-title"')[0]
                 assert '<div class="ux-kpis ux-kpis-3 sx-wide"' in img16, f"16b: {role16} imaging tab has no tile strip"
 
+        # 17. P30 record details: consent is a table whose wording opens under its row with a Read out button (all wording
+        # shows without script); reception's Files tab pairs Upload with what happens next; the billed lines are a table
+        anna17 = patient_id.resolve(conn, "ZZUA800101010101")
+        lines17 = conn.execute("SELECT COUNT(*) FROM invoices WHERE patient_id = ?", (anna17,)).fetchone()[0]
+        for role17 in ("dentist", "assistant"):
+            rec17 = clients[role17].get("/patients/ZZUA800101010101").get_data(as_text=True)
+            box17 = rec17.split('aria-labelledby="consent-title"')[1].split("</section>")[0]
+            table17 = re.search(r"<table[^>]*>(.*?)</table>", box17, re.S)
+            assert table17 and all(h in _text(table17.group(1)) for h in ("Consent", "Status", "Last change", "Wording")), \
+                f"17a: {role17}: consent is not a table"
+            rows17 = re.findall(r'<tr data-consent="(\w+)"', box17)
+            assert sorted(rows17) == ["ai_assistant", "messaging", "recording"], f"17a: consent rows {rows17}"
+            for purpose17 in rows17:
+                assert re.search(rf'<button[^>]*data-read-out[^>]*aria-controls="wording-{purpose17}"[^>]*hidden', box17) or \
+                    re.search(rf'<button[^>]*aria-controls="wording-{purpose17}"[^>]*data-read-out[^>]*hidden', box17), \
+                    f"17a: no Read out button for {purpose17} (rendered hidden, shown by the script)"
+                wording17 = re.search(rf'<tr id="wording-{purpose17}"[^>]*>(.*?)</tr>', box17, re.S)
+                assert wording17 and "Wording to read out" in wording17.group(1) and " hidden" not in wording17.group(0).split(">")[0], \
+                    f"17a: the {purpose17} wording is not on the page without script"
+            assert re.search(r'class="ds-badge [^"]*"[^>]*>(Not asked|Given|Withdrawn|Ask again)<', box17), "17a: a consent's status is not a badge"
+            files17 = rec17.split('id="tab-files"')[1].split('id="tab-')[0]
+            boxes17 = re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="([^"]+)"', files17)
+            if role17 == "assistant":
+                assert [b for _c, b in boxes17] == ["upload-title", "next-steps-title"] and boxes17[0][0] == boxes17[1][0] \
+                    and "sx-wide" not in boxes17[0][0], f"17b: reception's Files tab is not Upload beside what happens next: {boxes17}"
+                assert "Show to patient" in _text(files17), "17b: the steps do not say the patient sees nothing until a dentist shares it"
+            else:
+                assert "next-steps-title" not in files17, "17b: the dentist does not need reception's steps"
+            bill17 = rec17.split('aria-labelledby="invoices-title"')[1].split("</section>")[0]
+            assert re.search(r'<table class="ux-table[^"]*"', bill17) and "Description" in bill17 and "Amount" in bill17, \
+                f"17c: {role17}: billed lines are not a table"
+            assert bill17.count("<tr data-line") == lines17, f"17c: {role17}: {bill17.count('<tr data-line')} rows for {lines17} lines"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

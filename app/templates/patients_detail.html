@@ -217,7 +217,7 @@
     </section>
   {% endif %}
     {% if authorize(g.user.role, 'upload_file') %}
-    <section class="card dash-card sx-h-s sx-wide" aria-labelledby="upload-title">
+    <section class="card dash-card {{ 'sx-h-s sx-wide' if show_clinical else 'sx-h-m' }}" aria-labelledby="upload-title">
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="upload-title">Upload files</h2>
@@ -229,6 +229,24 @@
         <div id="upload-toast-container" class="toast-container position-fixed top-0 end-0 p-3"></div>
       </div>
     </section>
+    {% if not show_clinical %}
+    {# P30: reception does not see the clinical files, so the box beside Upload says what happens to an upload #}
+    <section class="card dash-card sx-h-m" aria-labelledby="next-steps-title">
+      <div class="dash-card-head">
+        <div>
+          <h2 class="ds-card-title" id="next-steps-title">What happens next</h2>
+          <p class="ds-card-sub">Your part ends at the upload</p>
+        </div>
+      </div>
+      <div class="dash-card-body">
+        <ol class="sx-steps">
+          <li><span class="sx-step-n" aria-hidden="true">1</span><span><strong>You upload</strong><small>The file is stored for this patient, on this machine.</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">2</span><span><strong>It is read and sorted</strong><small>A note waits for a dentist's review; a file that cannot be read is marked as needing review. Your Home shows each upload's state.</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">3</span><span><strong>The patient sees nothing yet</strong><small>A file reaches the patient's portal only when a dentist chooses Show to patient.</small></span></li>
+        </ol>
+      </div>
+    </section>
+    {% endif %}
     {% endif %}
   </div>
 </div>
@@ -253,15 +271,16 @@
       </div>
       <div class="dash-card-body">
         {% if patient.invoices %}
-        <ul class="ds-rows">
+        <table class="ux-table sx-lines">
+          <caption class="visually-hidden">Billed lines</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">Description</th><th scope="col" class="ux-num">Amount</th></tr></thead>
+          <tbody>
           {% for inv in patient.invoices %}
-          <li class="ds-row">
-            <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-receipt"></i></span>
-            <span class="ds-row-main"><span class="ds-row-title">{{ inv.description }}</span></span>
-            <span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span>
-          </li>
+          <tr data-line><td data-label="#" class="ux-muted">{{ loop.index }}</td><td data-label="Description"><strong>{{ inv.description }}</strong></td>
+            <td data-label="Amount" class="ux-num"><span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span></td></tr>
           {% endfor %}
-        </ul>
+          </tbody>
+        </table>
         {% else %}
         <p class="dash-empty-line">No invoices on record.</p>
         {% endif %}
@@ -355,33 +374,42 @@
         </div>
       </div>
       <div class="dash-card-body">
-        <ul class="ds-rows">
+        {# P30: a table. every consent's wording shows under its row; app.js folds it behind a Read out button #}
+        <table class="ux-table sx-consent">
+          <caption class="visually-hidden">Consent recorded for this patient</caption>
+          <thead><tr><th scope="col">Consent</th><th scope="col">Status</th><th scope="col">Last change</th><th scope="col">Wording</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+          <tbody>
           {% for c in consents %}
-          <li class="ds-row">
-            <span class="ds-row-main">
-              <span class="ds-row-title">{{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}</span>
-              <span class="ds-row-sub">
-                {% if c.granted and not c.outdated %}Given{% elif c.outdated %}Given to older wording - ask again{% elif c.recorded %}Withdrawn{% else %}Not asked{% endif %}
-                {% if c.ts %} · {{ c.ts | appt_date }} by {{ c.actor_role }}{% endif %}
-              </span>
-              <details class="small text-secondary"><summary>Wording to read out ({{ c.version }})</summary>{{ c.text }}</details>
-            </span>
-            {% if authorize(g.user.role, 'record_consent') %}
-            <form method="post" action="{{ url_for('patients.consent_submit', cf=cf) }}" class="ms-auto">
-              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <input type="hidden" name="purpose" value="{{ c.purpose }}">
-              {% if c.granted and not c.outdated %}
-              <input type="hidden" name="granted" value="0">
-              <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Record withdrawal: {{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}">Record withdrawal</button>
-              {% else %}
-              <input type="hidden" name="granted" value="1">
-              <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="Record consent: {{ {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] }}">Record consent</button>
+          {% set label = {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] %}
+          <tr data-consent="{{ c.purpose }}">
+            <td data-label="Consent"><strong>{{ label }}</strong></td>
+            <td data-label="Status">
+              {% if c.granted and not c.outdated %}<span class="ds-badge ds-badge-success">Given</span>
+              {% elif c.outdated %}<span class="ds-badge ds-badge-warning">Ask again</span> <span class="ux-muted">given to older wording</span>
+              {% elif c.recorded %}<span class="ds-badge ds-badge-danger">Withdrawn</span>
+              {% else %}<span class="ds-badge ds-badge-neutral">Not asked</span>{% endif %}</td>
+            <td data-label="Last change">{% if c.ts %}{{ c.ts | appt_date }} · by {{ c.actor_role }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>
+            <td data-label="Wording"><button type="button" class="btn btn-outline-secondary btn-sm" data-read-out aria-expanded="true" aria-controls="wording-{{ c.purpose }}" hidden>Read out<span class="visually-hidden">: {{ label }}</span></button></td>
+            <td data-label="Action">
+              {% if authorize(g.user.role, 'record_consent') %}
+              <form method="post" action="{{ url_for('patients.consent_submit', cf=cf) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="purpose" value="{{ c.purpose }}">
+                {% if c.granted and not c.outdated %}
+                <input type="hidden" name="granted" value="0">
+                <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Record withdrawal: {{ label }}">Record withdrawal</button>
+                {% else %}
+                <input type="hidden" name="granted" value="1">
+                <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="Record consent: {{ label }}">Record consent</button>
+                {% endif %}
+              </form>
               {% endif %}
-            </form>
-            {% endif %}
-          </li>
+            </td>
+          </tr>
+          <tr id="wording-{{ c.purpose }}" class="sx-wording"><td colspan="5"><strong>Wording to read out ({{ c.version }}):</strong> {{ c.text }}</td></tr>
           {% endfor %}
-        </ul>
+          </tbody>
+        </table>
       </div>
     </section>
   </div>

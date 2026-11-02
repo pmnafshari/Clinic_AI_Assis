@@ -1535,3 +1535,14 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 .sx-btn-ghost:hover, .sx-btn-ghost:focus-visible { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .sx-panel > .ux-kpis { margin: 0; }
 @media (max-width: 575.98px) { .sx-rec-acts { width: 100%; } .sx-rec-acts .btn { flex: 1; } }
+
+/* P30 record details: the consent table and its wording rows, reception's steps, the billed lines */
+.sx-consent td, .sx-lines td { vertical-align: middle; }
+.sx-consent form { margin: 0; }
+.sx-wording td { background: var(--ds-surface-sunken) !important; color: var(--sx-muted); font-size: 0.8125rem; white-space: normal; }
+.sx-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.sx-steps li { display: flex; gap: 0.75rem; align-items: flex-start; padding: 0.625rem 0.75rem; border-radius: 10px; }
+.sx-steps li:nth-child(even) { background: var(--sx-zebra); }
+.sx-steps strong { display: block; font-size: 0.9375rem; }
+.sx-steps small { display: block; color: var(--sx-muted); font-size: 0.8125rem; }
+.sx-step-n { width: 1.75rem; height: 1.75rem; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--ds-info-surface); color: var(--ds-info); font-weight: 700; font-size: 0.8125rem; }
