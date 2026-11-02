@@ -170,9 +170,15 @@
       {% endfor %}
     </nav>
     {% if queue %}
-    <ul class="ds-rows sx-box">
+    {# P30: Sort and Filter on the items loaded here (the buttons above choose a result on the server) #}
+    {% set kind_options = [] %}{% for k in queue | map(attribute='kind') | unique | sort %}{% set _ = kind_options.append([k, k]) %}{% endfor %}
+    {% set state_options = [] %}{% for s, label in labels.items() %}{% set _ = state_options.append([s, label]) %}{% endfor %}
+    <div class="sx-tools mb-2" data-list-tools data-for="import-rows" data-noun="item|items"
+         data-sorts='{{ [['no', 'num', -1, 'Newest first'], ['no', 'num', 1, 'Oldest first'], ['name', 'text', 1, 'Name (A-Z)']] | tojson }}'
+         data-filters='{{ [['state', 'Result', state_options], ['kind', 'File type', kind_options]] | tojson }}'></div>
+    <ul class="ds-rows sx-box" id="import-rows">
       {% for r in queue %}
-      <li class="ds-row"><span class="ds-row-main">
+      <li class="ds-row" data-name="{{ name_of(r) }}" data-no="{{ r.id }}" data-state="{{ r.state }}" data-kind="{{ r.kind }}"><span class="ds-row-main">
         <span class="ds-row-title text-break">{{ name_of(r) }}</span>
         <span class="ds-row-sub">item {{ r.id }} · {{ r.kind }} · <strong>{{ labels[r.state] }}</strong>{% if r.strength %} ({{ 'strong' if r.strength == 'strong' else 'needs checking' }}){% endif %}{% if r.patient_id and people.get(r.patient_id) %} · proposed: {{ people[r.patient_id].patient_name }}{% endif %}</span>
       </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imports.item', import_id=r.id) }}">Decide<span class="visually-hidden">: {{ name_of(r) }}</span></a></span></li>

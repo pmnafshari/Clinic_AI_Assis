@@ -81,6 +81,29 @@ def _lists(html):
     return parser.tools, parser.rows
 
 
+def assert_list_tools(html, where, keys):
+    """every list tool on a page works on rows that can answer it: each sort key on every row, each row's filter value
+    reachable by a choice, a noun for the count - and the page offers at least the sorts named in keys."""
+    tools, rows = _lists(html)
+    assert tools, f"14a: {where} has no list tools"
+    seen = set()
+    for tool in tools:
+        target = tool["data-for"]
+        assert rows.get(target), f"14a: {where} {target} has no rows to work on"
+        sorts = json.loads(tool["data-sorts"])
+        filters = json.loads(tool.get("data-filters") or "[]")
+        assert sorts and all(len(x) == 4 and x[1] in ("text", "num") and x[2] in (1, -1) for x in sorts), f"14a: {where} sorts {sorts}"
+        for key, _kind, _dir, label in sorts:
+            seen.add(key)
+            assert all(f"data-{key}" in r for r in rows[target]), f"14a: {where} {target}: a row has no data-{key} ({label})"
+        for key, _group, options in filters:
+            assert all(f"data-{key}" in r for r in rows[target]), f"14a: {where} {target}: a row has no data-{key}"
+            held = {r.get(f"data-{key}") for r in rows[target]}
+            assert held <= {v for v, _l in options}, f"14a: {where} {target}: a {key} value no choice reaches: {held}"
+        assert "|" in tool["data-noun"], f"14a: {where} {target} has no noun for its count"
+    assert set(keys) <= seen, f"14a: {where} is missing sorts {set(keys) - seen}"
+
+
 def _client(app, user, password):
     c = app.test_client()
     r = c.post("/login", data={"username": user, "password": password})
@@ -563,25 +586,7 @@ def selftest():
                    "/stock": ("dentist", {"name", "status"}), "/handoffs": ("assistant", {"raised", "name"}),
                    "/appointments": ("assistant", {"day", "asked", "name"})}
         for path14, (role14, keys14) in pages14.items():
-            html14 = clients[role14].get(path14).get_data(as_text=True)
-            tools14, rows14 = _lists(html14)
-            assert tools14, f"14a: {path14} has no list tools"
-            seen14 = set()
-            for tool14 in tools14:
-                target14 = tool14["data-for"]
-                assert rows14.get(target14), f"14a: {path14} {target14} has no rows to work on"
-                sorts14 = json.loads(tool14["data-sorts"])
-                filters14 = json.loads(tool14.get("data-filters") or "[]")
-                assert sorts14 and all(len(x) == 4 and x[1] in ("text", "num") and x[2] in (1, -1) for x in sorts14), f"14a: {path14} sorts {sorts14}"
-                for key14, _kind14, _dir14, label14 in sorts14:
-                    seen14.add(key14)
-                    assert all(f"data-{key14}" in r for r in rows14[target14]), f"14a: {path14} {target14}: a row has no data-{key14} ({label14})"
-                for key14, _group14, options14 in filters14:
-                    held14 = {r.get(f"data-{key14}") for r in rows14[target14]}
-                    assert all(f"data-{key14}" in r for r in rows14[target14]), f"14a: {path14} {target14}: a row has no data-{key14}"
-                    assert held14 <= {v for v, _l in options14}, f"14a: {path14} {target14}: a {key14} value no choice reaches: {held14}"
-                assert "|" in tool14["data-noun"], f"14a: {path14} {target14} has no noun for its count"
-            assert keys14 <= seen14, f"14a: {path14} is missing sorts {keys14 - seen14}"
+            assert_list_tools(clients[role14].get(path14).get_data(as_text=True), path14, keys14)
         assert 'js/list_tools.js' in dentist.get("/patients").get_data(as_text=True), "14b: the lists script is not loaded"
         tools_js14 = (Path(__file__).parent / "app" / "static" / "js" / "list_tools.js").read_text()
         assert "bootstrap" not in tools_js14.lower() or "data-bs-toggle" in tools_js14, "14b: panels open with the page's own dropdown"
@@ -741,6 +746,15 @@ def selftest():
         assert [(k, l.strip()) for k, _p, l in labels20] == [("all", "All"), ("owed", "Outstanding"), ("unknown", "To reconcile"), ("draft", "Drafts")] \
             and labels20[0][1] == "true", f"20: show buttons {labels20}"
         assert '<div class="sx-card-body">' in box20.group(1), "20: the box's body does not scroll inside"
+
+        # 21. P30 the remaining lists - notes to review and data requests - get the same tools (the import queue's are
+        # checked in patient_files_selftest, which stages a real import)
+        import data_rights
+        import note_review
+        data_rights.file_request(conn, patient_id.resolve(conn, "ZZUA800101010101"), "access", "dentist", "dentist", "synthetic")
+        note_review.record_failed(conn, Path(tmp) / "unreadable.txt", "needs_review", "assistant", "assistant")
+        assert_list_tools(dentist.get("/reviews").get_data(as_text=True), "/reviews", {"created", "name"})
+        assert_list_tools(dentist.get("/data-requests").get_data(as_text=True), "/data-requests", {"filed", "name"})
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

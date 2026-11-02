@@ -19,11 +19,18 @@
 </div>
 
 <section class="card dash-card">
+  {# P30: Sort and Filter on the requests listed here #}
+  {% if rows %}
+  <div class="sx-tools sx-tools-row pt-3" data-list-tools data-for="data-request-rows" data-noun="request|requests"
+       data-sorts='{{ [['filed', 'text', -1, 'Newest first'], ['filed', 'text', 1, 'Oldest first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
+       data-filters='{{ [['kind', 'Kind', [['access', 'Access'], ['export', 'Copy'], ['amend', 'Correction'], ['erasure', 'Erasure']]],
+                         ['status', 'Status', [['open', 'Open'], ['approved', 'Approved'], ['rejected', 'Refused'], ['done', 'Done']]]] | tojson }}'></div>
+  {% endif %}
   <div class="dash-card-body">
     {% if rows %}
-    <ul class="ds-rows">
+    <ul class="ds-rows sx-box" id="data-request-rows">
       {% for r in rows %}
-      <li class="ds-row">
+      <li class="ds-row" data-name="{{ r.patient_name or 'erased patient' }}" data-filed="{{ r.requested_at }}" data-kind="{{ r.kind }}" data-status="{{ r.status }}">
         <span class="ds-row-main">
           <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
           <span class="ds-row-sub">
