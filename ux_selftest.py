@@ -4,10 +4,12 @@ a temporary synthetic clinic, the real app through its test client, a pinned cli
 different day from the machine's (so a page that reads the server date instead of the clinic's shows the wrong day).
 """
 
+import json
 import re
 import sys
 import tempfile
 from datetime import datetime
+from html.parser import HTMLParser
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
@@ -42,6 +44,41 @@ def _section(html, marker):
     m = re.search(rf'<[^>]+data-ux="{marker}"[^>]*>(.*?)<!--/{marker}-->', html, re.S)
     assert m, f"no data-ux={marker} section"
     return m.group(1)
+
+
+class _Lists(HTMLParser):
+    """every [data-list-tools] on a page, and the rows (direct children) of each tbody/ul that has an id."""
+
+    VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"}
+
+    def __init__(self):
+        super().__init__()
+        self.tools, self.rows, self._stack = [], {}, []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if "data-list-tools" in a:
+            self.tools.append(a)
+        parent = self._stack[-1] if self._stack else (None, None)
+        if tag in ("tr", "li") and parent[0] in ("tbody", "ul") and parent[1]:
+            self.rows[parent[1]].append(a)
+        if tag in self.VOID:
+            return
+        if tag in ("tbody", "ul") and a.get("id"):
+            self.rows[a["id"]] = []
+        self._stack.append((tag, a.get("id")))
+
+    def handle_endtag(self, tag):
+        for i in range(len(self._stack) - 1, -1, -1):
+            if self._stack[i][0] == tag:
+                del self._stack[i:]
+                break
+
+
+def _lists(html):
+    parser = _Lists()
+    parser.feed(html)
+    return parser.tools, parser.rows
 
 
 def _client(app, user, password):
@@ -428,7 +465,7 @@ def selftest():
         assert box12 and "overflow: auto" in box12.group(1) and "max-height" in box12.group(1) \
             and "position: relative" in box12.group(1), "12b: no fixed-height scroll box"
         assert re.search(r"\.sx-box[^{]*th\s*\{[^}]*position: sticky", css12), "12b: the header row scrolls away"
-        assert re.search(r"tbody tr:nth-child\(even\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
+        assert re.search(r"tbody tr:nth-child\(even(?: of :not\(\[hidden\]\))?\)[^{]*\{[^}]*background", css12), "12b: rows are not told apart"
 
         # 12c. home opens with what comes next for this person: the dentist's own next patient
         home12 = clients["dentist"].get("/").get_data(as_text=True)
@@ -515,6 +552,43 @@ def selftest():
         adm13 = _section(clients["admin"].get("/admin/users").get_data(as_text=True), "topbar")
         assert 'class="app-notif-item' not in adm13 and "Nothing needs you right now" in adm13 and 'role="search"' not in adm13, \
             "13c: admin has nothing waiting and no record search"
+
+        # 14. P30 lists: every list can be searched, filtered and sorted. one script reads what each list declares; the page
+        # declares only choices its own rows can answer (a sort key every row carries, a filter value some row holds)
+        import handoff
+        pid14 = patient_id.resolve(conn, "ZZUA800101010101")
+        handoff.raise_request(conn, pid14, "patient_asked", "billing")
+        pages14 = {"/patients": ("dentist", {"name", "next", "last"}), "/billing": ("dentist", {"amount", "name"}),
+                   "/stock": ("dentist", {"name", "status"}), "/handoffs": ("assistant", {"raised", "name"}),
+                   "/appointments": ("assistant", {"day", "asked", "name"})}
+        for path14, (role14, keys14) in pages14.items():
+            html14 = clients[role14].get(path14).get_data(as_text=True)
+            tools14, rows14 = _lists(html14)
+            assert tools14, f"14a: {path14} has no list tools"
+            seen14 = set()
+            for tool14 in tools14:
+                target14 = tool14["data-for"]
+                assert rows14.get(target14), f"14a: {path14} {target14} has no rows to work on"
+                sorts14 = json.loads(tool14["data-sorts"])
+                filters14 = json.loads(tool14.get("data-filters") or "[]")
+                assert sorts14 and all(len(x) == 4 and x[1] in ("text", "num") and x[2] in (1, -1) for x in sorts14), f"14a: {path14} sorts {sorts14}"
+                for key14, _kind14, _dir14, label14 in sorts14:
+                    seen14.add(key14)
+                    assert all(f"data-{key14}" in r for r in rows14[target14]), f"14a: {path14} {target14}: a row has no data-{key14} ({label14})"
+                for key14, _group14, options14 in filters14:
+                    held14 = {r.get(f"data-{key14}") for r in rows14[target14]}
+                    assert all(f"data-{key14}" in r for r in rows14[target14]), f"14a: {path14} {target14}: a row has no data-{key14}"
+                    assert held14 <= {v for v, _l in options14}, f"14a: {path14} {target14}: a {key14} value no choice reaches: {held14}"
+                assert "|" in tool14["data-noun"], f"14a: {path14} {target14} has no noun for its count"
+            assert keys14 <= seen14, f"14a: {path14} is missing sorts {keys14 - seen14}"
+        assert 'js/list_tools.js' in dentist.get("/patients").get_data(as_text=True), "14b: the lists script is not loaded"
+        tools_js14 = (Path(__file__).parent / "app" / "static" / "js" / "list_tools.js").read_text()
+        assert "bootstrap" not in tools_js14.lower() or "data-bs-toggle" in tools_js14, "14b: panels open with the page's own dropdown"
+        assert not re.search(r"localStorage|sessionStorage|indexedDB|innerHTML\s*=\s*[^;]*\b(?:value|textContent|dataset)", tools_js14), \
+            "14b: nothing is stored in the browser and no row text is written back as markup"
+        assert "of :not([hidden])" in css12, "14c: shaded rows are counted among the rows that show"
+        assert "Search" in re.sub(r"<[^>]+>", " ", dentist.get("/patients").get_data(as_text=True).split('data-ux="patient-rows"')[0]), \
+            "14d: the patients box has a Search button"
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

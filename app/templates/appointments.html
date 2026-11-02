@@ -186,11 +186,18 @@
         <h2 class="ux-card-title" id="requests-title">Patient requests <span class="ux-count" aria-label="{{ requests_pending | length }} request{{ 's' if requests_pending | length != 1 else '' }} waiting">{{ requests_pending | length }}</span></h2>
         <p class="ux-card-meta">Requests are not bookings: a preferred day and part of the day, no time and no clinician. Earliest preferred day first.</p>
       </div></div>
+      {# P30: Sort and Filter on the requests loaded here #}
+      {% if requests_pending %}
+      <div class="sx-tools sx-tools-row" data-list-tools data-for="request-rows" data-noun="request|requests"
+           data-sorts='{{ [['day', 'text', 1, 'Preferred day (soonest)'], ['day', 'text', -1, 'Preferred day (latest)'], ['asked', 'text', -1, 'Asked (newest)'],
+                           ['asked', 'text', 1, 'Asked (oldest)'], ['name', 'text', 1, 'Name (A-Z)']] | tojson }}'
+           data-filters='{{ [['period', 'Part of the day', [['morning', 'Morning'], ['afternoon', 'Afternoon']]]] | tojson }}'></div>
+      {% endif %}
       <div>
       {% if requests_pending %}
-      <ul class="ux-list ux-requests">
+      <ul class="ux-list ux-requests" id="request-rows">
         {% for r in requests_pending %}
-        <li class="ux-request">
+        <li class="ux-request" data-name="{{ r.patient_name }}" data-day="{{ r.starts_at[:10] }}" data-asked="{{ r.created_at[:10] }}" data-period="{{ r.period }}">
           <div class="ux-request-top"><strong class="ux-request-name">{{ r.patient_name }}</strong>
             <span class="ux-badge ux-badge-requested">Requested - not booked</span></div>
           <p class="ux-request-when">Preferred day: {{ r.starts_at[:10] | appt_date_label }} · {{ r.period }}</p>

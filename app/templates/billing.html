@@ -51,19 +51,31 @@
       <h2 class="ux-card-title" id="bill-{{ key }}">{{ title }} <span class="ux-count">{{ work[key] | length }}</span></h2>
       <p class="ux-card-meta">{{ meta }}</p>
     </div>
+    {# P30: Sort and Filter on this section's rows #}
+    {% if work[key] %}
+    <div class="sx-tools" data-list-tools data-for="bill-rows-{{ key }}" data-noun="invoice|invoices"
+         data-sorts='{{ [['no', 'num', -1, 'Invoice number (newest)'], ['no', 'num', 1, 'Invoice number (oldest)'], ['amount', 'num', -1, 'Amount (highest first)'],
+                         ['amount', 'num', 1, 'Amount (lowest first)'], ['due', 'text', 1, 'Due date (soonest)'], ['visit', 'text', -1, 'Visit date (newest)'],
+                         ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
+         data-filters='{{ [['band', 'Amount', [['u100', 'Under 100'], ['m', '100 to 200'], ['o200', 'Over 200']]],
+                           ['state', 'Status', [['draft', 'Draft'], ['issued', 'Issued'], ['partially_paid', 'Part paid'], ['unknown', 'Unknown']]]] | tojson }}'></div>
+    {% endif %}
   </div>
   <div data-ux="billing-{{ key }}">
   {% if work[key] %}
   <table class="ux-table ux-table-page ux-bill">
     <caption class="visually-hidden">{{ title }}</caption>
     <thead><tr>
-      <th scope="col">Patient</th><th scope="col">Invoice</th><th scope="col">Due</th>
-      <th scope="col" class="ux-num">Amount</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th>
+      <th scope="col" data-sort="name">Patient</th><th scope="col" data-sort="no">Invoice</th><th scope="col" data-sort="due">Due</th>
+      <th scope="col" class="ux-num" data-sort="amount">Amount</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th>
     </tr></thead>
-    <tbody>
+    <tbody id="bill-rows-{{ key }}">
     {% for s in work[key] %}
     {% set href = url_for('billing.patient', cf=s.cf) ~ '#invoice-' ~ s.id %}
-    <tr>
+    {% set cents = s.outstanding_cents if key == 'owed' else s.total_cents %}
+    <tr data-name="{{ s.patient_name }}" data-no="{{ s.id }}" data-amount="{{ cents }}" data-due="{{ (s.due_date if key == 'owed' and s.due_date else '9999') }}"
+        data-visit="{{ s.visit_date or '' }}" data-band="{{ 'u100' if cents < 10000 else 'm' if cents <= 20000 else 'o200' }}"
+        data-state="{{ s.state if s.state in ('draft', 'unknown', 'partially_paid') else 'issued' }}">
       <td data-label="Patient"><strong>{{ s.patient_name }}</strong></td>
       <td data-label="Invoice">#{{ s.id }} <span class="ux-muted">· visit {{ s.visit_date or 'undated' }}</span></td>
       <td data-label="Due">{% if key == 'owed' and s.due_date %}{{ s.due_date }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>

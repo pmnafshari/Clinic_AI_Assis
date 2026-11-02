@@ -44,11 +44,20 @@
     <h2 class="ds-card-title" id="items-title">Items</h2>
     <nav class="sx-tabs sx-tabs-sm" aria-label="Filter"><a href="{{ url_for('stock.index') }}" {% if not low_only %}aria-current="page"{% endif %}>All</a><a href="{{ url_for('stock.index', show='low') }}" {% if low_only %}aria-current="page"{% endif %}>Low only</a></nav>
   </div>
+  {# P30: search, Filter by unit and Sort on the items loaded here #}
+  {% if items %}
+  {% set unit_options = [] %}{% for u in units %}{% set _ = unit_options.append([u, u]) %}{% endfor %}
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="stock-rows" data-noun="item|items" data-search="Find an item" data-find="name"
+       data-sorts='{{ [['status', 'num', 1, 'Needs attention first'], ['ratio', 'num', 1, 'Stock left (lowest first)'], ['ratio', 'num', -1, 'Stock left (highest first)'],
+                       ['name', 'text', 1, 'Name (A-Z)'], ['name', 'text', -1, 'Name (Z-A)']] | tojson }}'
+       data-filters='{{ [['unit', 'Unit', unit_options]] | tojson }}'></div>
+  {% endif %}
   <div class="dash-card-body">
     {% if items %}
-    <ul class="ds-rows sx-box">
+    <ul class="ds-rows sx-box" id="stock-rows">
       {% for i in items %}
-      <li class="ds-row">
+      <li class="ds-row" data-name="{{ i.name }}" data-unit="{{ i.unit }}" data-status="{{ 0 if i.low else 1 }}"
+          data-ratio="{{ '%.3f' | format(i.balance / i.threshold if i.threshold else 99) }}">
         <span class="ds-row-main">
           <span class="ds-row-title">{{ i.name }}</span>
           <span class="ds-row-sub">threshold {{ i.threshold }} {{ i.unit }}{% if i.low %} · <strong>low</strong>{% endif %}</span>
