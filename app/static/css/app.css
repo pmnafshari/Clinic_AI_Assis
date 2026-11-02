@@ -1546,3 +1546,22 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 .sx-steps strong { display: block; font-size: 0.9375rem; }
 .sx-steps small { display: block; color: var(--sx-muted); font-size: 0.8125rem; }
 .sx-step-n { width: 1.75rem; height: 1.75rem; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--ds-info-surface); color: var(--ds-info); font-weight: 700; font-size: 0.8125rem; }
+
+/* P30 equal boxes on the pages. Home: agenda beside requests, the chart full width, activity beside quick actions - each
+   pair one fixed height whose body scrolls; on a narrow screen the same boxes stack in that order */
+.ux-home { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: stretch; }
+.ux-home-main, .ux-home-side { display: contents; }
+.ux-home-agenda { order: 1; } .ux-home-requests { order: 2; } .ux-home-chart { order: 3; } .ux-home-activity { order: 4; } .ux-home-quick { order: 5; }
+@media (max-width: 1199.98px) { .ux-home { grid-template-columns: minmax(0, 1fr); } }
+.ux-card.sx-h-s, .ux-card.sx-h-m, .ux-card.sx-h-l { height: var(--sx-h); display: flex; flex-direction: column; min-height: 0; margin: 0; }
+.ux-card > .sx-card-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.sx-card-body .sx-box, .sx-panel .dash-card-body .sx-box { max-height: none; overflow: visible; }
+.ux-request-row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.ux-request-row > span { min-width: 0; display: flex; flex-direction: column; }
+.ux-home-requests .sx-card-body > .btn { margin-top: 0.75rem; }
+/* Appointments: the calendar full width, the requests and the booking form below it */
+.ux-appt-stacked { grid-template-columns: minmax(0, 1fr); }
+.ux-appt-stacked .ux-appt-side { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+.ux-requests.sx-box { --h: 24rem; }
+/* Stock: alerts, then Add an item, then the item list, whatever order the page writes them in */
+.sx-order-1 { order: 1; } .sx-order-2 { order: 2; } .sx-order-3 { order: 3; }

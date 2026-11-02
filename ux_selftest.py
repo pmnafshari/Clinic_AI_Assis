@@ -698,6 +698,34 @@ def selftest():
                 tile18 = re.search(rf'<span class="ux-kpi-label">{re.escape(label18)}</span>\s*<span class="ux-kpi-value">([^<]+)</span>', tiles18.group(1))
                 assert tile18 and tile18.group(1).strip() == str(n18), f"18: {path18} {label18} shows {tile18 and tile18.group(1)}, the database has {n18}"
 
+        # 19. P30 equal boxes on the pages: Home pairs agenda with requests and activity with quick actions, the chart runs
+        # full width; each request opens its preferred day; Appointments stacks the calendar over the requests; Stock pairs
+        # its alerts with Add an item over the full-width item list
+        def cards19(html, pattern):
+            return re.findall(r'<section class="card ux-card ([^"]*)"[^>]*aria-labelledby="(' + pattern + r')-title"', html)
+        home19 = clients["assistant"].get("/").get_data(as_text=True)
+        got19 = dict((t, c) for c, t in cards19(home19, "agenda|requests|chart|activity|quick"))
+        assert set(got19) == {"agenda", "requests", "chart", "activity", "quick"}, f"19a: home boxes {got19}"
+        size19 = lambda c: re.search(r"\bsx-h-[sml]\b", c).group(0) if re.search(r"\bsx-h-[sml]\b", c) else None
+        assert size19(got19["agenda"]) and size19(got19["agenda"]) == size19(got19["requests"]), "19a: agenda and requests are not one size"
+        assert size19(got19["activity"]) and size19(got19["activity"]) == size19(got19["quick"]), "19a: activity and quick actions are not one size"
+        assert "sx-wide" in got19["chart"], "19a: the chart is not full width"
+        waiting19 = conn.execute("SELECT substr(starts_at, 1, 10) FROM appointments WHERE status = 'requested' ORDER BY starts_at").fetchall()
+        req19 = home19.split('aria-labelledby="requests-title"')[1].split("</section>")[0]
+        for (day19,) in waiting19[:3]:
+            assert re.search(rf'<a class="btn[^"]*" href="/appointments\?view=day&amp;day={day19}#requests"', req19), \
+                f"19a: the request for {day19} has no button to its day"
+        assert re.search(r"\.ux-home-main, \.ux-home-side \{ display: contents; \}\s*\n", css12.split("P30 equal boxes on the pages")[1]), \
+            "19a: home is still two free-height columns"
+        appt19 = clients["assistant"].get(f"/appointments?view=day&day={DAY}").get_data(as_text=True)
+        assert 'class="ux-appt-layout ux-appt-stacked"' in appt19 and re.search(r'<ul class="ux-list ux-requests sx-box[^"]*" id="request-rows"', appt19), \
+            "19b: appointments does not stack the calendar over a requests box"
+        stock19 = clients["dentist"].get("/stock").get_data(as_text=True)
+        boxes19 = dict((t, c) for c, t in re.findall(r'<section class="card dash-card ([^"]*)" aria-labelledby="(alerts|items|new)-title"', stock19))
+        assert 'class="sx-panel sx-panel-2 sx-page"' in stock19 and "sx-wide" in boxes19.get("items", ""), f"19c: stock boxes {boxes19}"
+        if "alerts" in boxes19 and "new" in boxes19:
+            assert size19(boxes19["alerts"]) and size19(boxes19["alerts"]) == size19(boxes19["new"]), "19c: alerts and Add an item are not one size"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

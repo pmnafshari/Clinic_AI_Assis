@@ -93,7 +93,7 @@
     <span class="ux-kpi-value">{{ patients | length }}</span><span class="ux-kpi-sub">to book from the list</span></div>
 <!--/page-tiles--></div>
 
-<div class="ux-appt-layout">
+<div class="ux-appt-layout ux-appt-stacked">
   <div class="ux-appt-main">
     {% if view == 'day' %}
     <section class="card ux-card" aria-labelledby="day-title">
@@ -204,7 +204,7 @@
       {% endif %}
       <div>
       {% if requests_pending %}
-      <ul class="ux-list ux-requests" id="request-rows">
+      <ul class="ux-list ux-requests sx-box" id="request-rows">
         {% for r in requests_pending %}
         <li class="ux-request" data-name="{{ r.patient_name }}" data-day="{{ r.starts_at[:10] }}" data-asked="{{ r.created_at[:10] }}" data-period="{{ r.period }}">
           <div class="ux-request-top"><strong class="ux-request-name">{{ r.patient_name }}</strong>
