@@ -1569,3 +1569,8 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 .sx-bill .sx-bill-panel + .sx-bill-panel { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--ds-border); }
 .sx-bill .sx-bill-panel .ux-card-head { padding-left: 0; padding-right: 0; }
 .sx-bill .sx-tools-row { padding-left: 0; padding-right: 0; }
+
+/* P29 R-009: confirm dialog */
+.app-dialog { border: 0; border-radius: 12px; padding: 1.25rem; max-width: 28rem; width: calc(100% - 2rem); }
+.app-dialog::backdrop { background: rgba(15, 23, 42, 0.45); }
+.app-dialog-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; flex-wrap: wrap; }

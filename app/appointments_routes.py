@@ -13,6 +13,8 @@ from .db import get_db
 appointments_bp = Blueprint("appointments", __name__)
 
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+BOOK_FIELDS = ("codice_fiscale", "dentist", "date", "time", "minutes", "note")
+_book_retry = {}
 
 
 def _denied(action, target=None):
@@ -195,6 +197,7 @@ def index():
         prev_day=prev_day, next_day=next_day,
         requests_pending=appointments.pending_requests(conn), patients=patients,
         open_booking=request.args.get("book") == "1",
+        retry=_book_retry.pop(g.user["username"], None),
         weeks=_month_grid(conn, first, selected, per_day, word) if view == "month" else [], weekdays=WEEKDAYS,
         month=first.isoformat()[:7], month_label=first.strftime("%B %Y"),
         today=clinic_time.now().date().isoformat(),
@@ -227,7 +230,9 @@ def book():
         )
     except ValueError as e:
         # an overlap is a user mistake, not a server error
-        flash(str(e), "error")
+        flash(f"The appointment was not booked: {e}", "error")
+        _book_retry[g.user["username"]] = {**{k: request.form.get(k, "") for k in BOOK_FIELDS}, "error": str(e)}
+        return redirect(url_for("appointments.index", day=day, book=1) + "#book")
     else:
         _allowed("book_appointment", str(new_id))
         flash(f"Appointment booked: {_when(new_id)}.", "success")
@@ -247,7 +252,7 @@ def cancel(appointment_id):
         flash(str(e), "error")
     else:
         _allowed("cancel_appointment", str(appointment_id))
-        flash("Appointment cancelled.", "success")
+        flash("Appointment cancelled.", "removed")
     return redirect(url_for("appointments.index", day=day))
 
 
@@ -314,5 +319,5 @@ def decline(appointment_id):
         flash(str(e), "error")
     else:
         _allowed("decline_appointment_request", str(appointment_id))
-        flash("Request declined.", "success")
+        flash("Request declined.", "removed")
     return redirect(url_for("appointments.index", day=day))

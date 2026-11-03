@@ -321,6 +321,25 @@ def selftest():
                      "SELECT * FROM audit_log WHERE action = 'decline_appointment_request'"), \
             "12f: declining must be audited"
 
+        # 12h. P29 R-006 / R-007 / R-008: a refused booking is an error, says why, and keeps the entries
+        taken = _appt.book(_conn(db_path), PATIENT_CF, "drossi", f"{soon12}T11:00", 30)
+        refused = dentist.post("/appointments/book", data={
+            "codice_fiscale": PATIENT_CF, "dentist": "drossi", "date": soon12, "time": "11:00",
+            "minutes": "45", "note": "keep me", "day": soon12}, follow_redirects=True).text
+        assert 'class="alert alert-danger app-flash"' in refused and 'role="alert"' in refused, \
+            "12h R-006: a refused booking is not shown as an error"
+        assert "Not done:" in refused and "alert-error" not in refused, "12h R-008: the kind has no word"
+        assert re.search(r'<details[^>]*id="book"[^>]*open', refused), "12h R-007: the booking panel is closed"
+        assert 'value="11:00"' in refused and 'value="45"' in refused and 'value="keep me"' in refused, \
+            "12h R-007: the typed values were lost"
+        assert f'value="{PATIENT_CF}" selected' in refused, "12h R-007: the patient choice was lost"
+        assert 'value="keep me"' not in dentist.get(f"/appointments?day={soon12}").text, \
+            "12h R-007: the kept values outlive the next page"
+        cancelled12h = dentist.post(f"/appointments/{taken}/cancel", data={"day": soon12},
+                                    follow_redirects=True).text
+        assert "alert-secondary" in cancelled12h and "Removed:" in cancelled12h, \
+            "12h R-008: a cancellation reads like a save"
+
         # 12g. P29 F-026: a decline needs a reason - an empty one leaves the request waiting
         req3 = _appt.request(_conn(db_path), PATIENT_CF, soon12, _appt.MORNING)
         page12g = dentist.post(f"/appointments/{req3}/decline", data={"reason": "  ", "day": soon12},

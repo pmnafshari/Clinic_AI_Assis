@@ -28,8 +28,15 @@
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
-            {% set css_cat = 'primary' if category == 'message' else category %}
-            <div class="alert alert-{{ css_cat }}">{{ message }}</div>
+            {% set kind = {'success': ('success', 'check-circle-fill', 'Done'),
+                           'removed': ('secondary', 'x-circle-fill', 'Removed'),
+                           'warning': ('warning', 'exclamation-triangle-fill', 'Check this'),
+                           'danger': ('danger', 'x-octagon-fill', 'Not done'),
+                           'error': ('danger', 'x-octagon-fill', 'Not done')}.get(category, ('primary', 'info-circle-fill', 'Note')) %}
+            <div class="alert alert-{{ kind[0] }} app-flash" data-flash="{{ kind[2] | lower }}"
+                 role="{{ 'alert' if kind[0] in ('danger', 'warning') else 'status' }}">
+              <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ kind[2] }}:</strong> {{ message }}
+            </div>
           {% endfor %}
         {% endif %}
       {% endwith %}

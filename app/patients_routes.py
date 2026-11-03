@@ -81,13 +81,22 @@ def list_view():
     if q:
         rows = [r for r in rows if q in r["patient_name"].lower() or q in r["codice_fiscale"].lower()]
     sort = request.args.get("sort") if request.args.get("sort") in ("name", "next", "last") else "name"
-    far = "9999"
-    if sort == "next":
-        rows.sort(key=lambda r: (r["next_appointment"] or far, r["request"] or far, r["patient_name"].lower()))
-    elif sort == "last":
-        rows.sort(key=lambda r: (r["last_visit"] or ""), reverse=True)
-    return render_template("patients_list.html", patients=rows, sort=sort, q=request.args.get("q") or "",
-                           total=len(patients), figures=figures)
+    # P29 F-005: ?dir= flips the column; last visit starts newest first, the others a-z / soonest
+    direction = request.args.get("dir") if request.args.get("dir") in ("asc", "desc") else \
+        ("desc" if sort == "last" else "asc")
+    if sort == "name":
+        rows.sort(key=lambda r: r["patient_name"].lower(), reverse=direction == "desc")
+    else:
+        # rows with no value stay at the end whichever way the column runs
+        field = "next_appointment" if sort == "next" else "last_visit"
+        have = sorted([r for r in rows if r[field]], key=lambda r: (r[field], r["patient_name"].lower()),
+                      reverse=direction == "desc")
+        rest = [r for r in rows if not r[field]]
+        if sort == "next":
+            rest.sort(key=lambda r: (r["request"] or "9999", r["patient_name"].lower()))
+        rows = have + rest
+    return render_template("patients_list.html", patients=rows, sort=sort, direction=direction,
+                           q=request.args.get("q") or "", total=len(patients), figures=figures)
 
 
 def _visit_band(last_visit, today):

@@ -227,6 +227,19 @@ def selftest():
         assert "Anna Uno" in week and "11:00" in week and "Bea Due" in week, "5: week view"
         month = dentist.get(f"/appointments?view=month&day={DAY}").get_data(as_text=True)
         assert "March 2031" in month and 'data-ux="month"' in month, "5: month view"
+        # P29 R-009 / R-010: cancel names what it cancels and asks first; Show says when filters are not applied
+        dayhtml = dentist.get(f"/appointments?view=day&day={DAY}").get_data(as_text=True)
+        assert re.search(r'data-confirm-cancel="Anna Uno · [^"]+ · \d\d:\d\d–\d\d:\d\d · ', dayhtml), \
+            "5 R-009: the cancel form does not name the appointment"
+        assert re.search(r'<dialog[^>]+id="cancel-dialog"', dayhtml) and "I am sure" in dayhtml \
+            and re.search(r'data-cancel-yes disabled', dayhtml), "5 R-009: no confirm dialog with a held button"
+        assert "data-apply-button" in dayhtml and "Filters changed - press Show to apply" in dayhtml, \
+            "5 R-010: Show does not mark unapplied filters"
+        js = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
+        cancel_js = js[js.index("P29 R-009"):js.index("P29 R-010")]
+        assert cancel_js.count("HTMLFormElement.prototype.submit") == 1 and \
+            cancel_js.index("HTMLFormElement.prototype.submit") > cancel_js.index('yes.addEventListener("click"'), \
+            "5 R-009: something other than the Yes click submits the cancel"
         for view in ("day", "week"):
             html = dentist.get(f"/appointments?view={view}&day={DAY}").get_data(as_text=True)
             assert not CF_SHAPE.search(_text(_section(html, "day-grid" if view == "day" else "week"))), \
@@ -238,6 +251,15 @@ def selftest():
         assert rows[:2] == [anna, bea], f"6: sort by next appointment gave {rows}"
         text = _text(pl)
         assert "No phone" in text and "No booking" in text, "6: missing values are not explicit"
+        # P29 F-005 / R-004: a second click on the active column reverses it, and says so
+        flipped = dentist.get("/patients?sort=next&dir=desc").get_data(as_text=True)
+        frows = re.findall(r'<tr[^>]*data-patient="([^"]+)"', flipped)
+        assert frows.index(bea) < frows.index(anna), f"6 F-005: dir=desc did not reverse {frows}"
+        assert re.search(r'<th scope="col" aria-sort="ascending"><a href="[^"]*sort=next[^"]*dir=desc', pl), \
+            "6 F-005: the active column does not offer the reverse order"
+        assert re.search(r'<th scope="col" aria-sort="descending"><a href="[^"]*sort=next[^"]*dir=asc', flipped), \
+            "6 F-005: and back again"
+        assert pl.count("bi-chevron-expand") == 2, "6 R-004: inactive sortable columns show no sort cue"
         assert "Booked" in text and f"{DAY} 09:30" in text, "6: next booking without date/time/status"
         assert "Requested 2031-03-10" in text, "6: a waiting request is not shown as requested"
         assert "Anna Uno" in _text(dentist.get("/patients?q=anna").get_data(as_text=True)) and \

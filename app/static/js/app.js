@@ -212,6 +212,61 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   });
 })();
 
+// P29 R-009: cancelling asks first, names the appointment, and waits five seconds unless
+// "I am sure" is ticked. the wait only enables the button - time alone never cancels.
+// without script the form posts as before.
+(function () {
+  var dialog = document.getElementById("cancel-dialog");
+  if (!dialog || typeof dialog.showModal !== "function") return;
+  var yes = dialog.querySelector("[data-cancel-yes]");
+  var sure = dialog.querySelector("[data-cancel-sure]");
+  var form = null, timer = null, left = 0;
+  function label() { yes.textContent = left > 0 && !sure.checked ? "Yes, cancel (" + left + ")" : "Yes, cancel"; }
+  function arm() { yes.disabled = left > 0 && !sure.checked; label(); }
+  document.querySelectorAll("form[data-confirm-cancel]").forEach(function (f) {
+    f.addEventListener("submit", function (event) {
+      if (f.dataset.confirmed) return;
+      event.preventDefault();
+      form = f;
+      dialog.querySelector("#cancel-dialog-what").textContent = f.getAttribute("data-confirm-cancel");
+      sure.checked = false;
+      left = 5;
+      arm();
+      clearInterval(timer);
+      timer = setInterval(function () { left -= 1; arm(); if (left <= 0) clearInterval(timer); }, 1000);
+      dialog.showModal();
+    });
+  });
+  sure.addEventListener("change", arm);
+  dialog.querySelector("[data-cancel-keep]").addEventListener("click", function () { dialog.close(); });
+  dialog.addEventListener("close", function () { clearInterval(timer); form = null; });
+  yes.addEventListener("click", function () {
+    if (!form || yes.disabled) return;
+    var f = form;
+    f.dataset.confirmed = "1";
+    dialog.close();
+    HTMLFormElement.prototype.submit.call(f);
+  });
+})();
+
+// P29 R-010: a filter form whose values differ from what the page shows highlights its
+// Show button, and drops it again when they match - nothing to do with hover.
+(function () {
+  document.querySelectorAll("[data-apply-button]").forEach(function (button) {
+    var form = button.form;
+    var hint = form.querySelector("[data-apply-hint]");
+    var shown = new URLSearchParams(new FormData(form)).toString();
+    function check() {
+      var changed = new URLSearchParams(new FormData(form)).toString() !== shown;
+      button.classList.toggle("btn-primary", changed);
+      button.classList.toggle("btn-outline-secondary", !changed);
+      if (hint) hint.hidden = !changed;
+    }
+    form.addEventListener("input", check);
+    form.addEventListener("change", check);
+  });
+})();
+
 // P30 billing: All / Outstanding / To reconcile / Drafts choose which group shows inside the one box.
 (function () {
   var group = document.querySelector("[data-bill-show]");
