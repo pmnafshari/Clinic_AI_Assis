@@ -37,7 +37,8 @@ def queue():
     if not authorize(g.user["role"], nr.CAPABILITY):
         return _refuse("note_review_read", "queue")
     conn = get_db()
-    return render_template("reviews.html", rows=nr.queue(conn), counts=nr.counts(conn))
+    return render_template("reviews.html", rows=nr.queue(conn), counts=nr.counts(conn),
+                           decided=nr.recent_decisions(conn))
 
 
 @review_bp.route("/reviews/<int:review_id>")
@@ -57,8 +58,17 @@ def confirm(review_id):
     if not authorize(g.user["role"], nr.CAPABILITY):
         return _refuse("note_review_confirm", f"review:{review_id}")
     form = {k: request.form[k] for k in ("visit_date", "procedures", "clinical_notes",
-                                         "next_appointment") if k in request.form}
-    return _step(review_id, nr.confirm, "Confirmed. The note is now part of the record.", form=form)
+                                         "next_appointment", "phone") if k in request.form}
+    # P29 F-036: say what the confirm actually does - an upload becomes a new visit, an
+    # earlier note was already in the record and is only marked as reviewed
+    row = get_db().execute("SELECT n.origin, p.patient_name FROM note_reviews n LEFT JOIN patients p"
+                           " ON p.patient_id = n.patient_id WHERE n.id = ?", (review_id,)).fetchone()
+    if row is not None and row["origin"] == "legacy":
+        done = "Marked as reviewed. This earlier note was already in the record - no new visit was made."
+    else:
+        who = row["patient_name"] if row is not None and row["patient_name"] else "the patient"
+        done = f"Confirmed. A new visit is filed for {who}."
+    return _step(review_id, nr.confirm, done, form=form)
 
 
 @review_bp.route("/reviews/<int:review_id>/reject", methods=["POST"])

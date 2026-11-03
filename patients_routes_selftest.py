@@ -1171,6 +1171,13 @@ def selftest():
         assert "No phone on file" in rec49, "49y: the record says there is no phone"
         assert ">None<" not in rec49 and "Date not recorded" in rec49, "49y: an undated visit says so"
 
+        # 49x. P29 R-025: a phone on file cannot be cleared
+        clear_page = dentist_client.get(f"/patients/{cf}")
+        cleared = dentist_client.post(f"/patients/{cf}/edit", data={
+            "field": "phone", "value": "", "csrf_token": _csrf_from(clear_page.text)})
+        assert "cannot be removed" in cleared.text and 'name="token"' not in cleared.text, \
+            "49x: clearing the phone was offered"
+
         # 49z. P29 F-031: the number already on file is not a change to confirm
         same_page = dentist_client.get(f"/patients/{cf}")
         same = dentist_client.post(f"/patients/{cf}/edit", data={

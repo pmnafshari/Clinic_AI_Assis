@@ -389,6 +389,9 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
         current = data[EDITABLE_FIELDS[args.field]]
         name = data["patient_name"]
         value = args.value
+        if args.field == "phone" and not (value or "").strip() and current:
+            # P29 R-025: a phone is changed, never removed
+            return None, "the phone cannot be removed - type the new number instead"
         if args.field == "phone" and value:
             # P22: one stored form (E.164); a value that is not an Italian number is refused, not stored
             import phones

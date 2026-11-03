@@ -2078,9 +2078,16 @@ def selftest():
         # approves, the patient downloads their own copy and nobody else can
         patient_routes.EXPORTS_DIR = Path(tmp) / "exports"
         profile33 = client32.get("/profile").text
-        client32.post("/data-request", data={"kind": "export", "detail": "per favore",
-                                             "patient_id": pid_of(cf32_other),
-                                             "csrf_token": _csrf_from(profile33)})
+        sent33 = client32.post("/data-request", data={"kind": "export", "detail": "per favore",
+                                                      "patient_id": pid_of(cf32_other),
+                                                      "csrf_token": _csrf_from(profile33)}, follow_redirects=True).text
+        # P29 F-024: the patient is told the request went, and where it is
+        assert on_page(t("rights_sent_new", "en"), sent33), "33 F-024: no word after sending a request"
+        again33 = client32.post("/data-request", data={"kind": "export", "csrf_token": _csrf_from(profile33)},
+                                follow_redirects=True).text
+        assert on_page(t("rights_sent_open", "en"), again33), "33 F-024: a second request is not explained"
+        assert not on_page(t("rights_sent_new", "en"), client32.get("/profile").text), \
+            "33 F-024: the message stays on a plain visit"
         c33 = raw_db()
         mine = data_rights.for_patient(c33, pid_of(cf32))
         assert [(r["kind"], r["status"], r["requested_role"]) for r in mine] == \

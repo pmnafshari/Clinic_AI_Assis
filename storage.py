@@ -507,6 +507,12 @@ def upsert_note_sql(note, source_path, conn):
     conn.commit()
 
 
+def phone_needed(conn, cf, phone):
+    """P29 R-025 (owner 2026-11-03): a NEW patient is not saved without a phone.
+    a patient already on record without one keeps working."""
+    return not (phone or "").strip() and lookup_patient(cf, conn) is None
+
+
 def lookup_patient(key, conn):
     """Takes a codice fiscale, a patient_id, or a folded CF (Phase 51).
 

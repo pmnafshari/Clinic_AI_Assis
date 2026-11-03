@@ -48,4 +48,29 @@
     {% endif %}
   </div>
 </section>
+
+<section class="card dash-card mt-4" aria-labelledby="decided-title" data-ux="recent-decisions">
+  <div class="dash-card-head"><div>
+    <h2 class="ds-card-title" id="decided-title">Recently decided</h2>
+    <p class="ds-card-sub">The last {{ decided | length }} notes confirmed or rejected, newest first</p>
+  </div></div>
+  <div class="dash-card-body">
+    {% if decided %}
+    <ul class="ds-rows sx-box">
+      {% for d in decided %}
+      <li class="ds-row">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ d.patient_name or 'Patient not identified' }} · {{ 'Earlier note' if d.origin == 'legacy' else 'Upload' }}</span>
+          <span class="ds-row-sub"><span class="ds-badge {{ 'ds-badge-success' if d.status == 'confirmed' else 'ds-badge-danger' }}">{{ d.status | capitalize }}</span>
+            by {{ d.decided_by or 'someone not recorded' }} · {{ d.decided_at | appt_date }}{% if d.decision_reason %} · {{ d.decision_reason }}{% endif %}</span>
+        </span>
+        <span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.detail', review_id=d.id) }}">Open<span class="visually-hidden">: {{ d.patient_name or 'patient not identified' }}, {{ d.status }}</span></a></span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">No note has been confirmed or rejected yet.</p>
+    {% endif %}
+  </div>
+</section>
 {% endblock %}

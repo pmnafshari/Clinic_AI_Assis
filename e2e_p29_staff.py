@@ -135,6 +135,13 @@ def main():
                         toggle.click()
                         expect(page.locator(f"#{field}")).to_have_attribute("type", "password")
                     checks.append(f"R-002 password toggles {width}")
+                    # NEW-02: the checklist ticks rule by rule as the new password grows
+                    page.fill("#password", "Abc")
+                    expect(page.locator("[data-rule=upper]")).to_have_class("is-met")
+                    expect(page.locator("[data-rule=digit]")).not_to_have_class("is-met")
+                    page.fill("#password", "Abcdefg1!")
+                    expect(page.locator("[data-pw-rules] li.is-met")).to_have_count(5)
+                    checks.append(f"NEW-02 checklist {width}")
 
                     # F-005: clicking the active column reverses it
                     page.goto(base + "/patients?sort=name")

@@ -9,7 +9,7 @@ from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from dental_notes_schema import DentalNote, plain_errors
 from extract_note import OllamaUnreachable, call_model, local_urlopen, parse_reply
-from storage import lookup_patient, save_new_note
+from storage import lookup_patient, phone_needed, save_new_note
 
 from .db import get_chroma, get_db
 
@@ -186,6 +186,12 @@ def new_note():
         )
     except Exception as e:
         return render_template("notes_new.html", error=f"Check these fields: {plain_errors(e)}", locked=locked)
+
+    if phone_needed(get_db(), note.codice_fiscale, note.phone):
+        # the draft stays on screen with what was typed, and its token stays unused
+        return render_template("notes_new.html", preview=note, locked=locked,
+                               confirm_token=request.form.get("confirm_token"),
+                               error="This is a new patient - add their phone number before saving.")
 
     # P14.T2: one save per preview. the token is claimed before anything is
     # written, so a second submit of the same preview finds it used

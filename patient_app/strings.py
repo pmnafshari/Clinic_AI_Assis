@@ -283,6 +283,13 @@ STRINGS = {
     "rights_col_request": {"it": "Richiesta", "en": "Request"},
     "rights_col_notes": {"it": "Note", "en": "Notes"},
     "rights_new": {"it": "Nuova richiesta", "en": "New request"},
+    # P29 F-024: what happened after the patient sent a request. Italian awaits native-speaker review.
+    "rights_sent_new": {"it": "La tua richiesta è stata inviata alla clinica. La trovi qui sotto come Aperta.",
+                        "en": "Your request was sent to the clinic. It is listed below as Open."},
+    "rights_sent_open": {"it": "Hai già una richiesta aperta di questo tipo: la trovi qui sotto.",
+                         "en": "You already have an open request of this kind - it is listed below."},
+    "rights_sent_none": {"it": "Non è stato possibile inviare la richiesta. Riprova o contatta la clinica.",
+                         "en": "The request could not be sent. Try again or contact the clinic."},
 
     # consent (P06). the wording itself lives in consent_texts.json
     "consent_heading": {"it": "I tuoi consensi", "en": "Your consents"},

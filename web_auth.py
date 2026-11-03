@@ -13,6 +13,28 @@ LOCKOUT_COOLDOWN_MINUTES = 15
 # the planner, so a policy decision only has to land here
 MIN_PASSWORD_LENGTH = 8
 
+# P29 NEW-02 (owner 2026-11-03): what a NEW password must have. checked when a
+# password is set on the change-password page; existing passwords keep working
+PASSWORD_RULES = (
+    ("upper", "an uppercase letter"),
+    ("lower", "a lowercase letter"),
+    ("digit", "a number"),
+    ("symbol", "a symbol"),
+    ("length", f"at least {MIN_PASSWORD_LENGTH} characters"),
+)
+
+
+def password_missing(password):
+    """-> the wording of each rule a new password does not meet, in PASSWORD_RULES order."""
+    have = {
+        "upper": any(c.isupper() for c in password),
+        "lower": any(c.islower() for c in password),
+        "digit": any(c.isdigit() for c in password),
+        "symbol": any(not c.isalnum() for c in password),
+        "length": len(password) >= MIN_PASSWORD_LENGTH,
+    }
+    return [text for key, text in PASSWORD_RULES if not have[key]]
+
 # scope boundary (Pitfall 2): these lockout columns are only enforced by the
 # web login path built this phase. cli_session.py is intentionally untouched
 # (D-03), so a web-locked account can still log in via the CLI - deliberate,

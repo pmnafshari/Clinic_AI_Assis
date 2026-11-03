@@ -206,6 +206,32 @@ def selftest():
             dr.UNDO_LOG = real_log
         assert [a["when"] for a in acts] == ["5 Mar, 09:15", "2031-03-04"] and acts[0]["who"] == "Anna Uno", f"4b: {acts}"
 
+        # 4c. P29 F-019: an upload shows its latest state - the dentist's decision on it - and a
+        # refused type says why instead of "no patient matched"
+        import note_review as _nr
+        from auth import log_audit as _log
+        empty = Path(tmp) / "empty-undo.jsonl"
+        empty.write_text("")
+        for name, status, why in (("ok.txt", "confirmed", None), ("no.txt", "rejected", "wrong patient")):
+            conn.execute("INSERT INTO note_reviews (origin, status, original_name, extraction, created_by,"
+                         " created_at, decided_by, decided_at, decision_reason) VALUES ('upload', ?, ?, '{}',"
+                         " 'dentist', '2031-03-05T08:00:00+00:00', 'drbianchi', '2031-03-05T09:00:00+00:00', ?)",
+                         (status, name, why))
+            _log(conn, "dentist", "dentist", "note_staged", f"sorted/ZZUA800101010101/notes/{name}", allowed=1,
+                 reason="awaiting_review")
+        _log(conn, "dentist", "dentist", "upload_file", "scan.heic", allowed=0)
+        conn.commit()
+        real_log, dr.UNDO_LOG = dr.UNDO_LOG, str(empty)
+        try:
+            with app.app_context():
+                acts = {a["text"]: a["who"] for a in dr._activity(conn, "dentist", limit=10)}
+        finally:
+            dr.UNDO_LOG = real_log
+        assert "Note confirmed by drbianchi" in acts, f"4c: the confirmed upload still shows its first state {acts}"
+        assert "Note rejected by drbianchi: wrong patient" in acts, f"4c: the rejection and its reason {acts}"
+        assert acts.get("Upload refused - this file type is not accepted") == "scan.heic", \
+            f"4c: a refused type still reads as an unmatched patient {acts}"
+
         # 5. appointments: day by clinician, week, month, filters, requests apart, booking panel on demand
         day = dentist.get(f"/appointments?view=day&day={DAY}").get_data(as_text=True)
         grid = _section(day, "day-grid")
@@ -331,6 +357,11 @@ def selftest():
         rows = _section(pl, "patient-rows")
         assert "ZZUA800101010101" not in _text(rows) and "ZZUA…0101" in _text(rows), "10c: full codice fiscale in the list"
         assert 'href="/patients/ZZUA800101010101"' in rows, "10c: the row no longer opens the record"
+        # P29 F-004 (owner 2026-11-03): a codice fiscale matches only when it is typed whole
+        part = _section(dentist.get("/patients?q=ZZUB80").get_data(as_text=True), "patient-rows")
+        assert 'data-patient="' not in part and "No patient matches" in part, "F-004: part of a code still matches"
+        whole_lower = _section(dentist.get("/patients?q=zzub 8001 0101 0102").get_data(as_text=True), "patient-rows")
+        assert 'data-patient="' in whole_lower, "F-004: the whole code typed loosely finds nobody"
         found = _section(dentist.get("/patients?q=ZZUB800101010102").get_data(as_text=True), "patient-rows")
         assert "Bea Due" in found and "Anna Uno" not in found, "10c: a full codice fiscale no longer finds the patient"
         # 10d. billing: three grouped tables, the same columns, amounts unchanged, actions only where the role may act

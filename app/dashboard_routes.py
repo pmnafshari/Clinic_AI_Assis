@@ -1,5 +1,6 @@
 import json
 from datetime import timedelta
+import re
 from pathlib import Path
 
 from flask import Blueprint, g, redirect, render_template, url_for
@@ -248,6 +249,23 @@ _STATE_WORDS = {"sorted": "Note filed", "needs_review": "File needs review", "aw
                 "rejected": "Upload refused"}
 
 
+_CF_IN_NAME = re.compile(r"[A-Z]{6}\d{2}[A-Z]\d{2}[A-Z]\d{3}[A-Z]", re.I)
+
+
+def _review_words(conn, name, username):
+    """P29 F-019: what became of a staged upload - the newest review of that file by this user."""
+    row = conn.execute("SELECT status, decided_by, decision_reason FROM note_reviews WHERE original_name = ?"
+                       " AND created_by = ? ORDER BY id DESC LIMIT 1", (name, username)).fetchone()
+    if row is None or row["status"] in ("pending", "confirming"):
+        return None
+    by = row["decided_by"] or "a dentist"
+    if row["status"] == "confirmed":
+        return f"Note confirmed by {by}"
+    if row["status"] == "rejected":
+        return f"Note rejected by {by}" + (f": {row['decision_reason']}" if row["decision_reason"] else "")
+    return "Note could not be read"
+
+
 def _who(conn, key):
     """a patient's name from a patient id or codice fiscale - never the identifier itself."""
     import patient_id
@@ -303,6 +321,11 @@ def _activity(conn, username, limit=6):
         who = _who(conn, parts[1]) if len(parts) > 2 and parts[0] == "sorted" else None
         state = _intake_state(r)
         text = "Document filed" if state == "sorted" and "documents" in parts[:-1] else _STATE_WORDS[state]
+        # P29 F-019: the latest state of the file, not the step that logged it
+        if state == "awaiting_review":
+            text = _review_words(conn, key, username) or text
+        elif state == "rejected" and r["action"] == "upload_file":
+            text, who = "Upload refused - this file type is not accepted", _CF_IN_NAME.sub("…", key)
         local = clinic_time.local_of(r["ts"]) if r["ts"] else None
         items.append({"when": local.strftime("%-d %b, %H:%M" if local.year == now.year else "%-d %b %Y, %H:%M") if local else "",
                       "at": _instant(r["ts"]), "text": text, "who": who or "no patient matched yet", "undo": False})

@@ -21,18 +21,24 @@ def session():
     return resp
 
 
+def _lock_hint():
+    # P29 R-001: the same hint on every failure - it never says WHICH account is locked
+    return {"lock_tries": web_auth.LOCKOUT_THRESHOLD, "lock_minutes": web_auth.LOCKOUT_COOLDOWN_MINUTES}
+
+
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     target = local_destination((request.args if request.method == "GET" else request.form).get("next"))
     if request.method == "GET":
-        return render_template("login.html", return_to=target)
+        return render_template("login.html", return_to=target, **_lock_hint())
 
     username = request.form.get("username", "")
     password = request.form.get("password", "")
 
     role = web_auth.attempt_login(username, password, get_db())
     if role is None:
-        return render_template("login.html", error="invalid username or password", return_to=target)
+        return render_template("login.html", error="invalid username or password", return_to=target,
+                               **_lock_hint())
 
     token = web_session.create_session(get_db(), username, role)
     resp = redirect(target or url_for("dashboard.index"))
@@ -49,14 +55,16 @@ def change_password():
     target = local_destination((request.args if request.method == "GET" else request.form).get("next"))
 
     if request.method == "GET":
-        return render_template("change_password.html", min_length=min_length, return_to=target)
+        return render_template("change_password.html", min_length=min_length, return_to=target,
+                               rules=web_auth.PASSWORD_RULES)
 
     current = request.form.get("current", "")
     password = request.form.get("password", "")
     confirm = request.form.get("confirm", "")
 
     def refuse(message):
-        return render_template("change_password.html", error=message, min_length=min_length, return_to=target)
+        return render_template("change_password.html", error=message, min_length=min_length, return_to=target,
+                               rules=web_auth.PASSWORD_RULES)
 
     # cheap validations first, the credential check last - otherwise a typo in
     # confirm or a short new password burns a failed attempt against the
@@ -67,8 +75,9 @@ def change_password():
         return refuse("Enter a new password.")
     if password != confirm:
         return refuse("The two passwords don't match.")
-    if len(password) < min_length:
-        return refuse(f"New password must be at least {min_length} characters.")
+    missing = web_auth.password_missing(password)
+    if missing:
+        return refuse("New password needs " + ", ".join(missing) + ".")
     if password == current:
         return refuse("New password must be different from your current one.")
 

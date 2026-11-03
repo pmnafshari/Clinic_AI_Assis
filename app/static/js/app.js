@@ -212,6 +212,29 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   });
 })();
 
+// P29 NEW-02: the new-password checklist ticks as the rules are met. the server checks
+// them again; this only shows progress
+(function () {
+  var list = document.querySelector("[data-pw-rules]");
+  var input = document.getElementById("password");
+  if (!list || !input) return;
+  var tests = {
+    upper: function (v) { return /[A-Z]/.test(v); },
+    lower: function (v) { return /[a-z]/.test(v); },
+    digit: function (v) { return /[0-9]/.test(v); },
+    symbol: function (v) { return /[^A-Za-z0-9]/.test(v); },
+    length: function (v) { return v.length >= 8; }
+  };
+  input.addEventListener("input", function () {
+    list.querySelectorAll("[data-rule]").forEach(function (li) {
+      var met = tests[li.getAttribute("data-rule")](input.value);
+      li.classList.toggle("is-met", met);
+      li.querySelector("i").className = met ? "bi bi-check-circle-fill" : "bi bi-circle";
+      li.querySelector("[data-rule-state]").textContent = met ? " - done" : " - not yet";
+    });
+  });
+})();
+
 // P29 R-009: cancelling asks first, names the appointment, and waits five seconds unless
 // "I am sure" is ticked. the wait only enables the button - time alone never cancels.
 // without script the form posts as before.

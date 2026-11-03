@@ -18,7 +18,7 @@ import patient_files
 import patient_identity
 import pending_actions
 from auth import authorize, log_audit
-from codice_fiscale import is_valid as is_valid_cf
+from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from storage import lookup_clinical, lookup_patient
 
 from .db import get_chroma, get_db
@@ -79,7 +79,9 @@ def list_view():
     figures = {"booked": sum(1 for r in rows if r["next_appointment"]), "no_phone": sum(1 for r in rows if not r["phone"])}
     q = (request.args.get("q") or "").strip().lower()
     if q:
-        rows = [r for r in rows if q in r["patient_name"].lower() or q in r["codice_fiscale"].lower()]
+        # P29 F-004: part of a name, or the whole codice fiscale - never part of a code
+        code = normalize_cf(q)
+        rows = [r for r in rows if q in r["patient_name"].lower() or code == r["codice_fiscale"]]
     sort = request.args.get("sort") if request.args.get("sort") in ("name", "next", "last") else "name"
     # P29 F-005: ?dir= flips the column; last visit starts newest first, the others a-z / soonest
     direction = request.args.get("dir") if request.args.get("dir") in ("asc", "desc") else \

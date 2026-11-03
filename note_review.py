@@ -295,6 +295,9 @@ def _fields(extraction, form):
         out["clinical_notes"] = str(form.get("clinical_notes") or "")
     if "next_appointment" in form:
         out["next_appointment"] = (form.get("next_appointment") or "").strip() or None
+    if "phone" in form:
+        # contact detail, not identity - asked for when the upload is a new patient (R-025)
+        out["phone"] = (form.get("phone") or "").strip() or None
     # identity is the upload's. a name or codice fiscale in the form is ignored
     out["codice_fiscale"], out["patient_name"] = base["codice_fiscale"], base["patient_name"]
     return out, out != base
@@ -316,6 +319,8 @@ def confirm(conn, review_id, form, actor, role, sorted_root=Path("sorted"), coll
         note = DentalNote.model_validate(fields)
     except ValueError as e:
         raise ReviewError("invalid", f"the note is not valid: {e.errors()[0]['msg']}") from None
+    if storage.phone_needed(conn, note.codice_fiscale, note.phone):
+        raise ReviewError("invalid", "this is a new patient - add their phone number before confirming")
 
     _claim(conn, review_id, "confirming")
     try:
@@ -415,6 +420,15 @@ def queue(conn, limit=100):
         " ON p.patient_id = n.patient_id WHERE n.status IN"
         " ('pending', 'extraction_failed', 'confirming')"
         " ORDER BY n.origin DESC, n.created_at LIMIT ?", (limit,)).fetchall()
+
+
+def recent_decisions(conn, limit=20):
+    """P29 F-037: notes that left the queue, newest decision first, so a rejection stays findable."""
+    return conn.execute(
+        "SELECT n.id, n.origin, n.status, n.decided_by, n.decided_at, n.decision_reason, p.patient_name"
+        " FROM note_reviews n LEFT JOIN patients p ON p.patient_id = n.patient_id"
+        " WHERE n.status IN ('confirmed', 'rejected') AND n.decided_at IS NOT NULL"
+        " ORDER BY n.decided_at DESC, n.id DESC LIMIT ?", (limit,)).fetchall()
 
 
 def counts(conn):

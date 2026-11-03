@@ -298,6 +298,21 @@ def domain(tmp):
     assert "note_reviews" in patient_identity.MERGE_RELATIONS
     assert "staging" in backup.FILE_STORES, "14: staged uploads would be lost on restore"
 
+    # 14b. P29 R-025 (owner 2026-11-03): an upload for a NEW patient is not filed without a phone
+    NEW = "ZZUC000000000003"
+    _ntxt, njs = routed(sorted_root, NEW, "n1")
+    storage.sync_note_file(njs, sorted_root, conn, collection, "assistant", "aassist")
+    nid = conn.execute("SELECT id FROM note_reviews WHERE codice_fiscale = ?", (NEW,)).fetchone()[0]
+    try:
+        nr.confirm(conn, nid, {}, *D, sorted_root=sorted_root, collection=collection, now=t0)
+        raise AssertionError("14b: a new patient was filed without a phone")
+    except nr.ReviewError as e:
+        assert e.code == "invalid" and "phone" in str(e), e
+    assert storage.lookup_patient(NEW, conn) is None, "14b: the patient was created anyway"
+    nr.confirm(conn, nid, {"phone": "333 123 4567"}, *D, sorted_root=sorted_root,
+               collection=collection, now=t0)
+    assert storage.lookup_patient(NEW, conn)["phone"] == "+393331234567", "14b: the phone was not kept"
+
     # 15. erasure removes the patient's reviews, staged files and review marks,
     # and nobody else's
     import erasure
@@ -419,12 +434,32 @@ def routes(tmp):
     assert conn.execute("SELECT status FROM note_reviews WHERE id = ?", (rid,)).fetchone()[0] \
         == "pending", "19: reception confirmed through a direct POST"
     # 20. the dentist confirms through the form, and the note becomes a visit
-    dentist.post(f"/reviews/{rid}/confirm", data={
+    done = dentist.post(f"/reviews/{rid}/confirm", data={
         "csrf_token": csrf(page), "visit_date": "2026-05-05", "procedures": "rct 26",
-        "clinical_notes": "rct 26 prima seduta", "next_appointment": ""})
+        "clinical_notes": "rct 26 prima seduta", "next_appointment": ""}, follow_redirects=True).text
     assert conn.execute("SELECT status FROM note_reviews WHERE id = ?", (rid,)).fetchone()[0] \
         == "confirmed"
     assert conn.execute("SELECT COUNT(*) FROM visits WHERE patient_id = ?", (pid,)).fetchone()[0] == 1
+    # 20b. P29 F-036: the message says a new visit was filed; a repeat says nothing new happened
+    assert "A new visit is filed for Ugo Upload" in done, "20b: the confirmation does not say what was filed"
+    again = dentist.post(f"/reviews/{rid}/confirm", data={"csrf_token": csrf(page)},
+                         follow_redirects=True).text
+    assert "no longer waiting" in again and "Not done:" in again, "20b: a repeat confirm reads as a success"
+    assert conn.execute("SELECT COUNT(*) FROM visits WHERE patient_id = ?", (pid,)).fetchone()[0] == 1
+    # 20c. P29 F-037: a rejected note is still findable after it leaves the queue
+    _txt2, js2 = routed(sorted_root, CF, "r2")
+    storage.sync_note_file(js2, sorted_root, conn, storage.get_collection(app_db.CHROMA_PATH),
+                           "assistant", "rv_assist")
+    rid2 = conn.execute("SELECT MAX(id) FROM note_reviews").fetchone()[0]
+    dentist.post(f"/reviews/{rid2}/reject", data={"csrf_token": csrf(page), "reason": "wrong patient"})
+    queue = dentist.get("/reviews").text
+    assert 'data-ux="recent-decisions"' in queue, "20c: no list of decided notes"
+    recent = queue[queue.index('data-ux="recent-decisions"'):]
+    assert "Rejected" in recent and "wrong patient" in recent and f'href="/reviews/{rid2}"' in recent, \
+        "20c: the rejection, its reason and its page are not listed"
+    assert "Confirmed" in recent and f'href="/reviews/{rid}"' in recent, "20c: the confirmed note is not listed"
+    outcome = dentist.get(f"/reviews/{rid2}").text
+    assert "Rejected by rv_dentist" in outcome and "wrong patient" in outcome, "20c: the rejected note's page"
     conn.close()
 
 

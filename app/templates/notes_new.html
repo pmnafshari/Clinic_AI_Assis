@@ -95,7 +95,9 @@
     </div>
     <div class="mb-3">
       <label for="phone" class="form-label">Phone</label>
-      <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}" class="form-control">
+      <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}" class="form-control" inputmode="tel"
+             aria-describedby="phone-help">
+      <div class="form-text" id="phone-help">Needed when this note creates a new patient.</div>
     </div>
     <div class="mb-3">
       <label for="visit_date" class="form-label">Visit date</label>

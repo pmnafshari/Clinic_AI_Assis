@@ -84,6 +84,15 @@ def selftest():
             "4: failed login should show the generic error"
         assert client_b.get_cookie("session_token") is None, \
             "4: a failed login must not issue a session cookie"
+        # P29 R-001 (owner 2026-11-03): every failure carries the same lockout hint, and a
+        # locked account reads exactly like a wrong password - no account is revealed
+        hint = b"After 5 wrong tries an account is locked for 15 minutes; the admin can unlock it."
+        assert hint in bad_resp.data, "4 R-001: the lockout hint is missing"
+        nobody = client_b.post("/login", data={"username": "nobody-here", "password": "x",
+                                               "csrf_token": _csrf_from(client_b.get("/login").text)})
+        assert hint in nobody.data and b"invalid username or password" in nobody.data, \
+            "4 R-001: an unknown username reads differently"
+        assert b"locked" not in nobody.data.replace(hint, b""), "4 R-001: the page says an account is locked"
 
         # 5. D-05 CSRF required - a login POST without csrf_token is rejected
         client_c = app.test_client()
@@ -375,6 +384,14 @@ def selftest():
         assert b'name="current"' in form.data, "12: the form must ask for the current password"
         assert str(MIN_PASSWORD_LENGTH).encode() in form.data, \
             "12: the form should state the real minimum length"
+        # P29 NEW-02 (owner 2026-11-03): five rules, listed under the field
+        for rule in ("upper", "lower", "digit", "symbol", "length"):
+            assert f'data-rule="{rule}"'.encode() in form.data, f"12 NEW-02: rule {rule} not listed"
+        for weak, why in (("alllowercase1!", "uppercase"), ("ALLUPPERCASE1!", "lowercase"),
+                          ("NoNumbersHere!", "number"), ("NoSymbols123", "symbol")):
+            refused_rule = change_pw(client_p, "oldpass123", weak)
+            assert refused_rule.status_code == 200 and why.encode() in refused_rule.data, \
+                f"12 NEW-02: {weak!r} was not refused for its missing {why}"
         # P29 R-002: each of the three fields has its own show/hide button, one input each
         for field in ("current", "password", "confirm"):
             assert re.search(r'<input[^>]+id="%s"[^>]+data-pw-input' % field, form.text) and \
@@ -382,14 +399,14 @@ def selftest():
                           form.text), f"12 R-002: no show/hide button for {field}"
             assert form.text.count(f'name="{field}"') == 1, f"12 R-002: {field} exists twice"
 
-        changed = change_pw(client_p, "oldpass123", "brandnewpass1")
+        changed = change_pw(client_p, "oldpass123", "Brandnewpass1!")
         assert changed.status_code == 302, "12: a successful change should redirect"
         assert changed.headers["Location"].endswith("/login"), \
             "12: a successful change should land on login (D-03)"
 
         _, old_login = sign_in("pchange", "oldpass123")
         assert old_login.status_code == 200, "12: the old password must stop working (SC2)"
-        _, new_login = sign_in("pchange", "brandnewpass1")
+        _, new_login = sign_in("pchange", "Brandnewpass1!")
         assert new_login.status_code == 302, "12: the new password must work immediately (SC2)"
 
         # 13. AUTH-05 SC4 - the completed change is audited
@@ -401,11 +418,11 @@ def selftest():
         # 14. AUTH-05 SC3 - every session dies, not just the acting one. two
         # separate clients are the point: destroy_session would pass this with
         # only client A checked
-        client_x, _ = sign_in("pchange", "brandnewpass1")
-        client_y, _ = sign_in("pchange", "brandnewpass1")
+        client_x, _ = sign_in("pchange", "Brandnewpass1!")
+        client_y, _ = sign_in("pchange", "Brandnewpass1!")
         assert client_y.get("/").status_code == 200, "14: second session should start authenticated"
 
-        change_pw(client_x, "brandnewpass1", "thirdpassword1")
+        change_pw(client_x, "Brandnewpass1!", "Thirdpassword1!")
         assert client_x.get("/").status_code == 302, "14: the acting session must be revoked"
         assert client_y.get("/").status_code == 302, \
             "14: every other session for that account must be revoked too (SC3)"
@@ -415,11 +432,11 @@ def selftest():
 
         # 15. D-01/D-02 - a wrong current password refuses, writes nothing, and
         # is audited as change_password rather than login
-        client_w, _ = sign_in("pchange", "thirdpassword1")
+        client_w, _ = sign_in("pchange", "Thirdpassword1!")
         hash_before = stored_hash("pchange")
         logins_before = count_rows("SELECT COUNT(*) FROM audit_log WHERE action = 'login'")
 
-        refused = change_pw(client_w, "notmypassword", "yetanotherpass1")
+        refused = change_pw(client_w, "notmypassword", "Yetanother1!")
         assert refused.status_code == 200, "15: a wrong current password should re-render, not redirect"
         assert b"Current password is not correct." in refused.data, "15: expected the refusal message"
         assert stored_hash("pchange") == hash_before, "15: nothing should have been written"
@@ -436,12 +453,12 @@ def selftest():
             "SELECT failed_attempts FROM users WHERE username = ?", ("pchange",)
         )
 
-        short = change_pw(client_w, "thirdpassword1", "a" * (MIN_PASSWORD_LENGTH - 1))
+        short = change_pw(client_w, "Thirdpassword1!", "a" * (MIN_PASSWORD_LENGTH - 1))
         assert short.status_code == 200 and b"at least" in short.data, \
             "16: a too-short new password should be refused"
         assert stored_hash("pchange") == hash_before, "16: a refused change must write nothing"
 
-        same = change_pw(client_w, "thirdpassword1", "thirdpassword1")
+        same = change_pw(client_w, "Thirdpassword1!", "Thirdpassword1!")
         assert same.status_code == 200 and b"different from your current one" in same.data, \
             "16: reusing the current password should be refused"
         assert stored_hash("pchange") == hash_before, "16: a refused change must write nothing"
@@ -467,7 +484,7 @@ def selftest():
         assert b'name="current"' in forced_form.data, \
             "16: the forced path must also ask for the current password (D-01)"
 
-        forced_done = change_pw(client_f, "temp12345", "forcednewpass1")
+        forced_done = change_pw(client_f, "temp12345", "Forcednewpass1!")
         assert forced_done.status_code == 302, "16: the forced change should succeed"
         assert count_rows(
             "SELECT must_change_password FROM users WHERE username = ?", ("forced",)

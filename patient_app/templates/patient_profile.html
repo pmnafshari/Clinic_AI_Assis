@@ -65,6 +65,7 @@
   <section class="pp-card" aria-labelledby="rights">
     <div class="pp-card-head"><h2 id="rights">{{ t('rights_heading', lang) }}</h2></div>
     <p class="small">{{ t('rights_intro', lang) }}</p>
+    {% if sent %}<p class="pp-note {{ 'is-danger' if sent == 'none' else '' }}" role="{{ 'alert' if sent == 'none' else 'status' }}" id="rights-sent">{{ t('rights_sent_' ~ sent, lang) }}</p>{% endif %}
     {% if requests %}
     <h3 class="pp-sub-h" id="rights-list">{{ t('rights_requests_title', lang) }}</h3>
     <div class="pp-box mb-3" style="--h:260px" tabindex="0" role="region" aria-labelledby="rights-list">

@@ -938,3 +938,6 @@ body { background: var(--pp-ground); color: var(--pp-text); }
 @media (prefers-reduced-motion: reduce) {
   .patient-core-caption { transition: none; }
 }
+
+/* P29 F-024: a request that could not be sent */
+.pp-note.is-danger { color: var(--pp-danger, #b42318); border-color: currentColor; }

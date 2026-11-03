@@ -297,7 +297,7 @@ def selftest():
         old_hash = _user(db_path, "fresh")["password_hash"]
         resp = fresh.post(
             "/change-password",
-            data={"current": "temp-pass", "password": "newpass1", "confirm": "newpass1"},
+            data={"current": "temp-pass", "password": "Newpass1!", "confirm": "Newpass1!"},
         )
         assert resp.status_code == 302, "forced-change: success should redirect"
         after = _user(db_path, "fresh")

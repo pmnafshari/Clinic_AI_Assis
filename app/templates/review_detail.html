@@ -64,6 +64,12 @@
           <label for="clinical_notes" class="form-label">Note</label>
           <textarea id="clinical_notes" name="clinical_notes" rows="4" class="ds-textarea">{{ x.clinical_notes or '' }}</textarea>
         </div>
+        {% if not view.patient %}
+        <div class="col-12 col-md-6">
+          <label for="phone" class="form-label">Phone <span class="ux-muted">(a new patient needs one)</span></label>
+          <input id="phone" name="phone" class="form-control" value="{{ x.phone or '' }}" inputmode="tel" required>
+        </div>
+        {% endif %}
         <div class="col-12 col-md-6">
           <label for="next_appointment" class="form-label">Recall, as written in the note</label>
           <input id="next_appointment" name="next_appointment" class="form-control" value="{{ x.next_appointment or '' }}">

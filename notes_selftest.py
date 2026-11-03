@@ -259,6 +259,17 @@ def selftest():
         conn.close()
         assert denied_row is not None, "denied submit should log an allowed=0 audit_log row"
 
+        # 3a. P29 R-025 (owner 2026-11-03): a typed note for a NEW patient needs a phone
+        np_page = client.get(client.post("/notes/new", data={
+            "raw_note": "nuovo paziente", "csrf_token": _csrf_from(client.get("/notes/new").text)}).headers["Location"])
+        no_phone = client.post("/notes/new", data={
+            "patient_name": "nina nuova", "codice_fiscale": "ZZNN800101010188", "phone": "",
+            "clinical_notes": "x", "csrf_token": _csrf_from(np_page.text),
+            "confirm_token": _token_from(np_page.text)}).text
+        assert "phone number" in no_phone and 'value="nina nuova"' in no_phone, \
+            "3a: a new patient without a phone was not stopped with the draft kept"
+        assert not (Path(tmp) / "sorted" / "ZZNN800101010188").exists(), "3a: the note was saved anyway"
+
         # 3b. P29 F-034: a wrong field is explained in words, never as pydantic internals
         bad_page = client.get("/notes/new")
         bad = client.post("/notes/new", data={

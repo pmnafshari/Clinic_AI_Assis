@@ -117,7 +117,7 @@ class LoginReturnTest(unittest.TestCase):
         gate = self.client.get(signed.location)
         page = self.client.get(gate.location).text
         # Browsers inherit fragments across redirects; the explicit hidden field carries it on POST.
-        data = {"current": PASSWORD, "password": "new-synthetic-password",
+        data = {"current": PASSWORD, "password": "New-synthetic-pass1",
                 "confirm": "mismatch", "csrf_token": field(page, "csrf_token"), "next": TARGET}
         failed = self.client.post("/change-password", data=data)
         self.assertEqual(field(failed.text, "next"), TARGET)

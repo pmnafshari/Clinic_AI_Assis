@@ -21,7 +21,8 @@
         {% if error %}
         {# an alert, not a bare red paragraph: it is announced, and it looks
            like every other error in the product #}
-        <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+        <div class="ds-alert ds-alert-danger" role="alert">{{ error }}
+          <p class="mb-0 mt-1 small">After {{ lock_tries }} wrong tries an account is locked for {{ lock_minutes }} minutes; the admin can unlock it.</p></div>
         {% endif %}
 
         <form method="post" action="{{ url_for('auth.login') }}" data-login-return>

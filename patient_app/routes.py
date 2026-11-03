@@ -210,16 +210,22 @@ def profile():
         g.patient["patient_id"], get_db(), ip=net.from_request(request))
     consents = consent.state(get_db(), g.patient["patient_id"], current_language())
     requests = data_rights.for_patient(get_db(), g.patient["patient_id"])
+    sent = request.args.get("sent") if request.args.get("sent") in ("new", "open", "none") else None
     return render_template("patient_profile.html", cf=cf, demo=demo, consents=consents,
-                           requests=requests)
+                           requests=requests, sent=sent)
 
 
 @patient_bp.route("/data-request", methods=["POST"])
 def data_request():
     pid = g.patient["patient_id"]
-    data_rights.file_request(get_db(), pid, request.form.get("kind", ""), pid, "patient",
-                             request.form.get("detail"))
-    return redirect(url_for("patient.profile") + "#rights")
+    conn = get_db()
+    kind = request.form.get("kind", "")
+    # P29 F-024: tell the patient what happened - sent, already open, or not sent
+    already = conn.execute("SELECT 1 FROM data_requests WHERE patient_id = ? AND kind = ? AND status = 'open'",
+                           (pid, kind)).fetchone()
+    filed = data_rights.file_request(conn, pid, kind, pid, "patient", request.form.get("detail"))
+    sent = "none" if filed is None else "open" if already else "new"
+    return redirect(url_for("patient.profile", sent=sent) + "#rights")
 
 
 @patient_bp.route("/data-requests/<int:req_id>/download")

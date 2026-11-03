@@ -78,7 +78,7 @@
       <div class="dash-card-body">
         <dl class="detail-list">
           <div><dt>Codice Fiscale</dt><dd class="font-monospace">{{ cf }}</dd></div>
-          <div><dt>Phone</dt><dd>{{ patient.phone|phone or "No phone on file" }}</dd></div>
+          <div><dt>Phone</dt><dd>{{ patient.phone|phone or ("No phone on file - add one" if authorize(g.user.role, 'update_field') else "No phone on file") }}</dd></div>
         </dl>
       </div>
     </section>
