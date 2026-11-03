@@ -272,7 +272,8 @@ def detail_view(cf):
         # the timeline follows the SAME gate as the clinical card above, rather
         # than carrying a gate of its own - an assistant sees that a visit
         # happened without reading what it said (RBAC-03)
-        timeline=patient_identity.timeline(conn, cf, show_clinical=show_clinical),
+        timeline=patient_identity.timeline_parts(patient_identity.timeline(conn, cf, show_clinical=show_clinical),
+                                                 clinic_time.now()),
         consents=consent.state(conn, pid, "en"),
         # P29 F-030: paid and owed come from the ledger, never worked out in the template
         ledger=ledger.patient_summary(conn, pid) if authorize(g.user["role"], "view_billing") else None,

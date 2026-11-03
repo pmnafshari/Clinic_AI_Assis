@@ -53,6 +53,9 @@ BILL_STATE_WORDS = {
     "paid": "invoice paid",
     "void": "invoice cancelled",
 }
+# P29 R-011: the short status each billed row shows beside its type
+BILL_STATE_SHORT = {"unknown": "Unknown", "draft": "Draft", "issued": "Issued", "partially_paid": "Part paid",
+                    "paid": "Paid", "void": "Cancelled"}
 
 # patient_merges and patient_duplicate_dismissals moved to
 # migrate_pid.TABLE_BODIES in Phase 51: they are keyed on patient_id now, and
@@ -602,6 +605,7 @@ def timeline(conn, key, show_clinical=True):
         events.append({
             "date": v["visit_date"],
             "kind": "visit",
+            "type": "Visit", "start": None, "time": "", "status": "Filed",
             "title": ", ".join(procedures) if procedures else "Visit",
             "detail": (v["clinical_notes"] or "") if show_clinical else "",
             "source": "from a filed note",
@@ -625,10 +629,12 @@ def timeline(conn, key, show_clinical=True):
         events.append({
             "date": day,
             "kind": "appointment",
+            "type": "Appointment", "status": a["status"].capitalize(),
+            "start": None if requested else hhmm, "time": "" if requested else f"{hhmm}–{end}",
             "title": {"booked": "Appointment booked", "requested": "Requested an appointment",
                       "cancelled": "Appointment cancelled",
                       "declined": "Request declined"}.get(a["status"], a["status"]),
-            "detail": "" if requested else f"{hhmm}–{end} with {a['dentist']}",
+            "detail": "" if requested else f"with {a['dentist']}",
             "source": "scheduling",
         })
 
@@ -645,6 +651,7 @@ def timeline(conn, key, show_clinical=True):
         events.append({
             "date": inv["visit_date"],
             "kind": "billed",
+            "type": "Billing", "start": None, "time": "", "status": BILL_STATE_SHORT.get(state, "Unknown"),
             "title": f"{'Draft invoice' if state == 'draft' else 'Billed'} {inv['amount']:.2f} EUR",
             "detail": inv["description"] or "",
             # said on every single line, not once at the bottom, because the
@@ -659,6 +666,7 @@ def timeline(conn, key, show_clinical=True):
         events.append({
             "date": mrg["merged_at"][:10],
             "kind": "merge",
+            "type": "Record", "start": None, "time": "", "status": "Merged",
             "title": f"Absorbed the record of {was.get('patient_name') or mrg['source_cf']}",
             "detail": f"{mrg['source_cf']}, merged by {mrg['merged_by']}",
             # a record that absorbed another says so on its own history. a
@@ -670,6 +678,25 @@ def timeline(conn, key, show_clinical=True):
     # undated rows sort last rather than crashing the sort or claiming a date
     events.sort(key=lambda e: (e["date"] is None, e["date"] or ""))
     return events
+
+
+def timeline_parts(events, now):
+    """P29 R-011: the timeline as the record shows it - what is coming up, nearest first; what happened, newest
+    first; and what has no date. a booking is coming up until it starts, a request (a day, no time) until its day
+    is over. `now` is the clinic's own time."""
+    today, hhmm = now.date().isoformat(), now.strftime("%H:%M")
+    upcoming, history, undated = [], [], []
+    for e in events:
+        if not e["date"]:
+            undated.append(e)
+        elif e["kind"] == "appointment" and e["status"] in ("Booked", "Requested") and (
+                e["date"] > today or (e["date"] == today and (e["start"] or "99:99") >= hhmm)):
+            upcoming.append(e)
+        else:
+            history.append(e)
+    upcoming.sort(key=lambda e: (e["date"], e["start"] or ""))
+    history.sort(key=lambda e: (e["date"], e["start"] or ""), reverse=True)
+    return {"upcoming": upcoming, "history": history, "undated": undated}
 
 
 def pending_index_repoints(conn):
@@ -1111,7 +1138,10 @@ def selftest():
         assert "00:00" not in req["detail"] and req["detail"] == "", \
             f"20: a request must not be shown with a time, got {req['detail']!r}"
         booked = [e for e in tl if e["title"] == "Appointment booked"][0]
-        assert "14:30–15:00" in booked["detail"], "20: a real booking shows its start and end (P29 F-011/F-015)"
+        assert booked["time"] == "14:30–15:00" and booked["detail"] == "with dr rossi", \
+            "20: a real booking shows its start and end (P29 F-011/F-015) and who"
+        assert req["time"] == "" and req["status"] == "Requested" and booked["status"] == "Booked", \
+            "20: each row carries its status (P29 R-011)"
 
         # 21. NO TOTAL on the timeline. each line says its invoice's ledger state
         # (P29 F-030); a line with no ledger invoice is unknown, never assumed paid
@@ -1151,6 +1181,17 @@ def selftest():
         undated = timeline(t, TPID)
         assert undated[-1]["date"] is None, "24: an undated row sorts last"
         assert len(undated) == len(merged_tl) + 1, "24: and is not dropped"
+
+        # 25. P29 R-011: the record shows it in three parts. a booking still ahead today is coming up; one already
+        # started is history; requests carry no time and count by their day
+        parts = timeline_parts(undated, datetime(2026, 5, 10, 14, 0))
+        assert [e["title"] for e in parts["upcoming"]] == ["Appointment booked"], parts["upcoming"]
+        assert parts["history"][0]["date"] >= parts["history"][-1]["date"], "25: history is newest first"
+        assert all(e["date"] for e in parts["history"]) and [e["date"] for e in parts["undated"]] == [None], \
+            "25: undated rows are apart"
+        later = timeline_parts(undated, datetime(2026, 5, 10, 14, 45))
+        assert not later["upcoming"], "25: a booking that already started is not coming up"
+        assert len(parts["upcoming"]) + len(parts["history"]) + len(parts["undated"]) == len(undated), "25: nothing dropped"
 
     print("selftest ok")
 

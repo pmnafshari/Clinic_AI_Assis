@@ -1184,6 +1184,46 @@ def selftest():
         assert "No phone on file" in rec49, "49y: the record says there is no phone"
         assert ">None<" not in rec49 and "Date not recorded" in rec49, "49y: an undated visit says so"
 
+        # 49t. P29 R-011: the timeline is three lists - coming up (nearest first), history (newest first: the latest
+        # eight, then View all) and not dated - and each row says its type, date, time where it has one, and status
+        from datetime import date as _d, timedelta as _td
+        import clinic_time
+        today49 = _d.today()
+        conn = sqlite3.connect(db_path)
+        for n in range(10):
+            conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                         " VALUES (?, ?, '[\"controllo\"]', 'ok', ?)",
+                         (pid49, (today49 - _td(days=30 + 7 * n)).isoformat(), f"zz/49-{n}.json"))
+        for offset, status in ((-3, "booked"), (5, "booked")):
+            at = clinic_time.to_utc_text(clinic_time.parse(f"{(today49 + _td(days=offset)).isoformat()}T10:00:00"))
+            conn.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, created_at, updated_at)"
+                         " VALUES (?, 'drossi', ?, 30, ?, '', '')", (pid49, at, status))
+        soon49 = (today49 + _td(days=2)).isoformat()
+        conn.execute("INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status, period, created_at, updated_at)"
+                     " VALUES (?, '', ?, 0, 'requested', 'morning', '', '')", (pid49, f"{soon49}T00:00:00"))
+        conn.commit()
+        conn.close()
+        tl49 = dentist_client.get(f"/patients/{cf49}").text
+        tl49 = tl49[tl49.index('id="timeline-title"'):]
+        tl49 = tl49[:tl49.index("</section>")]
+        assert all(f'data-tl="{part}"' in tl49 for part in ("upcoming", "history", "undated")), \
+            "49t R-011: the timeline is not split into coming up, history and not dated"
+        up49 = tl49[tl49.index('data-tl="upcoming"'):tl49.index('data-tl="history"')]
+        hist49 = tl49[tl49.index('data-tl="history"'):tl49.index('data-tl="undated"')]
+        und49 = tl49[tl49.index('data-tl="undated"'):]
+        when = r'class="tl-date">(\d{4}-\d{2}-\d{2})<'
+        assert re.findall(when, up49) == [soon49, (today49 + _td(days=5)).isoformat()], \
+            f"49t: coming up is not nearest first: {re.findall(when, up49)}"
+        assert ">Requested<" in up49 and ">Booked<" in up49 and 'class="tl-time">10:00–10:30<' in up49, \
+            "49t: a coming-up row lacks its status or time"
+        dates49 = re.findall(when, hist49)
+        assert len(dates49) == 11 and dates49 == sorted(dates49, reverse=True), f"49t: history is not newest first: {dates49}"
+        assert dates49[0] == (today49 - _td(days=3)).isoformat(), "49t: the past booking is history, not coming up"
+        assert hist49.split("<details")[0].count('class="tl-item') == 8 and "View all 11 events" in hist49, \
+            "49t: history is not bounded to the latest eight with View all"
+        assert 'class="tl-type">Visit<' in hist49 and 'class="tl-type">Appointment<' in hist49, "49t: rows lack their type"
+        assert "Date not recorded" in und49 and "Date not recorded" not in hist49, "49t: the undated visit is not apart"
+
         # 49w. P29 F-007: the Data requests card says its wording is a demo template, like Consent
         rec49w = dentist_client.get(f"/patients/{cf}").text
         card = rec49w[rec49w.index('id="rights-title"'):rec49w.index('id="rights-title"') + 400]

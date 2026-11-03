@@ -112,23 +112,38 @@
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
-          <p class="ds-card-sub">Visits, appointments and billing, in order</p>
+          <p class="ds-card-sub">Visits, appointments and billing: what is coming up, then what happened, newest first</p>
         </div>
       </div>
       <div class="dash-card-body">
-        {% if timeline %}
-        <ol class="tl">
-          {% for event in timeline %}
-          <li class="tl-item tl-{{ event.kind }}">
-            <span class="tl-date">{{ event.date or 'Date not recorded' }}</span>
+        {# P29 R-011: three lists, each row its type, date, time where it has one, and status; history shows the
+           latest eight and keeps the rest behind View all #}
+        {% macro tl_row(e) %}
+          <li class="tl-item tl-{{ e.kind }}">
+            <span class="tl-when"><span class="tl-type">{{ e.type }}</span><span class="tl-date">{{ e.date or 'Date not recorded' }}</span>{% if e.time %}<span class="tl-time">{{ e.time }}</span>{% endif %}</span>
             <span class="tl-main">
-              <span class="ds-row-title">{{ event.title }}</span>
-              {% if event.detail %}<span class="ds-row-sub">{{ event.detail }}</span>{% endif %}
-              <span class="tl-source">{{ event.source }}</span>
+              <span class="ds-row-title">{{ e.title }} <span class="tl-status">{{ e.status }}</span></span>
+              {% if e.detail %}<span class="ds-row-sub">{{ e.detail }}</span>{% endif %}
+              <span class="tl-source">{{ e.source }}</span>
             </span>
           </li>
-          {% endfor %}
-        </ol>
+        {% endmacro %}
+        {% if timeline.upcoming or timeline.history or timeline.undated %}
+        <h3 class="tl-part" data-tl="upcoming">Coming up <span class="tl-part-note">nearest first</span></h3>
+        {% if timeline.upcoming %}<ol class="tl">{% for e in timeline.upcoming %}{{ tl_row(e) }}{% endfor %}</ol>
+        {% else %}<p class="text-secondary small">Nothing booked or requested ahead.</p>{% endif %}
+        <h3 class="tl-part" data-tl="history">History <span class="tl-part-note">newest first</span></h3>
+        {% if timeline.history %}
+        <ol class="tl">{% for e in timeline.history[:8] %}{{ tl_row(e) }}{% endfor %}</ol>
+        {% if timeline.history | length > 8 %}
+        <details class="tl-more"><summary>View all {{ timeline.history | length }} events</summary>
+          <ol class="tl" start="9">{% for e in timeline.history[8:] %}{{ tl_row(e) }}{% endfor %}</ol>
+        </details>
+        {% endif %}
+        {% else %}<p class="text-secondary small">Nothing has happened yet.</p>{% endif %}
+        <h3 class="tl-part" data-tl="undated">Not dated</h3>
+        {% if timeline.undated %}<ol class="tl">{% for e in timeline.undated %}{{ tl_row(e) }}{% endfor %}</ol>
+        {% else %}<p class="text-secondary small mb-0">Every event has a date.</p>{% endif %}
         {% else %}
         <p class="text-secondary mb-0">Nothing recorded for this patient yet.</p>
         {% endif %}
