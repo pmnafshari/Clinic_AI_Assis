@@ -60,7 +60,7 @@
       <span class="ux-kpi-sub">{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></div>
     <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed</span>
       <span class="ux-kpi-value">€ {{ "%.2f" | format(billed) }}</span>
-      <span class="ux-kpi-sub">{{ patient.invoices | length }} line{{ 's' if patient.invoices | length != 1 }} · no paid status here</span></div>
+      <span class="ux-kpi-sub">{{ patient.invoices | length }} line{{ 's' if patient.invoices | length != 1 }}{% if ledger %} · € {{ "%.2f" | format(ledger.outstanding_cents / 100) }} owed{% endif %}</span></div>
   <!--/tiles--></div>
   <div class="sx-panel-col">
     <section class="card dash-card sx-h-s" aria-labelledby="profile-title">
@@ -78,7 +78,7 @@
       <div class="dash-card-body">
         <dl class="detail-list">
           <div><dt>Codice Fiscale</dt><dd class="font-monospace">{{ cf }}</dd></div>
-          <div><dt>Phone</dt><dd>{{ patient.phone|phone or "-" }}</dd></div>
+          <div><dt>Phone</dt><dd>{{ patient.phone|phone or "No phone on file" }}</dd></div>
         </dl>
       </div>
     </section>
@@ -93,7 +93,7 @@
           {% for d in patient.visit_dates %}
           <li class="ds-row">
             <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
-            <span class="ds-row-main"><span class="ds-row-title">{{ d }}</span></span>
+            <span class="ds-row-main"><span class="ds-row-title">{{ d or 'Date not recorded' }}</span></span>
           </li>
           {% endfor %}
         </ul>
@@ -120,7 +120,7 @@
         <ol class="tl">
           {% for event in timeline %}
           <li class="tl-item tl-{{ event.kind }}">
-            <span class="tl-date">{{ event.date or 'no date' }}</span>
+            <span class="tl-date">{{ event.date or 'Date not recorded' }}</span>
             <span class="tl-main">
               <span class="ds-row-title">{{ event.title }}</span>
               {% if event.detail %}<span class="ds-row-sub">{{ event.detail }}</span>{% endif %}
@@ -152,7 +152,7 @@
           {% for visit in clinical %}
           <li class="timeline-item">
             <div class="timeline-head">
-              <span class="timeline-date">{{ visit.visit_date or "no date" }}</span>
+              <span class="timeline-date">{{ visit.visit_date or "Date not recorded" }}</span>
               <button type="button" class="btn btn-outline-secondary btn-sm"
                 data-bs-toggle="modal" data-bs-target="#editModal"
                 hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
@@ -260,7 +260,7 @@
   <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="billing-tiles">
     <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed in total</span>
       <span class="ux-kpi-value">€ {{ "%.2f" | format(patient.invoices | sum(attribute='amount')) }}</span>
-      <span class="ux-kpi-sub">no paid status is recorded here</span></div>
+      <span class="ux-kpi-sub">{% if ledger %}€ {{ "%.2f" | format(ledger.outstanding_cents / 100) }} still owed, from the ledger{% else %}paid status is on the billing page{% endif %}</span></div>
     <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed lines</span>
       <span class="ux-kpi-value">{{ patient.invoices | length }}</span><span class="ux-kpi-sub">from the filed notes</span></div>
     <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Visits on record</span>
@@ -270,7 +270,7 @@
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
-          <p class="ds-card-sub">Billed lines - no paid or unpaid status is recorded</p>
+          <p class="ds-card-sub">Billed lines, and each invoice's state from the ledger</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -285,6 +285,21 @@
           {% endfor %}
           </tbody>
         </table>
+        {% if ledger and ledger.invoices %}
+        <table class="ux-table sx-lines mt-3" data-ux="record-ledger">
+          <caption class="visually-hidden">Invoices and what is paid, from the ledger</caption>
+          <thead><tr><th scope="col">Visit</th><th scope="col">State</th><th scope="col" class="ux-num">Total</th><th scope="col" class="ux-num">Paid</th><th scope="col" class="ux-num">Owed</th></tr></thead>
+          <tbody>
+          {% for i in ledger.invoices %}
+          <tr><td data-label="Visit">{{ i.visit_date or 'Date not recorded' }}</td>
+            <td data-label="State">{{ {'unknown': 'Unknown', 'draft': 'Draft', 'issued': 'Issued', 'partially_paid': 'Part paid', 'paid': 'Paid', 'void': 'Cancelled'}[i.state] }}</td>
+            <td data-label="Total" class="ux-num">€ {{ "%.2f" | format(i.total_cents / 100) }}</td>
+            <td data-label="Paid" class="ux-num">{% if i.state == 'unknown' %}unknown{% else %}€ {{ "%.2f" | format(i.paid_cents / 100) }}{% endif %}</td>
+            <td data-label="Owed" class="ux-num">{% if i.state == 'unknown' %}unknown{% else %}€ {{ "%.2f" | format(i.outstanding_cents / 100) }}{% endif %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
         {% else %}
         <p class="dash-empty-line">No invoices on record.</p>
         {% endif %}

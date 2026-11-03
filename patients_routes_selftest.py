@@ -1159,6 +1159,25 @@ def selftest():
             "48c: the request list no longer names the erased patient"
         del os.environ[erasure.KEY_ENV]
 
+        # 49y. P29 F-006 / F-008: no phone and no visit date are said in words, never "-" or None
+        cf49 = "ZZNP800101010149"
+        conn = sqlite3.connect(db_path)
+        pid49 = patient_id.seed_patient(conn, cf49, "Nina Nophone", None)
+        conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                     " VALUES (?, NULL, '[]', 'undated', 'zz/49.json')", (pid49,))
+        conn.commit()
+        conn.close()
+        rec49 = dentist_client.get(f"/patients/{cf49}").text
+        assert "No phone on file" in rec49, "49y: the record says there is no phone"
+        assert ">None<" not in rec49 and "Date not recorded" in rec49, "49y: an undated visit says so"
+
+        # 49z. P29 F-031: the number already on file is not a change to confirm
+        same_page = dentist_client.get(f"/patients/{cf}")
+        same = dentist_client.post(f"/patients/{cf}/edit", data={
+            "field": "phone", "value": _phone(db_path, cf), "csrf_token": _csrf_from(same_page.text)})
+        assert "no change" in same.text and 'name="token"' not in same.text, \
+            "49z: an identical phone offers nothing to confirm"
+
         # 49. P29 F-020: the assistant may not change demographics, so the
         # record offers no Edit for them; the save itself stays refused server-side
         page49 = assistant_client.get(f"/patients/{cf}")

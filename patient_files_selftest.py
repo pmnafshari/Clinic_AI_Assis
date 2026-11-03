@@ -127,6 +127,12 @@ def selftest():
         assert entry["visit_date"] == "2021-03-04" and entry["file_type"] == "PNG image" \
             and entry["category"] == "OPG" and "uploaded by drossi" in entry["source"], entry
         assert entry["date_basis"], "2: the timeline says what its date is"
+        # P29 F-009: a confirmed note whose reviewer was not recorded never says "by None"
+        conn.execute("INSERT INTO visit_reviews (visit_id, method, reviewed_by, reviewed_at)"
+                     " VALUES (?, 'typed', NULL, '2021-03-04T10:00:00+00:00')", (visit,))
+        note = next(e for e in pf.timeline(conn, rossi, *D) if e["kind"] == "note")
+        assert "None" not in note["source"] and "not recorded" in note["source"], note
+        conn.execute("DELETE FROM visit_reviews WHERE visit_id = ?", (visit,))
         for who in (A, ADM):
             try:
                 pf.timeline(conn, rossi, *who)

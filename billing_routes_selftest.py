@@ -221,7 +221,18 @@ def selftest():
         for action in ("reconcile_invoice", "issue_invoice", "record_payment",
                        "plan_installments", "refund_payment", "view_billing", "preview_invoice"):
             assert action in audits, f"7: {action} is not audited"
+        v8 = _visit(conn, pid, "2026-10-01", [("controllo", 5000)])
+        ledger.ensure_invoice(conn, pid, v8)
+        conn.commit()
         conn.close()
+
+        # 8. P29 F-030 / F-032: the record shows the ledger's own state, and a draft is not "billed"
+        record = dentist.get(f"/patients/{CF}").text
+        assert "no paid" not in record and "not collected" not in record, \
+            "8: the record still says no paid status exists"
+        assert "Part paid" in record and "€ 310.00" in record, "8: the ledger state and what is owed"
+        assert "Draft invoice 50.00 EUR" in record and "Billed 50.00 EUR" not in record, \
+            "8: a draft line is shown as a draft, not as billed"
 
     print("selftest ok")
 

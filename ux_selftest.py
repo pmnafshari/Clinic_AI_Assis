@@ -405,7 +405,7 @@ def selftest():
         assert _text(empty_week).count("Nothing") + _text(empty_week).count("No confirmed") <= 1, "11d: repeated empty messages"
         assert "day=2031-03-05" in empty_week and "Wed 5 Mar" in _text(empty_week), "11d: empty week has no next booking"
         full_day = _section(appt("day"), "day-grid")
-        hours = re.findall(r'<th scope="row" class="ux-daygrid-time">(\d\d):00</th>', full_day)
+        hours = re.findall(r'<th scope="row" class="ux-daygrid-time">(\d\d):00–\d\d:00</th>', full_day)
         assert hours and hours[0] == "09" and hours[-1] == "10", f"11d: the day draws empty hours {hours}"
         # 11e. the month legend: counts as words, a request never shown as a booking
         legend = _text(_section(appt("month"), "month-legend"))

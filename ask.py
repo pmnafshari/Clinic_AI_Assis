@@ -69,6 +69,12 @@ def fuzzy_lookup(query, conn, limit=8):
     if not query_lower:
         return []
 
+    # a whole codice fiscale is an exact lookup, never a fuzzy name (P29 F-002)
+    if is_valid_cf(normalize_cf(query)):
+        row = conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE codice_fiscale = ?",
+                           (normalize_cf(query),)).fetchone()
+        return [(row["codice_fiscale"], row["patient_name"])] if row else []
+
     tokens = query_lower.split()
     # coarse SQL prefilter: every token must appear somewhere in the name -
     # cheap at this data volume, narrows the set difflib has to score
@@ -346,6 +352,11 @@ def selftest():
             hits = fuzzy_lookup(q, conn)
             assert (cf5, "Anna Gialli") in hits, \
                 f"query {q!r} must surface the capitalized name 'Anna Gialli'"
+
+        # 3d. P29 F-002: a whole codice fiscale finds that one patient, typed any way
+        for q in (cf, cf.lower(), " ".join([cf[:6], cf[6:11], cf[11:]])):
+            assert fuzzy_lookup(q, conn) == [(cf, "Mario Rossi")], f"3d: {q!r} did not find the patient"
+        assert fuzzy_lookup("ZZZZZZ00Z00Z000Z", conn) == [], "3d: an unknown code finds nobody"
 
         # 4. answer_exact behaviors
         answer = answer_exact(cf, "phone", conn)

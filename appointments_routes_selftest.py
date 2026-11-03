@@ -321,6 +321,14 @@ def selftest():
                      "SELECT * FROM audit_log WHERE action = 'decline_appointment_request'"), \
             "12f: declining must be audited"
 
+        # 12g. P29 F-026: a decline needs a reason - an empty one leaves the request waiting
+        req3 = _appt.request(_conn(db_path), PATIENT_CF, soon12, _appt.MORNING)
+        page12g = dentist.post(f"/appointments/{req3}/decline", data={"reason": "  ", "day": soon12},
+                               follow_redirects=True).text
+        assert _rows(db_path, "SELECT status FROM appointments WHERE id = ?", (req3,))[0]["status"] \
+            == "requested", "12g: a decline without a reason went through"
+        assert "reason" in page12g.lower(), "12g: and the page says a reason is needed"
+
         # --- the month calendar (phase 48) --------------------------------
         #
         # asserted through the aria-label rather than the day number, because
@@ -395,6 +403,13 @@ def selftest():
             assert resp13.status_code == 200, f"13g: {bad} must not break the page"
             # P23: a bad ?day= falls back to today's day view; a ?month= still draws the month - a view either way
             assert "appt-cal" in resp13.text or 'data-ux="day-grid"' in resp13.text, f"13g: {bad} must still draw a view"
+
+        # 14. P29 F-011: the message after a booking gives its start and end
+        page14 = dentist.post("/appointments/book", data={
+            "codice_fiscale": PATIENT_CF, "dentist": "drossi", "date": "2027-03-22", "time": "09:30",
+            "minutes": "30", "day": "2027-03-22"}, follow_redirects=True).text
+        assert "Appointment booked: Mon 22 Mar, 09:30–10:00 with drossi" in page14, \
+            "14: the booking message has no start-end range"
 
     print("selftest ok")
 

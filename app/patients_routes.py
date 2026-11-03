@@ -12,6 +12,7 @@ import clinic_time
 import consent
 import data_rights
 import imaging_requests
+import ledger
 import patient_auth
 import patient_files
 import patient_identity
@@ -262,6 +263,8 @@ def detail_view(cf):
         # happened without reading what it said (RBAC-03)
         timeline=patient_identity.timeline(conn, cf, show_clinical=show_clinical),
         consents=consent.state(conn, pid, "en"),
+        # P29 F-030: paid and owed come from the ledger, never worked out in the template
+        ledger=ledger.patient_summary(conn, pid) if authorize(g.user["role"], "view_billing") else None,
         requests=data_rights.for_patient(conn, pid),
         # P25: the same gate as the clinical card; the timeline itself re-checks it
         file_timeline=patient_files.timeline(conn, pid, g.user["username"], g.user["role"])

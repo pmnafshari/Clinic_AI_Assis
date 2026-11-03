@@ -7,7 +7,7 @@ import note_review
 import patient_id
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
-from dental_notes_schema import DentalNote
+from dental_notes_schema import DentalNote, plain_errors
 from extract_note import OllamaUnreachable, call_model, local_urlopen, parse_reply
 from storage import lookup_patient, save_new_note
 
@@ -185,7 +185,7 @@ def new_note():
             next_appointment=request.form.get("next_appointment") or None,
         )
     except Exception as e:
-        return render_template("notes_new.html", error=f"invalid fields: {e}", locked=locked)
+        return render_template("notes_new.html", error=f"Check these fields: {plain_errors(e)}", locked=locked)
 
     # P14.T2: one save per preview. the token is claimed before anything is
     # written, so a second submit of the same preview finds it used

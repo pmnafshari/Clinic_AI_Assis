@@ -48,3 +48,17 @@ class DentalNote(BaseModel):
             if code and code not in KNOWN_PROCEDURES:
                 unknown.append(code)
         return unknown
+
+
+def plain_errors(e):
+    """A validation error as words a person can act on - "codice fiscale: ..." -
+    without pydantic's type codes and help links (P29 F-034). Anything else is
+    its own message."""
+    if not hasattr(e, "errors"):
+        return str(e)
+    parts = []
+    for err in e.errors():
+        field = " ".join(str(x) for x in err.get("loc", ()) if not isinstance(x, int)).replace("_", " ")
+        msg = err.get("msg", "not valid").removeprefix("Value error, ")
+        parts.append(f"{field}: {msg}" if field else msg)
+    return "; ".join(parts) or "a field is not valid"

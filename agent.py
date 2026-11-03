@@ -16,7 +16,7 @@ from ask import resolve_cf
 from auth import authorize, log_audit
 from cli_session import read_session
 from codice_fiscale import is_valid as is_valid_cf
-from dental_notes_schema import DentalNote
+from dental_notes_schema import DentalNote, plain_errors
 from extract_note import OllamaUnreachable, extract_json
 from local_model import local_urlopen
 from storage import get_collection, init_db, lookup_patient, upsert_note_chroma, upsert_note_sql
@@ -113,7 +113,7 @@ def parse_tool_call(reply):
         call = ToolCall(**obj)
         call.parsed_args()
     except Exception as e:
-        raise ValueError("model output failed schema validation: " + str(e))
+        raise ValueError("model output failed schema validation: " + plain_errors(e))
     return call
 
 
@@ -395,6 +395,8 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
             value = phones.canonical(value)
             if value is None:
                 return None, "that is not a valid Italian phone number"
+        if (value or None) == (current or None):
+            return None, f"no change: the {args.field} is already {current or 'empty'}"
         diff_line = build_diff_line(args.field, current, value, name, cf)
         return {
             "tool": call.tool,

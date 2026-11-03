@@ -259,6 +259,15 @@ def selftest():
         conn.close()
         assert denied_row is not None, "denied submit should log an allowed=0 audit_log row"
 
+        # 3b. P29 F-034: a wrong field is explained in words, never as pydantic internals
+        bad_page = client.get("/notes/new")
+        bad = client.post("/notes/new", data={
+            "patient_name": "paolo lilli", "codice_fiscale": "NOTACODE", "clinical_notes": "x",
+            "csrf_token": _csrf_from(bad_page.text), "confirm_token": "x"}).text
+        for leak in ("pydantic", "validation error for", "For further information", "type=value_error"):
+            assert leak not in bad, f"3b: the page shows {leak!r}"
+        assert "codice fiscale" in bad.lower(), "3b: the page names the field to fix"
+
         # 4. Ollama-down - a raw_note POST re-renders the friendly error, never a 500
         notes_routes._urlopen = boom_urlopen
         down_new_get = client.get("/notes/new")

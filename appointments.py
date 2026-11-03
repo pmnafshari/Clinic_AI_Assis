@@ -340,6 +340,10 @@ def confirm(conn, appointment_id, dentist, starts_at, minutes):
 
 def decline(conn, appointment_id, reason=None):
     # a status, like cancel - the patient asked, and that they asked is a fact
+    reason = (reason or "").strip()
+    if not reason:
+        # P29 F-026: the patient is told it was declined, so the clinic has to say why
+        raise ValueError("Give a reason for declining the request.")
     row = conn.execute(
         "SELECT status FROM appointments WHERE id = ?", (appointment_id,)
     ).fetchone()
@@ -505,7 +509,13 @@ def next_booked(conn, patient):
     applies. never a request, a cancelled row, a past day, or the free-text recall
     in a visit note."""
     booked, _requested = open_for_patient(conn, patient)
-    return booked[0] if booked else None
+    # P29 F-003: from now, not from midnight - a booking already started today is
+    # not the next one. it is not marked done either; it stays on the day's agenda
+    now = clinic_time.to_utc_text(clinic_time.now())
+    for row in booked:
+        if row["starts_at"] >= now:
+            return row
+    return None
 
 
 def next_booked_local(conn, patient):
@@ -1029,6 +1039,26 @@ def selftest():
             " AND name='idx_appointments_slot'").fetchone()["c"]
         assert built == 0, "28: and the guard is honestly absent, not silently assumed"
         legacy.close()
+
+        # 29. P29 F-003: a booking that already started today is not the next appointment
+        import datetime as _dt
+        real_now = clinic_time.now
+        clinic_time.now = lambda env=None: _dt.datetime(2031, 3, 4, 15, 0)
+        try:
+            conn.execute("DELETE FROM appointments")
+            for hhmm in ("09:00", "16:00"):
+                conn.execute(
+                    "INSERT INTO appointments (patient_id, dentist, starts_at, minutes, status,"
+                    " created_at, updated_at) VALUES (?, 'dr rossi', ?, 30, 'booked', '', '')",
+                    (_pidmod.resolve(conn, CF), clinic_time.to_utc_text(clinic_time.parse(f"2031-03-04T{hhmm}"))))
+            conn.commit()
+            assert next_booked_local(conn, CF) == "2031-03-04 16:00", "29: the 09:00 is not next at 15:00"
+            assert len(agenda(conn, "2031-03-04")) == 2, "29: both stay on the day's agenda"
+            conn.execute("DELETE FROM appointments WHERE starts_at > ?",
+                         (clinic_time.to_utc_text(clinic_time.parse("2031-03-04T12:00")),))
+            assert next_booked(conn, CF) is None, "29: nothing later today means no next appointment"
+        finally:
+            clinic_time.now = real_now
 
     print("selftest ok")
 

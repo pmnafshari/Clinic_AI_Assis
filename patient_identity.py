@@ -39,10 +39,20 @@ import shutil
 import sqlite3
 import sys
 import unicodedata
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from auth import authorize, log_audit
+
+# the invoice state of a billed line, as the record timeline says it
+BILL_STATE_WORDS = {
+    "unknown": "not settled in the ledger - paid status unknown",
+    "draft": "draft invoice, not owed yet",
+    "issued": "invoice issued, nothing paid yet",
+    "partially_paid": "invoice partly paid",
+    "paid": "invoice paid",
+    "void": "invoice cancelled",
+}
 
 # patient_merges and patient_duplicate_dismissals moved to
 # migrate_pid.TABLE_BODIES in Phase 51: they are keyed on patient_id now, and
@@ -611,29 +621,35 @@ def timeline(conn, key, show_clinical=True):
         else:
             local = clinic_time.local_of(a["starts_at"])
             day, hhmm = local.date().isoformat(), local.strftime("%H:%M")
+        end = (datetime.strptime(hhmm, "%H:%M") + timedelta(minutes=a["minutes"])).strftime("%H:%M")
         events.append({
             "date": day,
             "kind": "appointment",
-            "title": {"booked": "Appointment", "requested": "Requested an appointment",
+            "title": {"booked": "Appointment booked", "requested": "Requested an appointment",
                       "cancelled": "Appointment cancelled",
                       "declined": "Request declined"}.get(a["status"], a["status"]),
-            "detail": "" if requested else
-                      f"{hhmm} with {a['dentist']} ({a['minutes']} min)",
+            "detail": "" if requested else f"{hhmm}–{end} with {a['dentist']}",
             "source": "scheduling",
         })
 
+    # P29 F-030 / F-032: each line carries its invoice's state from the ledger,
+    # the one place that works it out. no ledger invoice -> unknown, never paid
+    import ledger
+    states = {b["visit_id"]: ledger.summary(conn, b["id"])["state"] for b in conn.execute(
+        "SELECT id, visit_id FROM billing_invoices WHERE patient_id = ?", (pid,))}
     for inv in conn.execute(
-            "SELECT i.amount, i.description, v.visit_date FROM invoices i"
+            "SELECT i.amount, i.description, i.visit_id, v.visit_date FROM invoices i"
             " JOIN visits v ON v.id = i.visit_id"
             " WHERE i.patient_id = ? ORDER BY v.visit_date, i.line_index", (pid,)):
+        state = states.get(inv["visit_id"], "unknown")
         events.append({
             "date": inv["visit_date"],
             "kind": "billed",
-            "title": f"Billed {inv['amount']:.2f} EUR",
+            "title": f"{'Draft invoice' if state == 'draft' else 'Billed'} {inv['amount']:.2f} EUR",
             "detail": inv["description"] or "",
             # said on every single line, not once at the bottom, because the
             # line is what gets read aloud to a patient over the phone
-            "source": "billed, not collected - payments are not recorded here",
+            "source": BILL_STATE_WORDS.get(state, BILL_STATE_WORDS["unknown"]),
         })
 
     for mrg in conn.execute(
@@ -1094,15 +1110,14 @@ def selftest():
         req = [e for e in tl if e["title"] == "Requested an appointment"][0]
         assert "00:00" not in req["detail"] and req["detail"] == "", \
             f"20: a request must not be shown with a time, got {req['detail']!r}"
-        booked = [e for e in tl if e["title"] == "Appointment"][0]
-        assert "14:30" in booked["detail"], "20: a real booking does show its time"
+        booked = [e for e in tl if e["title"] == "Appointment booked"][0]
+        assert "14:30–15:00" in booked["detail"], "20: a real booking shows its start and end (P29 F-011/F-015)"
 
-        # 21. NO TOTAL. invoices carry no payment status and there is no
-        # payments table, so any sum would be a claim the data cannot support -
-        # the same defect P02 closed in the patient chat, in a new surface.
+        # 21. NO TOTAL on the timeline. each line says its invoice's ledger state
+        # (P29 F-030); a line with no ledger invoice is unknown, never assumed paid
         billed = [e for e in tl if e["kind"] == "billed"][0]
         assert "80.00" in billed["title"], "21: the billed line shows what was billed"
-        assert "not collected" in billed["source"], \
+        assert "paid status unknown" in billed["source"], \
             "21: and says so on the line, not once at the bottom of the page"
         joined = " ".join(e["title"] + e["detail"] + e["source"] for e in tl).lower()
         for forbidden in ("total", "balance", "owes", "outstanding", "due"):

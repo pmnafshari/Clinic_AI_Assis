@@ -5,7 +5,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from dental_notes_schema import KNOWN_PROCEDURES, DentalNote
+from dental_notes_schema import KNOWN_PROCEDURES, DentalNote, plain_errors
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
 MODEL = "dental-notes"
@@ -49,7 +49,7 @@ def parse_reply(reply, fallback_cf=None):
     try:
         note = DentalNote(**obj)
     except Exception as e:
-        raise ValueError("model output failed schema validation: " + str(e))
+        raise ValueError("model output failed schema validation: " + plain_errors(e))
     unknown = note.unknown_procedures()
     if unknown:
         print("unknown procedure code, needs review:", ", ".join(unknown))

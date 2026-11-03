@@ -2214,7 +2214,7 @@ def selftest():
             "34b: newest first"
         c = raw_db()
         for _ in range(patient_routes.HISTORY_LIMIT + 3):
-            _appt34.decline(c, _appt34.request(c, cf34, day7, "morning", None))
+            _appt34.decline(c, _appt34.request(c, cf34, day7, "morning", None), "STAFF-ONLY reason")
         c.close()
         past_rows34, _ = group34(client34.get("/appointments").text, "past")
         assert len(past_rows34) == patient_routes.HISTORY_LIMIT, \

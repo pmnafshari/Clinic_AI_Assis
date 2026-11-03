@@ -27,6 +27,16 @@ def _may():
     return authorize(g.user["role"], "manage_appointments")
 
 
+def _when(appointment_id):
+    # "Tue 4 Nov, 09:30-10:00 with drossi" for the message after a booking
+    row = get_db().execute("SELECT starts_at, minutes, dentist FROM appointments WHERE id = ?",
+                           (appointment_id,)).fetchone()
+    start = clinic_time.local_of(row["starts_at"])
+    end = start + timedelta(minutes=row["minutes"])
+    return (f"{WEEKDAYS[start.weekday()]} {start.day} {start.strftime('%b')}, "
+            f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')} with {row['dentist']}")
+
+
 def _pick_day(raw):
     # a hand-typed ?day= is user input, and it now drives which month is drawn
     # as well as which agenda is read. before the calendar a bad value just
@@ -162,7 +172,7 @@ def index():
     if slots:
         # only the hours that hold something - no screen of empty rows
         hours = range(min(s["hour"] for s in slots), max(s["hour"] for s in slots) + 1)
-        grid = [{"hour": f"{h:02d}:00", "cells": [[s for s in slots if s["hour"] == h and s["dentist"] == c] for c in columns]}
+        grid = [{"hour": f"{h:02d}:00–{h + 1:02d}:00", "cells": [[s for s in slots if s["hour"] == h and s["dentist"] == c] for c in columns]}
                 for h in hours]
     week = [{"iso": (monday + timedelta(days=i)).isoformat(), "label": f"{(monday + timedelta(days=i)):%a %-d %b}",
              "name": f"{(monday + timedelta(days=i)):%a}", "date": f"{(monday + timedelta(days=i)):%-d %b}",
@@ -220,7 +230,7 @@ def book():
         flash(str(e), "error")
     else:
         _allowed("book_appointment", str(new_id))
-        flash("Appointment booked.", "success")
+        flash(f"Appointment booked: {_when(new_id)}.", "success")
     return redirect(url_for("appointments.index", day=day))
 
 

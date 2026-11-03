@@ -255,7 +255,7 @@ def timeline(conn, pid, actor, role, limit=200):
         if r["source"] == "legacy_import":
             source = f"legacy import, batch {_batch_of(conn, r['import_item_id'])}"
         else:
-            source = f"uploaded by {r['uploaded_by']}"
+            source = f"uploaded by {r['uploaded_by'] or 'someone not recorded'}"
         out.append({"kind": "file", "doc_id": r["id"], "date": date, "date_basis": basis,
                     "category": label(r), "file_type": FILE_TYPES.get(r["kind"], "File"),
                     "display_name": r["display_name"], "source": source,
@@ -267,7 +267,7 @@ def timeline(conn, pid, actor, role, limit=200):
             " ORDER BY v.visit_date DESC LIMIT ?", (pid, limit)):
         out.append({"kind": "note", "visit_id": v["id"], "date": v["visit_date"] or "",
                     "date_basis": "visit date", "category": "Visit note", "file_type": "Note",
-                    "display_name": _procedures(v["procedures"]), "source": f"confirmed by {v['reviewed_by']}",
+                    "display_name": _procedures(v["procedures"]), "source": f"confirmed by {v['reviewed_by'] or 'someone not recorded'}",
                     "visit_date": v["visit_date"], "published": False, "preview": False})
     out.sort(key=lambda e: (e["date"] or "", e.get("doc_id") or 0), reverse=True)
     return out

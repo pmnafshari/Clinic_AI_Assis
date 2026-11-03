@@ -6,6 +6,7 @@ import agent
 import dictation
 import pending_actions
 from auth import authorize, log_audit
+from dental_notes_schema import plain_errors
 from extract_note import OllamaUnreachable
 from local_model import local_urlopen
 
@@ -122,7 +123,7 @@ def edit_page():
     except Exception as e:
         return render_template(
             "agent_edit.html", fields=fields, patient=patient, field=field, value=value,
-            error=f"invalid fields: {e}",
+            error=f"Check these fields: {plain_errors(e)}",
         )
 
     return _build_and_render(call, "agent_edit.html", fields=fields, patient=patient, field=field, value=value)
