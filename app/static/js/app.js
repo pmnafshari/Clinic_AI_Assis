@@ -433,3 +433,21 @@ document.querySelectorAll("img.file-view, img.file-thumb, img.import-preview").f
   var auto = Array.prototype.some.call(document.querySelectorAll("[autofocus]"), function (el) { return !el.closest("dialog"); });
   if (!auto && document.activeElement === document.body) ok.focus();
 })();
+
+// P29 U-005: the menu opens with the page you are on in view. in a short window, a zoomed one or the phone drawer the
+// menu is taller than the screen, and the current page can sit below the fold or under the pinned account foot
+(function () {
+  var side = document.getElementById("app-side");
+  if (!side) return;
+  function reveal() {
+    var link = side.querySelector(".app-side-link.active");
+    var foot = side.querySelector(".app-side-foot");
+    if (!link) return;
+    var top = side.getBoundingClientRect().top, at = link.getBoundingClientRect();
+    var bottom = foot ? foot.getBoundingClientRect().top : side.getBoundingClientRect().bottom;
+    if (at.top >= top && at.bottom <= bottom) return;
+    side.scrollTop += at.top - top - (bottom - top - at.height) / 2;
+  }
+  reveal();
+  side.addEventListener("show.bs.offcanvas", reveal);
+})();

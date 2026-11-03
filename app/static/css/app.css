@@ -1705,3 +1705,14 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 @media (max-width: 575.98px) { .app-result { left: 0.5rem; right: 0.5rem; bottom: 0.5rem; width: auto; } }
 @media (prefers-reduced-motion: no-preference) { .app-result { animation: app-result-in 0.18s ease-out; } }
 @keyframes app-result-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: none; } }
+
+/* P29 NEW-01 / U-005: in its drawer (below 992 px) the menu scrolls as it does beside the page, the account foot
+   pinned; its scroll line is always drawn - a Mac hides overlay scrollbars until you scroll. Firefox gets colours */
+@media (max-width: 991.98px) {
+  .app-side { overflow-y: auto; overscroll-behavior: contain; }
+}
+.app-side::-webkit-scrollbar { width: 10px; }
+.app-side::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.06); }
+.app-side::-webkit-scrollbar-thumb { background: #8a9bb8; border-radius: 999px; border: 2px solid var(--app-navy); }
+.app-side::-webkit-scrollbar-thumb:hover { background: #b9c6dc; }
+@supports not selector(::-webkit-scrollbar) { .app-side { scrollbar-color: #8a9bb8 transparent; } }

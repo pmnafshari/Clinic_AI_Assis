@@ -33,6 +33,40 @@ class Quiet(WSGIRequestHandler):
 
 # R-015: in the page tables, a date, a time, an amount or a phone number never breaks across lines or runs out of its
 # box, and a status or a button stays on one line inside it
+MENU_STATE = r"""() => {
+  const side = document.getElementById('app-side');
+  const link = side.querySelector('.app-side-link.active');
+  const foot = side.querySelector('.app-side-foot');
+  const s = side.getBoundingClientRect(), r = link.getBoundingClientRect();
+  const bottom = Math.min(s.bottom, foot.getBoundingClientRect().top, window.innerHeight);
+  return {overflows: side.scrollHeight > side.clientHeight + 1, bar: side.offsetWidth - side.clientWidth,
+          activeVisible: r.top >= Math.max(s.top, 0) - 1 && r.bottom <= bottom + 1};
+}"""
+
+
+def menu_check(page, base, label, vh):
+    """NEW-01 / U-005: on a page low in the menu (Call-backs) the menu opens with that page in view, the wheel
+    scrolls it, its scroll line is drawn, and Sign out is on screen."""
+    page.goto(base + "/handoffs")
+    toggle = page.locator(".app-topbar-toggle")
+    if toggle.is_visible():
+        toggle.click()
+        expect(page.locator("#app-side")).to_be_visible()
+        page.wait_for_timeout(500)
+    state = page.evaluate(MENU_STATE)
+    assert state["activeVisible"], f"U-005 {label}: the page you are on is out of view in the menu {state}"
+    if state["overflows"]:
+        assert state["bar"] > 0, f"NEW-01 {label}: the menu's scroll line is not drawn {state}"
+        page.evaluate("document.getElementById('app-side').scrollTop = 0")
+        side = page.locator("#app-side").bounding_box()
+        page.mouse.move(side["x"] + side["width"] / 2, side["y"] + side["height"] / 3)
+        page.mouse.wheel(0, 400)
+        page.wait_for_timeout(300)
+        assert page.evaluate("document.getElementById('app-side').scrollTop") > 0, f"U-005 {label}: the wheel does not move the menu"
+    out = page.locator("#app-side .app-signout").bounding_box()
+    assert out and out["y"] >= 0 and out["y"] + out["height"] <= vh + 1, f"U-005 {label}: Sign out is off screen {out}"
+
+
 TABLE_CHECK = r"""() => {
   const bad = [];
   const re = /\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?|€[\d.,]+|\+\d{8,}/g;
@@ -326,7 +360,19 @@ def main():
                         expect(page.locator('[data-ux="day-grid"]')).to_have_count(1)
                     checks.append(f"R-014/R-015/F-012 layout {width}")
                     context.close()
+
                 browser.close()
+
+                # NEW-01 / U-005: the menu in a short window, a 200% zoom and a phone. Playwright starts Chromium with
+                # its scrollbars hidden; this one draws them, as Chrome does
+                drawn = p.chromium.launch(ignore_default_args=["--hide-scrollbars"])
+                for label, vw, vh, scale in (("1440x600", 1440, 600, 1), ("200% zoom", 720, 450, 2), ("390", 390, 844, 1)):
+                    context = drawn.new_context(viewport={"width": vw, "height": vh}, device_scale_factor=scale)
+                    context.add_cookies([{"name": web_session.COOKIE_NAME, "value": token, "url": base}])
+                    menu_check(context.new_page(), base, label, vh)
+                    checks.append(f"NEW-01/U-005 menu {label}")
+                    context.close()
+                drawn.close()
 
                 # U-021: the same keyboard path in WebKit, the macOS app's engine, which leaves links out of Tab
                 # unless they ask - at 1440, 1024, 768, 390 and 200% zoom of 1440x900
@@ -403,8 +449,9 @@ def main():
                     expect(result.locator("[data-result-ok]")).to_be_focused()
                     page.keyboard.press("Enter")
                     expect(result).to_be_hidden()
+                    menu_check(page, base, "webkit " + label, vh)
                     assert not errors, errors
-                    checks.append(f"U-021 keyboard webkit {label}")
+                    checks.append(f"U-021 keyboard, U-008 popup, NEW-01/U-005 menu webkit {label}")
                     context.close()
                 webkit.close()
         finally:

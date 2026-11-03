@@ -884,6 +884,17 @@ def selftest():
         rule25 = re.search(r"\.app-result \{([^}]*)\}", css25)
         assert rule25 and "position: fixed" in rule25.group(1), "25: the popup sits in the page flow like a banner"
 
+        # 26. P29 NEW-01 / U-005: the menu scrolls in its drawer too (below 992 px it was fixed with nothing to scroll,
+        # so the middle items were out of reach), its scroll line is always drawn (macOS hides overlay scrollbars), and
+        # it opens scrolled to the page you are on (the browser check in e2e_p29_staff.py measures all three)
+        drawer26 = re.search(r"@media \(max-width: 991\.98px\) \{\s*\.app-side \{([^}]*)\}", css25)
+        assert drawer26 and "overflow-y: auto" in drawer26.group(1), "26 U-005: the menu drawer cannot be scrolled"
+        bar26 = re.search(r"\.app-side::-webkit-scrollbar \{([^}]*)\}", css25)
+        assert bar26 and "width" in bar26.group(1) and ".app-side::-webkit-scrollbar-thumb" in css25, \
+            "26 NEW-01: the menu's scroll line is left to the system, which hides it on a Mac"
+        assert "P29 U-005" in js25 and "show.bs.offcanvas" in js25[js25.index("P29 U-005"):], \
+            "26 U-005: the menu does not open at the page you are on"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")
