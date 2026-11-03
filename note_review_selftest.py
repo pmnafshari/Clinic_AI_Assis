@@ -460,6 +460,24 @@ def routes(tmp):
     assert "Confirmed" in recent and f'href="/reviews/{rid}"' in recent, "20c: the confirmed note is not listed"
     outcome = dentist.get(f"/reviews/{rid2}").text
     assert "Rejected by rv_dentist" in outcome and "wrong patient" in outcome, "20c: the rejected note's page"
+    assert "Not part of the record yet" not in outcome, "20c: a decided note still says it is waiting"
+    # 20d. P29 R-027: an uploaded note and an earlier note say what each is and what each button does
+    _txt3, js3 = routed(sorted_root, CF, "r3")
+    storage.sync_note_file(js3, sorted_root, conn, storage.get_collection(app_db.CHROMA_PATH),
+                           "assistant", "rv_assist")
+    up = re.sub(r"<[^>]+>", "", dentist.get(f"/reviews/{conn.execute('SELECT MAX(id) FROM note_reviews').fetchone()[0]}").text)
+    assert "Not part of the record yet" in up and "Confirm files it as a new visit" in up \
+        and "Reject files nothing" in up, "20d: the upload page does not explain its buttons"
+    conn.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                 " VALUES (?, '2025-01-10', '[]', 'old note', ?)", (pid, f"{CF}/notes/old-import.json"))
+    conn.commit()
+    nr.classify_legacy(conn)
+    lid = conn.execute("SELECT id FROM note_reviews WHERE origin = 'legacy'").fetchone()[0]
+    old = re.sub(r"<[^>]+>", "", dentist.get(f"/reviews/{lid}").text)
+    assert "Not part of the record yet" not in old and "Already in the record" in old, \
+        "20d: an earlier note is told it is not in the record"
+    assert "Confirm marks it as reviewed" in old and "Reject keeps the visit" in old, \
+        "20d: the earlier note page does not explain its buttons"
     conn.close()
 
 

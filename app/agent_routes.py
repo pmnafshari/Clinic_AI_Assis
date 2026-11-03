@@ -49,7 +49,8 @@ def _build_and_render(call, template, **template_args):
     token = pending_actions.create_pending_action(
         get_db(), g.user["username"], g.user["role"], pending
     )
-    return render_template("agent_confirm.html", diff_line=pending["diff_line"], token=token)
+    return render_template("agent_confirm.html", diff_line=pending["diff_line"], token=token,
+                           change=pending.get("change"))
 
 
 @agent_bp.route("/agent/command", methods=["GET", "POST"])
@@ -158,7 +159,12 @@ def confirm_change():
     if not allowed:
         return _confirm_error("You don't have permission to make this change.")
 
-    flash("Change saved.")
+    change = pending.get("change")
+    if change:
+        # P29 R-026: the result names what changed
+        flash(f"Saved: {change['patient']}'s {change['field']} is now {change['after'] or 'empty'}.", "success")
+    else:
+        flash("Change saved.", "success")
     if request.headers.get("HX-Request"):
         # htmx's xhr follows a 302 transparently and would swap the redirect
         # target's whole document into the modal - hand it a client-side

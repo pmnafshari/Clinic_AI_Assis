@@ -290,6 +290,10 @@ def selftest():
             "confirm-diff fragment should show the old -> new diff"
         assert _phone(db_path, cf) == "333123456", \
             "building the diff must not write to the db until confirm"
+        # P29 R-026: patient, field, now and after in plain rows, not one technical string
+        for label in ("Patient", "Field", "Now", "After"):
+            assert f"<dt>{label}</dt>" in build_resp.text, f"7 R-026: no {label} row"
+        assert "->" not in build_resp.text, "7 R-026: the technical arrow string is still shown"
 
         token = _token_from(build_resp.text)
         confirm_csrf = _csrf_from(build_resp.text)
@@ -302,6 +306,9 @@ def selftest():
         assert confirm_resp.status_code == 302, "confirm should redirect on success"
         assert _phone(db_path, cf) == "+393331234567", \
             "confirming should apply the frozen new value"
+        saved_page = dentist_client.get("/").text
+        assert "Done:" in saved_page and "phone is now +393331234567" in saved_page, \
+            "8 R-026: the result does not say what changed"
 
         # 9. RBAC re-check (SC4) - build as dentist (authorized), then
         # demote the account before confirming. The denial

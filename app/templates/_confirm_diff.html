@@ -2,7 +2,16 @@
 {% if error %}
 <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% else %}
+{% if change %}
+<dl class="confirm-rows">
+  <div><dt>Patient</dt><dd>{{ change.patient }}</dd></div>
+  <div><dt>Field</dt><dd>{{ change.field | capitalize }}</dd></div>
+  <div><dt>Now</dt><dd>{{ change.before or 'empty' }}</dd></div>
+  <div><dt>After</dt><dd><strong>{{ change.after or 'empty' }}</strong></dd></div>
+</dl>
+{% else %}
 <p class="fs-5 mb-3">{{ diff_line }}</p>
+{% endif %}
 <form hx-post="{{ url_for('agent.confirm_change') }}" hx-target="#modal-body-target" hx-swap="innerHTML" class="d-inline">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="token" value="{{ token }}">

@@ -475,7 +475,8 @@ def edit_submit(cf):
         return render_template("_edit_form.html", cf=cf, field=field, value=value, error=reason)
 
     token = pending_actions.create_pending_action(conn, g.user["username"], g.user["role"], pending)
-    return render_template("_confirm_diff.html", diff_line=pending["diff_line"], token=token)
+    return render_template("_confirm_diff.html", diff_line=pending["diff_line"], token=token,
+                           change=pending.get("change"))
 
 
 @patients_bp.route("/patients/<cf>/visits/<int:visit_id>/edit-form")

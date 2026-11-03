@@ -406,6 +406,9 @@ def build_pending_action(call, conn, role, username, sorted_root=Path("sorted"),
             "args": {"field": args.field, "value": value},
             "cf": cf,
             "diff_line": diff_line,
+            # P29 R-026: the same change as rows a person reads - patient, field, now, after
+            "change": {"patient": name, "field": args.field.replace("_", " "),
+                       "before": current or "", "after": value or ""},
             "before": current,
             "target": f"sqlite:patients.{args.field}",
         }, None

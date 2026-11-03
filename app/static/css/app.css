@@ -1581,3 +1581,9 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 
 /* P29 F-025: a data request opened from the record is the row you land on */
 #data-request-rows > li:target { outline: 2px solid var(--ds-primary, #2563eb); outline-offset: -2px; border-radius: 8px; }
+
+/* P29 R-026: a record change as rows */
+.confirm-rows { display: grid; gap: 0.35rem; margin: 0 0 1rem; }
+.confirm-rows > div { display: grid; grid-template-columns: 6rem 1fr; gap: 0.75rem; }
+.confirm-rows dt { font-weight: 500; color: var(--ds-text-muted); }
+.confirm-rows dd { margin: 0; overflow-wrap: anywhere; }

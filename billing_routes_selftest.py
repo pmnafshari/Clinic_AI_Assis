@@ -93,6 +93,12 @@ def selftest():
         assistant = _staff(app, db_path, "bl_assist", "assistant")
         page = dentist.get(f"/patients/{CF}/billing").text
         assert "unknown" in page and "Reconcile" in page and "Issue" in page, "1: the forms show"
+        # P29 R-022: reconciling says what is known, and what each choice does to what is owed
+        rec = re.sub(r"<[^>]+>", "", page)
+        assert "No payment is recorded for it" in rec, "1 R-022: the page does not say nothing is recorded"
+        for said in ("Not paid: the invoice is issued and", "Paid in full: a payment of",
+                     "Partly paid: the amount you enter is recorded"):
+            assert said in rec, f"1 R-022: missing {said!r}"
 
         # 1. reconcile the legacy invoice as partly paid, issue the new one
         dentist.post(f"/billing/invoices/{legacy}/reconcile", data={

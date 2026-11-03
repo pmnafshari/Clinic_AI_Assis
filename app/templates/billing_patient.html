@@ -67,6 +67,15 @@
         <select class="form-select form-select-sm" id="rmeth-{{ inv.id }}" name="method">{% for m in methods %}<option value="{{ m }}">{{ m | replace('_', ' ') }}</option>{% endfor %}</select></div>
         <button class="btn btn-primary btn-sm" type="submit">Reconcile</button>
       </form>
+      {# P29 R-022: what each choice records and what it does to the amount owed #}
+      <div class="small w-100" id="rhelp-{{ inv.id }}">
+        <p class="mb-1">This invoice predates the ledger. No payment is recorded for it, so what was paid is unknown and it is not counted in "still to pay". Billed: {{ fmt(inv.total_cents, 'en') }}.</p>
+        <ul class="mb-0">
+          <li><strong>Not paid:</strong> the invoice is issued and {{ fmt(inv.total_cents, 'en') }} becomes owed.</li>
+          <li><strong>Paid in full:</strong> a payment of {{ fmt(inv.total_cents, 'en') }} is recorded as a reconciliation and nothing is owed.</li>
+          <li><strong>Partly paid:</strong> the amount you enter is recorded as a reconciliation; the rest of {{ fmt(inv.total_cents, 'en') }} becomes owed.</li>
+        </ul>
+      </div>
       {% endif %}
       {% if can_pay and inv.state in ('issued', 'partially_paid') %}
       <a class="btn btn-primary btn-sm" href="{{ url_for('billing.new_payment', invoice_id=inv.id) }}">Start payment</a>
