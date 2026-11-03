@@ -604,7 +604,7 @@ strong {
 /* the toggle sits inside the field, so the input keeps its full width and
    the control cannot be mistaken for a second form field */
 .auth-pw { position: relative; }
-.auth-pw .ds-input { padding-right: var(--ds-space-8); }
+.auth-pw .ds-input, .auth-pw .form-control { padding-right: var(--ds-space-8); }
 
 .auth-pw-toggle {
   position: absolute;

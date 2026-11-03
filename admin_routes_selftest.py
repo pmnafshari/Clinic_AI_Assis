@@ -198,6 +198,16 @@ def selftest():
             assert resp.status_code == 403, f"SC4: {username} should get 403 on the write"
             assert _user(db_path, "newstaff")["role"] == "dentist", \
                 f"SC4: {username} changed a role anyway"
+
+            # P29 NEW-08: only the admin creates staff accounts
+            before = _denied_count(db_path)
+            resp = client.post("/admin/users", data={
+                "username": f"made_by_{username}", "role": "dentist", "password": "temp-pass-1"})
+            assert resp.status_code == 302, f"NEW-08: {username} is sent away from account creation"
+            assert _user(db_path, f"made_by_{username}") is None, \
+                f"NEW-08: {username} created an account"
+            assert _denied_count(db_path) == before + 1, \
+                f"NEW-08: {username}'s refused creation must be audited"
             assert _denied_count(db_path) == before + 1, \
                 f"SC4: {username}'s denied write must be audited"
 

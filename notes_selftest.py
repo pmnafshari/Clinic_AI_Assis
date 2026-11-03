@@ -150,10 +150,15 @@ def selftest():
         assert new_get.status_code == 200, "GET /notes/new should return 200"
         csrf_paste = _csrf_from(new_get.text)
 
-        paste_resp = client.post(
+        paste_post = client.post(
             "/notes/new", data={"raw_note": "paolo came in, checkup", "csrf_token": csrf_paste}
         )
-        assert paste_resp.status_code == 200, "raw_note POST should return 200"
+        # P29 F-038: the extract step redirects to its draft, so Back never resubmits a form
+        assert paste_post.status_code == 303 and "preview=" in paste_post.headers["Location"], \
+            "raw_note POST should redirect to the draft"
+        preview_url = paste_post.headers["Location"]
+        paste_resp = client.get(preview_url)
+        assert paste_resp.status_code == 200, "the draft page should return 200"
         assert _call_count["n"] == 1, "extract_note should have run exactly once after step 1"
         assert 'value="paolo lilli"' in paste_resp.text, "preview should show extracted patient name"
         assert f'value="{FAKE_CF}"' in paste_resp.text, "preview should show extracted codice fiscale"
@@ -183,6 +188,16 @@ def selftest():
         )
         assert save_resp.status_code == 302, "corrected-fields POST should redirect on success"
         assert _call_count["n"] == 1, "extract_note must not re-run on the confirm/submit step"
+        back = client.get(preview_url)
+        assert back.status_code == 302, "F-038: Back to the saved draft does not offer it again"
+        assert "already saved" in client.get(back.headers["Location"]).text, \
+            "F-038: and says the note was already saved"
+        assert _call_count["n"] == 1, "F-038: Back never re-runs the extraction"
+        other = app.test_client()
+        other.post("/login", data={"username": "drossi", "password": "goodpass",
+                                   "csrf_token": _csrf_from(other.get("/login").text)})
+        assert "expired" in other.get("/notes/new?preview=not-a-token").text, \
+            "F-038: an unknown draft says it has expired"
 
         note_files = list((Path(tmp) / "sorted" / FAKE_CF / "notes").glob("web-*.json"))
         assert len(note_files) == 1, f"expected 1 web-*.json file, got {len(note_files)}"
@@ -295,8 +310,9 @@ def selftest():
         mismatch_resp = client.post(
             "/notes/new",
             data={"raw_note": "giulia came in", "cf": FAKE_CF, "csrf_token": csrf_mismatch_paste},
+            follow_redirects=True,
         )
-        assert mismatch_resp.status_code == 200, "6: mismatch preview should render, not redirect"
+        assert mismatch_resp.status_code == 200, "6: mismatch preview should render"
         assert "giulia bianchi" in mismatch_resp.text, "6: notice should name the extracted patient"
         assert "Paolo Lilli" in mismatch_resp.text, "6: notice should name the locked patient"
         assert "Save to the record" in mismatch_resp.text, "6: save must stay available on a mismatch (D-03)"
@@ -350,6 +366,7 @@ def selftest():
         no_cf_resp = client.post(
             "/notes/new",
             data={"raw_note": "otturazione sul 24", "cf": FAKE_CF, "csrf_token": csrf_no_cf},
+            follow_redirects=True,
         )
         assert no_cf_resp.status_code == 200, "6b: a no-cf locked paste should render the preview"
         assert "extraction rejected" not in no_cf_resp.text, \
@@ -364,7 +381,8 @@ def selftest():
         # 7. not-searchable save still lands on the patient screen (D-04)
         new_get_for_fail = client.get(f"/notes/new?cf={FAKE_CF}")
         fail_preview = client.post("/notes/new", data={
-            "raw_note": "checkup", "cf": FAKE_CF, "csrf_token": _csrf_from(new_get_for_fail.text)})
+            "raw_note": "checkup", "cf": FAKE_CF, "csrf_token": _csrf_from(new_get_for_fail.text)},
+            follow_redirects=True)
         csrf_fail = _csrf_from(fail_preview.text)
 
         real_save_new_note = notes_routes.save_new_note

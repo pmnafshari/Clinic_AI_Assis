@@ -18,6 +18,12 @@ notes_bp = Blueprint("notes", __name__)
 SORTED_ROOT = Path("sorted")
 _urlopen = local_urlopen
 
+# P29 F-038: an extracted draft waits here under its confirm token, so the extract
+# POST can redirect and Back never offers to send the form again. memory only:
+# an unconfirmed draft is not a record and is never written to disk
+_previews = {}
+PREVIEWS_KEPT = 50
+
 
 def extract_note(raw_note, fallback_cf=None):
     # composes extract_note.py's call_model + parse_reply with the local
@@ -95,6 +101,9 @@ def new_note():
         flash("You don't have permission to add notes.", "danger")
         return redirect(url_for("dashboard.index"))
 
+    if request.method == "GET" and request.args.get("preview"):
+        return _show_preview(request.args["preview"])
+
     if request.method == "GET":
         cf = request.args.get("cf", "")
         locked = _locked_patient(cf)
@@ -140,8 +149,10 @@ def new_note():
                     f"it will be filed under {locked['patient_name']} ({locked['cf']})"
                 )
         token = note_review.issue_confirm_token(get_db(), g.user["username"])
-        return render_template("notes_new.html", preview=note, locked=locked, mismatch=mismatch,
-                               confirm_token=token)
+        _previews[token] = (g.user["username"], cf, note, mismatch)
+        while len(_previews) > PREVIEWS_KEPT:
+            _previews.pop(next(iter(_previews)))
+        return redirect(url_for("notes.new_note", preview=token), code=303)
 
     # step 2: confirm POST - re-validate the (possibly staff-corrected) fields,
     # never re-call extract_note (D-04's "no re-derivation" applies here too)
@@ -189,6 +200,7 @@ def new_note():
         return render_template("notes_new.html", locked=locked, **_dictation(),
                                error="This form has expired. Extract the note again.")
 
+    _previews.pop(request.form.get("confirm_token"), None)
     status = save_new_note(
         note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT
     )
@@ -203,3 +215,17 @@ def new_note():
     if locked is not None:
         return redirect(url_for("patients.detail_view", cf=locked["cf"]))
     return redirect(url_for("dashboard.index"))
+
+
+def _show_preview(token):
+    held = _previews.get(token)
+    if held is None or held[0] != g.user["username"]:
+        if note_review.confirm_token_used(get_db(), token, g.user["username"]):
+            # Back from the saved note's page lands here - say so, never re-offer the save
+            flash("This note was already saved.")
+            return redirect(url_for("dashboard.index"))
+        return render_template("notes_new.html", locked=None, **_dictation(),
+                               error="This draft has expired. Extract the note again.")
+    _, cf, note, mismatch = held
+    return render_template("notes_new.html", preview=note, locked=_locked_patient(cf),
+                           mismatch=mismatch, confirm_token=token)

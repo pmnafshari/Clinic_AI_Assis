@@ -267,7 +267,7 @@ def selftest():
                                                                    procedures=["prophy"], clinical_notes="igiene")
         blank = dentist.get("/notes/new").get_data(as_text=True)
         assert 'data-step="1" aria-current="step"' in blank and "data-unsaved-guard" in blank, "8: stages or guard missing"
-        draft = dentist.post("/notes/new", data={"raw_note": "igiene fatta"}).get_data(as_text=True)
+        draft = dentist.post("/notes/new", data={"raw_note": "igiene fatta"}, follow_redirects=True).get_data(as_text=True)
         assert 'data-step="2" aria-current="step"' in draft and "Draft - not saved" in _text(draft), "8: draft state not shown"
         assert re.search(r'<form[^>]*data-unsaved-guard[^>]*>(?:(?!</form>).)*name="confirm_token"', draft, re.S), \
             "8: leaving an edited draft does not ask first"

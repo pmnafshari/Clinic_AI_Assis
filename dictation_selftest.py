@@ -250,7 +250,8 @@ def routes(tmp):
                 "audio": (_io.BytesIO(b"otturazione dente 36 fu 2wk"), "a.webm")},
                 content_type="multipart/form-data").text
             preview = dentist.post("/notes/new", data={
-                "csrf_token": csrf(heard), "cf": cf, "raw_note": "otturazione dente 36 fu 2wk"}).text
+                "csrf_token": csrf(heard), "cf": cf, "raw_note": "otturazione dente 36 fu 2wk"},
+                follow_redirects=True).text
             token = re.search(r'name="confirm_token" value="([^"]+)"', preview).group(1)
             form = {"csrf_token": csrf(preview), "cf": cf, "confirm_token": token,
                     "patient_name": "x", "codice_fiscale": "ZZDZ000000000009",

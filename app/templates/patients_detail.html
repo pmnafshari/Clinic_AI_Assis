@@ -66,10 +66,14 @@
     <section class="card dash-card sx-h-s" aria-labelledby="profile-title">
       <div class="dash-card-head">
         <h2 class="ds-card-title" id="profile-title">Demographics</h2>
+        {% if authorize(g.user.role, 'update_field') %}
         <button type="button" class="btn btn-outline-secondary btn-sm"
           data-bs-toggle="modal" data-bs-target="#editModal"
           hx-get="{{ url_for('patients.edit_form_fragment', cf=cf, field='phone') }}"
           hx-target="#modal-body-target" hx-swap="innerHTML"><i class="bi bi-pencil"></i> Edit</button>
+        {% else %}
+        <span class="ds-row-sub">Changes are made by a dentist</span>
+        {% endif %}
       </div>
       <div class="dash-card-body">
         <dl class="detail-list">

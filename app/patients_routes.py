@@ -403,8 +403,9 @@ def consent_submit(cf):
 
 @patients_bp.route("/patients/<cf>/edit-form")
 def edit_form_fragment(cf):
-    # HTMX target - a denied fragment returns a bare status, not a redirect
-    if not authorize(g.user["role"], "read_notes"):
+    # HTMX target - a denied fragment returns a bare status, not a redirect.
+    # gated on the save's own permission so no form is offered that can only fail (F-020)
+    if not authorize(g.user["role"], "update_field"):
         return "", 403
 
     if not is_valid_cf(cf):

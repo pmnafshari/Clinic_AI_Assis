@@ -105,17 +105,20 @@ document.body.addEventListener("htmx:afterRequest", resetUploadForm);
 // show/hide password (UX-10). one input whose type flips - never a second
 // input holding the same value, and aria-pressed so the state is announced
 // rather than only drawn.
+// each toggle drives the input beside it, so a form can have several (R-002).
 (function () {
-  var toggle = document.querySelector("[data-pw-toggle]");
-  var input = document.querySelector("[data-pw-input]");
-  if (!toggle || !input) return;
-  toggle.addEventListener("click", function () {
-    var shown = input.type === "text";
-    input.type = shown ? "password" : "text";
-    toggle.setAttribute("aria-pressed", shown ? "false" : "true");
-    toggle.setAttribute("aria-label", shown ? "Show password" : "Hide password");
-    var icon = toggle.querySelector("i");
-    if (icon) icon.className = shown ? "bi bi-eye" : "bi bi-eye-slash";
+  document.querySelectorAll("[data-pw-toggle]").forEach(function (toggle) {
+    var input = toggle.parentElement.querySelector("[data-pw-input]");
+    if (!input) return;
+    toggle.addEventListener("click", function () {
+      var shown = input.type === "text";
+      input.type = shown ? "password" : "text";
+      toggle.setAttribute("aria-pressed", shown ? "false" : "true");
+      var label = toggle.getAttribute("aria-label").replace(/^(Show|Hide) /, "");
+      toggle.setAttribute("aria-label", (shown ? "Show " : "Hide ") + label);
+      var icon = toggle.querySelector("i");
+      if (icon) icon.className = shown ? "bi bi-eye" : "bi bi-eye-slash";
+    });
   });
 })();
 

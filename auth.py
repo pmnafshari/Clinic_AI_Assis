@@ -94,7 +94,7 @@ ROUTE_POLICY = {
     "patients.list_view": "read_notes",
     "patients.search_fragment": "read_notes",
     "patients.detail_view": "read_notes",
-    "patients.edit_form_fragment": "read_notes",
+    "patients.edit_form_fragment": "update_field",
     # the form is read_notes; the change it proposes is gated as update_field
     # when the pending action is built
     "patients.edit_submit": "read_notes",

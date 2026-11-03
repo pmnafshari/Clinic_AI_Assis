@@ -1159,6 +1159,23 @@ def selftest():
             "48c: the request list no longer names the erased patient"
         del os.environ[erasure.KEY_ENV]
 
+        # 49. P29 F-020: the assistant may not change demographics, so the
+        # record offers no Edit for them; the save itself stays refused server-side
+        page49 = assistant_client.get(f"/patients/{cf}")
+        assert page49.status_code == 200, "49a: the assistant opens the record"
+        assert "edit-form?field=" not in page49.text, \
+            "49a: no demographics Edit for a role that cannot save it"
+        assert "Changes are made by a dentist" in page49.text, "49a: and the record says who can"
+        assert assistant_client.get(f"/patients/{cf}/edit-form?field=phone").status_code == 403, \
+            "49b: the edit form itself is refused"
+        assert "edit-form?field=" in dentist_client.get(f"/patients/{cf}").text, \
+            "49c: the dentist keeps the Edit button"
+        phone49 = _phone(db_path, cf)
+        refused49 = assistant_client.post(f"/patients/{cf}/edit", data={
+            "field": "phone", "value": "3339998887", "csrf_token": _csrf_from(page49.text)})
+        assert "not permitted" in refused49.text and _phone(db_path, cf) == phone49, \
+            "49d: a forged save is still refused by the server"
+
     print("selftest ok")
 
 

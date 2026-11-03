@@ -375,6 +375,12 @@ def selftest():
         assert b'name="current"' in form.data, "12: the form must ask for the current password"
         assert str(MIN_PASSWORD_LENGTH).encode() in form.data, \
             "12: the form should state the real minimum length"
+        # P29 R-002: each of the three fields has its own show/hide button, one input each
+        for field in ("current", "password", "confirm"):
+            assert re.search(r'<input[^>]+id="%s"[^>]+data-pw-input' % field, form.text) and \
+                re.search(r'<button[^>]+data-pw-toggle[^>]+aria-controls="%s"[^>]+aria-pressed' % field,
+                          form.text), f"12 R-002: no show/hide button for {field}"
+            assert form.text.count(f'name="{field}"') == 1, f"12 R-002: {field} exists twice"
 
         changed = change_pw(client_p, "oldpass123", "brandnewpass1")
         assert changed.status_code == 302, "12: a successful change should redirect"

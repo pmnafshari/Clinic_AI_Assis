@@ -172,6 +172,11 @@ def claim_confirm_token(conn, token, username, now=None):
     return "used" if used else "unknown"
 
 
+def confirm_token_used(conn, token, username):
+    return conn.execute("SELECT 1 FROM note_confirm_tokens WHERE token = ? AND username = ?"
+                        " AND used_at IS NOT NULL", (token or "", username)).fetchone() is not None
+
+
 # --- intake ----------------------------------------------------------------
 
 def stage(conn, json_path, actor, role, target=None, now=None):
