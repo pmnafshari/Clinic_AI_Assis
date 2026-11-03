@@ -58,8 +58,8 @@
         If these are different people, say how you know
       </label>
       <div class="d-flex gap-2 flex-wrap">
-        <input type="text" class="form-control w-auto flex-grow-1" id="reason-{{ loop.index }}"
-               name="reason" placeholder="e.g. checked both records, different birth dates">
+        <textarea class="form-control w-auto flex-grow-1" id="reason-{{ loop.index }}"
+               name="reason" placeholder="e.g. checked both records, different birth dates" rows="1" data-grow></textarea>
         <button type="submit" class="btn btn-outline-secondary">Different people</button>
       </div>
     </form>

@@ -140,7 +140,7 @@
           </select></div>
         {% endif %}
         <div class="col-sm-6"><label for="reason" class="form-label">Reason{% if item.state != 'proposed' %} (required){% endif %}</label>
-          <input id="reason" name="reason" class="form-control form-control-sm" maxlength="300" {% if item.state != 'proposed' %}required{% endif %}></div>
+          <textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="300" {% if item.state != 'proposed' %}required{% endif %} rows="1" data-grow></textarea></div>
       </div>
       <button class="btn btn-primary btn-sm mt-2" type="submit">Confirm: this file is this patient's</button>
     </form>
@@ -148,13 +148,13 @@
       <form method="post" action="{{ url_for('imports.hold', import_id=item.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label for="hreason" class="form-label">Why hold it</label>
-        <input id="hreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+        <textarea id="hreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
         <button class="btn btn-outline-secondary btn-sm" type="submit">Hold for investigation</button>
       </form>
       <form method="post" action="{{ url_for('imports.reject', import_id=item.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label for="rreason" class="form-label">Why reject it</label>
-        <input id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+        <textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
         <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button>
       </form>
     </div>

@@ -78,5 +78,5 @@ def exclude(cf, vid, case):
     except sc.Disabled as e:
         flash(str(e), "danger")
         return redirect(url_for("similar.page", cf=cf, vid=vid))
-    flash("Removed from similar-case search. The visit itself is unchanged.", "success")
+    flash("Removed from similar-case search. The visit itself is unchanged.", "removed")
     return redirect(url_for("similar.page", cf=cf, vid=vid))

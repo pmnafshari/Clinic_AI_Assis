@@ -41,7 +41,7 @@ def _back(cf, rid=None):
     return redirect(url_for("patients.detail_view", cf=cf) + "#imaging")
 
 
-def _step(cf, rid, fn, done, **kwargs):
+def _step(cf, rid, fn, done, kind="success", **kwargs):
     conn, pid, _p = _patient(cf)
     try:
         fn(conn, rid, pid, actor=g.user["username"], role=g.user["role"], **kwargs)
@@ -52,7 +52,7 @@ def _step(cf, rid, fn, done, **kwargs):
     except (ir.RequestError, ValueError) as e:
         flash(str(e), "danger")
         return _back(cf, rid)
-    flash(done, "success")
+    flash(done, kind)
     return _back(cf, rid)
 
 
@@ -163,7 +163,7 @@ def activate(cf, rid):
 def cancel(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_cancel", f"imaging:{rid}")
-    return _step(cf, rid, ir.cancel, "Cancelled. Reception sees that it was cancelled.",
+    return _step(cf, rid, ir.cancel, "Cancelled. Reception sees that it was cancelled.", kind="removed",
                  expected_version=request.form.get("version", "0"), reason=request.form.get("reason", ""))
 
 
@@ -261,7 +261,7 @@ def complete(cf, rid):
 def reverse(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_complete_reverse", f"imaging:{rid}")
-    return _step(cf, rid, ib.reverse, "Completion reversed. The request is open again.",
+    return _step(cf, rid, ib.reverse, "Completion reversed. The request is open again.", kind="removed",
                  reason=request.form.get("reason", ""))
 
 

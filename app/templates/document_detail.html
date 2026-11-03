@@ -101,7 +101,7 @@
       <form method="post" action="{{ url_for('documents.withdraw', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label for="wreason" class="form-label">Why withdraw it (optional)</label>
-        <input id="wreason" name="reason" class="form-control form-control-sm" maxlength="300"></div>
+        <textarea id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" rows="1" data-grow></textarea></div>
         <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw from the portal</button>
       </form>
       {% else %}
@@ -125,7 +125,7 @@
       <div><label for="to_cf" class="form-label">Right patient's codice fiscale</label>
       <input id="to_cf" name="to_cf" class="form-control form-control-sm" maxlength="40" required autocomplete="off"></div>
       <div><label for="creason" class="form-label">Why it belongs to that patient</label>
-      <input id="creason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+      <textarea id="creason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
       <button class="btn btn-outline-danger btn-sm" type="submit">Move to that record</button>
     </form>
   </div>
@@ -178,7 +178,7 @@
     <form method="post" action="{{ url_for('documents.reject', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label for="reason" class="form-label">Reason</label>
-      <input id="reason" name="reason" class="form-control form-control-sm" maxlength="300"></div>
+      <textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="300" rows="1" data-grow></textarea></div>
       <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
     </form>
     {% endif %}

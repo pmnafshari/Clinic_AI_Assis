@@ -145,7 +145,7 @@
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div>
             <label for="reason" class="form-label">Reason</label>
-            <input id="reason" name="reason" class="form-control form-control-sm" maxlength="500">
+            <textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="500" rows="1" data-grow></textarea>
           </div>
           <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
         </form>

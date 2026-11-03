@@ -45,7 +45,7 @@
         <form method="post" action="{{ url_for('data_requests.review', req_id=r.id) }}" class="ms-auto d-flex gap-2 align-items-center flex-wrap">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label class="ds-sr-only" for="reason-{{ r.id }}">Reason</label>
-          <input type="text" class="form-control form-control-sm" id="reason-{{ r.id }}" name="reason" placeholder="Reason (needed to refuse)" maxlength="500">
+          <textarea class="form-control form-control-sm" id="reason-{{ r.id }}" name="reason" placeholder="Reason (needed to refuse)" maxlength="500" rows="1" data-grow></textarea>
           {% if r.kind == 'erasure' %}
           <label class="small"><input type="checkbox" name="confirm" value="yes"> Erase for good - this cannot be undone</label>
           {% endif %}

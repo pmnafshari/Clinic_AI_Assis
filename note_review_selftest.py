@@ -487,8 +487,10 @@ def routes(tmp):
     assert conn.execute("SELECT status FROM note_reviews WHERE id = ?", (lid,)).fetchone()[0] == "pending", \
         "20e: a reject with no reason went through"
     assert "give a reason" in blank.lower(), "20e: and the page does not say a reason is needed"
-    dentist.post(f"/reviews/{lid}/reject", data={"csrf_token": csrf(page), "reason_choice": "Already filed",
-                                                 "reason": ""})
+    done20e = dentist.post(f"/reviews/{lid}/reject", data={"csrf_token": csrf(page), "reason_choice": "Already filed",
+                                                           "reason": ""}, follow_redirects=True).text
+    # P29 R-008: a rejection reads as a removal, not as a save
+    assert 'data-flash="removed"' in done20e, "20e R-008: the rejection is shown as a success"
     assert tuple(conn.execute("SELECT status, decision_reason FROM note_reviews WHERE id = ?",
                               (lid,)).fetchone()) == ("rejected", "Already filed"), "20e: the chosen reason"
     conn.close()

@@ -122,7 +122,7 @@
     {% if r.state in ('draft', 'active') %}
     <form method="post" action="{{ url_for('imaging.cancel', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
-      <div><label for="reason" class="form-label">Why cancel it</label><input id="reason" name="reason" class="form-control form-control-sm" maxlength="200" required></div>
+      <div><label for="reason" class="form-label">Why cancel it</label><textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
       <button class="btn btn-outline-danger btn-sm" type="submit">Cancel request</button>
     </form>
     {% endif %}
@@ -154,7 +154,7 @@
       <p>Recorded as done by {{ completion.recorded_by }} on {{ completion.recorded_at | clinic_when }}{% if done_file %}, with the image {{ done_file.display_name }}{% endif %}.</p>
       <form method="post" action="{{ url_for('imaging.reverse', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label for="rreason" class="form-label">Why reverse it</label><input id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required></div>
+        <div><label for="rreason" class="form-label">Why reverse it</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
         <button class="btn btn-outline-danger btn-sm" type="submit">Reverse completion</button>
       </form>
       {% elif files %}

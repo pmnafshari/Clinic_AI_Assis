@@ -830,7 +830,11 @@ def routes(tmp):
     assert "1 file waiting is not searched until it is confirmed" in index16, "16c: search does not say what it leaves out"
     js16 = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
     assert "P29 R-031" in js16 and "file-view" in js16[js16.index("P29 R-031"):], "16c: no fallback for an image that fails"
-    docs.reject(conn, waiting, a, "test", *D)
+    # P29 R-008: rejecting reads as a removal, not as a save
+    gone16 = dentist.post(f"/patients/{cf_a}/documents/{waiting}/reject", follow_redirects=True, data={
+        "csrf_token": re.search(r'name="csrf_token" value="([^"]+)"', wpage).group(1), "reason": "test"}).text
+    assert docs.row(conn, waiting)["status"] == "rejected" and 'data-flash="removed"' in gone16, \
+        "16c R-008: a document rejection reads as a success"
     # 17. dentist sees and searches; reception is refused
     page = dentist.get(f"/patients/{cf_a}/documents?q=otturazione").text
     assert "r.pdf" in page and "otturazione" in page, "17: search page"

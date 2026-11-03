@@ -95,7 +95,7 @@
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='void') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label class="form-label small" for="vr-{{ inv.id }}">Reason to void</label>
-        <input class="form-control form-control-sm" id="vr-{{ inv.id }}" name="reason" maxlength="300" required></div>
+        <textarea class="form-control form-control-sm" id="vr-{{ inv.id }}" name="reason" maxlength="300" required rows="1" data-grow></textarea></div>
         <button class="btn btn-outline-danger btn-sm" type="submit">Void</button>
       </form>
       {% endif %}

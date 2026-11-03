@@ -91,7 +91,7 @@ def detail(cf, did):
                            date=pf.dated(r), visit=visit, previewable=r["kind"] in pf.PREVIEWABLE and r["status"] != "quarantined")
 
 
-def _step(cf, did, fn, done, back="detail", **kwargs):
+def _step(cf, did, fn, done, back="detail", kind="success", **kwargs):
     conn, pid, _patient_row = _patient(cf)
     try:
         out = fn(conn, did, pid, actor=g.user["username"], role=g.user["role"], **kwargs)
@@ -100,7 +100,7 @@ def _step(cf, did, fn, done, back="detail", **kwargs):
     except docs.DocumentError as e:
         flash(str(e), "danger")
         return redirect(url_for("documents.detail", cf=cf, did=did))
-    flash(done, "success")
+    flash(done, kind)
     if back == "index":
         return redirect(url_for("documents.index", cf=cf) + "#timeline")
     return redirect(url_for("documents.detail", cf=cf, did=out if isinstance(out, int) else did))
@@ -124,7 +124,7 @@ def retry(cf, did):
 def reject(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_reject", f"document:{did}")
-    return _step(cf, did, docs.reject, "Rejected. The file is kept; it is not part of the record.",
+    return _step(cf, did, docs.reject, "Rejected. The file is kept; it is not part of the record.", kind="removed",
                  reason=request.form.get("reason", ""))
 
 
@@ -191,7 +191,7 @@ def publish(cf, did):
 def withdraw(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_withdraw", f"document:{did}")
-    return _step(cf, did, pf.withdraw, "No longer shown to the patient.", back="index",
+    return _step(cf, did, pf.withdraw, "No longer shown to the patient.", back="index", kind="removed",
                  reason=request.form.get("reason", ""))
 
 

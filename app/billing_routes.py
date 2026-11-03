@@ -115,7 +115,7 @@ def invoice_action(invoice_id, action):
             ledger.plan_installments(conn, invoice_id, form.get("count", "0"),
                                      form.get("first_due", ""), who, role)
             message = "Installment plan created."
-        flash(message, "success")
+        flash(message, "removed" if action == "void" else "success")
     except (ledger.LedgerError, ValueError) as e:
         flash(f"Not done: {e}.", "danger")
     return redirect(_patient_url(inv["patient_id"]))
@@ -232,7 +232,7 @@ def payment_action(payment_id, action):
             _, created = ledger.reverse(conn, payment_id, form.get("key"), who, role,
                                         reasons.chosen(form, reasons.REVERSE))
         flash(("Refund recorded." if action == "refund" else "Payment reversed.")
-              if created else "That was already recorded.", "success")
+              if created else "That was already recorded.", "removed" if created else "success")
     except (ledger.LedgerError, ValueError) as e:
         flash(f"Not done: {e}.", "danger")
     return redirect(_patient_url(row["patient_id"]))

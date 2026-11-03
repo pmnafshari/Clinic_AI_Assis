@@ -38,7 +38,7 @@ def _back(cf):
     return redirect(url_for("summary.page", cf=cf))
 
 
-def _act(cf, sid, fn, done_message, **kwargs):
+def _act(cf, sid, fn, done_message, kind="success", **kwargs):
     """Run one workflow step on this patient's summary. Another patient's id
     is not found; a refused step says why and changes nothing."""
     conn, pid, _patient_row = _patient(cf)
@@ -49,7 +49,7 @@ def _act(cf, sid, fn, done_message, **kwargs):
     except vs.SummaryError as e:
         flash(str(e), "danger")
         return _back(cf)
-    flash(done_message, "success")
+    flash(done_message, kind)
     return _back(cf)
 
 
@@ -136,5 +136,5 @@ def approve(cf, sid):
 def reject(cf, sid):
     if not authorize(g.user["role"], vs.CAPABILITY):
         return _refuse("summary_reject", f"summary:{sid}")
-    return _act(cf, sid, vs.reject, "Rejected. It stays in the history.",
+    return _act(cf, sid, vs.reject, "Rejected. It stays in the history.", kind="removed",
                 reason=request.form.get("reason", ""))

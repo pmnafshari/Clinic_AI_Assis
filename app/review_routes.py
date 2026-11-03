@@ -20,7 +20,7 @@ def _refuse(action, target=None):
     return redirect(url_for("dashboard.index"))
 
 
-def _step(review_id, fn, done, **kwargs):
+def _step(review_id, fn, done, kind="success", **kwargs):
     try:
         fn(get_db(), review_id, actor=g.user["username"], role=g.user["role"],
            sorted_root=SORTED_ROOT, collection=get_chroma(), **kwargs)
@@ -29,7 +29,7 @@ def _step(review_id, fn, done, **kwargs):
     except nr.ReviewError as e:
         flash(str(e), "danger")
         return redirect(url_for("review.detail", review_id=review_id))
-    flash(done, "success")
+    flash(done, kind)
     return redirect(url_for("review.queue"))
 
 
@@ -76,7 +76,7 @@ def confirm(review_id):
 def reject(review_id):
     if not authorize(g.user["role"], nr.CAPABILITY):
         return _refuse("note_review_reject", f"review:{review_id}")
-    return _step(review_id, nr.reject, "Rejected. Nothing was filed; the upload is kept.",
+    return _step(review_id, nr.reject, "Rejected. Nothing was filed; the upload is kept.", kind="removed",
                  reason=reasons.chosen(request.form, reasons.REJECT_NOTE))
 
 

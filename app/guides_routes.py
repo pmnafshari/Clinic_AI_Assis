@@ -178,7 +178,7 @@ def page_image(guide_id, page):
     return _no_store(resp)
 
 
-def _decide(guide_id, fn, done, action, **kwargs):
+def _decide(guide_id, fn, done, action, kind="success", **kwargs):
     try:
         fn(gconn(), guide_id, *kwargs.pop("args", ()), actor=g.user["username"], role=g.user["role"], **kwargs)
     except LookupError:
@@ -191,7 +191,7 @@ def _decide(guide_id, fn, done, action, **kwargs):
         flash(str(e), "danger")
         return redirect(url_for("guides.source_view", guide_id=guide_id))
     log_audit(get_db(), *_who(), action, f"guide:{guide_id}", allowed=1)
-    flash(done, "success")
+    flash(done, kind)
     return redirect(url_for("guides.source_view", guide_id=guide_id))
 
 
@@ -206,7 +206,7 @@ def approve(guide_id):
 def reject(guide_id):
     if not authorize(g.user["role"], cg.ASK):
         return _refuse("guide_reject", f"guide:{guide_id}")
-    return _decide(guide_id, cg.reject, "Rejected. It will never be searched.", "guide_reject",
+    return _decide(guide_id, cg.reject, "Rejected. It will never be searched.", "guide_reject", kind="removed",
                    args=(request.form.get("reason", ""),))
 
 
@@ -214,7 +214,7 @@ def reject(guide_id):
 def withdraw(guide_id):
     if not authorize(g.user["role"], cg.ASK):
         return _refuse("guide_withdraw", f"guide:{guide_id}")
-    return _decide(guide_id, cg.withdraw, "Withdrawn. It is out of every answer from now on.", "guide_withdraw",
+    return _decide(guide_id, cg.withdraw, "Withdrawn. It is out of every answer from now on.", "guide_withdraw", kind="removed",
                    args=(request.form.get("reason", ""),))
 
 

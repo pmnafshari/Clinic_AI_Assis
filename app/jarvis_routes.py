@@ -46,7 +46,7 @@ def revoke_device(device_id):
     if not authorize(g.user["role"], "manage_users"):
         return _refuse("jarvis_device_revoke", f"jarvis_device:{device_id}")
     jl.revoke_device(get_db(), device_id, *_who())
-    flash("Device revoked: it can no longer reach the clinic app.", "success")
+    flash("Device revoked: it can no longer reach the clinic app.", "removed")
     return redirect(url_for("jarvis.devices"))
 
 

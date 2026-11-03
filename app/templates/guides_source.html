@@ -30,12 +30,12 @@
     {% if s.status == 'pending_review' %}
     <form method="post" action="{{ url_for('guides.approve', guide_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm" type="submit">Approve</button></form>
     <form method="post" action="{{ url_for('guides.reject', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="rreason" class="form-label">Why reject it</label><input id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+      <div><label for="rreason" class="form-label">Why reject it</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
       <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button></form>
     {% endif %}
     {% if s.status == 'approved' %}
     <form method="post" action="{{ url_for('guides.withdraw', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="wreason" class="form-label">Why withdraw it</label><input id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" required></div>
+      <div><label for="wreason" class="form-label">Why withdraw it</label><textarea id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
       <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw from answers</button></form>
     {% if approve and others %}
     <form method="post" action="{{ url_for('guides.supersede', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

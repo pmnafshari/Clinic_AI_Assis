@@ -851,6 +851,13 @@ def selftest():
         assert "ux-table-patients" in plist23, "23 R-014: the patients table has no card layout for phones"
         assert re.search(r'<span class="ux-nowrap">\d{4}-\d{2}-\d{2}', plist23), "23 R-015: a date in the list can break"
 
+        # 24. P29 U-007: every reason box on a staff page grows with what is typed (and so gets the counter); none is a
+        # single line that hides what was written
+        tdir = Path(__file__).parent / "app" / "templates"
+        single = [f"{t.name}: {m}" for t in sorted(tdir.glob("*.html"))
+                  for m in re.findall(r'<input[^>]*name="reason"[^>]*>', t.read_text())]
+        assert not single, f"24 U-007: single-line reason fields: {single[:3]}"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

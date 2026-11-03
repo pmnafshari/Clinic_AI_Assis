@@ -162,7 +162,7 @@ def original(import_id):
     return resp
 
 
-def _decided(import_id, fn, done, **kwargs):
+def _decided(import_id, fn, done, kind="success", **kwargs):
     conn = get_db()
     try:
         fn(conn, import_id, actor=g.user["username"], role=g.user["role"], **kwargs)
@@ -171,7 +171,7 @@ def _decided(import_id, fn, done, **kwargs):
     except li.ImportProblem as e:
         flash(str(e), "danger")
         return redirect(url_for("imports.item", import_id=import_id))
-    flash(done, "success")
+    flash(done, kind)
     return redirect(url_for("imports.index") + "#queue")
 
 
@@ -192,7 +192,7 @@ def confirm(import_id):
 def reject(import_id):
     if not authorize(g.user["role"], li.REVIEW):
         return _refuse("import_reject", f"item:{import_id}")
-    return _decided(import_id, li.reject, "Rejected. Nothing was attached; the old file is untouched.",
+    return _decided(import_id, li.reject, "Rejected. Nothing was attached; the old file is untouched.", kind="removed",
                     reason=request.form.get("reason", ""))
 
 
