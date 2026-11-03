@@ -86,13 +86,19 @@ def open_for_patient(conn, pid):
 
 
 def queue(conn, status=None):
-    sql = ("SELECT h.*, p.patient_name FROM handoff_requests h LEFT JOIN patients p"
+    sql = ("SELECT h.*, p.patient_name, p.codice_fiscale, p.phone FROM handoff_requests h LEFT JOIN patients p"
            " ON p.patient_id = h.patient_id")
     args = ()
     if status:
         sql += " WHERE h.status = ?"
         args = (status,)
     return conn.execute(sql + " ORDER BY h.status, h.created_at LIMIT 100", args).fetchall()
+
+
+def get(conn, handoff_id):
+    return conn.execute(
+        "SELECT h.*, p.patient_name FROM handoff_requests h LEFT JOIN patients p"
+        " ON p.patient_id = h.patient_id WHERE h.id = ?", (handoff_id,)).fetchone()
 
 
 def counts(conn):

@@ -70,7 +70,7 @@ def selftest():
         # 3. one claimer wins on screen; the loser is told, not overridden
         reception.post(f"/handoffs/{hid}/claim", data={"csrf_token": _csrf(page)})
         page2 = other.get("/handoffs").text
-        assert "with hf_assist" in page2, "3: the holder is named"
+        assert "Taken by hf_assist" in page2, "3: the holder is named"
         other.post(f"/handoffs/{hid}/claim", data={"csrf_token": _csrf(page2)})
         assert conn.execute("SELECT claimed_by FROM handoff_requests WHERE id = ?",
                             (hid,)).fetchone()[0] == "hf_assist", "3: no override"
@@ -99,6 +99,43 @@ def selftest():
         assert "Nothing in that state." in reception.get("/handoffs?status=open").text
         page = reception.get("/handoffs").text
         assert ("Clinic open now" in page) or ("Clinic closed" in page), "6: hours, not an ETA"
+
+        # 7. P29 R-019 / F-028: the page says what a call-back is and that a missed call is never one; the states have
+        # the same words on tiles, tabs and rows; each row says why in words, the next step, the phone and the record;
+        # taking or closing one says whose it is and what to do next, never a bare "Yours."
+        def row(html, name):
+            m = re.search(r'<li class="ds-row"[^>]*data-name="' + name + r'"[^>]*>(.*?)</li>', html, re.S)
+            return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m.group(1))) if m else "", m.group(1) if m else ""
+        def flash(html):
+            return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", re.search(r'data-ux="result".*?</section>', html, re.S).group(0)))
+        purpose = re.search(r'data-ux="callback-purpose".*?</section>', page, re.S)
+        assert purpose and "A patient asked" in purpose.group(0) and "missed call" in purpose.group(0) \
+            and "phone line is not switched on" in re.sub(r"\s+", " ", purpose.group(0)), "7 R-019: the page does not say what a call-back is"
+        tiles = re.findall(r'<span class="ux-kpi-label">([^<]+)</span>', page)
+        tabs = re.findall(r'<a href="/handoffs\?status=\w+"[^>]*>(\w+) <span', page)
+        assert tiles == ["Waiting", "Taken", "Done"] and tabs == ["Waiting", "Taken", "Done"], \
+            f"7: the states are named differently on tiles {tiles} and tabs {tabs}"
+        pid7 = patient_id.seed_patient(conn, "ZZH00C00C000D", "Dario Domanda", "+39 055 7")
+        hid7, _ = handoff.raise_request(conn, pid7, "payment_unknown", "billing", now=t0)
+        page = reception.get("/handoffs").text
+        text, html = row(page, "Dario Domanda")
+        assert "Waiting" in text and "whether an invoice is paid" in text and "Next: take it" in text, f"7: waiting row {text!r}"
+        assert "+39 055 7" in text and 'href="/patients/ZZH00C00C000D"' in html, f"7: no phone or record link {text!r}"
+        took = reception.post(f"/handoffs/{hid7}/claim", data={"csrf_token": _csrf(page)}, follow_redirects=True).text
+        said = flash(took)
+        assert "Yours." not in said and "You have taken" in said and "Dario Domanda" in said and "Call them back" in said, \
+            f"7: the claim says {said!r}"
+        text, html = row(took, "Dario Domanda")
+        assert "Taken by you" in text and "Next: call" in text and "Mark done" in text, f"7: own taken row {text!r}"
+        text, html = row(other.get("/handoffs").text, "Dario Domanda")
+        assert "Taken by hf_assist" in text and "Mark done" not in text, f"7: a colleague's taken row {text!r}"
+        lost = other.post(f"/handoffs/{hid7}/claim", data={"csrf_token": _csrf(page2)}, follow_redirects=True).text
+        assert "hf_assist took it first" in flash(lost), f"7: the loser is told {flash(lost)!r}"
+        page = reception.get("/handoffs").text
+        closed = reception.post(f"/handoffs/{hid7}/resolve", data={"csrf_token": _csrf(page)}, follow_redirects=True).text
+        assert "Marked done" in flash(closed) and "Dario Domanda" in flash(closed), f"7: the close says {flash(closed)!r}"
+        text, _ = row(reception.get("/handoffs?status=resolved").text, "Dario Domanda")
+        assert "Done" in text and "Marked done by hf_assist" in text, f"7: done row {text!r}"
         conn.close()
 
     print("selftest ok")

@@ -758,7 +758,7 @@ def selftest():
             f"/appointments?view=day&day={DAY}": ("assistant", {"Requests to confirm": conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]}),
             "/stock": ("dentist", {"Items": conn.execute("SELECT COUNT(*) FROM inventory_items").fetchone()[0],
                                    "Open alerts": len(inv18.open_alerts(conn))}),
-            "/handoffs": ("assistant", {s18.capitalize() if s18 != "claimed" else "Taken": n18 for s18, n18 in
+            "/handoffs": ("assistant", {{"open": "Waiting", "claimed": "Taken"}[s18]: n18 for s18, n18 in
                                         {r[0]: r[1] for r in conn.execute("SELECT status, COUNT(*) FROM handoff_requests GROUP BY status")}.items()
                                         if s18 in ("open", "claimed")}),
         }

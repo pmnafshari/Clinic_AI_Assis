@@ -10,37 +10,47 @@
   </div>
 </div>
 
-<div class="ds-alert ds-alert-info mb-4" role="note">
-  <div><strong class="ds-alert-title">Nothing was sent to the patient</strong>
-  A call-back is raised when the assistant stops and asks for a person. The patient sees it
-  waiting in the portal; no message goes out, because there is no messaging provider. The queue
-  records <strong>why</strong> and <strong>what about</strong> — never what the patient typed.</div>
-</div>
+{# P29 R-019: what a call-back is, where it comes from, and that a missed call is never one #}
+{% set state_words = {'open': 'Waiting', 'claimed': 'Taken', 'resolved': 'Done'} %}
+{% set why_words = {'patient_asked': 'asked for a person', 'payment_unknown': 'asked whether an invoice is paid - not recorded here',
+                    'no_content': "asked something the clinic's content does not cover", 'symptom': 'described a symptom',
+                    'treatment': 'asked about medication or treatment', 'advice': 'asked for an opinion'} %}
+<section class="ds-alert ds-alert-info mb-4" role="note" data-ux="callback-purpose" aria-label="What a call-back is">
+  <div><strong class="ds-alert-title">What a call-back is</strong>
+  A patient asked the assistant for a person, or asked something it must not answer - a symptom, a treatment, an
+  opinion, whether an invoice is paid, or something the clinic's content does not cover. Someone here calls the
+  patient back: take it, call, then mark it done.
+  {% if phone_line %}They come from the portal's assistant and the phone line's assistant.{% else %}The phone line is
+  not switched on, so every call-back here was asked for in the patient portal.{% endif %}
+  A missed call to the clinic's phone is never in this list.
+  <br><strong>Nothing was sent to the patient</strong>: they see the call-back waiting in the portal, and no message
+  goes out. The list keeps <strong>why</strong> and <strong>what about</strong> - never what the patient typed.</div>
+</section>
 
 <div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Open</span>
-    <span class="ux-kpi-value">{{ counts.get('open', 0) }}</span><span class="ux-kpi-sub">nobody has taken it</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Waiting</span>
+    <span class="ux-kpi-value">{{ counts.get('open', 0) }}</span><span class="ux-kpi-sub">nobody has taken it yet</span></div>
   <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Taken</span>
-    <span class="ux-kpi-value">{{ counts.get('claimed', 0) }}</span><span class="ux-kpi-sub">someone is on it</span></div>
+    <span class="ux-kpi-value">{{ counts.get('claimed', 0) }}</span><span class="ux-kpi-sub">someone is calling the patient</span></div>
   <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Done</span>
-    <span class="ux-kpi-value">{{ counts.get('resolved', 0) }}</span><span class="ux-kpi-sub">closed by staff</span></div>
+    <span class="ux-kpi-value">{{ counts.get('resolved', 0) }}</span><span class="ux-kpi-sub">called back and marked done</span></div>
 <!--/page-tiles--></div>
 
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
-    <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' call-backs') if status else 'The queue' }}</h2>
+    <h2 class="ds-card-title" id="queue-title">{{ (state_words[status] ~ ' call-backs') if status else 'The queue' }}</h2>
     {# P29 redesign: the states are a tab control - the count on each, the current one marked #}
     <nav class="sx-tabs sx-tabs-sm" aria-label="Show">
       <a href="{{ url_for('handoff.index') }}"{% if not status %} aria-current="page"{% endif %}>All</a>
       {% for state, n in counts.items() %}
-      <a href="{{ url_for('handoff.index', status=state) }}"{% if status == state %} aria-current="page"{% endif %}>{{ state | capitalize }} <span class="sx-count">{{ n }}</span></a>
+      <a href="{{ url_for('handoff.index', status=state) }}"{% if status == state %} aria-current="page"{% endif %}>{{ state_words[state] }} <span class="sx-count">{{ n }}</span></a>
       {% endfor %}
     </nav>
   </div>
   {# P30: Sort and Filter on the rows loaded here (the tabs above choose a state on the server) #}
   {% if rows %}
   <div class="sx-tools sx-tools-row" data-list-tools data-for="handoff-rows" data-noun="call-back|call-backs"
-       data-sorts='{{ [['raised', 'text', 1, 'Oldest first'], ['raised', 'text', -1, 'Newest first'], ['state', 'num', 1, 'Open first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
+       data-sorts='{{ [['raised', 'text', 1, 'Oldest first'], ['raised', 'text', -1, 'Newest first'], ['state', 'num', 1, 'Waiting first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
        data-filters='{{ [['about', 'About', [['appointment', 'Appointment'], ['billing', 'Billing'], ['clinical', 'Clinical'], ['records', 'Records'], ['other', 'Other']]],
                          ['why', 'Why', [['patient_asked', 'Asked for a person'], ['payment_unknown', 'Payment unknown'], ['no_content', 'Not covered'], ['symptom', 'Symptom'], ['treatment', 'Treatment'], ['advice', 'Advice']]]] | tojson }}'></div>
   {% endif %}
@@ -53,22 +63,31 @@
         <span class="ds-row-main">
           <span class="ds-row-title">{{ r.patient_name or 'Erased patient' }} · {{ r.topic }}</span>
           <span class="ds-row-sub">
-            {{ r.status }} · {{ r.reason.replace('_', ' ') }} · raised {{ r.created_at | appt_date }} {{ r.created_at | appt_time }}
-            {%- if r.claimed_by %} · with {{ r.claimed_by }}{% endif %}
-            {%- if r.resolved_by %} · closed by {{ r.resolved_by }}{% endif %}
+            <b>{% if r.status == 'claimed' %}Taken by {{ 'you' if r.claimed_by == me else r.claimed_by }}{% else %}{{ state_words[r.status] }}{% endif %}</b>
+            · the patient {{ why_words.get(r.reason, r.reason) }} · raised <span class="ux-nowrap">{{ r.created_at | appt_date }} {{ r.created_at | appt_time }}</span>
+          </span>
+          <span class="ds-row-sub">
+            {%- if r.phone %}<span class="ux-nowrap"><i class="bi bi-telephone" aria-hidden="true"></i> {{ r.phone }}</span>{% else %}No phone on file{% endif %}
+            {%- if r.codice_fiscale %} · <a class="ux-nowrap" href="{{ url_for('patients.detail_view', cf=r.codice_fiscale) }}" tabindex="0">Open record</a>{% endif %}
+          </span>
+          <span class="ds-row-sub" data-next>
+            {%- if r.status == 'open' %}Next: take it, then call the patient back.
+            {%- elif r.status == 'claimed' and r.claimed_by == me %}Next: call {{ r.phone or 'the patient' }} back, then mark it done.
+            {%- elif r.status == 'claimed' %}{{ r.claimed_by }} is calling. Only they or a dentist can mark it done.
+            {%- else %}Marked done by {{ r.resolved_by }} <span class="ux-nowrap">{{ r.resolved_at | appt_date }} {{ r.resolved_at | appt_time }}</span>.{% endif %}
           </span>
         </span>
         {% if r.status == 'open' %}
         <form method="post" action="{{ url_for('handoff.claim', handoff_id=r.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
-          <button class="btn btn-outline-secondary btn-sm" type="submit">Take it</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">Take it</button>
         </form>
-        {% elif r.status == 'claimed' %}
+        {% elif r.status == 'claimed' and (r.claimed_by == me or g.user.role == 'dentist') %}
         <form method="post" action="{{ url_for('handoff.resolve', handoff_id=r.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
-          <button class="btn btn-outline-secondary btn-sm" type="submit">Mark done</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">Mark done</button>
         </form>
         {% endif %}
       </li>
