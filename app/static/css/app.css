@@ -1664,3 +1664,11 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .tl-status { display: inline-block; margin-left: 0.25rem; padding: 0 0.4375rem; border: 1px solid var(--ds-border); border-radius: 999px;
   font-size: 0.75rem; font-weight: 600; color: #3f4a5a; background: var(--ds-neutral-surface); white-space: nowrap; }
 .tl-more > summary { margin: 0.5rem 0; color: var(--bs-link-color); font-weight: 600; cursor: pointer; }
+
+/* P29 R-013: payment history - the sign is the first thing read, the net state beside it */
+.pay-amount { margin-left: 0.25rem; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pay-amount.is-in { color: #0f5132; }
+.pay-amount.is-out { color: #842029; }
+.pay-state { margin-left: 0.375rem; padding: 0 0.4375rem; border: 1px solid var(--ds-border); border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: #3f4a5a; background: var(--ds-neutral-surface); }
+.pay-detail > summary { margin-top: 0.25rem; color: var(--bs-link-color); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
+.pay-row:target { box-shadow: inset 3px 0 0 var(--ds-primary); }

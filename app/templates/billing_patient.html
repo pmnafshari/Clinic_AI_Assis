@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_reason.html" import reason_box %}
 {% block content %}
 <nav aria-label="Breadcrumb" class="mb-3">
   <ol class="ds-breadcrumb">
@@ -107,28 +108,46 @@
 {% endfor %}
 
 <section class="card dash-card" aria-labelledby="pay-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="pay-title">Payment history</h2></div>
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="pay-title">Payment history</h2>
+    <p class="ds-card-sub">Newest first. Money received is +, money handed back is −. Open a row for its details.</p></div></div>
   <div class="dash-card-body">
+    {# P29 R-013: signed rows, what is left of each payment and what gave money back, links both ways, details per
+       row, and Refund / Reverse only while something of the payment is left #}
     {% if payments %}
-    <ul class="ds-rows">
+    <ul class="ds-rows pay-rows">
       {% for p in payments %}
-      <li class="ds-row">
+      <li class="ds-row pay-row" id="pay-{{ p.id }}">
         <span class="ds-row-main">
-          <span class="ds-row-title">#{{ p.id }} {{ p.kind }} · {{ fmt(p.amount_cents, 'en') }} · {{ p.method | replace('_', ' ') }}</span>
-          <span class="ds-row-sub">received {{ p.received_on }} · recorded by {{ p.recorded_by }} ({{ p.source | replace('_', ' ') }}){% if p.reference %} · receipt {{ p.reference }}{% endif %}{% if p.reverses_payment_id %} · against #{{ p.reverses_payment_id }}{% endif %}{% if p.note %} · {{ p.note }}{% endif %}</span>
+          <span class="ds-row-title">#{{ p.id }} {{ {'payment': 'Payment', 'refund': 'Refund', 'reversal': 'Reversal'}[p.kind] }}
+            <span class="pay-amount {{ 'is-in' if p.signed > 0 else 'is-out' }}">{{ '+' if p.signed > 0 else '−' }}{{ fmt(p.amount_cents, 'en') }}</span>
+            <span class="pay-state">{{ p.state }}</span></span>
+          <span class="ds-row-sub">received {{ p.received_on }} · {{ p.method | replace('_', ' ') }}
+            {%- if p.reverses_payment_id %} · Against payment <a href="#pay-{{ p.reverses_payment_id }}">#{{ p.reverses_payment_id }}</a>{% endif %}
+            {%- for a in p.answers %} · {{ 'Refunded' if a.kind == 'refund' else 'Reversed' }} by <a href="#pay-{{ a.id }}">#{{ a.id }}</a>{% endfor %}</span>
+          <details class="pay-detail">
+            <summary>Details<span class="visually-hidden"> of #{{ p.id }}</span></summary>
+            <dl class="confirm-rows">
+              <dt>Recorded</dt><dd>recorded by {{ p.recorded_by }} ({{ p.recorded_role }}), {{ p.source | replace('_', ' ') }}</dd>
+              {% if p.reference %}<dt>Receipt</dt><dd>{{ p.reference }}</dd>{% endif %}
+              {% if p.note %}<dt>{{ 'Note' if p.kind == 'payment' else 'Reason' }}</dt><dd>{{ p.note }}</dd>{% endif %}
+              <dt>Set against</dt><dd>{% for a in p.allocations %}invoice #{{ a.invoice_id }} {{ fmt(a.c, 'en') }}{{ ', ' if not loop.last else '' }}{% else %}no invoice{% endfor %}</dd>
+            </dl>
+            {% if can_change and p.kind == 'payment' and p.left > 0 %}
+            <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='refund') }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ key() }}">
+              <div><label class="form-label small" for="ra-{{ p.id }}">Refund amount (at most {{ fmt(p.left, 'en') }})</label>
+                <input class="form-control form-control-sm" id="ra-{{ p.id }}" name="amount" inputmode="decimal" required></div>
+              <div>{{ reason_box('rr-' ~ p.id, reasons.REFUND, 'Reason for the refund') }}</div>
+              <button class="btn btn-outline-secondary btn-sm" type="submit">Refund</button>
+            </form>
+            <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='reverse') }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ key() }}">
+              <div>{{ reason_box('rv-' ~ p.id, reasons.REVERSE, 'Reason to reverse it (takes out ' ~ fmt(p.left, 'en') ~ ')') }}</div>
+              <button class="btn btn-outline-danger btn-sm" type="submit">Reverse (entered by mistake)</button>
+            </form>
+            {% endif %}
+          </details>
         </span>
-        {% if can_change and p.kind == 'payment' %}
-        <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='refund') }}" class="ms-auto d-flex gap-2 align-items-center flex-wrap">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <input type="hidden" name="key" value="{{ key() }}">
-          <label class="ds-sr-only" for="ra-{{ p.id }}">Refund amount</label>
-          <input class="form-control form-control-sm" id="ra-{{ p.id }}" name="amount" inputmode="decimal" placeholder="amount" style="max-width:7rem">
-          <label class="ds-sr-only" for="rr-{{ p.id }}">Reason</label>
-          <input class="form-control form-control-sm" id="rr-{{ p.id }}" name="reason" placeholder="reason" required style="max-width:10rem">
-          <button class="btn btn-outline-secondary btn-sm" type="submit">Refund</button>
-          <button class="btn btn-outline-danger btn-sm" type="submit" formaction="{{ url_for('billing.payment_action', payment_id=p.id, action='reverse') }}">Reverse (entered by mistake)</button>
-        </form>
-        {% endif %}
       </li>
       {% endfor %}
     </ul>

@@ -249,6 +249,34 @@ def payments_for(conn, pid):
                         (pid,)).fetchall()
 
 
+def payments_view(conn, pid):
+    """P29 R-013: the payment history as staff read it, newest first. each row is signed (money in +, money handed
+    back -); a payment says what is left of it and which rows gave money back; a refund or reversal names the
+    payment it answers; every row lists what it was set against."""
+    rows = [dict(p) for p in payments_for(conn, pid)]
+    by_id = {p["id"]: p for p in rows}
+    for p in rows:
+        p["signed"] = p["amount_cents"] if p["kind"] == "payment" else -p["amount_cents"]
+        p["answers"] = []
+        p["allocations"] = [dict(a) for a in _allocated(conn, p["id"])]
+    for p in rows:
+        if p["reverses_payment_id"] in by_id:
+            by_id[p["reverses_payment_id"]]["answers"].append(p)
+    for p in rows:
+        if p["kind"] != "payment":
+            p["left"], p["state"] = 0, "Refund" if p["kind"] == "refund" else "Reversal"
+            continue
+        returned = sum(a["amount_cents"] for a in p["answers"])
+        p["left"] = p["amount_cents"] - returned
+        if not returned:
+            p["state"] = "Kept in full"
+        elif p["left"] == 0:
+            p["state"] = "Reversed" if any(a["kind"] == "reversal" for a in p["answers"]) else "Fully refunded"
+        else:
+            p["state"] = f"{fmt(p['left'], 'en')} kept, {fmt(returned, 'en')} refunded"
+    return rows[::-1]
+
+
 # --- invoices from notes --------------------------------------------------
 
 

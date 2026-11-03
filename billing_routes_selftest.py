@@ -227,6 +227,18 @@ def selftest():
         for action in ("reconcile_invoice", "issue_invoice", "record_payment",
                        "plan_installments", "refund_payment", "view_billing", "preview_invoice"):
             assert action in audits, f"7: {action} is not audited"
+        # 7b. P29 R-013: the payment history reads each row's sign, what is left of a payment and what refunded it;
+        # every payment has its own details; a refund row offers no refund
+        ref_id = conn.execute("SELECT id FROM payments WHERE reverses_payment_id = ?", (pay_id,)).fetchone()[0]
+        hist7 = dentist.get(f"/patients/{CF}/billing").text
+        hist7 = hist7[hist7.index('id="pay-title"'):]
+        orig = re.search(r'<li[^>]+id="pay-' + str(pay_id) + r'".*?</li>', hist7, re.S).group(0)
+        back = re.search(r'<li[^>]+id="pay-' + str(ref_id) + r'".*?</li>', hist7, re.S).group(0)
+        assert re.search(r"\+\s?€\s?[\d.,]+", orig) and re.search(r"−\s?€\s?25\.00", back), "7b R-013: amounts carry no sign"
+        assert "25.00 refunded" in orig and f'href="#pay-{ref_id}"' in orig, "7b: the payment does not say what refunded it"
+        assert f'href="#pay-{pay_id}"' in back and "Against payment" in back, "7b: the refund does not link its payment"
+        assert "<details" in orig and "<details" in back and "recorded by" in back, "7b: no details of their own"
+        assert "/refund" in orig and "/refund" not in back and "/reverse" not in back, "7b: an action that cannot apply"
         v8 = _visit(conn, pid, "2026-10-01", [("controllo", 5000)])
         ledger.ensure_invoice(conn, pid, v8)
         conn.commit()

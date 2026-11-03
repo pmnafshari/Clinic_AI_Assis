@@ -8,6 +8,7 @@ from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
+from . import reasons
 from .db import get_db
 from . import payment_intent
 
@@ -80,7 +81,7 @@ def patient(cf):
     log_audit(conn, g.user["username"], g.user["role"], "view_billing", pid, allowed=1)
     return render_template(
         "billing_patient.html", cf=cf, patient=person, summary=ledger.patient_summary(conn, pid),
-        payments=ledger.payments_for(conn, pid), fmt=ledger.fmt, methods=ledger.METHODS,
+        payments=ledger.payments_view(conn, pid), fmt=ledger.fmt, methods=ledger.METHODS,
         order=ledger.ALLOCATION_ORDER, key=lambda: secrets.token_urlsafe(16),
         can_change=authorize(g.user["role"], "manage_billing"),
         can_pay=authorize(g.user["role"], "record_payment"))
@@ -226,10 +227,10 @@ def payment_action(payment_id, action):
     try:
         if action == "refund":
             _, created = ledger.refund(conn, payment_id, form.get("amount"), form.get("key"),
-                                       who, role, form.get("reason"))
+                                       who, role, reasons.chosen(form, reasons.REFUND))
         else:
             _, created = ledger.reverse(conn, payment_id, form.get("key"), who, role,
-                                        form.get("reason"))
+                                        reasons.chosen(form, reasons.REVERSE))
         flash(("Refund recorded." if action == "refund" else "Payment reversed.")
               if created else "That was already recorded.", "success")
     except (ledger.LedgerError, ValueError) as e:

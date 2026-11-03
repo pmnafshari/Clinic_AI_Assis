@@ -6,6 +6,8 @@ DECLINE = ("No free time in that period", "Dentist not available", "Patient aske
            "Already booked")
 REJECT_NOTE = ("Wrong patient", "Not a dental note", "Already filed", "Cannot be read")
 STOCK = ("Weekly count", "Damaged", "Expired", "Entered by mistake")
+REFUND = ("Treatment not done", "Overpaid", "Discount agreed", "Patient asked for it back")
+REVERSE = ("Entered by mistake", "Entered twice", "Wrong patient")
 
 
 def chosen(form, choices):
