@@ -122,11 +122,16 @@ def view(cf, rid):
     book = authorize(g.user["role"], ib.BOOK)
     dentists = [u["username"] for u in conn.execute(
         "SELECT username FROM users WHERE role = 'dentist' AND active = 1 ORDER BY username")] if book else []
+    history = ir.history(conn, rid, pid, *_who())
+    versions = ir.versions(conn, rid, pid, *_who())
     resp = Response(render_template(
         "imaging_request.html", cf=cf, patient=patient, h=h, r=r, guide=guide, manage=manage,
+        active_version=next((v for v in versions if v["state"] == "active"), None),
+        newer_draft=next((v for v in versions if v["state"] == "draft" and v["version"] > r["version"]), None),
+        seen=[e for e in history if e["action"] == "acknowledged" and e["request_id"] == rid],
         can_book=book, dentists=dentists, booking=ib.booking_view(conn, r), status=ib.status_line(conn, r),
         completion=ib.completion_for(conn, rid), booking_token=secrets.token_urlsafe(16),
-        history=ir.history(conn, rid, pid, *_who()), exams=ir.EXAMS,
+        history=history, exams=ir.EXAMS,
         files=ir.linked_files(conn, rid, pid, *_who()) if manage else [],
         linkable=ir.linkable_files(conn, pid) if manage and h["current"] else [],
         token=secrets.token_urlsafe(16)))

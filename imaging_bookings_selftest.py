@@ -369,6 +369,9 @@ def routes(tmp):
     bid = conn.execute("SELECT id FROM imaging_bookings").fetchone()[0]
     page = ast.get(f"/patients/{cfa}/imaging/{rid}").text
     assert "Booked" in page and "2031" in page, "the handoff shows the booking"
+    # P29 U-011: the appointment's day, start and end, and who booked it and when
+    assert "6 Mar 2031, 10:00–10:20 with drossi" in page, "U-011: the appointment's day and time are not shown"
+    assert re.search(r"Booked by aassist on \d{2}/\d{2}/\d{4} \d{2}:\d{2}", page), "U-011: who booked it and when"
     assert "Record completion" not in page, "K16: reception is never offered completion"
     # a dentist cancels the request: the task appears for reception
     dpage = den.get(f"/patients/{cfa}/imaging/{rid}").text

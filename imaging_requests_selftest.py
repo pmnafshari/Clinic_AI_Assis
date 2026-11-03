@@ -367,6 +367,26 @@ def routes(tmp):
         "no-store" in h.headers.get("Cache-Control", ""), "C04: reception's handoff page"
     assert 'action="/patients/' + cfa + f'/imaging/{rid}/activate"' not in h.text and "Cancel request" not in h.text, \
         "reception has no edit controls"
+    # P29 U-011: who saw it and when, which version is active and which is a draft, and a newest-first history
+    ast.post(f"/patients/{cfa}/imaging/{rid}/acknowledge", data={"csrf_token": csrf(h.text), "version": "1"})
+    seen = ast.get(f"/patients/{cfa}/imaging/{rid}").text
+    assert re.search(r"Seen by aassist on \d{2}/\d{2}/\d{4} \d{2}:\d{2}", seen), "U-011: the acknowledgement is not shown"
+    dpage = den.get(f"/patients/{cfa}/imaging/{rid}").text
+    den.post(f"/patients/{cfa}/imaging/{rid}/revise", data={
+        "csrf_token": csrf(dpage), "exam": "bitewing", "label": "", "note": "",
+        "submit_token": re.search(r'name="submit_token" value="([^"]+)"', dpage).group(1)})
+    v2 = conn.execute("SELECT id FROM imaging_requests WHERE supersedes_id = ?", (rid,)).fetchone()[0]
+    act = den.get(f"/patients/{cfa}/imaging/{rid}").text
+    assert "Version 2 is a draft, not active yet" in act and "Reception works from version 1" in act, \
+        "U-011: the active version does not say a newer draft waits"
+    drf = den.get(f"/patients/{cfa}/imaging/{v2}").text
+    assert "This version is a draft, not active" in drf and "Version 1 is the active one" in drf, \
+        "U-011: the draft does not say which version is active"
+    hist = act[act.index('id="hist-title"'):]
+    order = re.findall(r'data-hist-id="(\d+)"', hist)
+    assert len(order) >= 4 and order == sorted(order, key=int, reverse=True), f"U-011: history is not newest first: {order}"
+    assert "Seen by reception" in hist and "Revised (new draft version)" in hist and '<td data-label="Who">aassist</td>' in hist, \
+        "U-011: history rows do not say what happened in words"
     # C10 another patient in the URL - same answer as a request that does not exist
     for who, url, gone in ((ast, f"/patients/{cfb}/imaging/{rid}", f"/patients/{cfa}/imaging/99999"),
                            (den, f"/patients/{cfb}/imaging/{rid}", f"/patients/{cfa}/imaging/99999"),

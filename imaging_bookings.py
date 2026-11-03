@@ -16,6 +16,7 @@ which and why. No patient is contacted and no booking is re-attached to a new ve
 THE PORTAL AND REMINDERS SEE AN APPOINTMENT. The link lives here, never in appointments.note.
 """
 import sys
+from datetime import timedelta
 
 import appointments
 import clinic_time
@@ -338,6 +339,11 @@ def booking_view(conn, r):
     a = conn.execute("SELECT dentist, status, minutes FROM appointments WHERE id = ?", (b["appointment_id"],)).fetchone()
     out = dict(b)
     out["when"] = _when(b["appt_starts_at"])
+    # P29 U-011: the day with start and end, and when it was booked
+    start = clinic_time.to_local(clinic_time.read_instant(b["appt_starts_at"]))
+    end = start + timedelta(minutes=a["minutes"] if a else 0)
+    out["start_end"] = f"{start:%a} {start.day} {start:%b %Y}, {start:%H:%M}–{end:%H:%M}"
+    out["booked_when"] = _when(b["booked_at"])
     out["dentist"] = a["dentist"] if a else ""
     out["minutes"] = a["minutes"] if a else 0
     out["reason"] = FLAGS.get(b["flag"] or "", "")

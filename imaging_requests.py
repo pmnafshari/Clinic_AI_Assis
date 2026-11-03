@@ -269,11 +269,30 @@ def handoff(conn, pid, request_id, actor, role):
     return out
 
 
+# P29 U-011: what each history row says happened
+EVENT_WORDS = {"created": "Created as a draft", "revised": "Revised (new draft version)", "activated": "Activated",
+               "superseded": "Replaced by a newer version", "cancelled": "Cancelled", "acknowledged": "Seen by reception",
+               "file_linked": "File linked", "booked": "Appointment booked", "moved": "Appointment moved",
+               "booking_flagged": "Booking needs reception action", "completed": "Recorded as done",
+               "completion_reversed": "Completion reversed"}
+
+
 def history(conn, request_id, pid, actor, role):
+    """Every event of the request's series, newest first (P29 U-011)."""
     _require(conn, actor, role, VIEW, "imaging_read", f"imaging:{request_id}")
     r = _mine(conn, request_id, pid)
-    return [dict(e) for e in conn.execute("SELECT request_id, version, action, actor, role, at FROM"
-                                          " imaging_request_events WHERE series_id = ? ORDER BY id", (r["series_id"],))]
+    rows = conn.execute("SELECT id, request_id, version, action, actor, role, at FROM imaging_request_events"
+                        " WHERE series_id = ? ORDER BY id DESC", (r["series_id"],))
+    return [dict(e, what=EVENT_WORDS.get(e["action"], e["action"].replace("_", " "))) for e in rows]
+
+
+def versions(conn, request_id, pid, actor, role):
+    """Every version of the request's series, oldest first: which one is active and which are drafts."""
+    _require(conn, actor, role, VIEW, "imaging_read", f"imaging:{request_id}")
+    r = _mine(conn, request_id, pid)
+    return [dict(v) for v in conn.execute(
+        "SELECT id, version, state, created_by, created_at, activated_by, activated_at FROM imaging_requests"
+        " WHERE series_id = ? AND patient_id = ? ORDER BY version", (r["series_id"], pid))]
 
 
 def acknowledge(conn, request_id, pid, expected_version, actor, role, now=None):
