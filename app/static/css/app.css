@@ -1723,3 +1723,9 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .ux-filter-note { margin: 0 1.25rem 0.5rem; font-size: 0.875rem; color: #334155; }
 .ux-stock td form { margin: 0; }
 .ux-stock td[data-label="Seen"] { white-space: nowrap; }
+
+/* P29 U-004: the patients list - a number per row and the pages */
+.ux-table .ux-rownum { width: 3rem; text-align: right; color: var(--ds-text-muted); font-variant-numeric: tabular-nums; }
+.ux-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-top: 0.75rem; font-size: 0.875rem; color: #334155; }
+.ux-pager > span:first-child { margin-right: auto; }
+@media (max-width: 767.98px) { .ux-table.ux-table-patients td.ux-rownum { display: none; } }

@@ -3,6 +3,7 @@ synthetic clinic. No real account, model or service; the loopback server and the
 
 Run: .venv/bin/python e2e_list_tools.py
 """
+import re
 import tempfile
 import threading
 from datetime import date
@@ -63,13 +64,16 @@ def main():
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
 
-                # patients: tick a filter, the rows narrow, a chip appears and removing it brings them back
+                # patients: tick a filter, the rows narrow, a chip appears and removing it brings them back. P29 U-004:
+                # this list asks the server (pages of 100), so each choice reloads the page with it in the address
                 page.goto(base + "/patients")
                 everyone = shown(page, "#patients-rows tr")
                 assert len(everyone) >= 5, everyone
                 tools = page.locator("[data-for=patients-rows]")
                 tools.locator(".dropdown").nth(0).locator("[data-bs-toggle=dropdown]").click()
-                tools.locator(".sx-opt:has-text('No phone') input").check()
+                tools.locator(".sx-opt:has-text('No phone') input").click()
+                expect(page).to_have_url(re.compile(r"phone=no"))
+                page.wait_for_load_state()
                 narrowed = shown(page, "#patients-rows tr")
                 assert 0 < len(narrowed) < len(everyone), narrowed
                 expect(page.locator(".sx-chip")).to_have_count(1)
@@ -82,9 +86,16 @@ def main():
                     second.locator("td").first.evaluate("e => getComputedStyle(e).backgroundColor"), "rows are not told apart"
                 tools.locator(".dropdown").nth(1).locator("[data-bs-toggle=dropdown]").click()
                 tools.locator(".sx-menu-item:has-text('Last visit (oldest)')").click()
+                expect(page).to_have_url(re.compile(r"sort=last&dir=asc|dir=asc&sort=last"))
+                page.wait_for_load_state()
                 oldest = page.eval_on_selector_all("#patients-rows tr:not([hidden])", "rows => rows.map(r => r.dataset.last)")
-                assert oldest == sorted(oldest), oldest
+                dated = [d for d in oldest if d != "0000-00-00"]
+                # the server keeps a patient with no visit at the end whichever way the column runs (F-005)
+                assert dated == sorted(dated) and oldest == dated + ["0000-00-00"] * (len(oldest) - len(dated)), oldest
+                expect(page.locator(".sx-chip")).to_have_count(1)
                 page.locator(".sx-chip").click()
+                expect(page).not_to_have_url(re.compile(r"phone=no"))
+                page.wait_for_load_state()
                 assert shown(page, "#patients-rows tr") and len(shown(page, "#patients-rows tr")) == len(everyone)
 
                 # invoices: the Amount column header sorts, a second click flips it
@@ -110,10 +121,10 @@ def main():
 
                 # stock: the Search button finds an item, the line below says how many show
                 page.goto(base + "/stock")
-                total = len(shown(page, "#stock-rows li"))
+                total = len(shown(page, "#stock-rows tr"))
                 page.fill("#stock-rows-search", "guanti")
                 page.locator("[data-for=stock-rows] form button[type=submit]").click()
-                found = shown(page, "#stock-rows li")
+                found = shown(page, "#stock-rows tr")
                 assert found and len(found) < total and all("guanti" in n.lower() for n in found), found
                 page.fill("#stock-rows-search", "zzz-nothing")
                 expect(page.locator(".sx-list-empty")).to_be_visible()

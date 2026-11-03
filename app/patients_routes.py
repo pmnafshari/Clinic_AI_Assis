@@ -39,6 +39,28 @@ def patient_identity_pid(key):
 # same ordering as agent.pick_target_visit; nulls sort last.
 LATEST_VISIT = "ORDER BY v.visit_date IS NULL, v.visit_date DESC, v.id DESC LIMIT 1"
 
+# P29 U-004: the list comes in pages; filter, sort and search act on every patient here, never on one page
+PAGE_SIZE = 100
+LIST_FILTERS = {"phone": ("yes", "no"), "booking": ("booked", "requested", "none"),
+                "visit": ("recent", "mid", "old", "none")}
+_FLAGGED = {}
+
+
+def _flagged(conn):
+    # the possible-duplicate marks, worked out again only when the patients, dismissals or merges change
+    rows = conn.execute("SELECT patient_id, codice_fiscale, patient_name, phone FROM patients ORDER BY patient_id").fetchall()
+    marks = conn.execute("SELECT (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM patient_duplicate_dismissals),"
+                         " (SELECT COUNT(*) || ':' || IFNULL(MAX(rowid), 0) FROM patient_merges)").fetchone()
+    key = hash((tuple(tuple(r) for r in rows), tuple(marks)))
+    if key not in _FLAGGED:
+        flagged = set()
+        for pair in patient_identity.candidates(conn):
+            flagged.add(pair["a"]["codice_fiscale"])
+            flagged.add(pair["b"]["codice_fiscale"])
+        _FLAGGED.clear()
+        _FLAGGED[key] = flagged
+    return _FLAGGED[key]
+
 
 @patients_bp.route("/patients")
 def list_view():
@@ -63,10 +85,7 @@ def list_view():
     requested = {}
     for r in appointments.pending_requests(conn):
         requested.setdefault(r["patient_id"], r)
-    flagged = set()
-    for pair in patient_identity.candidates(conn):
-        flagged.add(pair["a"]["codice_fiscale"])
-        flagged.add(pair["b"]["codice_fiscale"])
+    flagged = _flagged(conn)
     rows = []
     today = clinic_time.now().date()
     for p in patients:
@@ -75,6 +94,7 @@ def list_view():
                      "request": f"{req['starts_at'][:10]} ({req['period']})" if req else None,
                      "possible_duplicate": p["codice_fiscale"] in flagged,
                      "visit_band": _visit_band(p["last_visit"], today)})
+        rows[-1]["booking"] = "booked" if rows[-1]["next_appointment"] else "requested" if req else "none"
     # P30 tiles: counted over every patient, before a search narrows the rows
     figures = {"booked": sum(1 for r in rows if r["next_appointment"]), "no_phone": sum(1 for r in rows if not r["phone"])}
     q = (request.args.get("q") or "").strip().lower()
@@ -82,6 +102,15 @@ def list_view():
         # P29 F-004: part of a name, or the whole codice fiscale - never part of a code
         code = normalize_cf(q)
         rows = [r for r in rows if q in r["patient_name"].lower() or code == r["codice_fiscale"]]
+    # P29 U-004: the Filter choices, counted over the patients the search leaves, then applied
+    values = {"phone": lambda r: "yes" if r["phone"] else "no", "booking": lambda r: r["booking"],
+              "visit": lambda r: r["visit_band"]}
+    counts = {key: {v: sum(1 for r in rows if values[key](r) == v) for v in allowed} for key, allowed in LIST_FILTERS.items()}
+    chosen = {key: [v for v in request.args.getlist(key) if v in allowed] for key, allowed in LIST_FILTERS.items()}
+    searched = len(rows)
+    for key, picked in chosen.items():
+        if picked:
+            rows = [r for r in rows if values[key](r) in picked]
     sort = request.args.get("sort") if request.args.get("sort") in ("name", "next", "last") else "name"
     # P29 F-005: ?dir= flips the column; last visit starts newest first, the others a-z / soonest
     direction = request.args.get("dir") if request.args.get("dir") in ("asc", "desc") else \
@@ -97,8 +126,14 @@ def list_view():
         if sort == "next":
             rest.sort(key=lambda r: (r["request"] or "9999", r["patient_name"].lower()))
         rows = have + rest
-    return render_template("patients_list.html", patients=rows, sort=sort, direction=direction,
-                           q=request.args.get("q") or "", total=len(patients), figures=figures)
+    pages = max(1, -(-len(rows) // PAGE_SIZE))
+    page = min(max(request.args.get("page", 1, type=int) or 1, 1), pages)
+    start = (page - 1) * PAGE_SIZE
+    keep = {key: picked for key, picked in chosen.items() if picked}
+    return render_template("patients_list.html", patients=rows[start:start + PAGE_SIZE], sort=sort, direction=direction,
+                           q=request.args.get("q") or "", total=len(patients), figures=figures,
+                           matching=len(rows), searched=searched, start=start, page=page, pages=pages,
+                           chosen=chosen, counts=counts, keep=keep)
 
 
 def _visit_band(last_visit, today):

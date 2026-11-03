@@ -967,6 +967,58 @@ def empty_states():
     print("empty states ok")
 
 
+def paged_patients():
+    """P29 U-004: the patients list comes in pages of 100 with row numbers; filter, sort and search act on every
+    patient on the server (10,000 rows took 15-24 s to show in a browser), and every link keeps them."""
+    import app.db as app_db
+    import clinic_guides
+    from app import create_app
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "paged.sqlite"
+        conn = storage.init_db(str(db))
+        conn.execute("INSERT INTO users (username, password_hash, role, active) VALUES ('dentist', ?, 'dentist', 1)",
+                     (generate_password_hash("dentist-pw-123"),))
+        for i in range(230):
+            patient_id.seed_patient(conn, f"ZZPG{i:04d}0101010A", f"Paziente {chr(65 + i % 26)}{i:03d}",
+                                    None if i % 4 == 0 else f"+39340{i:07d}")
+        conn.commit()
+        app_db.DB_PATH = str(db)
+        clinic_guides.DB_PATH = str(Path(tmp) / "guides.sqlite")
+        clinic_guides.STORE = Path(tmp) / "guides"
+        app = create_app()
+        app.config["WTF_CSRF_ENABLED"] = False
+        dentist = _client(app, "dentist", "dentist-pw-123")
+
+        def view(url):
+            page = dentist.get(url).get_data(as_text=True)
+            rows = re.findall(r'<tr data-patient="[^"]+" data-name="([^"]+)"', page)
+            numbers = [int(n) for n in re.findall(r'<td data-label="#" class="ux-rownum">(\d+)</td>', page)]
+            tools = re.search(r"<div class=\"sx-tools\"[^>]*data-list-tools[^>]*>", page)
+            return page, rows, numbers, tools.group(0) if tools else ""
+        page, rows, numbers, tools = view("/patients")
+        assert len(rows) == 100 and numbers == list(range(1, 101)), f"U-004: page one has {len(rows)} rows, numbers {numbers[:3]}"
+        assert "data-server" in tools and 'data-shown="230"' in tools and 'data-total="230"' in tools, f"U-004 tools {tools}"
+        assert "Page 1 of 3" in _text(page) and re.search(r'href="/patients\?[^"]*page=2[^"]*"[^>]*>Next', page), "U-004: no pager"
+        page, rows, numbers, _t = view("/patients?page=3")
+        assert len(rows) == 30 and numbers == list(range(201, 231)), f"U-004: the last page {len(rows)} {numbers[:2]}"
+        assert "Showing 201-230 of 230" in _text(page), "U-004: the pager does not say which rows these are"
+        assert view("/patients?page=99")[2][0] == 201, "U-004: a page past the end is not the last page"
+        page, rows, numbers, tools = view("/patients?phone=no")
+        nophone = conn.execute("SELECT COUNT(*) FROM patients WHERE phone IS NULL OR phone = ''").fetchone()[0]
+        assert len(rows) == nophone == 58 and 'data-shown="58"' in tools and "\"phone\": [\"no\"]" in tools, \
+            f"U-004: a filter does not act on every patient: {len(rows)} {tools}"
+        heads = re.findall(r'<th scope="col"[^>]*><a href="([^"]+)"', page)
+        assert heads and all("phone=no" in h for h in heads), f"U-004: a column header drops the filter: {heads}"
+        page, rows, _n, _t = view("/patients?phone=no&sort=name&dir=desc")
+        assert rows == sorted(rows, reverse=True), "U-004: the server sort is not applied to the filtered rows"
+        page, rows, _n, tools = view("/patients?q=paziente%20a")
+        assert rows and all(r.startswith("Paziente A") for r in rows), "U-004: search across pages"
+        js = (Path(__file__).parent / "app" / "static" / "js" / "list_tools.js").read_text()
+        assert "data-server" in js, "U-004: the list tools have no server mode"
+        conn.close()
+    print("paged patients ok")
+
+
 def main():
     if "--selftest" not in sys.argv:
         print("usage: python ux_selftest.py --selftest")
@@ -976,6 +1028,7 @@ def main():
     try:
         selftest()
         empty_states()
+        paged_patients()
     finally:
         clinic_time.now = real
 

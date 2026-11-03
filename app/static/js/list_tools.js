@@ -10,6 +10,10 @@
 // can be sorted or filtered by. Every row stays in the page: this only hides and reorders them, and without the
 // script the list is simply the whole list. Nothing is stored in the browser, and a row's text is never written
 // back as markup - controls are built with createElement and textContent.
+//
+// P29 U-004: a list too long for one page adds data-server. Then the same controls ask the server instead - a choice
+// reloads the page with it in the address (filter keys, sort, dir) - and the server sends back the rows, the counts
+// (data-counts), what is chosen (data-chosen) and how many match (data-shown of data-total).
 (function () {
   "use strict";
 
@@ -55,8 +59,12 @@
     var rows = Array.prototype.slice.call(list.children);
     rows.forEach(function (row, i) { row._order = i; });
 
+    var server = box.hasAttribute("data-server");
+    var counts = JSON.parse(box.getAttribute("data-counts") || "{}");
+    var picked = JSON.parse(box.getAttribute("data-chosen") || "{}");
+    var ready = false;
     var state = { q: "", chosen: {}, sort: parseInt(box.getAttribute("data-sort-initial") || "0", 10) };
-    filters.forEach(function (g) { state.chosen[g[0]] = []; });
+    filters.forEach(function (g) { state.chosen[g[0]] = server ? (picked[g[0]] || []).slice() : []; });
 
     // ---- the controls ----
     var searchInput = null;
@@ -87,11 +95,13 @@
         panel.appendChild(el("p", "sx-tool-k", g[1]));
         boxes[g[0]] = {};
         g[2].forEach(function (option) {
-          var n = rows.filter(function (r) { return r.getAttribute("data-" + g[0]) === option[0]; }).length;
+          var n = server ? ((counts[g[0]] || {})[option[0]] || 0)
+            : rows.filter(function (r) { return r.getAttribute("data-" + g[0]) === option[0]; }).length;
           var row = el("label", "sx-opt");
           var check = el("input");
           check.type = "checkbox";
           check.value = option[0];
+          check.checked = state.chosen[g[0]].indexOf(option[0]) >= 0;
           check.addEventListener("change", function () {
             var chosen = state.chosen[g[0]], at = chosen.indexOf(option[0]);
             if (check.checked && at < 0) chosen.push(option[0]);
@@ -204,10 +214,29 @@
       return b;
     }
 
+    function go() {
+      // server mode: the address carries the choices; a new choice starts again at page one
+      var url = new URL(location.href);
+      filters.forEach(function (g) {
+        url.searchParams.delete(g[0]);
+        state.chosen[g[0]].forEach(function (v) { url.searchParams.append(g[0], v); });
+      });
+      var s = sorts[state.sort];
+      if (s) {
+        url.searchParams.set("sort", s[0]);
+        url.searchParams.set("dir", s[2] > 0 ? "asc" : "desc");
+      }
+      url.searchParams.delete("page");
+      location.href = url.toString();
+    }
+
     function apply() {
+      if (server && ready) { go(); return; }
       var shown = 0, active = 0;
       filters.forEach(function (g) { active += state.chosen[g[0]].length; });
+      if (server) shown = rows.length;
       rows.forEach(function (row) {
+        if (server) return;
         var ok = true;
         filters.forEach(function (g) {
           var chosen = state.chosen[g[0]];
@@ -222,7 +251,7 @@
       });
 
       var s = sorts[state.sort];
-      if (s) {
+      if (s && !server) {
         var key = "data-" + s[0];
         rows.sort(function (a, b) {
           var x = a.getAttribute(key) || "", y = b.getAttribute(key) || "";
@@ -259,12 +288,18 @@
         chips.appendChild(all);
       }
       chips.hidden = !chips.firstChild;
-      empty.hidden = shown !== 0 || rows.length === 0;
-      status.textContent = (shown === rows.length ? rows.length : shown + " of " + rows.length) + " " +
-        noun[rows.length === 1 ? 0 : 1] + (shown === rows.length ? "" : " shown") + (s ? " · " + s[3].toLowerCase() : "");
+      empty.hidden = server || shown !== 0 || rows.length === 0;
+      var whole = rows.length;
+      if (server) {
+        shown = parseInt(box.getAttribute("data-shown") || "0", 10);
+        whole = parseInt(box.getAttribute("data-total") || "0", 10);
+      }
+      status.textContent = (shown === whole ? whole : shown + " of " + whole) + " " +
+        noun[whole === 1 ? 0 : 1] + (shown === whole ? "" : " shown") + (s ? " · " + s[3].toLowerCase() : "");
     }
 
     apply();
+    ready = true;
   }
 
   Array.prototype.forEach.call(document.querySelectorAll("[data-list-tools]"), init);
