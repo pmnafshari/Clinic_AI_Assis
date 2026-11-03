@@ -85,9 +85,15 @@ TABLE_CHECK = r"""() => {
       }
     }
     t.querySelectorAll('tbody .btn, tbody .ux-badge').forEach(el => {
-      const r = document.createRange();
-      r.selectNodeContents(el);
-      if (lines(r) > 1) bad.push('wraps: ' + el.textContent.trim());
+      // the words on screen only: screen-reader text (visually-hidden) is a 1 px box of its own
+      const tops = new Set();
+      el.childNodes.forEach(c => {
+        if ((c.nodeType === 1 && c.classList.contains('visually-hidden')) || (c.nodeType === 3 && !c.data.trim())) return;
+        const r = document.createRange();
+        r.selectNode(c);
+        [...r.getClientRects()].filter(x => x.width > 0).forEach(x => tops.add(Math.round(x.top)));
+      });
+      if (tops.size > 1) bad.push('wraps: ' + el.textContent.trim());
       if (el.getBoundingClientRect().right > box.right + 1) bad.push('out of its box: ' + el.textContent.trim());
     });
   });
@@ -329,7 +335,7 @@ def main():
                     context = browser.new_context(viewport={"width": width, "height": 900})
                     context.add_cookies([{"name": web_session.COOKIE_NAME, "value": token, "url": base}])
                     page = context.new_page()
-                    for path in ("/patients", "/billing"):
+                    for path in ("/patients", "/billing", "/stock"):
                         page.goto(base + path)
                         bad = page.evaluate(TABLE_CHECK)
                         assert not bad, f"R-015 {path} at {width}: {bad[:6]}"

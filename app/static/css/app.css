@@ -1716,3 +1716,10 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .app-side::-webkit-scrollbar-thumb { background: #8a9bb8; border-radius: 999px; border: 2px solid var(--app-navy); }
 .app-side::-webkit-scrollbar-thumb:hover { background: #b9c6dc; }
 @supports not selector(::-webkit-scrollbar) { .app-side { scrollbar-color: #8a9bb8 transparent; } }
+
+/* P29 R-003: stock - the state in words, and the line that says the list is filtered */
+.ux-badge-low { background: var(--ds-warning-surface); color: #7a4a00; border-color: #f1d27a; }
+.ux-badge-ok { background: var(--ds-success-surface); color: #0f5132; border-color: #a7dcc0; }
+.ux-filter-note { margin: 0 1.25rem 0.5rem; font-size: 0.875rem; color: #334155; }
+.ux-stock td form { margin: 0; }
+.ux-stock td[data-label="Seen"] { white-space: nowrap; }

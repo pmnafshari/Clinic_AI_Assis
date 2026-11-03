@@ -101,7 +101,7 @@ def selftest():
         alert_id = re.search(r"/stock/alerts/(\d+)/acknowledge", page).group(1)
         reception.post(f"/stock/alerts/{alert_id}/acknowledge", data={"csrf_token": _csrf(page)})
         page = reception.get("/stock").text
-        assert "seen by st_assist" in page and "Low stock (1)" in page, "4: seen is not resolved"
+        assert 'data-label="Seen">by st_assist<' in page and "Low stock (1)" in page, "4: seen is not resolved"
 
         # 5. history explains the balance, and admin sees none of it
         hist = " ".join(re.sub(r"<[^>]+>", " ", dentist.get(f"/stock/{item_id}").text).split())
@@ -151,6 +151,43 @@ def selftest():
             and '<option value="consumption" selected>' in refused7 and ">kept words</textarea>" in refused7, \
             "7 R-012: the refused movement lost what was typed"
         assert 'value="999"' not in reception.get(f"/stock/{item_id}").text, "7: the kept values outlive the next page"
+
+        # 8. P29 R-003: the items are a table - item, in stock, unit, alert level, state, low since - with the numbers in
+        # their own right-aligned columns; each alert says when it started; the Low only tab says how many, and the
+        # page says what it is showing
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        ok_id = inventory.create_item(conn, "Guanti zz8", "pz", 5, "st_dentist", "dentist")
+        inventory.move(conn, ok_id, "receipt", 40, "st_dentist", "dentist", key="r3-1")
+        bal8 = inventory.balance(conn, item_id)
+        opened8 = conn.execute("SELECT opened_at FROM inventory_alerts WHERE item_id = ? AND resolved_at IS NULL",
+                               (item_id,)).fetchone()[0]
+        conn.close()
+        day8, time8 = app.jinja_env.filters["appt_date"](opened8), app.jinja_env.filters["appt_time"](opened8)
+        page8 = dentist.get("/stock").text
+        items8 = page8[page8.index('id="items-title"'):]
+        heads8 = re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', items8)
+        assert heads8[:6] == ["Item", "In stock", "Unit", "Alert at or below", "State", "Low since"], f"8 R-003: item columns {heads8}"
+
+        def cells(html, name):
+            row = re.search(r'<tr[^>]*data-name="' + name + r'"[^>]*>(.*?)</tr>', html, re.S)
+            return [" ".join(re.sub(r"<[^>]+>", " ", c).split()) for c in re.findall(r"<td[^>]*>(.*?)</td>", row.group(1), re.S)] if row else []
+        assert cells(items8, "Carpule articaina")[:6] == ["Carpule articaina", str(bal8), "pz", "20", "Low", day8], \
+            f"8: the low row {cells(items8, 'Carpule articaina')}"
+        assert cells(items8, "Guanti zz8")[:6] == ["Guanti zz8", "40", "pz", "5", "OK", "-"], f"8: the stocked row {cells(items8, 'Guanti zz8')}"
+        for label8 in ("In stock", "Alert at or below"):
+            assert all("ux-num" in c for c in re.findall(rf'<td class="([^"]*)" data-label="{label8}">', items8)), \
+                f"8: {label8} is not a right-aligned number column"
+        alerts8 = page8[page8.index('id="alerts-title"'):page8.index('id="items-title"')]
+        assert re.findall(r'<th scope="col"[^>]*>([^<]*)</th>', alerts8)[:4] == ["Item", "In stock then", "Alert at or below", "Since"], \
+            "8: the alerts are not a table that says when each started"
+        assert f"{day8} {time8}" in " ".join(re.sub(r"<[^>]+>", " ", alerts8).split()), "8: an alert does not say when it started"
+        assert re.search(r'aria-current="page">All <span class="sx-count">2</span>', page8), "8: the All tab has no count"
+        low8 = reception.get("/stock?show=low").text
+        assert re.search(r'aria-current="page">Low only <span class="sx-count">1</span>', low8), "8: the Low only tab has no count"
+        assert "Showing the 1 item at or below its alert level" in " ".join(re.sub(r"<[^>]+>", " ", low8).split()), \
+            "8: the page does not say the list is filtered"
+        assert "Guanti zz8" not in low8[low8.index('id="items-title"'):], "8: Low only shows a stocked item"
 
     print("selftest ok")
 
