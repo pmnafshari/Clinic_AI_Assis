@@ -411,3 +411,25 @@ document.querySelectorAll("img.file-view, img.file-thumb, img.import-preview").f
   if (img.complete && img.naturalWidth === 0 && img.getAttribute("src")) fail();
   else img.addEventListener("error", fail);
 });
+
+// P29 U-008: the result popup closes with OK or Esc and leaves the page as it is - it is not modal, nothing behind it
+// is locked. when the page put the cursor nowhere, the cursor starts on OK so Enter closes it
+(function () {
+  var box = document.querySelector("[data-ux=result]");
+  if (!box) return;
+  var ok = box.querySelector("[data-result-ok]");
+  var main = document.getElementById("main");
+  function close() {
+    var inside = box.contains(document.activeElement);
+    box.hidden = true;
+    if (inside && main) main.focus({ preventScroll: true });
+  }
+  ok.addEventListener("click", close);
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape" || box.hidden) return;
+    var at = document.activeElement;
+    if (box.contains(at) || at === document.body || at === main) close();
+  });
+  var auto = Array.prototype.some.call(document.querySelectorAll("[autofocus]"), function (el) { return !el.closest("dialog"); });
+  if (!auto && document.activeElement === document.body) ok.focus();
+})();

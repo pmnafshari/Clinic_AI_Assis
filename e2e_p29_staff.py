@@ -248,6 +248,30 @@ def main():
                     expect(page.locator("main")).to_contain_text("Damaged")
                     checks.append(f"U-009 reason list {width}")
 
+                    # U-008: the result is a popup with OK over the updated page. it is on screen, the cursor starts on
+                    # OK, the page behind it still takes clicks and typing, and OK or Esc closes it
+                    result = page.locator("[data-ux=result]")
+                    ok = result.locator("[data-result-ok]")
+                    expect(result).to_be_visible()
+                    box, view = result.bounding_box(), page.viewport_size
+                    assert box["x"] >= 0 and box["y"] >= 0 and box["x"] + box["width"] <= view["width"] + 1 \
+                        and box["y"] + box["height"] <= view["height"] + 1, f"U-008: the popup is off screen at {width}: {box}"
+                    expect(ok).to_be_focused()
+                    page.click("#qty")
+                    page.keyboard.type("4")
+                    expect(page.locator("#qty")).to_have_value("4")
+                    expect(result).to_be_visible()
+                    if width == 390:
+                        ok.focus()
+                        page.keyboard.press("Escape")
+                    else:
+                        ok.click()
+                    expect(result).to_be_hidden()
+                    assert page.evaluate("document.activeElement.id") == "main", "U-008: the cursor is lost after OK"
+                    page.reload()
+                    expect(result).to_have_count(0)
+                    checks.append(f"U-008 result popup {width}")
+
                     # F-005: clicking the active column reverses it
                     page.goto(base + "/patients?sort=name")
                     first = page.locator("#patients-rows tr").first.get_attribute("data-name")
@@ -369,6 +393,16 @@ def main():
                         expect(toggle).to_be_focused()
                     width_px = page.evaluate("document.documentElement.scrollWidth")
                     assert width_px <= vw, f"sideways scroll in webkit at {label}: {width_px}"
+                    # U-008 in the app's engine: after an action the cursor is on OK and Enter closes the popup
+                    page.goto(f"{base}/stock/{item_id}")
+                    page.select_option("#kind", "count")
+                    page.fill("#qty", "3")
+                    page.select_option("#why-pick", "Damaged")
+                    page.click("form[action$='/move'] button[type=submit]")
+                    result = page.locator("[data-ux=result]")
+                    expect(result.locator("[data-result-ok]")).to_be_focused()
+                    page.keyboard.press("Enter")
+                    expect(result).to_be_hidden()
                     assert not errors, errors
                     checks.append(f"U-021 keyboard webkit {label}")
                     context.close()

@@ -1692,3 +1692,16 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 
 /* P29 R-024: what the report figures cover */
 .report-scope { margin: 0 0 1rem; font-size: 0.875rem; color: #334155; }
+
+/* P29 U-008: the result popup - over the page, no backdrop, nothing behind it locked; above the top bar, under the
+   lookup results and the menu drawer */
+.app-result { position: fixed; right: 1rem; bottom: 1rem; z-index: 1035; width: min(26rem, calc(100vw - 2rem)); max-height: 60vh;
+  overflow-y: auto; display: grid; gap: 0.5rem; padding: 0.75rem; background: var(--app-surface); border: 1px solid var(--app-border);
+  border-radius: 0.875rem; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22); }
+.app-result[hidden] { display: none; }
+.app-result .app-flash { margin: 0; }
+.app-result-actions { display: flex; justify-content: flex-end; }
+.app-result-actions .btn { min-width: 5rem; }
+@media (max-width: 575.98px) { .app-result { left: 0.5rem; right: 0.5rem; bottom: 0.5rem; width: auto; } }
+@media (prefers-reduced-motion: no-preference) { .app-result { animation: app-result-in 0.18s ease-out; } }
+@keyframes app-result-in { from { opacity: 0; transform: translateY(0.5rem); } to { opacity: 1; transform: none; } }

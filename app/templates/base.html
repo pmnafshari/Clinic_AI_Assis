@@ -13,6 +13,26 @@
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
   {% set chromeless = request.endpoint in ('auth.login', 'auth.change_password') %}
   <a class="app-skip" href="#main">Skip to content</a>
+  {# P29 U-008: what the last action did, as a popup with OK over the updated page. it leaves the page usable (owner,
+     2026-11-03): no backdrop, nothing locked. it comes first for the keyboard, before the menu #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <section class="app-result" data-ux="result" role="dialog" aria-modal="false" aria-label="Result">
+    {% for category, message in messages %}
+      {% set kind = {'success': ('success', 'check-circle-fill', 'Done'),
+                     'removed': ('secondary', 'x-circle-fill', 'Removed'),
+                     'warning': ('warning', 'exclamation-triangle-fill', 'Check this'),
+                     'danger': ('danger', 'x-octagon-fill', 'Not done'),
+                     'error': ('danger', 'x-octagon-fill', 'Not done')}.get(category, ('primary', 'info-circle-fill', 'Note')) %}
+      <div class="alert alert-{{ kind[0] }} app-flash" data-flash="{{ kind[2] | lower }}"
+           role="{{ 'alert' if kind[0] in ('danger', 'warning') else 'status' }}">
+        <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ kind[2] }}:</strong> {{ message }}
+      </div>
+    {% endfor %}
+    <div class="app-result-actions"><button type="button" class="btn btn-primary btn-sm" data-result-ok tabindex="0">OK</button></div>
+  </section>
+  {% endif %}
+  {% endwith %}
   {% if not chromeless %}
   <div class="app-shell">
     {% include "_sidebar.html" %}
@@ -25,21 +45,6 @@
      override at 992px. #}
   <main id="main" tabindex="-1" class="content{{ ' content-flush' if request.endpoint == 'auth.login' else '' }}">
     <div class="content-inner">
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-          {% for category, message in messages %}
-            {% set kind = {'success': ('success', 'check-circle-fill', 'Done'),
-                           'removed': ('secondary', 'x-circle-fill', 'Removed'),
-                           'warning': ('warning', 'exclamation-triangle-fill', 'Check this'),
-                           'danger': ('danger', 'x-octagon-fill', 'Not done'),
-                           'error': ('danger', 'x-octagon-fill', 'Not done')}.get(category, ('primary', 'info-circle-fill', 'Note')) %}
-            <div class="alert alert-{{ kind[0] }} app-flash" data-flash="{{ kind[2] | lower }}"
-                 role="{{ 'alert' if kind[0] in ('danger', 'warning') else 'status' }}">
-              <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ kind[2] }}:</strong> {{ message }}
-            </div>
-          {% endfor %}
-        {% endif %}
-      {% endwith %}
       {% block content %}{% endblock %}
     </div>
   </main>

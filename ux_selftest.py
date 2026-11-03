@@ -858,6 +858,32 @@ def selftest():
                   for m in re.findall(r'<input[^>]*name="reason"[^>]*>', t.read_text())]
         assert not single, f"24 U-007: single-line reason fields: {single[:3]}"
 
+        # 25. P29 U-008: what an action did comes up as a popup with OK over the updated page. it does not block the
+        # rest of the page (owner, 2026-11-03), keeps each message's kind, and comes before the menu for the keyboard
+        with dentist.session_transaction() as s25:
+            s25["_flashes"] = [("success", "Saved zz25"), ("danger", "Not saved zz25")]
+        home25 = dentist.get("/").get_data(as_text=True)
+        box25 = re.search(r'<section class="app-result"[^>]*>(.*?)</section>', home25, re.S)
+        assert box25, "25 U-008: the result is not a popup"
+        tag25 = box25.group(0).split(">")[0]
+        assert 'data-ux="result"' in tag25 and 'role="dialog"' in tag25 and 'aria-modal="false"' in tag25, \
+            f"25 U-008: the popup is not a dialog that leaves the page usable: {tag25}"
+        assert 'data-flash="done"' in box25.group(1) and 'data-flash="not done"' in box25.group(1) \
+            and box25.group(1).count("zz25") == 2, "25: the popup lost a message or its kind"
+        assert home25.count("zz25") == 2, "25: a message shows twice, in the popup and in a banner"
+        ok25 = re.search(r'<button[^>]*data-result-ok[^>]*>\s*OK\s*</button>', box25.group(1))
+        assert ok25 and 'tabindex="0"' in ok25.group(0), "25: no OK, or WebKit's Tab skips it"
+        assert home25.index('data-ux="result"') < home25.index('id="app-side"'), "25: the OK comes after the whole menu"
+        assert 'data-ux="result"' not in dentist.get("/").get_data(as_text=True), "25: the popup comes back by itself"
+        js25 = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
+        assert "P29 U-008" in js25, "25 U-008: nothing closes the popup"
+        u008 = js25[js25.index("P29 U-008"):].split("\n// P29")[0]
+        assert "data-result-ok" in u008 and "Escape" in u008 and "showModal" not in u008, \
+            "25: OK or Esc does not close it, or it locks the page"
+        css25 = (Path(__file__).parent / "app" / "static" / "css" / "app.css").read_text()
+        rule25 = re.search(r"\.app-result \{([^}]*)\}", css25)
+        assert rule25 and "position: fixed" in rule25.group(1), "25: the popup sits in the page flow like a banner"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")
