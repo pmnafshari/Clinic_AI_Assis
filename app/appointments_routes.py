@@ -69,7 +69,7 @@ def _shift_month(first, step):
     return date(year, (month - 1) % 12 + 1, 1)
 
 
-def _day_label(d, booked, requested, word="booked"):
+def _day_label(d, booked, requested, word="booked", past=False):
     # what a screen reader gets instead of a bare number in a grid
     parts = [d.strftime("%-d %B %Y")]
     counts = []
@@ -77,6 +77,9 @@ def _day_label(d, booked, requested, word="booked"):
         counts.append(f"{booked} {word}")
     if requested:
         counts.append(f"{requested} request" if requested == 1 else f"{requested} requests")
+        if past:
+            # P29 U-014: the preferred day is gone and nobody confirmed it - not one more upcoming request
+            counts[-1] += ", day passed - not booked"
     if counts:
         parts.append(", ".join(counts))
     else:
@@ -104,7 +107,8 @@ def _month_grid(conn, first, selected, per_day, word):
                 "is_selected": d == selected,
                 "booked": booked,
                 "requested": requested,
-                "label": _day_label(d, booked, requested, word),
+                "past": d < today,
+                "label": _day_label(d, booked, requested, word, d < today),
             })
         weeks.append(cells)
     return weeks

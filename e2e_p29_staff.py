@@ -5,6 +5,7 @@ loopback server and the database die with the run.
 
 Run: .venv/bin/python e2e_p29_staff.py
 """
+import re
 import tempfile
 import threading
 from datetime import date, timedelta
@@ -54,6 +55,34 @@ TABLE_CHECK = r"""() => {
       r.selectNodeContents(el);
       if (lines(r) > 1) bad.push('wraps: ' + el.textContent.trim());
       if (el.getBoundingClientRect().right > box.right + 1) bad.push('out of its box: ' + el.textContent.trim());
+    });
+  });
+  return bad;
+}"""
+
+# F-012: a week card keeps its text inside, a name never breaks inside a word, and a month mark stays in its day
+CAL_CHECK = r"""() => {
+  const bad = [];
+  const lines = r => new Set([...r.getClientRects()].filter(x => x.width > 0).map(x => Math.round(x.top))).size;
+  document.querySelectorAll('.ux-wk-appt').forEach(card => {
+    if (card.scrollWidth > card.clientWidth + 1) bad.push('clipped: ' + card.textContent.trim());
+    const who = card.querySelector('.ux-wk-who');
+    const walk = who && document.createTreeWalker(who, NodeFilter.SHOW_TEXT);
+    let n;
+    while (walk && (n = walk.nextNode())) {
+      for (const m of n.data.matchAll(/\S+/g)) {
+        const r = document.createRange();
+        r.setStart(n, m.index);
+        r.setEnd(n, m.index + m[0].length);
+        if (lines(r) > 1) bad.push('word split: ' + m[0]);
+      }
+    }
+  });
+  document.querySelectorAll('.appt-cal td').forEach(td => {
+    const t = td.getBoundingClientRect();
+    td.querySelectorAll('.appt-cal-marks > span').forEach(m => {
+      const r = m.getBoundingClientRect();
+      if (r.left < t.left - 0.5 || r.right > t.right + 0.5) bad.push('mark outside its day: ' + (m.dataset.text || ''));
     });
   });
   return bad;
@@ -247,6 +276,11 @@ def main():
                         bad = page.evaluate(TABLE_CHECK)
                         assert not bad, f"R-015 {path} at {width}: {bad[:6]}"
                         assert page.evaluate("document.documentElement.scrollWidth") <= width, f"sideways scroll {path} {width}"
+                    for view in ("week", "month"):
+                        page.goto(f"{base}/appointments?view={view}&day={date.today().isoformat()}")
+                        bad = page.evaluate(CAL_CHECK)
+                        assert not bad, f"F-012 {view} at {width}: {bad[:6]}"
+                        assert page.evaluate("document.documentElement.scrollWidth") <= width, f"sideways scroll {view} {width}"
                     if width == 390:
                         # R-014: the lookup and the filter are full width, a patient is a short card
                         page.goto(base + "/patients")
@@ -259,7 +293,14 @@ def main():
                         tall = max(page.eval_on_selector_all("#patients-rows tr", "rows => rows.map(r => r.getBoundingClientRect().height)"))
                         assert tall <= 150, f"R-014: a patient card is {tall:.0f} px tall"
                         expect(page.locator("#patients-rows tr").first.locator("a.btn")).to_be_in_viewport()
-                    checks.append(f"R-014/R-015 layout {width}")
+                    if width == 1024:
+                        # U-014: Enter on a month day opens that day's agenda
+                        page.goto(f"{base}/appointments?view=month&day={day}")
+                        page.focus(f'.appt-cal-day[href*="day={day}&"]')
+                        page.keyboard.press("Enter")
+                        expect(page).to_have_url(re.compile(r"view=day&day=" + day))
+                        expect(page.locator('[data-ux="day-grid"]')).to_have_count(1)
+                    checks.append(f"R-014/R-015/F-012 layout {width}")
                     context.close()
                 browser.close()
 

@@ -444,6 +444,34 @@ def selftest():
         assert "Appointment booked: Mon 22 Mar, 09:30–10:00 with drossi" in page14, \
             "14: the booking message has no start-end range"
 
+        # 15. P29 U-014 / F-012: a month day opens that day; a week card says start, end, who and status
+        body15 = dentist.get(f"/appointments?view=month&day={CAL_DAY}").text
+        cell15 = re.search(r'<a class="appt-cal-day[^>]*\bday=' + CAL_DAY + r'&[^>]*>', body15).group(0)
+        assert "view=day" in cell15, f"15 U-014: a month day selects instead of opening the day: {cell15}"
+        week15 = dentist.get(f"/appointments?view=week&day={CAL_DAY}").text
+        card15 = re.search(r'<a class="ux-wk-appt[^"]*"[^>]*>(.*?)</a>', week15, re.S)
+        assert card15 and "14:00–14:30" in card15.group(1) and "Booked" in card15.group(1), \
+            f"15 F-012: the week card has no start-end or status: {card15.group(1) if card15 else None}"
+        assert re.search(r'aria-label="14:00 to 14:30, [^"]+, with drossi, booked"', card15.group(0)), \
+            f"15 F-012: the card has no full label: {card15.group(0)}"
+
+        # 15b. a request whose preferred day has passed reads as passed - on the month and in the queue - not as one
+        # more upcoming request
+        past15 = (_date.today() - _td(days=2)).isoformat()
+        req15 = _appt.request(_conn(db_path), PATIENT_CF, (_date.today() + _td(days=3)).isoformat(), _appt.MORNING)
+        c15 = _conn(db_path)
+        c15.execute("UPDATE appointments SET starts_at = ? WHERE id = ?", (f"{past15}T00:00:00", req15))
+        c15.commit()
+        c15.close()
+        month15 = dentist.get(f"/appointments?view=month&day={past15}").text
+        pcell15 = re.search(r'<a class="appt-cal-day[^>]*\bday=' + past15 + r'&[^>]*>(.*?)</a>', month15, re.S)
+        assert "day passed" in pcell15.group(0) and "appt-cal-reqpast" in pcell15.group(1), \
+            f"15b U-014: a passed request looks like an upcoming one: {pcell15.group(0)[:300]}"
+        queue15 = month15[month15.index('data-ux="requests"'):] if 'data-ux="requests"' in month15 else month15
+        item15 = re.search(r'<li class="ux-request[^"]*"[^>]*data-day="' + past15 + r'".*?</li>', queue15, re.S)
+        assert item15 and "Day passed - not booked" in item15.group(0), "15b U-014: the queue does not say the day passed"
+        dentist.post(f"/appointments/{req15}/decline", data={"reason_choice": "Already booked", "day": past15})
+
     print("selftest ok")
 
 

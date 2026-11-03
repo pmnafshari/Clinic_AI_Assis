@@ -150,9 +150,11 @@
           {% if d.slots %}
           <ul class="ux-wk-list">
             {% for s in d.slots %}
-            <li><a class="ux-wk-appt ux-wk-{{ s.status }}" href="{{ url_for('appointments.index', view='day', day=d.iso, dentist=dentist, status=status) }}#appt-{{ s.id }}">
-              <span class="ux-wk-time">{{ s.start }}</span> <span class="ux-wk-who">{{ s.patient_name }}</span>
-              <span class="ux-wk-doc">{{ s.dentist }}{% if s.status != 'booked' %} · {{ s.status }}{% endif %}</span></a></li>
+            {# P29 F-012 / U-014: start and end, who and the status on every card; the label says all of it #}
+            <li><a class="ux-wk-appt ux-wk-{{ s.status }}" href="{{ url_for('appointments.index', view='day', day=d.iso, dentist=dentist, status=status) }}#appt-{{ s.id }}"
+                   aria-label="{{ s.start }} to {{ s.end }}, {{ s.patient_name }}, with {{ s.dentist }}, {{ s.status }}">
+              <span class="ux-wk-time">{{ s.start }}–{{ s.end }}</span> <span class="ux-wk-who">{{ s.patient_name }}</span>
+              <span class="ux-wk-doc">{{ s.dentist }} · {{ s.status | capitalize }}</span></a></li>
             {% endfor %}
           </ul>
           {% else %}<span class="ux-wk-none" aria-hidden="true">-</span>{% endif %}
@@ -177,14 +179,14 @@
             {% for c in w %}
             <td class="{% if not c.in_month %}appt-cal-out{% endif %}">
               <a class="appt-cal-day{% if c.is_today %} appt-cal-today{% endif %}{% if c.is_selected %} appt-cal-on{% endif %}"
-                 href="{{ url_for('appointments.index', day=c.iso, month=month, dentist=dentist, status=status) }}" aria-label="{{ c.label }}"
+                 href="{{ url_for('appointments.index', view='day', day=c.iso, dentist=dentist, status=status) }}" aria-label="{{ c.label }}"
                  {% if c.is_selected %}aria-current="date"{% endif %}>
                 <span class="appt-cal-num" aria-hidden="true">{{ c.number }}</span>
                 <span class="appt-cal-marks" aria-hidden="true">
                   {# drawn by CSS from data-text: the cell's accessible name is its aria-label, and the visible count
                      must not become extra text beside it (label in name) #}
-                  {% if c.booked %}<span class="appt-cal-count" data-text="{{ c.booked }} {{ word }}"></span>{% endif %}
-                  {% if c.requested %}<span class="appt-cal-reqtext" data-text="{{ c.requested }} request{{ 's' if c.requested != 1 else '' }}"></span>{% endif %}
+                  {% if c.booked %}<span class="appt-cal-count" data-text="{{ c.booked }} {{ word }}" data-short="{{ c.booked }}"></span>{% endif %}
+                  {% if c.requested %}<span class="appt-cal-reqtext{{ ' appt-cal-reqpast' if c.past else '' }}" data-text="{{ c.requested }} {{ 'past ' if c.past else '' }}request{{ 's' if c.requested != 1 else '' }}" data-short="{{ c.requested }}"></span>{% endif %}
                 </span>
               </a>
             </td>
@@ -196,8 +198,9 @@
       <ul class="appt-cal-key" data-ux="month-legend">
         <li><span class="appt-cal-count">2 {{ word }}</span> {{ 'confirmed appointments' if word == 'booked' else word ~ ' appointments' }} that day, with the filters above</li>
         <li><span class="appt-cal-reqtext">1 request</span> a patient's preferred day - not a booking until it is confirmed</li>
+        <li><span class="appt-cal-reqtext appt-cal-reqpast">1 past request</span> the preferred day has passed and nobody booked it - confirm a new time or decline it</li>
       <!--/month-legend--></ul>
-      <p class="ux-muted appt-cal-open">Selected: {{ day_label }} · <a class="ux-link" href="{{ url_for('appointments.index', view='day', day=day, dentist=dentist, status=status) }}">Open this day</a></p>
+      <p class="ux-muted appt-cal-open">Choose a day to open its appointments.</p>
     </section>
     {% endif %}
   </div>
@@ -221,7 +224,8 @@
         {% for r in requests_pending %}
         <li class="ux-request" data-name="{{ r.patient_name }}" data-day="{{ r.starts_at[:10] }}" data-asked="{{ r.created_at[:10] }}" data-period="{{ r.period }}">
           <div class="ux-request-top"><strong class="ux-request-name">{{ r.patient_name }}</strong>
-            <span class="ux-badge ux-badge-requested">Requested - not booked</span></div>
+            {% if r.starts_at[:10] < today %}<span class="ux-badge ux-badge-past">Day passed - not booked</span>
+            {% else %}<span class="ux-badge ux-badge-requested">Requested - not booked</span>{% endif %}</div>
           <p class="ux-request-when">Preferred day: {{ r.starts_at[:10] | appt_date_label }} · {{ r.period }}</p>
           {% if r.note %}<p class="ux-muted ux-request-note">{{ r.note }}</p>{% endif %}
           <details class="appt-more ux-request-actions">

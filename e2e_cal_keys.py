@@ -106,8 +106,9 @@ def main():
             s.wait_for_load_state("networkidle")
             check("7 Enter on a focused day opens that day", f"day={day}" in s.url, s.url)
 
-            selected = s.get_attribute(f'.appt-cal-day[href*="day={day}"]', "aria-current")
-            check("8 and the day is marked current once selected", selected == "date", selected)
+            # P29 U-014: a month day opens that day's agenda directly, not a selection to open in a second step
+            check("8 and it is the day's agenda, not the month", "view=day" in s.url
+                  and s.locator('[data-ux="day-grid"]').count() == 1, s.url)
 
             # the month arrows are links too - a keyboard user has to be able
             # to leave the month, not only move inside it

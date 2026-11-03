@@ -1632,3 +1632,24 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
     content: attr(data-label); float: none; position: static; width: auto; margin: 0 0.375rem 0 0; font-size: 0.8125rem; }
   .ux-table.ux-table-patients td[data-label="Next appointment"]::before { content: "Next"; }
 }
+
+/* P29 F-012 / U-014: week cards keep names whole and say start, end and status; when the week's box is too narrow
+   for seven columns (the sidebar at 1024 px) the days stack as rows. month: a passed request is grey, and phones
+   show the numbers alone (the key explains them) so neighbouring days' marks cannot touch */
+[data-ux="week"] { container-type: inline-size; }
+.ux-wk-who { overflow-wrap: break-word; }
+.ux-wk-doc { white-space: normal; overflow: visible; text-overflow: clip; }
+@container (max-width: 899.98px) {
+  .ux-wk { grid-template-columns: minmax(0, 1fr); }
+  .ux-wk-day { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 0.5rem; align-items: start; }
+  .ux-wk-list, .ux-wk-none { margin-top: 0; }
+  .ux-wk-list { flex-direction: row; flex-wrap: wrap; }
+  .ux-wk-list > li { flex: 1 1 11rem; }
+}
+.appt-cal-reqpast { background: var(--ds-neutral-surface); color: #3f4a5a; border-color: #8a96a8; }
+.ux-badge-past { background: var(--ds-neutral-surface); color: #3f4a5a; border-color: #8a96a8; border-style: dashed; }
+@media (max-width: 575.98px) {
+  .appt-cal-count[data-short]::before, .appt-cal-reqtext[data-short]::before { content: attr(data-short); }
+  .appt-cal-count, .appt-cal-reqtext { min-width: 1.25rem; padding: 0 0.25rem; font-size: 0.6875rem; text-align: center; }
+  .appt-cal-key .appt-cal-count, .appt-cal-key .appt-cal-reqtext { min-width: 0; }
+}
