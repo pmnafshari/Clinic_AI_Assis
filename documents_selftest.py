@@ -233,6 +233,9 @@ def domain(tmp):
     docs.confirm(conn, v2, anna, *D)
     ids = {h["doc_id"] for h in docs.search(conn, anna, "otturazione dente", *D)}
     assert ids == {v2}, f"10: a superseded version is still searchable: {ids}"
+    # P29 F-041: a tooth number in the query must be in the hit - the dente 37 correction is not a dente 36 match
+    assert docs.search(conn, anna, "otturazione dente 36", *D) == [], "10 F-041: dente 37 matched dente 36"
+    assert {h["doc_id"] for h in docs.search(conn, anna, "dente 37", *D)} == {v2}, "10 F-041: dente 37 lost"
     rej = docs.ingest(conn, anna, pdf(["bozza da scartare"]), "b.pdf", *D)
     docs.reject(conn, rej, anna, "wrong patient", *D)
     assert docs.row(conn, rej)["status"] == "rejected"
@@ -793,6 +796,14 @@ def routes(tmp):
         return c
 
     dentist, reception = client("dr_doc", "dentist"), client("as_doc", "assistant")
+    # 16b. P29 F-042: a quarantined image is not "In the record" and gets no preview
+    bomb = docs.ingest(conn, a, png_header(60000, 60000), "huge.png", *D)
+    assert docs.row(conn, bomb)["status"] == "quarantined"
+    qpage = dentist.get(f"/patients/{cf_a}/documents/{bomb}").text
+    assert "In the record" not in qpage and "Not in the record" in qpage, "16b: a quarantined file reads as filed"
+    assert "Quarantined" in qpage and "file-view" not in qpage, "16b: no reason, or a preview is still drawn"
+    assert dentist.get(f"/patients/{cf_a}/documents/{bomb}/preview").status_code == 404, \
+        "16b: the quarantined bytes are still served as an image"
     # 17. dentist sees and searches; reception is refused
     page = dentist.get(f"/patients/{cf_a}/documents?q=otturazione").text
     assert "r.pdf" in page and "otturazione" in page, "17: search page"

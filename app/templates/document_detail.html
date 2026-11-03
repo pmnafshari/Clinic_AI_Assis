@@ -38,8 +38,14 @@
 </section>
 
 <section class="card dash-card mb-3" aria-labelledby="file-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="file-title">In the record</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="file-title">{{ 'In the record' if doc.status == 'confirmed' else 'Not in the record' }}</h2></div>
   <div class="dash-card-body">
+    {% if doc.status == 'quarantined' %}
+    <div class="ds-alert ds-alert-warning mb-3" role="note"><strong>Quarantined:</strong> {{ doc.reason or 'refused before reading' }}.
+      Kept exactly as uploaded and never read further - it is not part of the record, not searchable and has no preview.</div>
+    {% elif doc.status != 'confirmed' %}
+    <p class="ds-row-sub">Not part of the record until a dentist confirms it.</p>
+    {% endif %}
     {% if previewable %}
     <figure class="file-preview mb-3" id="preview">
       <img class="file-view" src="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" alt="{{ doc.display_name }} - image preview for orientation only, not for diagnosis">

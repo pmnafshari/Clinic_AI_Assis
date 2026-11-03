@@ -558,6 +558,8 @@ def rebuild_index(conn):
 
 
 WORD = re.compile(r"[a-zà-ù0-9]{3,}")
+# a tooth or quadrant number is two digits, so WORD never sees it (P29 F-041)
+NUMBER = re.compile(r"\b\d{2,3}\b")
 
 
 def search(conn, pid, query, actor, role, k=TOP_K):
@@ -565,6 +567,7 @@ def search(conn, pid, query, actor, role, k=TOP_K):
     _require(conn, actor, role, "document_search", f"patient:{pid}")
     log_audit(conn, actor, role, "document_search", f"patient:{pid}", allowed=1)
     terms = set(WORD.findall((query or "").lower()))
+    numbers = set(NUMBER.findall(query or ""))
     if not terms:
         return []
     col = collection()
@@ -578,6 +581,10 @@ def search(conn, pid, query, actor, role, k=TOP_K):
         # an honest "nothing found": a hit must share a word with the query,
         # or the nearest-neighbour search would always return something
         if not terms & set(WORD.findall(chunk.lower())):
+            continue
+        # P29 F-041: every number the query names must be in the hit - "dente 36" never
+        # matches a note about dente 37
+        if numbers and not numbers <= set(NUMBER.findall(chunk)):
             continue
         key = (meta["doc_id"], meta["page"])
         if key in seen:

@@ -351,7 +351,7 @@
       <div class="dash-card-head">
         <div>
           <h2 class="ds-card-title" id="rights-title">Data requests</h2>
-          <p class="ds-card-sub">Access, copy, correction or erasure - reviewed by a dentist</p>
+          <p class="ds-card-sub">Access, copy, correction or erasure - reviewed by a dentist · Demo template wording, not a real clinic's procedure</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -360,8 +360,8 @@
           {% for r in requests %}
           <li class="ds-row"><span class="ds-row-main">
             <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
-            <span class="ds-row-sub">filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}{% if r.reason %} · {{ r.reason }}{% endif %}</span>
-          </span></li>
+            <span class="ds-row-sub">filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}{% if r.reason %} · {{ r.reason }}{% endif %}{% if not authorize(g.user.role, 'manage_data_requests') %} · reviewed by a dentist in Data requests{% endif %}</span>
+          </span>{% if authorize(g.user.role, 'manage_data_requests') %}<span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}">Open<span class="visually-hidden">: data request {{ r.id }}</span></a></span>{% endif %}</li>
           {% endfor %}
         </ul>
         {% else %}

@@ -30,7 +30,7 @@
     {% if rows %}
     <ul class="ds-rows sx-box" id="data-request-rows">
       {% for r in rows %}
-      <li class="ds-row" data-name="{{ r.patient_name or 'erased patient' }}" data-filed="{{ r.requested_at }}" data-kind="{{ r.kind }}" data-status="{{ r.status }}">
+      <li class="ds-row" id="req-{{ r.id }}" data-name="{{ r.patient_name or 'erased patient' }}" data-filed="{{ r.requested_at }}" data-kind="{{ r.kind }}" data-status="{{ r.status }}">
         <span class="ds-row-main">
           <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
           <span class="ds-row-sub">

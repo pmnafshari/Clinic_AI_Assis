@@ -1578,3 +1578,6 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 /* P29 NEW-02: new-password checklist */
 .pw-rules { list-style: none; padding: 0; margin: 0.5rem 0 0; font-size: 0.875rem; color: var(--ds-text-muted); }
 .pw-rules li.is-met { color: var(--ds-success, #157347); }
+
+/* P29 F-025: a data request opened from the record is the row you land on */
+#data-request-rows > li:target { outline: 2px solid var(--ds-primary, #2563eb); outline-offset: -2px; border-radius: 8px; }

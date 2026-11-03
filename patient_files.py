@@ -292,6 +292,9 @@ def preview(conn, doc_id, pid, actor, role):
     r = docs.load(conn, doc_id, pid, actor, role)
     if r["kind"] not in PREVIEWABLE:
         raise docs.DocumentError("no_preview", "no preview for this type; download the original")
+    if r["status"] == "quarantined":
+        # P29 F-042: quarantined bytes are never handed to a browser to decode
+        raise docs.DocumentError("quarantined", "a quarantined file has no preview")
     data = docs.verified_bytes(r)
     if data is None:
         raise docs.DocumentError("changed", "the stored file does not match what was confirmed")

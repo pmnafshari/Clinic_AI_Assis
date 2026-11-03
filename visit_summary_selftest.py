@@ -557,11 +557,26 @@ def routes(tmp):
     dentist.post(f"{url}/{sid}/edit", data={"csrf_token": csrf(page),
                                             "body": f"2026-05-05: rct 26 [#{r1_id(conn, anna)}]"})
     page = dentist.get(url).text
+    # 26b. P29 F-040: a line the dentist adds that cites no note is never labelled "From the record"
+    dentist.post(f"{url}/{sid}/edit", data={"csrf_token": csrf(page), "body":
+                 f"2026-05-05: rct 26 [#{r1_id(conn, anna)}]\npatient prefers morning visits"})
+    page = dentist.get(url).text
+    label = re.search(r'<span class="ds-row-sub">([^<]+)</span>\s*<span class="ds-row-title text-break">'
+                      r'patient prefers morning visits</span>', page)
+    assert label and label.group(1) == "Added - not found in the record", \
+        f"26b: an uncited line is labelled {label.group(1) if label else None!r}"
+    cited = re.search(r'<span class="ds-row-sub">([^<]+)</span>\s*<span class="ds-row-title text-break">'
+                      r'2026-05-05: rct 26', page)
+    assert cited and cited.group(1) == "From the record", "26b: a cited line lost its label"
+    dentist.post(f"{url}/{sid}/edit", data={"csrf_token": csrf(page),
+                                            "body": f"2026-05-05: rct 26 [#{r1_id(conn, anna)}]"})
+    page = dentist.get(url).text
     dentist.post(f"{url}/{sid}/approve", data={"csrf_token": csrf(page)})
     page = dentist.get(url).text
     assert conn.execute("SELECT status FROM visit_summaries WHERE id = ?",
                         (sid,)).fetchone()[0] == "approved"
     assert "Reviewed by sm_dentist" in page, "26: the approval is not shown"
+
 
     # 27. no patient-facing app has a summary route
     from patient_app import create_patient_app

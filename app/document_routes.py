@@ -88,7 +88,7 @@ def detail(cf, did):
     return render_template("document_detail.html", cf=cf, patient=patient, doc=r, pages=pages,
                            uncertain_below=docs.UNCERTAIN_BELOW, published=pf.published(conn, did, pid),
                            history=pf.history(conn, did, *_who()), label=pf.label(r),
-                           date=pf.dated(r), visit=visit, previewable=r["kind"] in pf.PREVIEWABLE)
+                           date=pf.dated(r), visit=visit, previewable=r["kind"] in pf.PREVIEWABLE and r["status"] != "quarantined")
 
 
 def _step(cf, did, fn, done, back="detail", **kwargs):

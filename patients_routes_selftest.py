@@ -1135,6 +1135,12 @@ def selftest():
         assert [r[1] for r in req48] == ["assistant"], "48a: an assistant files for the patient"
         listing = dentist_client.get("/data-requests")
         assert "Rita Request" in listing.text, "48a: the dentist sees it to review"
+        # P29 F-025: the record opens that request in the queue directly; reception is told who reviews it
+        assert f'id="req-{req48[0][0]}"' in listing.text, "48a F-025: the queue row has no address"
+        assert f'href="/data-requests#req-{req48[0][0]}"' in dentist_client.get(f"/patients/{cf48}").text, \
+            "48a F-025: the record does not open the request"
+        assert "reviewed by a dentist in Data requests" in assistant_client.get(f"/patients/{cf48}").text, \
+            "48a F-025: reception is not told where the request goes"
         dentist_client.post(f"/data-requests/{req48[0][0]}/review", data={
             "decision": "approve", "csrf_token": _csrf_from(listing.text)})
         got48 = dentist_client.get(f"/data-requests/{req48[0][0]}/download")
@@ -1170,6 +1176,11 @@ def selftest():
         rec49 = dentist_client.get(f"/patients/{cf49}").text
         assert "No phone on file" in rec49, "49y: the record says there is no phone"
         assert ">None<" not in rec49 and "Date not recorded" in rec49, "49y: an undated visit says so"
+
+        # 49w. P29 F-007: the Data requests card says its wording is a demo template, like Consent
+        rec49w = dentist_client.get(f"/patients/{cf}").text
+        card = rec49w[rec49w.index('id="rights-title"'):rec49w.index('id="rights-title"') + 400]
+        assert "Demo template wording" in card, "49w: the data requests card does not say it is a demo template"
 
         # 49x. P29 R-025: a phone on file cannot be cleared
         clear_page = dentist_client.get(f"/patients/{cf}")

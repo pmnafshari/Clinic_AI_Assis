@@ -49,7 +49,9 @@
       {% for line in latest.lines %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-sub">{{ kind_names.get(line.kind, line.kind) }}</span>
+          {# P29 F-040: a "fact" the check could not tie to this patient's notes is not from the record #}
+          {% set unsourced = line.kind == 'fact' and (line.flags or []) | select('in', ['no_source', 'unknown_source', 'unsupported']) | list %}
+          <span class="ds-row-sub">{{ 'Added - not found in the record' if unsourced else kind_names.get(line.kind, line.kind) }}</span>
           <span class="ds-row-title text-break">{{ line.text }}</span>
           {% if line.flags %}
           <span class="ds-row-sub"><strong>Check:</strong> {% for f in line.flags %}{{ flag_names.get(f, f) }}{% if not loop.last %}; {% endif %}{% endfor %}</span>
