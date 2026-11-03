@@ -9,6 +9,9 @@ from auth import authorize, log_audit
 from . import reasons
 from .db import get_db
 
+MOVE_FIELDS = ("kind", "quantity", "reason_choice", "reason")
+_move_retry = {}
+
 stock_bp = Blueprint("stock", __name__)
 
 
@@ -40,8 +43,14 @@ def item(item_id):
     found = inventory.item(conn, item_id)
     if found is None:
         abort(404)
-    return render_template("stock_item.html", item=found, history=inventory.history(conn, item_id),
+    # P29 R-012: each movement with the balance it left, worked back from the balance now (newest first)
+    history, after = [], found["balance"]
+    for m in inventory.history(conn, item_id):
+        history.append(dict(m, after=after))
+        after -= m["delta"]
+    return render_template("stock_item.html", item=found, history=history,
                            key=lambda: secrets.token_urlsafe(16),
+                           retry=_move_retry.pop((g.user["username"], item_id), None),
                            can_manage=authorize(g.user["role"], "manage_inventory"))
 
 
@@ -59,6 +68,8 @@ def move(item_id):
         flash("A correction is for a dentist. Use a count to record what is on the shelf.", "danger")
     except inventory.StockError as e:
         flash(f"Not recorded: {e}.", "danger")
+        # P29 R-012: the form comes back with what was typed, once
+        _move_retry[(g.user["username"], item_id)] = {k: form.get(k, "") for k in MOVE_FIELDS}
     return redirect(url_for("stock.item", item_id=item_id))
 
 

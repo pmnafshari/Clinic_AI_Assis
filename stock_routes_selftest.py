@@ -104,8 +104,9 @@ def selftest():
         assert "seen by st_assist" in page and "Low stock (1)" in page, "4: seen is not resolved"
 
         # 5. history explains the balance, and admin sees none of it
-        hist = dentist.get(f"/stock/{item_id}").text
-        for word in ("Received +50", "Used -8", "Counted -2", "weekly count", "Used -20"):
+        hist = " ".join(re.sub(r"<[^>]+>", " ", dentist.get(f"/stock/{item_id}").text).split())
+        # P29 R-012: the history is a table - movement, then its signed change, then the balance it left
+        for word in ("Received +50 50", "Used -8 42", "Counted (40 on the shelf) -2 40", "weekly count", "Used -20 20"):
             assert word in hist, f"5: history is missing {word!r}"
         admin = _client(app, db_path, "st_admin", "admin")
         assert admin.get("/stock").status_code == 302, "5: admin has no stock"
@@ -124,6 +125,32 @@ def selftest():
                                              " AND kind = 'count' ORDER BY id", (item_id,))]
         conn.close()
         assert counts == ["weekly count", "Damaged: box crushed"], f"6: other with no words, or the choice: {counts}"
+
+        # 7. P29 R-012: the quantity and the threshold stand out, the history is a table whose balance column ends at
+        # the balance on the page, and a refused movement keeps what was typed
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        now7, thr7 = inventory.balance(conn, item_id), inventory.item(conn, item_id)["threshold"]
+        n7 = conn.execute("SELECT COUNT(*) FROM inventory_movements WHERE item_id = ?", (item_id,)).fetchone()[0]
+        conn.close()
+        page7 = dentist.get(f"/stock/{item_id}").text
+        assert re.search(r'data-stock="balance">\s*' + str(now7) + r'\b', page7) and \
+            re.search(r'data-stock="threshold">\s*' + str(thr7) + r'\b', page7), "7 R-012: quantity and threshold are not stated apart"
+        hist7 = page7[page7.index('id="hist-title"'):]
+        heads = re.findall(r'<th scope="col">([^<]+)</th>', hist7)
+        assert heads == ["When", "Movement", "Change", "Balance after", "Who", "Reason"], f"7: history columns {heads}"
+        after = [int(x) for x in re.findall(r'<td data-label="Balance after">(-?\d+)', hist7)]
+        changes = [int(x) for x in re.findall(r'<td data-label="Change">([+-]\d+)', hist7)]
+        assert len(after) == n7 and after[0] == now7, f"7: the balance column does not end at the balance: {after}"
+        assert all(after[i] - changes[i] == after[i + 1] for i in range(len(after) - 1)), "7: a balance does not follow"
+        refused7 = reception.post(f"/stock/{item_id}/move", data={
+            "kind": "consumption", "quantity": "999", "reason": "kept words", "key": "r12-1",
+            "csrf_token": _csrf(reception.get(f"/stock/{item_id}").text)}, follow_redirects=True).text
+        assert "Not recorded" in refused7, "7: the refusal is not said"
+        assert 'id="qty" name="quantity" type="number" required value="999"' in refused7 \
+            and '<option value="consumption" selected>' in refused7 and ">kept words</textarea>" in refused7, \
+            "7 R-012: the refused movement lost what was typed"
+        assert 'value="999"' not in reception.get(f"/stock/{item_id}").text, "7: the kept values outlive the next page"
 
     print("selftest ok")
 
