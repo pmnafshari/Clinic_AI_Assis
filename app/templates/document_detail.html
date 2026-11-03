@@ -24,6 +24,38 @@
 </div>
 {% endif %}
 
+{# P29 R-031: what can be done with this file now and, for each thing that cannot, why #}
+{% set st = doc.status %}
+{% set acts = [
+  ('confirm', 'Confirm', st == 'pending_review',
+     'it is already in the record' if st == 'confirmed' else
+     'it was quarantined before reading (' ~ (doc.reason or 'refused') ~ '), so it was never read and there is nothing to check' if st == 'quarantined' else
+     'nothing could be read from it - try reading again first' if st == 'extraction_failed' else
+     'it was rejected' if st == 'rejected' else 'a newer version replaced it'),
+  ('show', 'Show to patient', st == 'confirmed',
+     'only a file in the record can be shown - confirm it first' if st == 'pending_review' else
+     'it is not in the record and cannot be shown to the patient'),
+  ('search', 'Find it in Search', st == 'confirmed',
+     'Search reads confirmed files only - it is not searched until it is confirmed' if st == 'pending_review' else
+     'Search reads confirmed files only'),
+  ('reject', 'Reject', st in ('pending_review', 'quarantined', 'extraction_failed'),
+     'a confirmed file is not rejected: Replace it with a corrected file, or move it if it is the wrong patient' if st == 'confirmed' else
+     'it is already decided'),
+  ('reread', 'Try reading again', st == 'extraction_failed', 'only a file that could not be read is read again'),
+  ('replace', 'Replace with a corrected file', st in ('pending_review', 'confirmed'),
+     'upload the corrected file as a new document instead' if st == 'quarantined' else 'it is already decided'),
+] %}
+<section class="card dash-card mb-3" aria-labelledby="can-title">
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="can-title">What can be done with this file</h2>
+    <p class="ds-card-sub">{{ {'pending_review': 'Read on this machine, waiting for a dentist to check it.', 'confirmed': 'In the record and searchable.', 'quarantined': 'Refused before reading and kept as uploaded.', 'extraction_failed': 'Uploaded, but nothing could be read from it.', 'rejected': 'Rejected - kept, not in the record.', 'superseded': 'Replaced by a newer version.'}[st] }}</p></div></div>
+  <div class="dash-card-body"><ul class="doc-can">
+    {% for key, name, ok, why in acts %}
+    <li data-act="{{ key }}" data-ok="{{ 'yes' if ok else 'no' }}"><i class="bi {{ 'bi-check-circle' if ok else 'bi-slash-circle' }}" aria-hidden="true"></i>
+      <b>{{ name }}</b>{% if ok %} - possible now{% else %} - not possible: {{ why }}{% endif %}</li>
+    {% endfor %}
+  </ul></div>
+</section>
+
 <section class="card dash-card mb-3" aria-labelledby="prov-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="prov-title">Source</h2></div>
   <div class="dash-card-body"><ul class="ds-rows">

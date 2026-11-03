@@ -397,3 +397,17 @@ document.querySelectorAll("[data-reason-pick]").forEach(function (pick) {
     else if (e.key === "Escape") { e.preventDefault(); results.innerHTML = ""; box.focus(); }
   });
 })();
+
+// P29 R-031: a file preview that cannot be drawn says so in words instead of an empty grey frame
+document.querySelectorAll("img.file-view, img.file-thumb, img.import-preview").forEach(function (img) {
+  function fail() {
+    var box = document.createElement("span");
+    box.className = "file-noview";
+    box.setAttribute("role", "img");
+    box.setAttribute("aria-label", "No preview: this image could not be shown");
+    box.textContent = img.classList.contains("file-thumb") ? "No preview" : "This image could not be shown here. Download the original to open it.";
+    img.replaceWith(box);
+  }
+  if (img.complete && img.naturalWidth === 0 && img.getAttribute("src")) fail();
+  else img.addEventListener("error", fail);
+});

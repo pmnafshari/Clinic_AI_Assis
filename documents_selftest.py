@@ -804,6 +804,33 @@ def routes(tmp):
     assert "Quarantined" in qpage and "file-view" not in qpage, "16b: no reason, or a preview is still drawn"
     assert dentist.get(f"/patients/{cf_a}/documents/{bomb}/preview").status_code == 404, \
         "16b: the quarantined bytes are still served as an image"
+    # 16c. P29 R-031: every file page lists what can be done with it now and, for each thing that cannot, why; the
+    # documents page says what each stage is for; an image that cannot be drawn says so in words
+    def can(page, act):
+        m = re.search(r'<li data-act="' + act + r'" data-ok="(yes|no)">(.*?)</li>', page, re.S)
+        return (m.group(1), re.sub(r"<[^>]+>", "", m.group(2))) if m else (None, "")
+    ok, why = can(qpage, "confirm")
+    assert ok == "no" and "quarantined" in why and "never read" in why, f"16c R-031: quarantined Confirm: {ok} {why!r}"
+    assert can(qpage, "show")[0] == "no" and can(qpage, "reject")[0] == "yes", "16c: quarantined show/reject"
+    waiting = docs.ingest(conn, a, pdf(["referto in attesa"]), "wait.pdf", *D)
+    wpage = dentist.get(f"/patients/{cf_a}/documents/{waiting}").text
+    assert can(wpage, "confirm")[0] == "yes", "16c: a waiting file cannot be confirmed"
+    ok, why = can(wpage, "show")
+    assert ok == "no" and "confirm it first" in why, f"16c: waiting Show to patient: {ok} {why!r}"
+    ok, why = can(wpage, "search")
+    assert ok == "no" and "until it is confirmed" in why, f"16c: waiting search: {ok} {why!r}"
+    cpage = dentist.get(f"/patients/{cf_a}/documents/{did}").text
+    assert can(cpage, "show")[0] == "yes" and can(cpage, "search")[0] == "yes", "16c: a confirmed file"
+    ok, why = can(cpage, "reject")
+    assert ok == "no" and "Replace" in why, f"16c: confirmed Reject: {ok} {why!r}"
+    index16 = dentist.get(f"/patients/{cf_a}/documents").text
+    stages = re.search(r'data-ux="doc-stages".*?</ol>', index16, re.S)
+    assert stages and all(w in stages.group(0) for w in ("Upload", "Read", "Confirm", "Show to patient", "Search")), \
+        "16c R-031: the documents page does not say what each stage is for"
+    assert "1 file waiting is not searched until it is confirmed" in index16, "16c: search does not say what it leaves out"
+    js16 = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
+    assert "P29 R-031" in js16 and "file-view" in js16[js16.index("P29 R-031"):], "16c: no fallback for an image that fails"
+    docs.reject(conn, waiting, a, "test", *D)
     # 17. dentist sees and searches; reception is refused
     page = dentist.get(f"/patients/{cf_a}/documents?q=otturazione").text
     assert "r.pdf" in page and "otturazione" in page, "17: search page"

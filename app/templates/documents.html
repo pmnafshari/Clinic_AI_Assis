@@ -14,6 +14,15 @@
   </div>
 </div>
 
+{# P29 R-031: what each stage is for, in the order a file goes through them #}
+<ol class="doc-stages" data-ux="doc-stages" aria-label="How a file becomes part of the record">
+  <li><b>Upload</b> keeps the file exactly as sent. A type that is not accepted is quarantined, never read.</li>
+  <li><b>Read</b> takes the text out on this machine. Nothing is sent anywhere.</li>
+  <li><b>Confirm</b> - a dentist checks what was read; only then is it in the record and searchable.</li>
+  <li><b>Show to patient</b> puts a confirmed file in the patient's portal, until it is withdrawn.</li>
+  <li><b>Search</b> finds confirmed files of this patient only.</li>
+</ol>
+
 <div class="ds-alert ds-alert-info mb-3" role="note">
   <div><strong class="ds-alert-title">Two separate decisions</strong>
   A file is part of this record once you confirm it. The patient sees it in their portal only after you
@@ -71,7 +80,9 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="search-title">Search</h2></div>
   <div class="dash-card-body">
     <p class="ds-row-sub mb-2">Finds this patient's confirmed documents and shows where each result came from. It does not
-    interpret, diagnose or summarise, and an image result is not a clinical finding.</p>
+    interpret, diagnose or summarise, and an image result is not a clinical finding.
+    {% set waiting = rows | selectattr('status', 'equalto', 'pending_review') | list | length %}
+    {% if waiting %}<strong>{{ waiting }} file{{ ' waiting is' if waiting == 1 else 's waiting are' }} not searched until {{ 'it is' if waiting == 1 else 'they are' }} confirmed.</strong>{% endif %}</p>
     <form method="get" action="{{ url_for('documents.index', cf=cf) }}" class="d-flex gap-2 mb-2" role="search">
       <label for="q" class="visually-hidden">Search this patient's documents</label>
       <input id="q" name="q" class="form-control" value="{{ query }}" maxlength="200">

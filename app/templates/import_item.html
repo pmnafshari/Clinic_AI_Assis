@@ -32,7 +32,7 @@
     {% else %}
     {% if previewable %}
     <figure class="file-preview mb-2">
-      <img src="{{ url_for('imports.original', import_id=item.id) }}" alt="Preview of {{ name }}">
+      <img class="import-preview" src="{{ url_for('imports.original', import_id=item.id) }}" alt="Preview of {{ name }}">
       <figcaption class="ds-row-sub">Preview for orientation only - not suitable for diagnosis.</figcaption>
     </figure>
     {% else %}
