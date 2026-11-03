@@ -34,6 +34,7 @@ import patient_id as _pidmod
 import clinic_time
 import difflib
 import json
+import math
 import re
 import shutil
 import sqlite3
@@ -169,12 +170,100 @@ def merged_sources(conn):
     return {r["source_cf"] for r in conn.execute("SELECT source_cf FROM patient_merges")}
 
 
+def _close_lengths(la, lb):
+    # two names of these lengths can reach NAME_RATIO at all: the matched letters are at most the shorter name
+    return 2 * min(la, lb) >= NAME_RATIO * (la + lb)
+
+
+def _shared_floor(la, lb):
+    # the fewest letter pairs two close names of these lengths share. a ratio of NAME_RATIO means at least
+    # NAME_RATIO * (la + lb) / 2 letters in common, in order (LCS). turning one name into the other deletes the
+    # rest of it, each deletion breaking at most two of its letter pairs, and inserts the rest of the other, each
+    # insertion breaking at most one - so at least 3 * LCS - (la + lb) - 1 pairs are left whole in both
+    common = math.ceil(NAME_RATIO * (la + lb) / 2 - 1e-9)
+    return 3 * common - (la + lb) - 1
+
+
+def _letter_pairs(name):
+    # each pair numbered by how often it has come up in the name, so a shared count is a plain set overlap
+    seen, out = {}, set()
+    for k in range(len(name) - 1):
+        seen[name[k:k + 2]] = seen.get(name[k:k + 2], 0) + 1
+        out.add((name[k:k + 2], seen[name[k:k + 2]]))
+    return out
+
+
+def _pairs_worth_checking(rows):
+    """-> the (i, j), i < j, that can be anything but WEAK. LOSES NONE.
+
+    a pair is more than weak only with the same or a close name, or with the same phone (see strength()). the same
+    name and the same phone are grouped. a close name differs by at most `budget` letters inserted or deleted, so
+    cut into budget + 1 pieces, one piece is in the other name unchanged, at most `budget` places along (the
+    pigeonhole). names are indexed by their pieces and only names that meet that way are compared, after the
+    letter-pair floor above. a name too short to cut is compared with every name of a length that could be close.
+    patient_identity --selftest checks the result against every pair.
+    """
+    names = [normalize_name(r["patient_name"]) for r in rows]
+    pairs = set()
+    groups = {}
+    for i, r in enumerate(rows):
+        if names[i]:
+            groups.setdefault(("name", names[i]), []).append(i)
+        phone = normalize_phone(r["phone"])
+        if phone:
+            groups.setdefault(("phone", phone), []).append(i)
+    for members in groups.values():
+        for x, i in enumerate(members):
+            for j in members[x + 1:]:
+                pairs.add((i, j))
+
+    longest = max((len(n) for n in names), default=0)
+    window = {n: [m for m in range(1, longest + 1) if _close_lengths(n, m)] for n in range(1, longest + 1)}
+    budget = {n: max(math.floor((1 - NAME_RATIO) * (n + m) + 1e-9) for m in window[n]) for n in window if window[n]}
+    cuts = {}
+    for n, k in budget.items():
+        if n > k:
+            size, extra, start, pieces = n // (k + 1), n % (k + 1), 0, []
+            for piece in range(k + 1):
+                pieces.append((start, size + (1 if piece < extra else 0)))
+                start += pieces[-1][1]
+            cuts[n] = pieces
+    index, short = {}, []
+    for j, name in enumerate(names):
+        if not name:
+            continue
+        if len(name) not in cuts:
+            short.append(j)
+            continue
+        for start, size in cuts[len(name)]:
+            index.setdefault((len(name), start, name[start:start + size]), []).append(j)
+    grams = [_letter_pairs(n) for n in names]
+    for i, name in enumerate(names):
+        la = len(name)
+        met = set()
+        for lb in window.get(la, ()):
+            k = budget[lb]
+            for start, size in cuts.get(lb, ()):
+                for p in range(max(0, start - k), min(la - size, start + k) + 1):
+                    met.update(index.get((lb, start, name[p:p + size]), ()))
+        for j in met:
+            if j > i and len(grams[i] & grams[j]) >= _shared_floor(la, len(names[j])):
+                pairs.add((i, j))
+    for i in short:
+        for j, other in enumerate(names):
+            if j != i and other and _close_lengths(len(names[i]), len(other)):
+                pairs.add((min(i, j), max(i, j)))
+    return sorted(pairs)
+
+
 def candidates(conn, limit=50):
     """Pairs worth a human's attention, strongest first. Reads only.
 
-    O(n^2) over the patient table on purpose: a single-clinic patient list is
-    thousands of rows at most, and a blocking key that skipped a real duplicate
-    would defeat the whole point of the screen.
+    Every pair that could be more than weak is checked; a blocking key that
+    skipped a real duplicate would defeat the whole point of the screen, so the
+    pairs are narrowed only by what the signals themselves rule out
+    (_pairs_worth_checking). Comparing every pair took 77 s on 3,000 patients
+    and kept the patients list waiting on it (P29 U-004).
     """
     rows = conn.execute(
         "SELECT patient_id, codice_fiscale, patient_name, phone FROM patients"
@@ -183,24 +272,24 @@ def candidates(conn, limit=50):
     gone = merged_sources(conn)
     order = {STRONG: 0, REVIEW: 1, WEAK: 2}
     found = []
-    for i, a in enumerate(rows):
-        for b in rows[i + 1:]:
-            # the pair is identified by SURROGATE now, so a dismissal survives
-            # a codice fiscale being corrected on either side
-            pair = tuple(sorted((a["patient_id"], b["patient_id"])))
-            if pair in skip or a["codice_fiscale"] in gone or b["codice_fiscale"] in gone:
-                continue
-            sig = signals(a, b)
-            level = strength(sig)
-            if level == WEAK:
-                continue
-            found.append({
-                "a": dict(a),
-                "b": dict(b),
-                "signals": sig,
-                "strength": level,
-                "reasons": _reasons(sig),
-            })
+    for i, j in _pairs_worth_checking(rows):
+        a, b = rows[i], rows[j]
+        # the pair is identified by SURROGATE now, so a dismissal survives
+        # a codice fiscale being corrected on either side
+        pair = tuple(sorted((a["patient_id"], b["patient_id"])))
+        if pair in skip or a["codice_fiscale"] in gone or b["codice_fiscale"] in gone:
+            continue
+        sig = signals(a, b)
+        level = strength(sig)
+        if level == WEAK:
+            continue
+        found.append({
+            "a": dict(a),
+            "b": dict(b),
+            "signals": sig,
+            "strength": level,
+            "reasons": _reasons(sig),
+        })
     found.sort(key=lambda c: (order[c["strength"]], c["a"]["codice_fiscale"]))
     return found[:limit]
 
@@ -1192,6 +1281,63 @@ def selftest():
         later = timeline_parts(undated, datetime(2026, 5, 10, 14, 45))
         assert not later["upcoming"], "25: a booking that already started is not coming up"
         assert len(parts["upcoming"]) + len(parts["history"]) + len(parts["undated"]) == len(undated), "25: nothing dropped"
+
+        # 26. P29 U-004: the duplicate search skips pairs that cannot be alike without missing one. checked against
+        # every pair, on names typed with slips (a letter changed, swapped, dropped or doubled), shared phones, near
+        # codici fiscali and very short names - and it stays fast on a clinic of 10,000
+        import random
+        import time
+        rnd = random.Random(26)
+        first = ["Paola", "Paolo", "Anna", "Ugo", "Lia", "Gianfranco", "Maria", "Mario", "Bea", "Io", "Giovanna", "Ettore"]
+        last = ["Rossi", "Rosi", "Bianchi", "Verdi", "Neri", "Esposito", "Ferrari", "Fo", "Bertolucci", "D'Angelo", "Li"]
+
+        def slip(name):
+            i = rnd.randrange(len(name))
+            kind = rnd.randrange(4)
+            if kind == 0:
+                return name[:i] + rnd.choice("aeiorsnt") + name[i + 1:]
+            if kind == 1 and i < len(name) - 1:
+                return name[:i] + name[i + 1] + name[i] + name[i + 2:]
+            if kind == 2:
+                return name[:i] + name[i + 1:]
+            return name[:i] + name[i] + name[i:]
+        big = storage.init_db(str(Path(tmp) / "many.sqlite"))
+        rows26 = []
+        for i in range(700):
+            name = f"{rnd.choice(first)} {rnd.choice(last)}"
+            name = slip(name) if rnd.random() < 0.4 else name
+            phone = f"+39 333 {rnd.randrange(60):07d}" if rnd.random() < 0.5 else (None if rnd.random() < 0.5 else "")
+            cf = f"ZZ{rnd.choice('ABC')}{rnd.choice('ABC')}{i % 97:02d}A01A{rnd.randrange(3):03d}{chr(65 + i % 26)}"
+            rows26.append((f"p26-{i}", cf if not any(r[1] == cf for r in rows26) else f"ZZQ{i:05d}A01A001Z", name, phone))
+        big.executemany("INSERT INTO patients (patient_id, codice_fiscale, patient_name, phone) VALUES (?, ?, ?, ?)", rows26)
+        big.commit()
+        every = big.execute("SELECT patient_id, codice_fiscale, patient_name, phone FROM patients"
+                            " ORDER BY codice_fiscale").fetchall()
+        brute = []
+        for i, a in enumerate(every):
+            for b in every[i + 1:]:
+                sig = signals(a, b)
+                if strength(sig) != WEAK:
+                    brute.append((a["codice_fiscale"], b["codice_fiscale"], strength(sig)))
+        brute.sort(key=lambda p: ({STRONG: 0, REVIEW: 1}[p[2]], p[0]))
+        fast = [(c["a"]["codice_fiscale"], c["b"]["codice_fiscale"], c["strength"]) for c in candidates(big, limit=10 ** 6)]
+        assert len(brute) > 200 and fast == brute, f"26 U-004: {len(fast)} pairs found, every pair gives {len(brute)}"
+        # a clinic's names: many first names, surnames from syllables, now and then the same name twice
+        syllables = ["ro", "ssi", "bian", "chi", "ver", "di", "ne", "gal", "lo", "gre", "co", "bru", "no", "con", "ti",
+                     "cos", "ta", "fon", "na", "mo", "ret", "va", "esp", "os", "ito", "fer", "rar", "ber", "to", "luc",
+                     "ci", "ma", "ni", "san", "de", "lu", "ca", "mar", "chet", "pel", "le", "gri"]
+        given = first + ["Giulia", "Sara", "Laura", "Elena", "Chiara", "Marco", "Luca", "Andrea", "Matteo", "Davide",
+                         "Simone", "Stefano", "Roberto", "Antonio", "Carla", "Dario", "Enzo", "Fabio", "Nadia", "Rita"]
+        big.execute("DELETE FROM patients")
+        big.executemany("INSERT INTO patients (patient_id, codice_fiscale, patient_name, phone) VALUES (?, ?, ?, ?)",
+                        [(f"k{i}", f"ZZK{i:05d}A01A001A",
+                          rnd.choice(given) + " " + "".join(rnd.choice(syllables) for _ in range(rnd.choice((2, 3, 3, 4)))).capitalize(),
+                          f"+39340{i:07d}") for i in range(10000)])
+        big.commit()
+        t26 = time.time()
+        candidates(big)
+        assert time.time() - t26 < 10, f"26 U-004: the duplicate search took {time.time() - t26:.1f} s on 10,000 patients"
+        big.close()
 
     print("selftest ok")
 
