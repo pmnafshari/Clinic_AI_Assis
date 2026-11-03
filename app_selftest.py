@@ -902,6 +902,28 @@ def selftest():
         if b'id="billed-chart"' not in rep.data:
             assert b"Nothing billed yet" in rep.data, \
                 "20d: an empty billed series must render the empty state"
+
+        # 20e. P29 R-024: the page says its scope and who is signed in, and a period choice narrows every chart to
+        # visits from that period - a visit five months ago is in the 6-month view and not in the 3-month one
+        import clinic_time as _ct
+        from datetime import timedelta as _td
+        old_day = (_ct.now().date() - _td(days=150)).isoformat()
+        c20 = sqlite3.connect(db_path)
+        pid20 = c20.execute("SELECT patient_id FROM patients LIMIT 1").fetchone()[0]
+        c20.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                    " VALUES (?, ?, '[\"zzperiod\"]', 'period test', 'zz/period.json')", (pid20, old_day))
+        c20.commit()
+        c20.close()
+        six = client_g.get("/reports?period=6").text
+        three = client_g.get("/reports?period=3").text
+        scope = re.search(r'data-ux="report-scope"[^>]*>(.*?)</p>', three, re.S)
+        assert scope and "Whole clinic" in scope.group(1) and "signed in as" in scope.group(1) \
+            and "last 3 months" in scope.group(1), "20e R-024: the scope and the signed-in dentist are not said"
+        assert re.search(r'<select[^>]+name="period"', three) and '<option value="3" selected>' in three, \
+            "20e: no period choice, or it does not show the one applied"
+        assert old_day[:7] in six and "zzperiod" in six, "20e: the 6-month view lacks the visit five months ago"
+        assert old_day[:7] not in three.split('id="visits-title"')[1] and "zzperiod" not in three, \
+            "20e: the 3-month view still counts a visit five months ago"
         assert b"Patients" not in adm_shell.data.split(b"</nav>")[0], \
             "20: an admin holds no read_notes and must not be offered Patients"
 

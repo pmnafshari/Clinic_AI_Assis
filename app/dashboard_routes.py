@@ -126,14 +126,14 @@ def _intake_counts(conn, username):
     return counts
 
 
-def _visits_by_month(conn, months=12):
+def _visits_by_month(conn, months=12, since=None):
     # clinic-wide, because visits carry no user column - a per-user split
     # does not exist in the schema. counts only, never a visit row (D-07).
     rows = conn.execute(
         "SELECT substr(visit_date, 1, 7) AS month, COUNT(*) AS n FROM visits"
-        " WHERE visit_date IS NOT NULL AND visit_date != ''"
+        " WHERE visit_date IS NOT NULL AND visit_date != '' AND (? IS NULL OR visit_date >= ?)"
         " GROUP BY month ORDER BY month DESC LIMIT ?",
-        (months,),
+        (since, since, months),
     ).fetchall()
     rows = list(reversed(rows))
     return [r["month"] for r in rows], [r["n"] for r in rows]

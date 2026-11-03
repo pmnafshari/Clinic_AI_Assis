@@ -1689,3 +1689,6 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .doc-can li[data-ok="no"] i { color: #842029; }
 .file-noview { display: inline-flex; align-items: center; justify-content: center; min-width: 3.5rem; min-height: 3.5rem; padding: 0.75rem;
   border: 1px dashed #8a96a8; border-radius: 8px; background: var(--ds-neutral-surface); color: #3f4a5a; font-size: 0.8125rem; text-align: center; }
+
+/* P29 R-024: what the report figures cover */
+.report-scope { margin: 0 0 1rem; font-size: 0.875rem; color: #334155; }

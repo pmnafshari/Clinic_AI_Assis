@@ -1,7 +1,9 @@
 import json
+from datetime import date
 
-from flask import Blueprint, g, redirect, render_template, url_for
+from flask import Blueprint, g, redirect, render_template, request, url_for
 
+import clinic_time
 import ledger
 from auth import authorize
 from dental_notes_schema import KNOWN_PROCEDURES
@@ -15,6 +17,11 @@ reports_bp = Blueprint("reports", __name__)
 TOP_N = 8
 
 
+# P29 R-024: the period choices, months back (None for everything) and how the page says them
+PERIODS = {"3": (3, "last 3 months"), "6": (6, "last 6 months"), "12": (12, "last 12 months"),
+           "24": (24, "last 24 months"), "all": (None, "everything on record")}
+
+
 def _code_of(entry):
     # the SAME rule dental_notes_schema.unknown_procedures uses: the first
     # token is the code, the rest is tooth numbers. reusing it means this
@@ -23,11 +30,12 @@ def _code_of(entry):
     return entry.strip().split(" ")[0].lower()
 
 
-def _procedure_distribution(conn, top_n=TOP_N):
+def _procedure_distribution(conn, top_n=TOP_N, since=None):
     # clinic-wide, counts only, never a procedure tied to a patient (D-07).
     rows = conn.execute(
         "SELECT procedures FROM visits"
         " WHERE procedures IS NOT NULL AND procedures != '' AND procedures != '[]'"
+        " AND (? IS NULL OR visit_date >= ?)", (since, since)
     ).fetchall()
 
     counts = {}
@@ -61,16 +69,16 @@ def _procedure_distribution(conn, top_n=TOP_N):
     return labels, values, uncoded
 
 
-def _billed_by_month(conn, months=12):
+def _billed_by_month(conn, months=12, since=None):
     # what was BILLED, from the lines' cents. it is never called revenue: the
     # ledger (P07) records payments staff typed in, and invoices from before
     # it are of unknown status - see _recorded_payments
     rows = conn.execute(
         "SELECT substr(v.visit_date, 1, 7) AS month, SUM(i.amount_cents) / 100.0 AS billed"
         " FROM invoices i JOIN visits v ON v.id = i.visit_id"
-        " WHERE v.visit_date IS NOT NULL AND v.visit_date != ''"
+        " WHERE v.visit_date IS NOT NULL AND v.visit_date != '' AND (? IS NULL OR v.visit_date >= ?)"
         " GROUP BY month ORDER BY month DESC LIMIT ?",
-        (months,),
+        (since, since, months),
     ).fetchall()
     rows = list(reversed(rows))
     return [r["month"] for r in rows], [r["billed"] for r in rows]
@@ -94,17 +102,26 @@ def index():
         return redirect(url_for("dashboard.index"))
 
     conn = get_db()
-    proc_labels, proc_values, proc_uncoded = _procedure_distribution(conn)
-    billed_months, billed_values = _billed_by_month(conn)
+    # P29 R-024: one period for every chart, counted in whole months back from the clinic's today
+    period = request.args.get("period") if request.args.get("period") in PERIODS else "12"
+    months = PERIODS[period][0]
+    since = None
+    if months:
+        today = clinic_time.now().date()
+        index = today.year * 12 + today.month - months
+        since = date(index // 12, index % 12 + 1, 1).isoformat()
+    proc_labels, proc_values, proc_uncoded = _procedure_distribution(conn, since=since)
+    billed_months, billed_values = _billed_by_month(conn, months or 600, since=since)
     # P23: visits per month moved here from Home (read_clinical, as it was there)
     from .dashboard_routes import _visits_by_month
-    visit_months, visit_counts = _visits_by_month(conn)
+    visit_months, visit_counts = _visits_by_month(conn, months or 600, since=since)
 
     # the has-data verdict is a route decision, like the series it describes
     # (phase 31 D-01). chart.js draws nothing for an empty series and says
     # nothing about it, so an empty card looks exactly like a broken one.
     return render_template(
         "reports.html",
+        periods=[(k, v[1]) for k, v in PERIODS.items()], period=period, period_label=PERIODS[period][1], since=since,
         proc_labels=proc_labels,
         proc_values=proc_values,
         proc_uncoded=proc_uncoded,
