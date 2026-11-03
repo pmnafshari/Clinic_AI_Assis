@@ -1672,3 +1672,9 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .pay-state { margin-left: 0.375rem; padding: 0 0.4375rem; border: 1px solid var(--ds-border); border-radius: 999px; font-size: 0.75rem; font-weight: 600; color: #3f4a5a; background: var(--ds-neutral-surface); }
 .pay-detail > summary { margin-top: 0.25rem; color: var(--bs-link-color); font-size: 0.8125rem; font-weight: 600; cursor: pointer; }
 .pay-row:target { box-shadow: inset 3px 0 0 var(--ds-primary); }
+
+/* P29 U-002: the summary's state line, what each decision changes, and the sources folded away */
+.sx-state { margin: -0.25rem 0 0.75rem; font-size: 0.875rem; font-weight: 600; color: #334155; }
+.sx-help { margin: 0.375rem 0 0; font-size: 0.8125rem; color: var(--ds-text-muted); }
+.sx-acts { margin: 0 0 0.75rem; padding-left: 1.125rem; font-size: 0.8125rem; color: #334155; }
+.sx-fold > summary { color: var(--bs-link-color); font-size: 0.875rem; font-weight: 600; cursor: pointer; margin-bottom: 0.5rem; }

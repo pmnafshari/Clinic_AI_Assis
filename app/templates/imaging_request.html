@@ -34,7 +34,7 @@
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Type, exactly as the dentist chose it</span><span class="ds-row-title">{{ r.exam_label }}</span></span></li>
       {% if r.note %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Dentist's administrative note</span><span class="ds-row-title text-break">{{ r.note }}</span></span></li>{% endif %}
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Seen by reception (clinic time)</span><span class="ds-row-title">
-        {% for e in seen %}Seen by {{ e.actor }} on {{ e.at | imaging_when }}{{ '; ' if not loop.last else '' }}{% else %}Not marked as seen yet{% endfor %}</span></span></li>
+        {% for e in seen %}Seen by {{ e.actor }} on {{ e.at | clinic_when }}{{ '; ' if not loop.last else '' }}{% else %}Not marked as seen yet{% endfor %}</span></span></li>
     </ul>
     <h3 class="ds-card-title mt-3">Next step</h3>
     {% if guide and guide.citation %}
@@ -151,7 +151,7 @@
       <h3 class="ds-card-title" id="completion-title">Completion</h3>
       {% if completion %}
       {% set done_file = files | selectattr('document_id', 'equalto', completion.document_id) | first %}
-      <p>Recorded as done by {{ completion.recorded_by }} on {{ completion.recorded_at | imaging_when }}{% if done_file %}, with the image {{ done_file.display_name }}{% endif %}.</p>
+      <p>Recorded as done by {{ completion.recorded_by }} on {{ completion.recorded_at | clinic_when }}{% if done_file %}, with the image {{ done_file.display_name }}{% endif %}.</p>
       <form method="post" action="{{ url_for('imaging.reverse', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label for="rreason" class="form-label">Why reverse it</label><input id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required></div>
@@ -178,7 +178,7 @@
     <table class="ux-table ux-table-page">
       <caption class="visually-hidden">History of request {{ r.id }}, newest first</caption>
       <thead><tr><th scope="col">When</th><th scope="col">Version</th><th scope="col">What happened</th><th scope="col">Who</th></tr></thead>
-      <tbody>{% for e in history %}<tr data-hist-id="{{ e.id }}"><td data-label="When"><span class="ux-nowrap">{{ e.at | imaging_when }}</span></td><td data-label="Version">{{ e.version }}</td><td data-label="What happened">{{ e.what }}</td><td data-label="Who">{{ e.actor }}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for e in history %}<tr data-hist-id="{{ e.id }}"><td data-label="When"><span class="ux-nowrap">{{ e.at | clinic_when }}</span></td><td data-label="Version">{{ e.version }}</td><td data-label="What happened">{{ e.what }}</td><td data-label="Who">{{ e.actor }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 </section>

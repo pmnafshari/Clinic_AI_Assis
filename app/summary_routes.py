@@ -59,6 +59,9 @@ def _render(cf, read_audio=None):
     current = next((r for r in rows if r["status"] in ("draft", "approved")), None)
     view = vs.load(conn, current["id"], pid, g.user["username"], g.user["role"]) \
         if current else None
+    if view:
+        # P29 R-030: the newest note first, undated ones last
+        view["sources"] = sorted(view["sources"], key=lambda src: src["visit_date"] or "", reverse=True)
     tts_ok, tts_why = dictation.tts_status()
     return render_template("summary.html", cf=cf, patient=patient, view=view, history=rows,
                            label=vs.DRAFT_LABEL,

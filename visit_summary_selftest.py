@@ -571,6 +571,26 @@ def routes(tmp):
     dentist.post(f"{url}/{sid}/edit", data={"csrf_token": csrf(page),
                                             "body": f"2026-05-05: rct 26 [#{r1_id(conn, anna)}]"})
     page = dentist.get(url).text
+    # 26c. P29 R-030 / U-002: the state and its time on top; versions and source notes newest first, each part saying
+    # its order; every action saying what it changes; the sources fold away
+    assert re.search(r'data-ux="summary-state">Draft · version 4 · saved \d{2}/\d{2}/\d{4} \d{2}:\d{2}', page), \
+        "26c U-002: no status and time on top"
+    versions_part = page[page.index('id="versions-title"'):]
+    versions_part = versions_part[:versions_part.index("</section>")]
+    order = re.findall(r'<span class="ds-row-title">Version (\d+)', versions_part)
+    assert order == ["4", "3", "2", "1"] and "newest first" in versions_part, f"26c R-030: versions {order}"
+    sources_part = page[page.index('id="sources-title"'):]
+    sources_part = sources_part[:sources_part.index("</section>")]
+    dates = re.findall(r'<span class="ds-row-title">\[#\d+\] (\d{4}-\d{2}-\d{2})', sources_part)
+    assert dates == sorted(dates, reverse=True) and "newest visit first" in sources_part and "<details" in sources_part, \
+        f"26c R-030: sources {dates}"
+    for button, says in (("Save as a new version", "the earlier ones stay under Versions"),
+                         ("Approve", "marks this version as reviewed"),
+                         ("Regenerate", "builds a new draft from the notes as they are now"),
+                         ("Reject", "closes this draft")):
+        assert button in page and says in page, f"26c U-002: {button} does not say what it changes"
+    history_part = page[page.index('id="history-title"'):]
+    assert "newest first" in history_part[:400], "26c R-030: history does not say its order"
     dentist.post(f"{url}/{sid}/approve", data={"csrf_token": csrf(page)})
     page = dentist.get(url).text
     assert conn.execute("SELECT status FROM visit_summaries WHERE id = ?",

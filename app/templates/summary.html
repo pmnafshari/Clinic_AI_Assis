@@ -19,6 +19,8 @@
 {% if view %}
   {% set s = view.summary %}
   {% set latest = view.versions[-1] %}
+  {# P29 U-002: where this summary stands, and since when #}
+  <p class="sx-state" data-ux="summary-state">{{ 'Draft' if s.status == 'draft' else 'Approved' }} · version {{ latest.version }} · saved {{ latest.created_at | clinic_when }}</p>
   {% if s.status == 'draft' %}
   <div class="ds-alert ds-alert-warning mb-3" role="note">
     <div><strong class="ds-alert-title">Draft</strong> {{ label }}</div>
@@ -92,7 +94,10 @@
         <p class="ds-card-sub">Clinical author not recorded: the record keeps who filed a note, not who wrote it</p>
       </div>
     </div>
-    <div class="dash-card-body"><ul class="ds-rows">
+    <div class="dash-card-body">
+    <details class="sx-fold">
+    <summary>Show the {{ view.sources | length }} note{{ 's' if view.sources | length != 1 else '' }} this summary reads, newest visit first</summary>
+    <ul class="ds-rows">
       {% for src in view.sources %}
       <li class="ds-row">
         <span class="ds-row-main">
@@ -105,6 +110,7 @@
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">[#{{ missing }}] no longer in this record</span></span></li>
       {% endfor %}
     </ul>
+    </details>
     <p class="dash-empty-line">Made {{ s.created_at | appt_date }} {{ s.created_at | appt_time }} by {{ s.created_by }} · {{ s.generator }} {{ s.generator_version }}, local, no model</p>
     </div>
   </section>
@@ -118,7 +124,14 @@
         <label for="body" class="form-label">Edit the lines. Keep a [#visit] on each line you want checked against the notes.</label>
         <textarea id="body" name="body" rows="10" class="ds-textarea">{{ edit_text }}</textarea>
         <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">Save as a new version</button>
+        <p class="sx-help">Changes the lines of this draft as a new version; the earlier ones stay under Versions.</p>
       </form>
+      {# P29 U-002: each decision says what it changes #}
+      <ul class="sx-acts">
+        <li><b>Approve</b> marks this version as reviewed by you. The notes stay the record.</li>
+        <li><b>Regenerate</b> builds a new draft from the notes as they are now; this draft is kept in History as replaced.</li>
+        <li><b>Reject</b> closes this draft with your reason. Nothing is deleted.</li>
+      </ul>
       <div class="d-flex flex-wrap gap-2 align-items-end">
         <form method="post" action="{{ url_for('summary.approve', cf=cf, sid=s.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -142,11 +155,12 @@
   {% endif %}
 
   <section class="card dash-card mb-3" aria-labelledby="versions-title">
-    <div class="dash-card-head"><h2 class="ds-card-title" id="versions-title">Versions</h2></div>
+    <div class="dash-card-head"><div><h2 class="ds-card-title" id="versions-title">Versions</h2>
+      <p class="ds-card-sub">This summary's versions, newest first. The Summary above shows the newest.</p></div></div>
     <div class="dash-card-body"><ul class="ds-rows">
-      {% for v in view.versions %}
+      {% for v in view.versions | reverse %}
       <li class="ds-row"><span class="ds-row-main">
-        <span class="ds-row-title">Version {{ v.version }} · {{ v.kind }}</span>
+        <span class="ds-row-title">Version {{ v.version }} · {{ v.kind }}{% if loop.first %} · shown above{% endif %}</span>
         <span class="ds-row-sub">{{ v.created_by }} · {{ v.created_at | appt_date }} {{ v.created_at | appt_time }} · {{ v.lines | length }} lines</span>
       </span></li>
       {% endfor %}
@@ -158,7 +172,7 @@
 <section class="card dash-card mb-3" aria-labelledby="make-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="make-title">{{ 'Make a new draft' if view else 'No summary yet' }}</h2></div>
   <div class="dash-card-body">
-    <p class="dash-empty-line">Builds a draft from this patient's own notes, on this machine. Nothing is sent anywhere and the notes are not changed.</p>
+    <p class="dash-empty-line">Builds a draft from this patient's own notes, on this machine. Nothing is sent anywhere and the notes are not changed.{% if view %} The approved summary stays in History.{% endif %}</p>
     <form method="post" action="{{ url_for('summary.generate', cf=cf) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="btn btn-primary btn-sm" type="submit">Make a draft</button>
@@ -169,7 +183,8 @@
 
 {% if history %}
 <section class="card dash-card" aria-labelledby="history-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="history-title">History</h2></div>
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="history-title">History</h2>
+    <p class="ds-card-sub">Every summary made for this patient, newest first. Nothing here is deleted.</p></div></div>
   <div class="dash-card-body"><ul class="ds-rows">
     {% for h in history %}
     <li class="ds-row"><span class="ds-row-main">
