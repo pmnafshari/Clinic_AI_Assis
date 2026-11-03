@@ -267,7 +267,9 @@ def selftest():
         imaging_t = (Path(__file__).parent / "app" / "templates" / "imaging_request.html").read_text()
         assert '<textarea id="rnote-b"' in imaging_t and "data-grow" in imaging_t, "5 U-007: 'in a few words' is one line"
         appt_t = (Path(__file__).parent / "app" / "templates" / "appointments.html").read_text()
-        assert '<textarea id="dreason-' in appt_t, "5 U-007: the decline reason is one line"
+        reason_t = (Path(__file__).parent / "app" / "templates" / "_reason.html").read_text()
+        assert "reason_box('dreason-'" in appt_t and re.search(r'<textarea[^>]+name="reason"[^>]+data-grow', reason_t), \
+            "5 U-007: the decline reason is one line"
         cancel_js = js[js.index("P29 R-009"):js.index("P29 R-010")]
         assert cancel_js.count("HTMLFormElement.prototype.submit") == 1 and \
             cancel_js.index("HTMLFormElement.prototype.submit") > cancel_js.index('yes.addEventListener("click"'), \
@@ -820,6 +822,28 @@ def selftest():
         note_review.record_failed(conn, Path(tmp) / "unreadable.txt", "needs_review", "assistant", "assistant")
         assert_list_tools(dentist.get("/reviews").get_data(as_text=True), "/reviews", {"created", "name"})
         assert_list_tools(dentist.get("/data-requests").get_data(as_text=True), "/data-requests", {"filed", "name"})
+
+        # 22. P29 U-021: WebKit - the macOS app's engine - leaves links out of Tab unless asked. the menu and the lookup
+        # results ask (tabindex), the results move with the arrow keys, and the app asks for every link
+        home22 = dentist.get("/").get_data(as_text=True)
+        side22 = home22[home22.index('id="app-side"'):home22.index("</aside>")]
+        links22 = re.findall(r"<(?:a|button)\b[^>]*>", side22)
+        assert links22 and all('tabindex="0"' in a for a in links22), \
+            f"22 U-021: a menu link or button WebKit's Tab skips: {[a for a in links22 if 'tabindex' not in a][:2]}"
+        top22 = home22[home22.index('data-ux="topbar"'):]
+        for cls in ("app-topbar-toggle", "app-bell", "app-account"):
+            tag = re.search(rf'<button[^>]*class="[^"]*{cls}[^"]*"[^>]*>', top22)
+            assert tag and 'tabindex="0"' in tag.group(0), f"22 U-021: WebKit's Tab skips the {cls} button"
+        found22 = dentist.get("/patients/search?q=Anna").get_data(as_text=True)
+        results22 = re.findall(r"<a\b[^>]*>", found22)
+        assert results22 and all('tabindex="0"' in a for a in results22), "22 U-021: a lookup result WebKit's Tab skips"
+        assert "Enter to open" in found22 and "Esc to close" in found22, "22 U-021: the results do not say the keys"
+        js22 = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
+        assert "P29 U-021" in js22, "22 U-021: no keyboard code for the results"
+        u021 = js22[js22.index("P29 U-021"):]
+        assert "ArrowDown" in u021 and "ArrowUp" in u021 and "Escape" in u021, "22 U-021: no arrow keys on the results"
+        swift22 = (Path(__file__).parent / "desktop" / "macos" / "Sources" / "WorkspaceWindow.swift").read_text()
+        assert "config.preferences.tabFocusesLinks = true" in swift22, "22 U-021: the app leaves links out of Tab"
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed

@@ -1910,14 +1910,19 @@ def selftest():
         # 31a. a request is stored as a request - no dentist, no time
         from datetime import date as _date, timedelta as _td
         soon = (_date.today() + _td(days=5)).isoformat()
+        # P29 U-009: the reason is a short list with Altro, and what is typed is added to the choice
+        assert 'name="reason_choice"' in page_a.text and on_page(t("appt_reason_other", "it"), page_a.text), \
+            "31a U-009: the request reason has no list with Altro"
         r = client_a.post("/appointments/request", data={
-            "day": soon, "period": "morning", "reason": "controllo",
+            "day": soon, "period": "morning", "reason_choice": "pain", "reason": "controllo",
             "csrf_token": _csrf_from(page_a.text)})
         assert r.status_code == 302, f"31a: a valid request should redirect, got {r.status_code}"
         conn_a = storage.connect(db_path)
         rows = _appt.for_patient(conn_a, cf_a)
         assert len(rows) == 1 and rows[0]["status"] == _appt.REQUESTED, \
             "31a: the request should be stored as requested"
+        assert rows[0]["note"] == f'{t("appt_reason_pain", "it")}: controllo', \
+            f"31a U-009: the chosen reason and the typed words: {rows[0]['note']!r}"
         appt_id = rows[0]["id"]
 
         # 31b. and the page NEVER renders it as a time. this is PAPT-05: the

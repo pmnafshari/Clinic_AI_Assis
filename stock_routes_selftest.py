@@ -111,6 +111,20 @@ def selftest():
         assert admin.get("/stock").status_code == 302, "5: admin has no stock"
         assert "low on stock" not in admin.get("/", follow_redirects=True).text
 
+        # 6. P29 U-009: a count or correction reason comes from a short list or Other; Other needs words
+        seen = dentist.get(f"/stock/{item_id}").text
+        assert 'name="reason_choice"' in seen and '<option value="other">Other' in seen, \
+            "6 U-009: the stock reason has no list"
+        for k, choice, typed in (("u9-1", "other", ""), ("u9-2", "Damaged", "box crushed")):
+            dentist.post(f"/stock/{item_id}/move", data={
+                "kind": "count", "quantity": "18", "reason_choice": choice, "reason": typed, "key": k,
+                "csrf_token": _csrf(seen)})
+        conn = sqlite3.connect(db_path)
+        counts = [r[0] for r in conn.execute("SELECT reason FROM inventory_movements WHERE item_id = ?"
+                                             " AND kind = 'count' ORDER BY id", (item_id,))]
+        conn.close()
+        assert counts == ["weekly count", "Damaged: box crushed"], f"6: other with no words, or the choice: {counts}"
+
     print("selftest ok")
 
 

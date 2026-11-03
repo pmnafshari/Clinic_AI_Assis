@@ -6,6 +6,7 @@ import glossary_review
 import note_review as nr
 from auth import authorize, log_audit
 
+from . import reasons
 from .db import get_chroma, get_db
 
 review_bp = Blueprint("review", __name__)
@@ -76,7 +77,7 @@ def reject(review_id):
     if not authorize(g.user["role"], nr.CAPABILITY):
         return _refuse("note_review_reject", f"review:{review_id}")
     return _step(review_id, nr.reject, "Rejected. Nothing was filed; the upload is kept.",
-                 reason=request.form.get("reason", ""))
+                 reason=reasons.chosen(request.form, reasons.REJECT_NOTE))
 
 
 @review_bp.route("/reviews/<int:review_id>/retry", methods=["POST"])

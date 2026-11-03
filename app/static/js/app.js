@@ -367,3 +367,33 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
     if (go) location.href = go;
   });
 })();
+
+// P29 U-009: a reason list's Other needs the words typed under it
+document.querySelectorAll("[data-reason-pick]").forEach(function (pick) {
+  var words = document.getElementById(pick.getAttribute("data-reason-pick"));
+  if (!words) return;
+  function sync() { words.required = pick.value === "other"; }
+  pick.addEventListener("change", sync);
+  sync();
+});
+
+// P29 U-021: the lookup results by keyboard. down from the box goes into the results, up and down move between
+// patients, Enter opens one, Esc closes them and goes back to the box.
+(function () {
+  var box = document.querySelector(".app-search input[type=search]");
+  var results = document.getElementById("app-search-results");
+  if (!box || !results) return;
+  function links() { return Array.prototype.slice.call(results.querySelectorAll("a[href]")); }
+  box.addEventListener("keydown", function (e) {
+    if (!links().length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); links()[0].focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); results.innerHTML = ""; }
+  });
+  results.addEventListener("keydown", function (e) {
+    var all = links(), i = all.indexOf(document.activeElement);
+    if (i < 0) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); (all[i + 1] || all[i]).focus(); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); (i === 0 ? box : all[i - 1]).focus(); }
+    else if (e.key === "Escape") { e.preventDefault(); results.innerHTML = ""; box.focus(); }
+  });
+})();

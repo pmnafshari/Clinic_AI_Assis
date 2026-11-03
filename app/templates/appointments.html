@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_reason.html" import reason_box %}
 {# P23 - appointments: day (time x clinician), week, month; filters; requests apart from bookings; the booking panel
    opens on demand. every control here posts to a route that already enforces manage_appointments.
    correction 2: the three views draw ONE dataset (range_rows) with the same filters; the controls sit in one bar in
@@ -241,8 +242,7 @@
             </form>
             <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}" class="ux-mini-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
-              <label class="form-label small" for="dreason-{{ r.id }}">Reason for declining<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
-              <textarea id="dreason-{{ r.id }}" name="reason" class="form-control form-control-sm" rows="1" maxlength="200" required data-grow></textarea>
+              {{ reason_box('dreason-' ~ r.id, reasons.DECLINE, 'Reason for declining', who=r.patient_name, maxlength=200) }}
               <button type="submit" class="btn btn-sm btn-outline-secondary">Decline<span class="visually-hidden"> {{ r.patient_name }}</span></button>
             </form>
           </details>

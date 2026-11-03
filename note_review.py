@@ -372,6 +372,9 @@ def reject(conn, review_id, reason, actor, role, sorted_root=None, collection=No
     and stays out of summaries."""
     _require(conn, actor, role, "note_review_reject", f"review:{review_id}")
     row = _row(conn, review_id)
+    if not (reason or "").strip():
+        # P29 U-009: the rejection is kept and listed, so it says why
+        raise ReviewError("invalid", "Give a reason for rejecting: choose one or type it.")
     changed = conn.execute(
         "UPDATE note_reviews SET status = 'rejected', decided_by = ?, decided_at = ?,"
         " decision_reason = ? WHERE id = ? AND status IN ('pending', 'extraction_failed')",

@@ -90,6 +90,9 @@ final class WorkspaceWindow: NSObject, NSWindowDelegate, WKNavigationDelegate, W
         let config = WKWebViewConfiguration()
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: p.storeID)
         config.preferences.javaScriptCanOpenWindowsAutomatically = false
+        // P29 U-021: WebKit leaves links out of Tab unless asked; staff pages are mostly links. buttons follow the
+        // Mac's own Keyboard navigation setting.
+        config.preferences.tabFocusesLinks = true
         config.userContentController.addUserScript(WKUserScript(source: Self.pageScript(writes: app.settings.writesAllowed(p)),
                                                                 injectionTime: .atDocumentStart, forMainFrameOnly: true))
         let w = WKWebView(frame: .zero, configuration: config)

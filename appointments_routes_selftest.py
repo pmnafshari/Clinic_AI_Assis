@@ -348,6 +348,20 @@ def selftest():
             == "requested", "12g: a decline without a reason went through"
         assert "reason" in page12g.lower(), "12g: and the page says a reason is needed"
 
+        # 12i. P29 U-009: the decline reason is a short list plus Other. a choice is a reason;
+        # Other, or a value that is not on the list, still needs typed words
+        page12i = dentist.get(f"/appointments?day={soon12}").text
+        assert re.search(rf'<select[^>]+id="dreason-{req3}-pick"[^>]+name="reason_choice"', page12i) \
+            and '<option value="other">Other' in page12i, "12i U-009: the decline has no reason list"
+        for bad in ({"reason_choice": "other", "reason": " "}, {"reason_choice": "made up", "reason": ""}):
+            dentist.post(f"/appointments/{req3}/decline", data=dict(bad, day=soon12))
+            assert _rows(db_path, "SELECT status FROM appointments WHERE id = ?", (req3,))[0]["status"] \
+                == "requested", f"12i: {bad} declined the request"
+        dentist.post(f"/appointments/{req3}/decline",
+                     data={"reason_choice": "Dentist not available", "reason": "", "day": soon12})
+        row12i = _rows(db_path, "SELECT status, note FROM appointments WHERE id = ?", (req3,))[0]
+        assert (row12i["status"], row12i["note"]) == ("declined", "Dentist not available"), dict(row12i)
+
         # --- the month calendar (phase 48) --------------------------------
         #
         # asserted through the aria-label rather than the day number, because

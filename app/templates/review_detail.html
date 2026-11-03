@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_reason.html" import reason_box %}
 {% block content %}
 {% set r = view.review %}
 {% set x = view.extraction %}
@@ -91,8 +92,7 @@
     <form method="post" action="{{ url_for('review.reject', review_id=r.id) }}" class="d-flex gap-2 align-items-end flex-wrap">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div>
-        <label for="reason" class="form-label">Reason</label>
-        <input id="reason" name="reason" class="form-control form-control-sm" maxlength="500">
+        {{ reason_box('reason', reasons.REJECT_NOTE, 'Reason for rejecting', maxlength=500) }}
       </div>
       <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
     </form>
@@ -111,8 +111,7 @@
       <form method="post" action="{{ url_for('review.reject', review_id=r.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div>
-          <label for="reason_f" class="form-label">Reason</label>
-          <input id="reason_f" name="reason" class="form-control form-control-sm" maxlength="500">
+          {{ reason_box('reason_f', reasons.REJECT_NOTE, 'Reason for rejecting', maxlength=500) }}
         </div>
         <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
       </form>

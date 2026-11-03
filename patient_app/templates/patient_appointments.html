@@ -119,6 +119,14 @@
         </div>
       </fieldset>
       <div class="mb-3">
+        <label for="reason-pick" class="form-label">{{ t('appt_reason_pick', lang) }}</label>
+        <select id="reason-pick" name="reason_choice" class="form-select" data-reason-pick="reason">
+          <option value="">{{ t('appt_reason_none', lang) }}</option>
+          {% for key in reason_keys %}<option value="{{ key }}" {{ 'selected' if request.form.get('reason_choice') == key else '' }}>{{ t('appt_reason_' ~ key, lang) }}</option>{% endfor %}
+          <option value="other" {{ 'selected' if request.form.get('reason_choice') == 'other' else '' }}>{{ t('appt_reason_other', lang) }}</option>
+        </select>
+      </div>
+      <div class="mb-3">
         <label for="reason" class="form-label">{{ t('appt_request_reason', lang) }}</label>
         <textarea id="reason" name="reason" class="form-control" maxlength="200" rows="3" aria-describedby="reason-count">{{ request.form.get('reason', '') }}</textarea>
         <p class="patient-counter" id="reason-count" data-count-for="reason">0 / 200 {{ t('ui_chars', lang) }}</p>

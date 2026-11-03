@@ -79,6 +79,8 @@ def create_app():
 
     # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
+    from . import reasons
+    app.jinja_env.globals["reasons"] = reasons             # P29 U-009: the reason lists
     from .nav import notifications, sidebar
     app.jinja_env.globals["side_nav"] = sidebar             # P23: the role-aware sidebar
     app.jinja_env.globals["top_notifications"] = notifications   # P30: what is waiting, for the top bar's bell

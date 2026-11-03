@@ -1,0 +1,12 @@
+{# P29 U-009: a reason from a short list, or Other with the words typed below. the list posts as
+   reason_choice and the words as reason; app/reasons.py joins them. Other makes the words required. #}
+{% macro reason_box(id, choices, label, required=true, who='', maxlength=300) %}
+<label class="form-label small" for="{{ id }}-pick">{{ label }}{% if who %}<span class="visually-hidden"> ({{ who }})</span>{% endif %}</label>
+<select class="form-select form-select-sm" id="{{ id }}-pick" name="reason_choice" data-reason-pick="{{ id }}"{% if required %} required{% endif %}>
+  <option value="">Choose a reason</option>
+  {% for c in choices %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+  <option value="other">Other - type it below</option>
+</select>
+<label class="form-label small mt-1" for="{{ id }}">In your words <span class="text-body-secondary">(needed for Other)</span>{% if who %}<span class="visually-hidden"> ({{ who }})</span>{% endif %}</label>
+<textarea class="form-control form-control-sm" id="{{ id }}" name="reason" rows="1" maxlength="{{ maxlength }}" data-grow></textarea>
+{% endmacro %}

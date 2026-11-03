@@ -208,7 +208,15 @@ STRINGS = {
     "appt_request_title": {"it": "Chiedi un appuntamento", "en": "Request an appointment"},
     "appt_request_day": {"it": "Giorno preferito", "en": "Preferred day"},
     "appt_request_period": {"it": "Quando", "en": "When"},
-    "appt_request_reason": {"it": "Motivo (facoltativo)", "en": "Reason (optional)"},
+    "appt_request_reason": {"it": "Dettagli (facoltativo, da scrivere se scegli Altro)",
+                            "en": "Details (optional - write them if you choose Other)"},
+    # P29 U-009: the visit reason list. Italian awaits native-speaker review
+    "appt_reason_pick": {"it": "Motivo della visita", "en": "Reason for the visit"},
+    "appt_reason_none": {"it": "Scegli un motivo (facoltativo)", "en": "Choose a reason (optional)"},
+    "appt_reason_checkup": {"it": "Controllo", "en": "Check-up"},
+    "appt_reason_cleaning": {"it": "Pulizia dei denti", "en": "Teeth cleaning"},
+    "appt_reason_pain": {"it": "Dolore o un problema", "en": "Pain or a problem"},
+    "appt_reason_other": {"it": "Altro - scrivilo sotto", "en": "Other - write it below"},
     "appt_request_send": {"it": "Invia richiesta", "en": "Send request"},
     "appt_request_ok": {
         "it": "Richiesta inviata. La clinica ti ricontatta per confermare.",

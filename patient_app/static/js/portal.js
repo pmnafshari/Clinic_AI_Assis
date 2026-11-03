@@ -131,3 +131,12 @@
     try { if (localStorage.getItem('pp-files-view') === 'list') setMode('list'); } catch (error) { /* not remembered */ }
   }
 })();
+
+// P29 U-009: Altro in the reason list needs the words typed under it
+document.querySelectorAll('[data-reason-pick]').forEach(pick => {
+  const words = document.getElementById(pick.dataset.reasonPick);
+  if (!words) return;
+  const sync = () => { words.required = pick.value === 'other'; };
+  pick.addEventListener('change', sync);
+  sync();
+});

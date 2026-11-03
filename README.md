@@ -216,7 +216,8 @@ There is no clinical X-ray analysis. The go/no-go record and the checks that kee
 synthetic images, off by default, is described in [`docs/xray/DEMO-MODEL-CARD.md`](docs/xray/DEMO-MODEL-CARD.md).
 
 Install the browser tooling with `.venv/bin/pip install -r requirements-dev.txt` then
-`.venv/bin/python -m playwright install chromium`. It is development-only and never goes on
+`.venv/bin/python -m playwright install chromium webkit` (WebKit is the macOS app's engine;
+`e2e_p29_staff.py` checks the keyboard path in it). It is development-only and never goes on
 the clinic machine.
 
 ## Screenshots

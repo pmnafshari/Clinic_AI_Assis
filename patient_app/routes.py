@@ -550,8 +550,11 @@ def appointments_page():
     prefill_day, prefill_period = _prefill()
     return render_template("patient_appointments.html",
                            booked=booked, requested=requested,
-                           history=_appointment_history(get_db(), cf),
+                           history=_appointment_history(get_db(), cf), reason_keys=REASON_KEYS,
                            prefill_day=prefill_day, prefill_period=prefill_period)
+
+
+REASON_KEYS = ("checkup", "cleaning", "pain")
 
 
 @patient_bp.route("/appointments/request", methods=["POST"])
@@ -561,7 +564,13 @@ def appointments_request():
     lang = current_language()
     day = (request.form.get("day") or "").strip()
     period = (request.form.get("period") or "").strip()
-    reason = (request.form.get("reason") or "").strip()[:200] or None
+    reason = (request.form.get("reason") or "").strip()
+    choice = request.form.get("reason_choice") or ""
+    if choice in REASON_KEYS:
+        # P29 U-009: the choice in the patient's words, then anything typed
+        picked = t("appt_reason_" + choice, lang)
+        reason = f"{picked}: {reason}" if reason else picked
+    reason = reason[:200] or None
     try:
         new_id = appointments.request(conn, cf, day, period, reason)
     except ValueError as e:
@@ -571,7 +580,7 @@ def appointments_request():
             "appt_error_period" if "morning" in str(e) else "appt_error_generic")
         booked, requested = appointments.open_for_patient(conn, cf)
         return render_template("patient_appointments.html", booked=booked,
-                               requested=requested, error=t(key, lang),
+                               requested=requested, error=t(key, lang), reason_keys=REASON_KEYS,
                                history=_appointment_history(conn, cf)), 400
     log_audit(conn, cf, "patient", "patient_appointment_request", str(new_id),
               allowed=1, ip=net.from_request(request))

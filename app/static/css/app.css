@@ -1592,3 +1592,6 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 .app-counter { display: block; margin-top: 0.25rem; font-size: 0.8125rem; color: var(--ds-text-muted); }
 .app-counter.is-full { color: var(--ds-danger, #b42318); font-weight: 500; }
 textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
+
+/* P29 U-021: the keys under the lookup box */
+.app-search-keys { margin: 0 .25rem .375rem; font-size: .8rem; color: var(--bs-secondary-color); }

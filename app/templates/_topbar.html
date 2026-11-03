@@ -6,7 +6,8 @@
 {% set clock = clinic_clock() %}
 <header class="app-topbar" data-ux="topbar">
   <div class="app-topbar-inner">
-    <button class="btn btn-link app-topbar-toggle d-lg-none" type="button" data-bs-toggle="offcanvas"
+    {# P29 U-021: tabindex="0" on the buttons - WebKit (the macOS app) leaves plain buttons out of Tab #}
+    <button class="btn btn-link app-topbar-toggle d-lg-none" type="button" tabindex="0" data-bs-toggle="offcanvas"
             data-bs-target="#app-side" aria-controls="app-side" aria-label="Open navigation">
       <i class="bi bi-list" aria-hidden="true"></i>
     </button>
@@ -33,7 +34,7 @@
       </p>
       <span class="app-topbar-sep" aria-hidden="true"></span>
       <div class="dropdown">
-        <button class="app-bell" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+        <button class="app-bell" type="button" tabindex="0" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
                 aria-label="{{ 'Notifications, ' ~ waiting | length ~ (' thing waiting' if waiting | length == 1 else ' things waiting') if waiting else 'Notifications, nothing waiting' }}">
           <i class="bi bi-bell" aria-hidden="true"></i>
           {% if waiting %}<span class="app-bell-count" aria-hidden="true">{{ waiting | length }}</span>{% endif %}
@@ -51,7 +52,7 @@
         </div>
       </div>
       <div class="dropdown">
-        <button class="app-account" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Your account">
+        <button class="app-account" type="button" tabindex="0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Your account">
           <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}" aria-hidden="true">{{ g.user.username | initials }}</span>
           <span class="app-account-text"><strong>{{ g.user.username }}</strong><small>{{ g.user.role }}</small></span>
           <i class="bi bi-chevron-down" aria-hidden="true"></i>

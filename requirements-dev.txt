@@ -3,7 +3,7 @@
 
 # drives the browser-based tooling - e2e_chat_walk.py, e2e_intake_walk.py and
 # shot_pages.py. needs a one-off browser download after install:
-#     .venv/bin/python -m playwright install chromium
+#     .venv/bin/python -m playwright install chromium webkit
 playwright==1.62.0
 
 # baseline security scans (P02.05). both only read the repo; pip-audit sends

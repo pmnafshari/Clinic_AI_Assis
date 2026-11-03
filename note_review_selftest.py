@@ -478,6 +478,19 @@ def routes(tmp):
         "20d: an earlier note is told it is not in the record"
     assert "Confirm marks it as reviewed" in old and "Reject keeps the visit" in old, \
         "20d: the earlier note page does not explain its buttons"
+    # 20e. P29 U-009: a reject reason comes from a short list or is typed; no reason, no rejection
+    old_page = dentist.get(f"/reviews/{lid}").text
+    assert 'name="reason_choice"' in old_page and '<option value="other">Other' in old_page, \
+        "20e U-009: the reject reason has no list"
+    blank = dentist.post(f"/reviews/{lid}/reject", data={"csrf_token": csrf(page), "reason_choice": "other",
+                                                         "reason": " "}, follow_redirects=True).text
+    assert conn.execute("SELECT status FROM note_reviews WHERE id = ?", (lid,)).fetchone()[0] == "pending", \
+        "20e: a reject with no reason went through"
+    assert "give a reason" in blank.lower(), "20e: and the page does not say a reason is needed"
+    dentist.post(f"/reviews/{lid}/reject", data={"csrf_token": csrf(page), "reason_choice": "Already filed",
+                                                 "reason": ""})
+    assert tuple(conn.execute("SELECT status, decision_reason FROM note_reviews WHERE id = ?",
+                              (lid,)).fetchone()) == ("rejected", "Already filed"), "20e: the chosen reason"
     conn.close()
 
 

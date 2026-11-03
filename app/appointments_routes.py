@@ -8,6 +8,7 @@ from flask import Blueprint, flash, g, redirect, render_template, request, url_f
 import appointments
 from auth import authorize, log_audit
 
+from . import reasons
 from .db import get_db
 
 appointments_bp = Blueprint("appointments", __name__)
@@ -313,8 +314,7 @@ def decline(appointment_id):
 
     day = request.form.get("day") or clinic_time.now().date().isoformat()
     try:
-        appointments.decline(get_db(), appointment_id,
-                             (request.form.get("reason") or "").strip() or None)
+        appointments.decline(get_db(), appointment_id, reasons.chosen(request.form, reasons.DECLINE) or None)
     except ValueError as e:
         flash(str(e), "error")
     else:

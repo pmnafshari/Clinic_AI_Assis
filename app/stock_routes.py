@@ -6,6 +6,7 @@ import inventory
 import inventory_job
 from auth import authorize, log_audit
 
+from . import reasons
 from .db import get_db
 
 stock_bp = Blueprint("stock", __name__)
@@ -51,7 +52,7 @@ def move(item_id):
     form = request.form
     try:
         _, created = inventory.move(get_db(), item_id, form.get("kind", ""), form.get("quantity"),
-                                    g.user["username"], g.user["role"], form.get("reason"),
+                                    g.user["username"], g.user["role"], reasons.chosen(form, reasons.STOCK),
                                     form.get("key") or None)
         flash("Recorded." if created else "That was already recorded.", "success")
     except PermissionError:
