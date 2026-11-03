@@ -242,7 +242,7 @@
             <form method="post" action="{{ url_for('appointments.decline', appointment_id=r.id) }}" class="ux-mini-form">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="day" value="{{ day }}">
               <label class="form-label small" for="dreason-{{ r.id }}">Reason for declining<span class="visually-hidden"> ({{ r.patient_name }})</span></label>
-              <input type="text" id="dreason-{{ r.id }}" name="reason" class="form-control form-control-sm" maxlength="200" required>
+              <textarea id="dreason-{{ r.id }}" name="reason" class="form-control form-control-sm" rows="1" maxlength="200" required data-grow></textarea>
               <button type="submit" class="btn btn-sm btn-outline-secondary">Decline<span class="visually-hidden"> {{ r.patient_name }}</span></button>
             </form>
           </details>

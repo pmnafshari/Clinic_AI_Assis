@@ -212,6 +212,35 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   });
 })();
 
+// P29 U-007 / R-021: a text field with a limit of 150 or more shows how much is used and says
+// when the limit is reached; a textarea marked data-grow grows with what is typed. the server
+// still cuts or refuses - this only says so before it happens
+(function () {
+  document.querySelectorAll("textarea[maxlength], input[maxlength]:not([type]), input[type=text][maxlength]").forEach(function (field) {
+    var max = parseInt(field.getAttribute("maxlength"), 10);
+    if (!max || max < 150 || field.name === "q" || field.hasAttribute("data-no-counter")) return;
+    var counter = document.createElement("span");
+    counter.className = "app-counter";
+    field.insertAdjacentElement("afterend", counter);
+    var said = document.createElement("span");
+    said.className = "visually-hidden";
+    said.setAttribute("role", "status");
+    counter.insertAdjacentElement("afterend", said);
+    function update() {
+      var full = field.value.length >= max;
+      counter.textContent = field.value.length + " / " + max + " characters" + (full ? " - limit reached, nothing more fits" : "");
+      counter.classList.toggle("is-full", full);
+      said.textContent = full ? "Limit of " + max + " characters reached" : "";
+      if (field.hasAttribute("data-grow")) {
+        field.style.height = "auto";
+        field.style.height = field.scrollHeight + "px";
+      }
+    }
+    field.addEventListener("input", update);
+    update();
+  });
+})();
+
 // P29 NEW-02: the new-password checklist ticks as the rules are met. the server checks
 // them again; this only shows progress
 (function () {
@@ -303,5 +332,38 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
       buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
       panels.forEach(function (panel) { panel.hidden = !(show === "all" || panel.getAttribute("data-bill-panel") === show); });
     });
+  });
+})();
+
+// P29 R-028: a form marked data-unsaved-guard with typed changes asks before a link inside the
+// app takes the user away - in the app's own dialog. closing the tab, reloading or going back
+// still gets the browser's own warning, the only one a page may show there.
+(function () {
+  var forms = document.querySelectorAll("[data-unsaved-guard]");
+  var dialog = document.getElementById("leave-dialog");
+  if (!forms.length) return;
+  var dirty = false, target = null;
+  forms.forEach(function (f) {
+    if (f.hasAttribute("data-dirty-from-start")) dirty = true;
+    f.addEventListener("input", function () { dirty = true; });
+    f.addEventListener("submit", function () { dirty = false; });
+  });
+  window.addEventListener("beforeunload", function (e) { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+  if (!dialog || typeof dialog.showModal !== "function") return;
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest("a[href]");
+    if (!dirty || !a || a.target === "_blank" || e.defaultPrevented || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    var url = new URL(a.href, location.href);
+    if (url.origin !== location.origin || (url.pathname === location.pathname && url.hash)) return;
+    e.preventDefault();
+    target = url.href;
+    dialog.showModal();
+  });
+  dialog.querySelector("[data-leave-stay]").addEventListener("click", function () { target = null; dialog.close(); });
+  dialog.querySelector("[data-leave-go]").addEventListener("click", function () {
+    var go = target;
+    dirty = false;
+    dialog.close();
+    if (go) location.href = go;
   });
 })();

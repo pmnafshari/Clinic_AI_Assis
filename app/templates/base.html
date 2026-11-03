@@ -49,6 +49,14 @@
   {% endif %}
   <script src="{{ url_for('static', filename='vendor/bootstrap/5.3.3/bootstrap.bundle.min.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/htmx/1.9.12/htmx.min.js') }}"></script>
+  <dialog class="app-dialog" id="leave-dialog" aria-labelledby="leave-dialog-title">
+    <h2 class="ux-card-title" id="leave-dialog-title">Leave without saving?</h2>
+    <p>What you typed on this page is not saved. If you leave now it is lost.</p>
+    <div class="app-dialog-actions">
+      <button type="button" class="btn btn-outline-secondary" data-leave-stay autofocus>Stay on this page</button>
+      <button type="button" class="btn btn-danger" data-leave-go>Leave without saving</button>
+    </div>
+  </dialog>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script src="{{ url_for('static', filename='js/list_tools.js') }}"></script>
 </body>

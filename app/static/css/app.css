@@ -1587,3 +1587,8 @@ th[aria-sort] .sx-th-arrow { opacity: 1; }
 .confirm-rows > div { display: grid; grid-template-columns: 6rem 1fr; gap: 0.75rem; }
 .confirm-rows dt { font-weight: 500; color: var(--ds-text-muted); }
 .confirm-rows dd { margin: 0; overflow-wrap: anywhere; }
+
+/* P29 U-007 / R-021: what is left in a limited field */
+.app-counter { display: block; margin-top: 0.25rem; font-size: 0.8125rem; color: var(--ds-text-muted); }
+.app-counter.is-full { color: var(--ds-danger, #b42318); font-weight: 500; }
+textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }

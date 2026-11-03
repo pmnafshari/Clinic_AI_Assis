@@ -124,6 +124,29 @@ def main():
                         expect(page.locator("#btime")).to_have_value("11:00")
                         checks.append("R-006/R-007 refused booking kept")
 
+                    # U-007 / R-021: a limited field counts what is left and says when it is full
+                    page.goto(f"{base}/appointments?view=day&day={day}&book=1")
+                    counter = page.locator("#bnote + .app-counter")
+                    expect(counter).to_have_text("0 / 200 characters")
+                    page.fill("#bnote", "x" * 200)
+                    expect(counter).to_contain_text("200 / 200 characters")
+                    expect(counter).to_contain_text("limit reached")
+                    checks.append(f"U-007 counter {width}")
+
+                    # R-028: leaving typed changes through a link asks in the app's own dialog
+                    page.goto(base + "/notes/new")
+                    page.fill("#raw_note", "not saved yet")
+                    page.locator("a.app-brand:visible").first.click()
+                    leave = page.locator("#leave-dialog")
+                    expect(leave).to_be_visible()
+                    leave.locator("[data-leave-stay]").click()
+                    expect(leave).to_be_hidden()
+                    expect(page.locator("#raw_note")).to_have_value("not saved yet")
+                    page.locator("a.app-brand:visible").first.click()
+                    leave.locator("[data-leave-go]").click()
+                    page.wait_for_url(base + "/")
+                    checks.append(f"R-028 leave dialog {width}")
+
                     # R-002: each password field shows and hides on its own
                     page.goto(base + "/change-password")
                     for field in ("current", "password", "confirm"):

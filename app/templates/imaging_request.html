@@ -66,7 +66,7 @@
     <form method="post" action="{{ url_for('imaging.resolve', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label for="resolution" class="form-label">What reception did</label><select id="resolution" name="resolution" class="form-select form-select-sm">{% for k, v in booking.choices %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-      <div><label for="rnote-b" class="form-label">Why, in a few words</label><input id="rnote-b" name="note" class="form-control form-control-sm" maxlength="200"></div>
+      <div><label for="rnote-b" class="form-label">Why, in a few words</label><textarea id="rnote-b" name="note" class="form-control form-control-sm" rows="1" maxlength="200" data-grow></textarea></div>
       <button class="btn btn-primary btn-sm" type="submit">Record resolution</button>
     </form>
     {% endif %}

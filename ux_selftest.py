@@ -262,6 +262,12 @@ def selftest():
         assert "data-apply-button" in dayhtml and "Filters changed - press Show to apply" in dayhtml, \
             "5 R-010: Show does not mark unapplied filters"
         js = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
+        # P29 U-007 / R-021: limited fields count, say when full, and the short-answer boxes grow
+        assert "P29 U-007" in js and "limit reached" in js and "data-grow" in js, "5 U-007: no counter code"
+        imaging_t = (Path(__file__).parent / "app" / "templates" / "imaging_request.html").read_text()
+        assert '<textarea id="rnote-b"' in imaging_t and "data-grow" in imaging_t, "5 U-007: 'in a few words' is one line"
+        appt_t = (Path(__file__).parent / "app" / "templates" / "appointments.html").read_text()
+        assert '<textarea id="dreason-' in appt_t, "5 U-007: the decline reason is one line"
         cancel_js = js[js.index("P29 R-009"):js.index("P29 R-010")]
         assert cancel_js.count("HTMLFormElement.prototype.submit") == 1 and \
             cancel_js.index("HTMLFormElement.prototype.submit") > cancel_js.index('yes.addEventListener("click"'), \
@@ -315,6 +321,12 @@ def selftest():
                                                                    procedures=["prophy"], clinical_notes="igiene")
         blank = dentist.get("/notes/new").get_data(as_text=True)
         assert 'data-step="1" aria-current="step"' in blank and "data-unsaved-guard" in blank, "8: stages or guard missing"
+        # P29 R-028: leaving through a link asks in the app's dialog; close/reload keep the browser's own warning
+        assert re.search(r'<dialog[^>]+id="leave-dialog"', blank) and "Leave without saving" in blank, \
+            "8 R-028: no in-app leave dialog"
+        app_js = (Path(__file__).parent / "app" / "static" / "js" / "app.js").read_text()
+        guard = app_js[app_js.index("P29 R-028"):]
+        assert "beforeunload" in guard and "leave-dialog" in guard, "8 R-028: the guard is not in app.js"
         draft = dentist.post("/notes/new", data={"raw_note": "igiene fatta"}, follow_redirects=True).get_data(as_text=True)
         assert 'data-step="2" aria-current="step"' in draft and "Draft - not saved" in _text(draft), "8: draft state not shown"
         assert re.search(r'<form[^>]*data-unsaved-guard[^>]*>(?:(?!</form>).)*name="confirm_token"', draft, re.S), \

@@ -146,16 +146,4 @@
   </aside>
 </div>
 </div>
-<script>
-  // unsaved-change guard: typing in a note form, or a draft not yet saved, asks before the page is left.
-  (function () {
-    var dirty = false;
-    document.querySelectorAll('[data-unsaved-guard]').forEach(function (f) {
-      if (f.hasAttribute('data-dirty-from-start')) dirty = true;
-      f.addEventListener('input', function () { dirty = true; });
-      f.addEventListener('submit', function () { dirty = false; });
-    });
-    window.addEventListener('beforeunload', function (e) { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
-  })();
-</script>
 {% endblock %}
