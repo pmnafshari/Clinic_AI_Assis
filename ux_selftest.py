@@ -905,6 +905,68 @@ def selftest():
     print("selftest ok")
 
 
+def _empties(html):
+    return [" ".join(re.sub(r"<[^>]+>", " ", m).split())
+            for m in re.findall(r'<p class="(?:dash-empty-line|ux-empty)[^"]*">(.*?)</p>', html, re.S)]
+
+
+def empty_states():
+    """P29 U-006: on an empty clinic every list says what puts something there or what to do next, not only that it
+    is empty. one patient with nothing on file, one stock item with no movements."""
+    import inventory
+    import app.db as app_db
+    import clinic_guides
+    from app import create_app
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "empty.sqlite"
+        conn = storage.init_db(str(db))
+        for user, role in (("dentist", "dentist"), ("assistant", "assistant")):
+            conn.execute("INSERT INTO users (username, password_hash, role, active) VALUES (?, ?, ?, 1)",
+                         (user, generate_password_hash(f"{user}-pw-123"), role))
+        cf = "ZZUE800101010101"
+        patient_id.seed_patient(conn, cf, "Elsa Vuota", "+393401110000")
+        conn.commit()
+        app_db.DB_PATH = str(db)
+        clinic_guides.DB_PATH = str(Path(tmp) / "guides.sqlite")
+        clinic_guides.STORE = Path(tmp) / "guides"
+        app = create_app()
+        app.config["WTF_CSRF_ENABLED"] = False
+        clients = {u: _client(app, u, f"{u}-pw-123") for u in ("dentist", "assistant")}
+        want = [
+            ("dentist", "/handoffs", ["Nobody is waiting.", "asks the portal's assistant for a person"]),
+            ("dentist", "/handoffs?status=claimed", ["Nothing in that state.", "Show all call-backs"]),
+            ("dentist", "/reminders", ["Nothing is queued.", "booked appointment"]),
+            ("dentist", "/data-requests", ["No data requests.", "from the patient's record"]),
+            ("dentist", "/stock", ["No items yet.", "Add one in Add an item"]),
+            ("dentist", "/stock?show=low", ["No items yet."]),
+            ("assistant", "/stock", ["No items yet.", "A dentist adds them"]),
+            ("dentist", "/reviews", ["Nothing is waiting.", "An uploaded note waits here"]),
+            ("dentist", f"/patients/{cf}/documents", ["Nothing waiting.", "until a dentist confirms or rejects it"]),
+            ("dentist", f"/patients/{cf}/billing", ["No invoices on record.", "when a visit with prices is filed",
+                                                    "No payments recorded.", "on an issued invoice"]),
+            ("dentist", f"/patients/{cf}", ["No visits on record.", "Filing a note for this patient adds one",
+                                            "No data requests.", "File one below"]),
+            ("assistant", f"/patients/{cf}", ["No data requests.", "File one below"]),
+        ]
+        for role, path, phrases in want:
+            page = clients[role].get(path).get_data(as_text=True)
+            said = " | ".join(_empties(page))
+            for phrase in phrases:
+                assert phrase in said, f"U-006 {role} {path}: the empty line does not say {phrase!r}: {said!r}"
+        item = inventory.create_item(conn, "Vuoto zz", "pz", 5, "dentist", "dentist")
+        conn.commit()
+        said = " | ".join(_empties(clients["dentist"].get(f"/stock/{item}").get_data(as_text=True)))
+        assert "No movements yet." in said and "Record a delivery, a use or a count above" in said, f"U-006 stock item: {said!r}"
+        low = " | ".join(_empties(clients["dentist"].get("/stock?show=low").get_data(as_text=True)))
+        assert low == "", f"U-006: a low list with a low item still says it is empty: {low!r}"
+        inventory.move(conn, item, "receipt", 40, "dentist", "dentist", key="u6-1")
+        conn.commit()
+        low = " | ".join(_empties(clients["dentist"].get("/stock?show=low").get_data(as_text=True)))
+        assert "Nothing is low" in low and "above its alert level" in low and "Show all 1" in low, f"U-006 low: {low!r}"
+        conn.close()
+    print("empty states ok")
+
+
 def main():
     if "--selftest" not in sys.argv:
         print("usage: python ux_selftest.py --selftest")
@@ -913,6 +975,7 @@ def main():
     clinic_time.now = lambda env=None: TODAY
     try:
         selftest()
+        empty_states()
     finally:
         clinic_time.now = real
 

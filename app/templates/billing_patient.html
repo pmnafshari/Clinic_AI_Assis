@@ -104,7 +104,7 @@
   </div>
 </section>
 {% else %}
-<p class="dash-empty-line">No invoices on record.</p>
+<p class="dash-empty-line">No invoices on record. One is drafted when a visit with prices is filed for this patient.</p>
 {% endfor %}
 
 <section class="card dash-card" aria-labelledby="pay-title">
@@ -152,7 +152,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No payments recorded.</p>
+    <p class="dash-empty-line">No payments recorded. Record one on an issued invoice above.</p>
     {% endif %}
   </div>
 </section>

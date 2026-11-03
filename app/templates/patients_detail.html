@@ -98,7 +98,7 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p class="dash-empty-line">No visits on record.</p>
+        <p class="dash-empty-line">No visits on record. Filing a note for this patient adds one.</p>
         {% endif %}
       </div>
     </section>
@@ -183,7 +183,7 @@
           {% endfor %}
         </ol>
         {% else %}
-        <p class="dash-empty-line">No clinical visits on record.</p>
+        <p class="dash-empty-line">No clinical visits on record. Filing a note for this patient adds one.</p>
         {% endif %}
       </div>
     </section>
@@ -316,7 +316,7 @@
         </table>
         {% endif %}
         {% else %}
-        <p class="dash-empty-line">No invoices on record.</p>
+        <p class="dash-empty-line">No invoices on record. One is drafted when a visit with prices is filed for this patient.</p>
         {% endif %}
       </div>
     </section>
@@ -380,7 +380,7 @@
           {% endfor %}
         </ul>
         {% else %}
-        <p class="dash-empty-line">No requests.</p>
+        <p class="dash-empty-line">No data requests.{% if authorize(g.user.role, 'file_data_request') %} File one below when the patient asks for access, a copy, a correction or erasure.{% endif %}</p>
         {% endif %}
         {% if authorize(g.user.role, 'file_data_request') %}
         <form method="post" action="{{ url_for('data_requests.file_for_patient', cf=cf) }}" class="d-flex gap-2 flex-wrap mt-3">

@@ -60,7 +60,7 @@
     {# P29 R-003: each tab says how many it holds; the one applied is marked and said under the head #}
     <nav class="sx-tabs sx-tabs-sm" aria-label="Show"><a href="{{ url_for('stock.index') }}"{% if not low_only %} aria-current="page"{% endif %}>All <span class="sx-count">{{ item_count }}</span></a><a href="{{ url_for('stock.index', show='low') }}"{% if low_only %} aria-current="page"{% endif %}>Low only <span class="sx-count">{{ low_count }}</span></a></nav>
   </div>
-  {% if low_only %}<p class="ux-filter-note" data-ux="stock-filter">Showing the {{ low_count }} item{{ '' if low_count == 1 else 's' }} at or below {{ 'its' if low_count == 1 else 'their' }} alert level. <a href="{{ url_for('stock.index') }}">Show all {{ item_count }}</a></p>{% endif %}
+  {% if low_only and items %}<p class="ux-filter-note" data-ux="stock-filter">Showing the {{ low_count }} item{{ '' if low_count == 1 else 's' }} at or below {{ 'its' if low_count == 1 else 'their' }} alert level. <a href="{{ url_for('stock.index') }}">Show all {{ item_count }}</a></p>{% endif %}
   {# P30: search, Filter by unit and Sort on the items loaded here #}
   {% if items %}
   {% set unit_options = [] %}{% for u in units %}{% set _ = unit_options.append([u, u]) %}{% endfor %}
@@ -94,7 +94,8 @@
     </table>
     </div>
     {% else %}
-    <p class="dash-empty-line">{{ 'Nothing is low.' if low_only else 'No items yet.' }}</p>
+    {# P29 U-006: say why it is empty and what to do #}
+    <p class="dash-empty-line">{% if not item_count %}No items yet. {{ 'Add one in Add an item.' if can_manage else 'A dentist adds them.' }}{% else %}Nothing is low: every item is above its alert level. <a href="{{ url_for('stock.index') }}">Show all {{ item_count }}</a>{% endif %}</p>
     {% endif %}
   </div>
 </section>

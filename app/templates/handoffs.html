@@ -94,7 +94,8 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">{{ 'Nothing in that state.' if status else 'Nobody is waiting.' }}</p>
+    {# P29 U-006: an empty list says what puts something in it #}
+    <p class="dash-empty-line">{% if status %}Nothing in that state. <a href="{{ url_for('handoff.index') }}">Show all call-backs</a>{% else %}Nobody is waiting. A call-back appears here when a patient asks the portal's assistant for a person, or asks something it must not answer.{% endif %}</p>
     {% endif %}
   </div>
 </section>

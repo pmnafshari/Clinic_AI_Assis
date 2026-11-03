@@ -57,7 +57,8 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">{{ 'Nothing in that state.' if status else 'Nothing is queued.' }}</p>
+    {# P29 U-006: an empty list says what puts something in it #}
+    <p class="dash-empty-line">{% if status %}Nothing in that state. <a href="{{ url_for('reminders.index') }}">Show all reminders</a>{% else %}Nothing is queued. The reminder check queues one for each booked appointment, issued invoice and installment that comes due; while sending is off they wait here.{% endif %}</p>
     {% endif %}
   </div>
 </section>
