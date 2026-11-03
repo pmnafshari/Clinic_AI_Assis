@@ -18,6 +18,7 @@ import appointments
 import availability
 import demo_seed
 import inventory
+import ledger
 import storage
 import web_session
 from app import create_app
@@ -27,6 +28,36 @@ from app import db as app_db
 class Quiet(WSGIRequestHandler):
     def log(self, *args, **kwargs):
         pass
+
+
+# R-015: in the page tables, a date, a time, an amount or a phone number never breaks across lines or runs out of its
+# box, and a status or a button stays on one line inside it
+TABLE_CHECK = r"""() => {
+  const bad = [];
+  const re = /\d{4}-\d{2}-\d{2}( \d{2}:\d{2})?|€[\d.,]+|\+\d{8,}/g;
+  const lines = r => new Set([...r.getClientRects()].filter(x => x.width > 0).map(x => Math.round(x.top))).size;
+  document.querySelectorAll('.ux-table-page').forEach(t => {
+    const box = (t.closest('.sx-box') || t.parentElement).getBoundingClientRect();
+    const walk = document.createTreeWalker(t.tBodies[0], NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walk.nextNode())) {
+      for (const m of n.data.matchAll(re)) {
+        const r = document.createRange();
+        r.setStart(n, m.index);
+        r.setEnd(n, m.index + m[0].length);
+        if (lines(r) > 1) bad.push('split: ' + m[0]);
+        if ([...r.getClientRects()].some(x => x.right > box.right + 1)) bad.push('out of its box: ' + m[0]);
+      }
+    }
+    t.querySelectorAll('tbody .btn, tbody .ux-badge').forEach(el => {
+      const r = document.createRange();
+      r.selectNodeContents(el);
+      if (lines(r) > 1) bad.push('wraps: ' + el.textContent.trim());
+      if (el.getBoundingClientRect().right > box.right + 1) bad.push('out of its box: ' + el.textContent.trim());
+    });
+  });
+  return bad;
+}"""
 
 
 def main():
@@ -49,11 +80,18 @@ def main():
         appointments.book(conn, cf, "p29_dentist", f"{day}T11:00", 30)
         conn.commit()
         item_id = inventory.create_item(conn, "P29 guanti", "pz", 5, "p29_dentist", "dentist")
+        # issued and part-paid invoices, so billing has due dates, "of" totals, statuses and Record payment
+        due = (date.today() + timedelta(days=30)).isoformat()
+        for i, (iid,) in enumerate(conn.execute("SELECT id FROM billing_invoices ORDER BY id LIMIT 5").fetchall()):
+            ledger.issue(conn, iid, "p29_dentist", "dentist", due_date=due)
+            if i % 2 == 0:
+                ledger.record_payment(conn, iid, "50,00", "card", f"p29-{iid}", "p29_dentist", "dentist")
+        conn.commit()
         token = web_session.create_session(conn, "p29_dentist", "dentist")
         conn.close()
         app = create_app()
         app.config["TESTING"] = True
-        server = make_server("127.0.0.1", 0, app, request_handler=Quiet)
+        server = make_server("127.0.0.1", 0, app, request_handler=Quiet, threaded=True)   # webkit opens idle connections ahead
         threading.Thread(target=server.serve_forever, daemon=True).start()
         base = f"http://127.0.0.1:{server.server_port}"
         checks = []
@@ -197,6 +235,31 @@ def main():
                     width_px = page.evaluate("document.documentElement.scrollWidth")
                     assert width_px <= width, f"sideways scroll at {width}: {width_px}"
                     assert not errors, errors
+                    context.close()
+
+                # R-014 / R-015: patients and billing between a phone and a wide screen
+                for width in (390, 768, 1024):
+                    context = browser.new_context(viewport={"width": width, "height": 900})
+                    context.add_cookies([{"name": web_session.COOKIE_NAME, "value": token, "url": base}])
+                    page = context.new_page()
+                    for path in ("/patients", "/billing"):
+                        page.goto(base + path)
+                        bad = page.evaluate(TABLE_CHECK)
+                        assert not bad, f"R-015 {path} at {width}: {bad[:6]}"
+                        assert page.evaluate("document.documentElement.scrollWidth") <= width, f"sideways scroll {path} {width}"
+                    if width == 390:
+                        # R-014: the lookup and the filter are full width, a patient is a short card
+                        page.goto(base + "/patients")
+                        look = page.locator(".app-search input[type=search]").bounding_box()
+                        assert look["width"] >= 0.7 * width, f"R-014: the lookup is {look['width']:.0f} px wide"
+                        box = page.locator("#patients-q").bounding_box()
+                        go = page.locator(".ux-search-form button[type=submit]").bounding_box()
+                        assert box["width"] >= 200 and abs(go["y"] - box["y"]) < 8, \
+                            f"R-014: the filter box ({box['width']:.0f} px) and Search are not one row"
+                        tall = max(page.eval_on_selector_all("#patients-rows tr", "rows => rows.map(r => r.getBoundingClientRect().height)"))
+                        assert tall <= 150, f"R-014: a patient card is {tall:.0f} px tall"
+                        expect(page.locator("#patients-rows tr").first.locator("a.btn")).to_be_in_viewport()
+                    checks.append(f"R-014/R-015 layout {width}")
                     context.close()
                 browser.close()
 

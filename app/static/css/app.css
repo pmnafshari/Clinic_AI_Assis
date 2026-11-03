@@ -1595,3 +1595,40 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 
 /* P29 U-021: the keys under the lookup box */
 .app-search-keys { margin: 0 .25rem .375rem; font-size: .8rem; color: var(--bs-secondary-color); }
+
+/* P29 R-015: between a phone and a wide screen a date, an amount, a status or an action stays whole and inside its
+   box; names and the second lines wrap instead. the billing tables give up their shared fixed grid below 1280 px */
+.ux-nowrap { white-space: nowrap; }
+.ux-sub { display: block; white-space: nowrap; font-size: 0.8125rem; }
+@media (min-width: 768px) and (max-width: 1279.98px) {
+  .ux-table-page .ux-badge, .ux-table-page td .btn { white-space: nowrap; }
+  .ux-table-page.ux-bill { table-layout: auto; }
+  .ux-table-page.ux-bill th, .ux-table-page.ux-bill td { width: auto; padding-left: 0.375rem; }
+}
+/* P29 R-014: phones - the top bar's lookup takes a full row of its own, the list filter is one row (box and Search),
+   and a patient is a short card: name and Open, code and phone, then the next appointment and the last visit */
+@media (max-width: 575.98px) {
+  .app-main .app-topbar-inner { height: auto; min-height: 4rem; flex-wrap: wrap; row-gap: 0.5rem; padding-top: 0.625rem; padding-bottom: 0.625rem; }
+  .app-search-form { order: 10; flex: 1 1 100%; max-width: none; }
+  .ux-search-form .ux-filter-label, .ux-search-form #patients-q-help { flex: 1 1 100%; }
+  .ux-search-form .form-control { flex: 1 1 0; min-width: 0; max-width: none; }
+}
+@media (max-width: 767.98px) {
+  .ux-table.ux-table-patients tr { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: 0.75rem; row-gap: 0.125rem;
+    grid-template-areas: "name name open" "cf phone open" "next next next" "last last last"; padding: 0.625rem 0.5rem; }
+  /* the stripe and the hover belong to the card, not to each cell of it */
+  .ux-table.ux-table-patients tbody tr td, .ux-table.ux-table-patients tbody tr:hover td { background: transparent; }
+  .ux-table.ux-table-patients tbody tr:nth-child(even of :not([hidden])) { background: var(--sx-zebra); border-radius: 10px; }
+  .ux-table.ux-table-patients td { display: block; padding: 0; min-height: 0; text-align: left; }
+  .ux-table.ux-table-patients td::before, .ux-table.ux-table-patients td::after { content: none; }
+  .ux-table.ux-table-patients td[data-label="Patient"] { grid-area: name; }
+  .ux-table.ux-table-patients td[data-label="Codice fiscale"] { grid-area: cf; font-size: 0.8125rem; }
+  .ux-table.ux-table-patients td[data-label="Phone"] { grid-area: phone; font-size: 0.8125rem; color: var(--ds-text-muted); }
+  .ux-table.ux-table-patients td[data-label="Next appointment"] { grid-area: next; }
+  .ux-table.ux-table-patients td[data-label="Last visit"] { grid-area: last; }
+  .ux-table.ux-table-patients td[data-label="Record"] { grid-area: open; align-self: center; }
+  .ux-table.ux-table-patients td[data-label="Next appointment"]::before,
+  .ux-table.ux-table-patients td[data-label="Last visit"]::before {
+    content: attr(data-label); float: none; position: static; width: auto; margin: 0 0.375rem 0 0; font-size: 0.8125rem; }
+  .ux-table.ux-table-patients td[data-label="Next appointment"]::before { content: "Next"; }
+}

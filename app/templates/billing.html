@@ -94,10 +94,10 @@
         data-visit="{{ s.visit_date or '' }}" data-band="{{ 'u100' if cents < 10000 else 'm' if cents <= 20000 else 'o200' }}"
         data-state="{{ s.state if s.state in ('draft', 'unknown', 'partially_paid') else 'issued' }}">
       <td data-label="Patient"><strong>{{ s.patient_name }}</strong></td>
-      <td data-label="Invoice">#{{ s.id }} <span class="ux-muted">· visit {{ s.visit_date or 'undated' }}</span></td>
-      <td data-label="Due">{% if key == 'owed' and s.due_date %}{{ s.due_date }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>
+      <td data-label="Invoice">#{{ s.id }} <span class="ux-muted ux-sub">visit {{ s.visit_date or 'undated' }}</span></td>
+      <td data-label="Due">{% if key == 'owed' and s.due_date %}<span class="ux-nowrap">{{ s.due_date }}</span>{% else %}<span class="ux-muted">-</span>{% endif %}</td>
       <td data-label="Amount" class="ux-num">
-        {% if key == 'owed' %}<strong>{{ fmt(s.outstanding_cents, 'en') }}</strong> <span class="ux-muted">of {{ fmt(s.total_cents, 'en') }}</span>
+        {% if key == 'owed' %}<strong class="ux-nowrap">{{ fmt(s.outstanding_cents, 'en') }}</strong> <span class="ux-muted ux-sub">of {{ fmt(s.total_cents, 'en') }}</span>
         {% else %}{{ fmt(s.total_cents, 'en') }}{% endif %}</td>
       <td data-label="Status">{{ state_badge(s) }}</td>
       <td data-label="Action">

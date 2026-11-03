@@ -845,6 +845,12 @@ def selftest():
         swift22 = (Path(__file__).parent / "desktop" / "macos" / "Sources" / "WorkspaceWindow.swift").read_text()
         assert "config.preferences.tabFocusesLinks = true" in swift22, "22 U-021: the app leaves links out of Tab"
 
+        # 23. P29 R-014 / R-015: dates, times and phones in the patients list are kept whole (the browser check in
+        # e2e_p29_staff.py measures it at 390, 768 and 1024), and phones get the short-card layout
+        plist23 = dentist.get("/patients").get_data(as_text=True)
+        assert "ux-table-patients" in plist23, "23 R-014: the patients table has no card layout for phones"
+        assert re.search(r'<span class="ux-nowrap">\d{4}-\d{2}-\d{2}', plist23), "23 R-015: a date in the list can break"
+
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
         demo_seed.seed(conn, seed=22, anchor="2031-03-10")

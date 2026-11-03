@@ -51,7 +51,7 @@
   <div data-ux="patient-rows">
   {% if patients %}
   <div class="sx-box sx-box-table">
-  <table class="ux-table ux-table-page">
+  <table class="ux-table ux-table-page ux-table-patients">
     <caption class="visually-hidden">Patients, sorted by {{ {'name': 'name', 'next': 'next appointment', 'last': 'last visit'}[sort] }}</caption>
     <thead><tr>
       {{ sort_th('name', 'Patient') }}
@@ -70,12 +70,12 @@
         <strong>{{ p.patient_name }}</strong>
         {% if p.possible_duplicate %}<span class="ux-badge ux-badge-requested" title="The duplicate review lists this record; an admin merges or dismisses it">Possible duplicate</span>{% endif %}</td>
       <td data-label="Codice fiscale"><span class="font-monospace" title="Shortened; the record shows it in full">{{ p.codice_fiscale | cf_short }}</span></td>
-      <td data-label="Phone">{% if p.phone %}{{ p.phone | phone }}{% else %}<span class="ux-muted">No phone</span>{% endif %}</td>
+      <td data-label="Phone">{% if p.phone %}<span class="ux-nowrap">{{ p.phone | phone }}</span>{% else %}<span class="ux-muted">No phone</span>{% endif %}</td>
       <td data-label="Next appointment">
-        {% if p.next_appointment %}<span class="ux-badge ux-badge-booked">Booked</span> {{ p.next_appointment }}
+        {% if p.next_appointment %}<span class="ux-badge ux-badge-booked">Booked</span> <span class="ux-nowrap">{{ p.next_appointment }}</span>
         {% elif p.request %}<span class="ux-badge ux-badge-requested">Requested {{ p.request }}</span>
         {% else %}<span class="ux-muted">No booking</span>{% endif %}</td>
-      <td data-label="Last visit">{{ p.last_visit or '' }}{% if not p.last_visit %}<span class="ux-muted">No visit yet</span>{% endif %}</td>
+      <td data-label="Last visit">{% if p.last_visit %}<span class="ux-nowrap">{{ p.last_visit }}</span>{% endif %}{% if not p.last_visit %}<span class="ux-muted">No visit yet</span>{% endif %}</td>
       <td data-label="Record"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}" aria-label="Open {{ p.patient_name }}'s record">Open</a></td>
     </tr>
     {% endfor %}
