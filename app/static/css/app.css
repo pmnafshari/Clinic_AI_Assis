@@ -1753,3 +1753,6 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 
 /* P29 E-001: a field's own problem, under it */
 .ux-field-error { margin: 0.25rem 0 0; font-size: 0.875rem; font-weight: 600; color: #842029; }
+
+/* P29 E-001: the language switch on the two pages without a menu */
+.auth-lang { margin: 0 0 0.5rem; text-align: right; font-size: 0.875rem; }

@@ -1,77 +1,78 @@
 {% extends "base.html" %}
 {# P29 E-001: a walk-in registered at the desk. every problem is said beside its field and what was typed stays; the
-   codice fiscale's check letter shows a typing slip, not whose code it is, so the desk names the document it saw. #}
-{% macro field_error(name) %}{% if problems.get(name) %}<p class="ux-field-error" id="{{ name }}-error">{{ problems[name] }}</p>{% endif %}{% endmacro %}
+   codice fiscale's check letter shows a typing slip, not whose code it is, so the desk names the document it saw.
+   English and Italian (i18n.py). #}
+{% macro field_error(name) %}{% if problems.get(name) %}<p class="ux-field-error" id="{{ name }}-error">{{ _(problems[name]) }}</p>{% endif %}{% endmacro %}
 {% macro described(name) %}{% if problems.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% else %} aria-describedby="{{ name }}-help"{% endif %}{% endmacro %}
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Records</p>
-    <h1 class="ds-page-title">New patient</h1>
-    <p class="ds-page-meta">For someone arriving without a record. Their first visit note adds the rest.</p>
+    <p class="ds-page-eyebrow">{{ _('Records') }}</p>
+    <h1 class="ds-page-title">{{ _('New patient') }}</h1>
+    <p class="ds-page-meta">{{ _('For someone arriving without a record. Their first visit note adds the rest.') }}</p>
   </div>
 <!--/page-head--></div>
 
 {% if existing %}
 <div class="ds-alert ds-alert-warning mb-3" role="alert">
-  <div><strong class="ds-alert-title">Already registered</strong>
-  {{ existing.patient_name }} has this codice fiscale on file - no second record is made.
-  <a href="{{ url_for('patients.detail_view', cf=existing.codice_fiscale) }}">Open their record</a></div>
+  <div><strong class="ds-alert-title">{{ _('Already registered') }}</strong>
+  {{ _('{name} has this codice fiscale on file - no second record is made.', name=existing.patient_name) }}
+  <a href="{{ url_for('patients.detail_view', cf=existing.codice_fiscale) }}">{{ _('Open their record') }}</a></div>
 </div>
 {% endif %}
 
 <section class="card ux-card" aria-labelledby="new-title">
-  <h2 class="ux-card-title" id="new-title">Who is arriving</h2>
+  <h2 class="ux-card-title" id="new-title">{{ _('Who is arriving') }}</h2>
   <form method="post" action="{{ url_for('patients.new_patient') }}" class="row g-3 mt-1" novalidate>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="col-md-6">
-      <label class="form-label" for="patient_name">Full name</label>
+      <label class="form-label" for="patient_name">{{ _('Full name') }}</label>
       <input class="form-control" id="patient_name" name="patient_name" value="{{ form.patient_name }}" maxlength="120" required{{ described('patient_name') }}>
-      <p class="ux-muted small" id="patient_name-help">As written on the document.</p>
+      <p class="ux-muted small" id="patient_name-help">{{ _('As written on the document.') }}</p>
       {{ field_error('patient_name') }}
     </div>
     <div class="col-md-6">
-      <label class="form-label" for="codice_fiscale">Codice fiscale</label>
+      <label class="form-label" for="codice_fiscale">{{ _('Codice fiscale') }}</label>
       <input class="form-control font-monospace" id="codice_fiscale" name="codice_fiscale" value="{{ form.codice_fiscale }}" maxlength="20" autocomplete="off" required{{ described('codice_fiscale') }}>
-      <p class="ux-muted small" id="codice_fiscale-help">Its check letter shows the code was typed without a slip, not who it belongs to - so check it against the document you name below.</p>
+      <p class="ux-muted small" id="codice_fiscale-help">{{ _('Its check letter shows the code was typed without a slip, not who it belongs to - so check it against the document you name below.') }}</p>
       {{ field_error('codice_fiscale') }}
     </div>
     <div class="col-md-6">
-      <label class="form-label" for="phone">Phone</label>
+      <label class="form-label" for="phone">{{ _('Phone') }}</label>
       <input class="form-control" id="phone" name="phone" value="{{ form.phone }}" maxlength="30" inputmode="tel" required{{ described('phone') }}>
-      <p class="ux-muted small" id="phone-help">The clinic calls this number; a new patient needs one.</p>
+      <p class="ux-muted small" id="phone-help">{{ _('The clinic calls this number; a new patient needs one.') }}</p>
       {{ field_error('phone') }}
     </div>
     <div class="col-md-6">
-      <label class="form-label" for="document">Codice fiscale checked against</label>
+      <label class="form-label" for="document">{{ _('Codice fiscale checked against') }}</label>
       <select class="form-select" id="document" name="document" required{{ described('document') }}>
-        <option value="">Choose the document you saw</option>
-        {% for d in documents %}<option value="{{ d }}"{{ ' selected' if form.document == d else '' }}>{{ d | capitalize }}</option>{% endfor %}
+        <option value="">{{ _('Choose the document you saw') }}</option>
+        {% for d in documents %}<option value="{{ d }}"{{ ' selected' if form.document == d else '' }}>{{ _(d) | capitalize }}</option>{% endfor %}
       </select>
-      <p class="ux-muted small" id="document-help">Recorded with who registered the patient.</p>
+      <p class="ux-muted small" id="document-help">{{ _('Recorded with who registered the patient.') }}</p>
       {{ field_error('document') }}
     </div>
 
     {% if alike %}
     <div class="col-12">
       <div class="ds-alert ds-alert-warning" role="alert" data-ux="lookalikes">
-        <div><strong class="ds-alert-title">This looks like {{ 'someone' if alike | length == 1 else alike | length ~ ' people' }} already on file</strong>
-        Open {{ 'the record' if alike | length == 1 else 'each record' }} first: a second record for one person has to be merged later.
+        <div><strong class="ds-alert-title">{{ _('This looks like someone already on file') if alike | length == 1 else _('This looks like {n} people already on file', n=alike | length) }}</strong>
+        {{ _('Open the record first: a second record for one person has to be merged later.') if alike | length == 1 else _('Open each record first: a second record for one person has to be merged later.') }}
         <ul class="mt-2 mb-2">
           {% for a in alike %}
           <li><a href="{{ url_for('patients.detail_view', cf=a.codice_fiscale) }}">{{ a.patient_name }}</a>
-            <span class="font-monospace">{{ a.codice_fiscale }}</span> - {{ a.reasons | join(', ') }}</li>
+            <span class="font-monospace">{{ a.codice_fiscale }}</span> - {% for r in a.reasons %}{{ _(r) }}{{ ', ' if not loop.last }}{% endfor %}</li>
           {% endfor %}
         </ul>
         <label class="form-check"><input class="form-check-input" type="checkbox" name="different" value="1">
-          <span class="form-check-label">I checked: these are different people - register a new record</span></label></div>
+          <span class="form-check-label">{{ _('I checked: these are different people - register a new record') }}</span></label></div>
       </div>
     </div>
     {% endif %}
 
     <div class="col-12 d-flex gap-2">
-      <button class="btn btn-primary" type="submit">Register patient</button>
-      <a class="btn btn-outline-secondary" href="{{ url_for('patients.list_view') }}">Cancel</a>
+      <button class="btn btn-primary" type="submit">{{ _('Register patient') }}</button>
+      <a class="btn btn-outline-secondary" href="{{ url_for('patients.list_view') }}">{{ _('Cancel') }}</a>
     </div>
   </form>
 </section>

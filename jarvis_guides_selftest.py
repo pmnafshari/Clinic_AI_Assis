@@ -66,8 +66,9 @@ def route(tmp):
     from app import WHITELIST_ENDPOINTS
     # checked first: a staff page on this list would break the later requests before they could be judged (M19)
     # J03 (2026-10-11) adds the device's note draft and save, each checked by jarvis_notes_selftest; 2026-10-12 read,
-    # edit and the hand-off link, checked by jarvis_patients_selftest
-    assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
+    # edit and the hand-off link, checked by jarvis_patients_selftest; P29 E-001 the language switch, which only sets a
+    # cookie (staff_i18n_selftest 4)
+    assert WHITELIST_ENDPOINTS == {"static", "shared", "auth.login", "set_language", "jarvis.api_whoami", "jarvis.api_guides_ask",
                                    "jarvis.api_guides_vocabulary", "jarvis.api_note_draft", "jarvis.api_note_commit",
                                    "jarvis.api_login", "jarvis.api_logout", "jarvis.api_patients_read",
                                    "jarvis.api_edit_draft", "jarvis.api_edit_commit", "jarvis.api_handoff",

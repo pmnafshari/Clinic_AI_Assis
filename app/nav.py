@@ -9,6 +9,8 @@ from flask import g, request
 
 from auth import authorize
 
+from .i18n import _
+
 # (group, label, endpoint, path, icon, gate or None, count key or None, active prefix)
 ITEMS = [
     ("Workspace", "Home", "dashboard.index", "/", "bi-house", "read_notes", None, "dashboard."),
@@ -88,7 +90,7 @@ def notifications():
     for key, icon, noun, detail, path, warn in NOTIFY:
         n = counts.get(key)
         if n:
-            out.append({"icon": icon, "title": f"{n} {noun[n != 1]}", "detail": detail, "path": path, "warn": warn})
+            out.append({"icon": icon, "title": _(f"{{n}} {noun[n != 1]}", n=n), "detail": _(detail), "path": path, "warn": warn})
     return out
 
 
@@ -117,9 +119,9 @@ def sidebar():
             continue
         active = any(endpoint.startswith(p) for p in prefixes.split("|"))
         count = counts.get(count_key) if count_key else None
-        item = {"label": label, "path": path, "icon": icon, "active": active, "count": count,
-                "count_label": f"{count} {COUNT_NOUNS[count_key][count != 1]}" if count else None}
-        if not groups or groups[-1][0] != group:
-            groups.append((group, []))
+        item = {"label": _(label), "path": path, "icon": icon, "active": active, "count": count,
+                "count_label": _(f"{{n}} {COUNT_NOUNS[count_key][count != 1]}", n=count) if count else None}
+        if not groups or groups[-1][0] != _(group):
+            groups.append((_(group), []))
         groups[-1][1].append(item)
     return groups

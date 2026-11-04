@@ -66,6 +66,7 @@ ROUTE_POLICY = {
     "static": "public",
     "shared": "public",
     "auth.login": "public",
+    "set_language": "public",
     "auth.logout": "login",
     "auth.change_password": "login",
     "auth.session": "login",

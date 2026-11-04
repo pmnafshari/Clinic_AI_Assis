@@ -21,7 +21,7 @@ from .login_return import authentication_url
 # is here. named explicitly - a prefix match would open anything starting
 # with "s".
 # the Jarvis device routes carry a device credential, not a staff cookie; they check it themselves (J00, J02, J03)
-WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "jarvis.api_whoami", "jarvis.api_guides_ask",
+WHITELIST_ENDPOINTS = {"static", "shared", "auth.login", "set_language", "jarvis.api_whoami", "jarvis.api_guides_ask",
                        "jarvis.api_guides_vocabulary", "jarvis.api_note_draft", "jarvis.api_note_commit",
                        "jarvis.api_login", "jarvis.api_logout", "jarvis.api_patients_read", "jarvis.api_edit_draft",
                        "jarvis.api_edit_commit", "jarvis.api_handoff", "jarvis.handoff"}
@@ -79,6 +79,20 @@ def create_app():
 
     # exposed so _topbar.html can role-filter nav items server-side
     app.jinja_env.globals["authorize"] = authorize
+    # P29 E-001: English and Italian (i18n.py)
+    from . import i18n
+    app.jinja_env.globals["_"] = i18n._
+    app.jinja_env.globals["_html"] = i18n.markup
+    app.jinja_env.globals["lang"] = i18n.current
+    app.jinja_env.globals["flash_kind"] = lambda category: i18n.FLASH_KINDS.get(category, i18n.FLASH_NOTE)
+
+    @app.route("/lang/<code>")
+    def set_language(code):
+        # back to the same page of this app, never to another host (i18n.safe_next)
+        resp = redirect(i18n.safe_next(request.args.get("next")))
+        if code in i18n.LANGUAGES:
+            resp.set_cookie(i18n.COOKIE, code, max_age=365 * 24 * 3600, httponly=True, samesite="Strict")
+        return resp
     from . import reasons
     app.jinja_env.globals["reasons"] = reasons             # P29 U-009: the reason lists
     import imaging_bookings
@@ -92,7 +106,8 @@ def create_app():
         """the top bar's clock: the clinic's own time (one clock, clinic_time) as minutes since midnight, so the page can keep
         it ticking without knowing a zone (P23 correction 2: no zone text in the top bar)."""
         now = clinic_time.now()
-        return {"time": f"{now:%H:%M}", "day": f"{now:%a} {now.day} {now:%b}", "minutes": now.hour * 60 + now.minute}
+        from .i18n import day_label
+        return {"time": f"{now:%H:%M}", "day": day_label(now.date()), "minutes": now.hour * 60 + now.minute}
     app.jinja_env.globals["clinic_clock"] = clinic_clock
     # read per render, so the switch is the environment the app was started with
     app.jinja_env.globals["similar_cases_enabled"] = similar_cases.enabled
@@ -221,4 +236,5 @@ def _date_label(iso):
         d = date.fromisoformat(iso)
     except (TypeError, ValueError):
         return iso
-    return f"{d:%a} {d.day} {d:%b}"
+    from .i18n import day_label
+    return day_label(d)

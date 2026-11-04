@@ -22,6 +22,7 @@ from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from storage import lookup_clinical, lookup_patient
 
 from .db import get_chroma, get_db
+from .i18n import _
 
 patients_bp = Blueprint("patients", __name__)
 
@@ -188,7 +189,7 @@ def new_patient():
     # P29 E-001: someone arriving without a record, registered at the desk (patient_identity.register)
     if not authorize(g.user["role"], "append_note"):
         log_audit(get_db(), g.user["username"], g.user["role"], "patient_register", None, allowed=0)
-        flash("You don't have permission to register a patient.", "danger")
+        flash(_("You don't have permission to register a patient."), "danger")
         return redirect(url_for("dashboard.index"))
     conn = get_db()
     form = {k: request.form.get(k, "") for k in ("patient_name", "codice_fiscale", "phone", "document")}
@@ -202,7 +203,7 @@ def new_patient():
             return redirect(url_for("dashboard.index"))
         if pid:
             row = conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE patient_id = ?", (pid,)).fetchone()
-            flash(f"Registered {row['patient_name']}. This is their record.", "success")
+            flash(_("Registered {name}. This is their record.", name=row["patient_name"]), "success")
             return redirect(url_for("patients.detail_view", cf=row["codice_fiscale"]))
         if found:
             existing = conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE patient_id = ?",

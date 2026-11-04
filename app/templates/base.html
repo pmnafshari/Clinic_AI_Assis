@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{ lang() }}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Dental AI Assistant</title>
+  <title>{{ _('Dental AI Assistant') }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/5.3.3/bootstrap.min.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/1.11.3/bootstrap-icons.css') }}">
   <link rel="stylesheet" href="{{ url_for('shared', filename='css/tokens.css') }}">
@@ -12,24 +12,20 @@
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
   {% set chromeless = request.endpoint in ('auth.login', 'auth.change_password') %}
-  <a class="app-skip" href="#main">Skip to content</a>
+  <a class="app-skip" href="#main">{{ _('Skip to content') }}</a>
   {# P29 U-008: what the last action did, as a popup with OK over the updated page. it leaves the page usable (owner,
      2026-11-03): no backdrop, nothing locked. it comes first for the keyboard, before the menu #}
   {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
-  <section class="app-result" data-ux="result" role="dialog" aria-modal="false" aria-label="Result">
+  <section class="app-result" data-ux="result" role="dialog" aria-modal="false" aria-label="{{ _('Result') }}">
     {% for category, message in messages %}
-      {% set kind = {'success': ('success', 'check-circle-fill', 'Done'),
-                     'removed': ('secondary', 'x-circle-fill', 'Removed'),
-                     'warning': ('warning', 'exclamation-triangle-fill', 'Check this'),
-                     'danger': ('danger', 'x-octagon-fill', 'Not done'),
-                     'error': ('danger', 'x-octagon-fill', 'Not done')}.get(category, ('primary', 'info-circle-fill', 'Note')) %}
-      <div class="alert alert-{{ kind[0] }} app-flash" data-flash="{{ kind[2] | lower }}"
+      {% set kind = flash_kind(category) %}
+      <div class="alert alert-{{ kind[0] }} app-flash" data-flash="{{ kind[2] }}"
            role="{{ 'alert' if kind[0] in ('danger', 'warning') else 'status' }}">
-        <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ kind[2] }}:</strong> {{ message }}
+        <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ _(kind[3]) }}:</strong> {{ message }}
       </div>
     {% endfor %}
-    <div class="app-result-actions"><button type="button" class="btn btn-primary btn-sm" data-result-ok tabindex="0">OK</button></div>
+    <div class="app-result-actions"><button type="button" class="btn btn-primary btn-sm" data-result-ok tabindex="0">{{ _('OK') }}</button></div>
   </section>
   {% endif %}
   {% endwith %}
@@ -55,11 +51,11 @@
   <script src="{{ url_for('static', filename='vendor/bootstrap/5.3.3/bootstrap.bundle.min.js') }}"></script>
   <script src="{{ url_for('static', filename='vendor/htmx/1.9.12/htmx.min.js') }}"></script>
   <dialog class="app-dialog" id="leave-dialog" aria-labelledby="leave-dialog-title">
-    <h2 class="ux-card-title" id="leave-dialog-title">Leave without saving?</h2>
-    <p>What you typed on this page is not saved. If you leave now it is lost.</p>
+    <h2 class="ux-card-title" id="leave-dialog-title">{{ _('Leave without saving?') }}</h2>
+    <p>{{ _('What you typed on this page is not saved. If you leave now it is lost.') }}</p>
     <div class="app-dialog-actions">
-      <button type="button" class="btn btn-outline-secondary" data-leave-stay autofocus>Stay on this page</button>
-      <button type="button" class="btn btn-danger" data-leave-go>Leave without saving</button>
+      <button type="button" class="btn btn-outline-secondary" data-leave-stay autofocus>{{ _('Stay on this page') }}</button>
+      <button type="button" class="btn btn-danger" data-leave-go>{{ _('Leave without saving') }}</button>
     </div>
   </dialog>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>

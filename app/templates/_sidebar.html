@@ -1,15 +1,15 @@
 {# P23 - the role-aware sidebar. the list and each link's gate live in app/nav.py; this only draws it.
    P29 U-021: every link and button says tabindex="0" - WebKit (Safari and the macOS app) leaves plain links and
    buttons out of Tab. #}
-<aside class="app-side offcanvas-lg offcanvas-start" id="app-side" tabindex="-1" aria-label="Main navigation">
+<aside class="app-side offcanvas-lg offcanvas-start" id="app-side" tabindex="-1" aria-label="{{ _('Main navigation') }}">
   <div class="app-side-head">
     <a class="app-brand" href="{{ url_for('dashboard.index') }}" tabindex="0">
       <span class="app-brand-mark" aria-hidden="true"><i class="bi bi-clipboard2-pulse"></i></span>
-      <span class="app-brand-text"><span class="app-brand-name">Dental AI</span><span class="app-brand-sub">Clinic · Staff</span></span>
+      <span class="app-brand-text"><span class="app-brand-name">Dental AI</span><span class="app-brand-sub">{{ _('Clinic · Staff') }}</span></span>
     </a>
-    <button type="button" class="btn-close d-lg-none" tabindex="0" data-bs-dismiss="offcanvas" data-bs-target="#app-side" aria-label="Close navigation"></button>
+    <button type="button" class="btn-close d-lg-none" tabindex="0" data-bs-dismiss="offcanvas" data-bs-target="#app-side" aria-label="{{ _('Close navigation') }}"></button>
   </div>
-  <nav class="app-side-nav" data-ux="nav" aria-label="Pages">
+  <nav class="app-side-nav" data-ux="nav" aria-label="{{ _('Pages') }}">
     {% for group, items in side_nav() %}
     <p class="app-side-group" id="nav-group-{{ loop.index }}">{{ group }}</p>
     <ul class="app-side-list" aria-labelledby="nav-group-{{ loop.index }}">
@@ -25,14 +25,19 @@
   <div class="app-side-foot" data-ux="account">
     <div class="app-side-user">
       <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}" aria-hidden="true">{{ g.user.username | initials }}</span>
-      <span class="app-user-text"><span class="app-user-name">{{ g.user.username }}</span><span class="app-user-role">{{ g.user.role }}</span></span>
+      <span class="app-user-text"><span class="app-user-name">{{ g.user.username }}</span><span class="app-user-role">{{ _(g.user.role) }}</span></span>
     </div>
     <a class="app-side-sub{{ ' active' if request.endpoint == 'auth.change_password' else '' }}" href="{{ url_for('auth.change_password') }}" tabindex="0">
-      <i class="bi bi-key" aria-hidden="true"></i> Change password
+      <i class="bi bi-key" aria-hidden="true"></i> {{ _('Change password') }}
+    </a>
+    {# P29 E-001: English or Italian, keeping the page #}
+    {% set other = 'it' if lang() == 'en' else 'en' %}
+    <a class="app-side-sub" href="{{ url_for('set_language', code=other, next=request.full_path) }}" lang="{{ other }}" hreflang="{{ other }}" tabindex="0">
+      <i class="bi bi-translate" aria-hidden="true"></i> {{ 'Italiano' if other == 'it' else 'English' }}
     </a>
     <form method="post" action="/logout" class="app-signout-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button type="submit" class="app-signout" tabindex="0"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sign out</button>
+      <button type="submit" class="app-signout" tabindex="0"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> {{ _('Sign out') }}</button>
     </form>
   <!--/account--></div>
 </aside>

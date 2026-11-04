@@ -78,6 +78,7 @@ this file is stale.
 | GET | `/jarvis/link` | `jarvis.link` |
 | POST | `/jarvis/link/<int:device_id>` | `jarvis.delegate` |
 | POST | `/jarvis/link/delegations/<int:delegation_id>/revoke` | `jarvis.revoke_delegation` |
+| GET | `/lang/<code>` | `set_language` |
 | GET,POST | `/login` | `auth.login` |
 | POST | `/logout` | `auth.logout` |
 | POST | `/notes/dictate` | `notes.dictate` |

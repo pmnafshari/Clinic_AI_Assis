@@ -15,6 +15,8 @@
   <div class="auth-panel">
     <div class="ds-card auth-form-card">
       <div class="ds-card-body">
+        {% set other = 'it' if lang() == 'en' else 'en' %}
+        <p class="auth-lang"><a href="{{ url_for('set_language', code=other, next=request.full_path) }}" lang="{{ other }}" hreflang="{{ other }}"><i class="bi bi-translate" aria-hidden="true"></i> {{ 'Italiano' if other == 'it' else 'English' }}</a></p>
         <p class="ds-page-eyebrow mb-1">Staff sign-in</p>
         <h1 class="page-title">Log in</h1>
 

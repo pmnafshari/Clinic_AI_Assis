@@ -8,7 +8,7 @@
   <div class="app-topbar-inner">
     {# P29 U-021: tabindex="0" on the buttons - WebKit (the macOS app) leaves plain buttons out of Tab #}
     <button class="btn btn-link app-topbar-toggle d-lg-none" type="button" tabindex="0" data-bs-toggle="offcanvas"
-            data-bs-target="#app-side" aria-controls="app-side" aria-label="Open navigation">
+            data-bs-target="#app-side" aria-controls="app-side" aria-label="{{ _('Open navigation') }}">
       <i class="bi bi-list" aria-hidden="true"></i>
     </button>
     <a class="app-brand d-lg-none" href="{{ url_for('dashboard.index') }}">
@@ -19,13 +19,13 @@
     <form class="app-search-form" role="search" action="{{ url_for('patients.list_view') }}" method="get">
       <div class="app-search">
         <i class="bi bi-search" aria-hidden="true"></i>
-        <input type="search" name="q" class="form-control" placeholder="Find a patient by name or codice fiscale"
-               aria-label="Go to a patient record" autocomplete="off"
+        <input type="search" name="q" class="form-control" placeholder="{{ _('Find a patient by name or codice fiscale') }}"
+               aria-label="{{ _('Go to a patient record') }}" autocomplete="off"
                hx-get="{{ url_for('patients.search_fragment') }}"
                hx-trigger="keyup changed delay:300ms, search" hx-target="#app-search-results">
         <div id="app-search-results" class="app-search-results"></div>
       </div>
-      <button type="submit" class="btn btn-primary app-search-go"><i class="bi bi-search" aria-hidden="true"></i><span class="app-search-word">Search</span></button>
+      <button type="submit" class="btn btn-primary app-search-go"><i class="bi bi-search" aria-hidden="true"></i><span class="app-search-word">{{ _('Search') }}</span></button>
     </form>
     {% endif %}
     <div class="app-topbar-right">
@@ -35,34 +35,36 @@
       <span class="app-topbar-sep" aria-hidden="true"></span>
       <div class="dropdown">
         <button class="app-bell" type="button" tabindex="0" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
-                aria-label="{{ 'Notifications, ' ~ waiting | length ~ (' thing waiting' if waiting | length == 1 else ' things waiting') if waiting else 'Notifications, nothing waiting' }}">
+                aria-label="{{ (_('Notifications, {n} thing waiting', n=waiting | length) if waiting | length == 1 else _('Notifications, {n} things waiting', n=waiting | length)) if waiting else _('Notifications, nothing waiting') }}">
           <i class="bi bi-bell" aria-hidden="true"></i>
           {% if waiting %}<span class="app-bell-count" aria-hidden="true">{{ waiting | length }}</span>{% endif %}
         </button>
         <div class="dropdown-menu dropdown-menu-end app-notif">
-          <p class="app-notif-head">Waiting for you</p>
+          <p class="app-notif-head">{{ _('Waiting for you') }}</p>
           {% for n in waiting %}
           <a class="app-notif-item" href="{{ n.path }}">
             <span class="app-notif-ico{{ ' warn' if n.warn else '' }}" aria-hidden="true"><i class="bi {{ n.icon }}"></i></span>
             <span><strong>{{ n.title }}</strong><small>{{ n.detail }}</small></span>
           </a>
           {% else %}
-          <p class="app-notif-empty">Nothing needs you right now.</p>
+          <p class="app-notif-empty">{{ _('Nothing needs you right now.') }}</p>
           {% endfor %}
         </div>
       </div>
       <div class="dropdown">
-        <button class="app-account" type="button" tabindex="0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Your account">
+        <button class="app-account" type="button" tabindex="0" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ _('Your account') }}">
           <span class="ds-avatar ds-avatar-sm {{ g.user.username | tint }}" aria-hidden="true">{{ g.user.username | initials }}</span>
-          <span class="app-account-text"><strong>{{ g.user.username }}</strong><small>{{ g.user.role }}</small></span>
+          <span class="app-account-text"><strong>{{ g.user.username }}</strong><small>{{ _(g.user.role) }}</small></span>
           <i class="bi bi-chevron-down" aria-hidden="true"></i>
         </button>
         <div class="dropdown-menu dropdown-menu-end app-account-menu">
-          <p class="app-notif-head"><span>{{ g.user.username }}</span> · {{ g.user.role }}</p>
-          <a class="dropdown-item" href="{{ url_for('auth.change_password') }}"><i class="bi bi-key" aria-hidden="true"></i> Change password</a>
+          <p class="app-notif-head"><span>{{ g.user.username }}</span> · {{ _(g.user.role) }}</p>
+          <a class="dropdown-item" href="{{ url_for('auth.change_password') }}"><i class="bi bi-key" aria-hidden="true"></i> {{ _('Change password') }}</a>
+          {% set other = 'it' if lang() == 'en' else 'en' %}
+          <a class="dropdown-item" href="{{ url_for('set_language', code=other, next=request.full_path) }}" lang="{{ other }}" hreflang="{{ other }}"><i class="bi bi-translate" aria-hidden="true"></i> {{ 'Italiano' if other == 'it' else 'English' }}</a>
           <form method="post" action="/logout">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sign out</button>
+            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> {{ _('Sign out') }}</button>
           </form>
         </div>
       </div>
