@@ -113,6 +113,17 @@ def selftest():
         reception.post("/providers/wishes/kill", data={"csrf_token": _csrf(page)})
         kinds = {r[0] for r in conn.execute("SELECT kind FROM provider_switches")}
         assert kinds <= set(providers.KINDS), f"7: a url created a switch: {kinds}"
+
+        # 8. P29 U-001: the page opens on one tile per connection saying whether it can send and why not, then the
+        # switches and the phone line beside delivery and the recent attempts, not one long column
+        page8 = dentist.get("/providers").text
+        tiles8 = re.findall(r'<span class="ux-kpi-label">([^<]+)</span>\s*<span class="ux-kpi-value">([^<]+)</span>\s*'
+                            r'<span class="ux-kpi-sub">([^<]+)</span>', page8)
+        assert [(t[0], t[1].strip()) for t in tiles8] == [(k.capitalize(), "Off") for k in providers.KINDS] \
+            and all("no adapter configured" in t[2] for t in tiles8), f"8 U-001: connection tiles {tiles8}"
+        work8 = re.search(r'<div class="sx-panel sx-panel-2 sx-free" data-ux="connections">(.*)', page8, re.S)
+        assert work8 and all(f'id="{t}-title"' in work8.group(1) for t in ("switches", "line", "receipts", "events")), \
+            "8: the connection parts are not laid out side by side"
         conn.close()
 
     print("selftest ok")

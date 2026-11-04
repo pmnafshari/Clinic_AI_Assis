@@ -1745,3 +1745,8 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .look-msg { margin: 2rem 1rem; color: #3f4a5a; text-align: center; }
 .look-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .look-pages { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.875rem; }
+
+/* P29 U-001: a work area of forms side by side - each card as tall as what it holds, the right column stacked */
+.sx-panel.sx-free .dash-card { height: auto; }
+.sx-panel.sx-free .dash-card > .dash-card-body { overflow: visible; }
+.ux-stack { display: grid; gap: 1rem; align-content: start; min-width: 0; }

@@ -752,6 +752,22 @@ def routes(tmp):
     assert not any("guide" in r for r in srules), "8: the public site has no guides route"
     assert "/guides/ask" in den.get("/").text and "/guides/ask" in ast.get("/").text and "/guides" not in adm.get("/").text, \
         "8: the sidebar links the page for dentist and assistant only"
+    # 8b. P29 U-001: the library opens on what it holds - three tiles counted from the documents shown - then the
+    # documents in a bounded box with a status filter and a search, and the dentist's work (add a document, devices,
+    # approvers) side by side under it instead of one long column
+    for who, lib in (("dentist", den.get("/guides").text), ("assistant", ast.get("/guides").text)):
+        groups = re.findall(r'<tr data-name="[^"]*" data-status="(\w+)"', lib)
+        tiles = re.findall(r'<span class="ux-kpi-label">([^<]+)</span>\s*<span class="ux-kpi-value">(\d+)</span>', lib)
+        want = [("Searchable now", str(groups.count("searchable"))), ("Waiting for review", str(groups.count("waiting"))),
+                ("Not searchable", str(len(groups) - groups.count("searchable") - groups.count("waiting")))]
+        assert groups and tiles == want, f"8b U-001 {who}: tiles {tiles} for rows {groups}"
+        tools = re.search(r'<div class="sx-tools[^"]*" data-list-tools data-for="guide-rows"[^>]*>', lib)
+        assert tools and "&#34;status&#34;" not in tools.group(0) and '"status"' in tools.group(0) and "data-search" in tools.group(0), \
+            f"8b: {who}: the documents cannot be filtered by status or searched"
+        assert re.search(r'<div class="sx-box[^"]*">\s*<table class="ux-table ux-table-page"', lib), f"8b: {who}: the table is not bounded"
+    work = re.search(r'<div class="sx-panel sx-panel-2[^"]*" data-ux="guide-work">(.*)', den.get("/guides").text, re.S)
+    assert work and all(t in work.group(1) for t in ('id="up-title"', 'id="dev-title"', 'id="appr-title"')), \
+        "8b: adding a document, devices and approvers are not laid out together"
     conn.close()
 
 

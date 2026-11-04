@@ -15,7 +15,17 @@
   <strong>blocked</strong> until a provider, its cost and a data agreement are approved.</div>
 </div>
 
-<section class="card dash-card mb-3" aria-labelledby="switches-title">
+{# P29 U-001: one tile per connection - can it send, and if not why - then the parts side by side #}
+<div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
+  {% for r in rows %}
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ r.kind | capitalize }}</span>
+    <span class="ux-kpi-value">{{ 'On' if r.can_send else 'Off' }}</span><span class="ux-kpi-sub">{{ 'can send' if r.can_send else 'blocked: ' ~ r.reason.replace('_', ' ') }}</span></div>
+  {% endfor %}
+<!--/page-tiles--></div>
+
+<div class="sx-panel sx-panel-2 sx-free" data-ux="connections">
+<div class="ux-stack">
+<section class="card dash-card" aria-labelledby="switches-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="switches-title">Switches</h2></div>
   <div class="dash-card-body"><ul class="ds-rows">
     {% for r in rows %}
@@ -46,7 +56,7 @@
   </ul></div>
 </section>
 
-<section class="card dash-card mb-3" aria-labelledby="line-title">
+<section class="card dash-card" aria-labelledby="line-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="line-title">Phone line</h2></div>
   <div class="dash-card-body">
     <ul class="ds-rows">
@@ -74,7 +84,9 @@
   </div>
 </section>
 
-<section class="card dash-card mb-3" aria-labelledby="receipts-title">
+</div>
+<div class="ux-stack">
+<section class="card dash-card" aria-labelledby="receipts-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="receipts-title">Delivery</h2></div>
   <div class="dash-card-body">
     <ul class="ds-rows">
@@ -118,4 +130,6 @@
     {% endif %}
   </div>
 </section>
+</div>
+</div>
 {% endblock %}
