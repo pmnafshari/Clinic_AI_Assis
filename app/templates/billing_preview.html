@@ -8,21 +8,21 @@
   <div class="dash-card-body">
     <h1 class="h4">{{ _("Summary of charges") }}</h1>
     <p class="mb-1">{{ person.patient_name }} · {{ person.codice_fiscale }}</p>
-    <p class="text-secondary small">Visit {{ inv.visit_date or 'undated' }} · status {{ inv.state | replace('_', ' ') }}{% if inv.issued_at %} · issued {{ inv.issued_at | appt_date }}{% endif %}{% if inv.due_date %} · due {{ inv.due_date }}{% endif %} · {{ inv.currency }}</p>
+    <p class="text-secondary small">{{ _('Visit {date}', date=inv.visit_date) if inv.visit_date else _('Visit undated') }} · {{ _('status {state}', state=_(inv.state | replace('_', ' '))) }}{% if inv.issued_at %} · {{ _('issued {date}', date=inv.issued_at | appt_date) }}{% endif %}{% if inv.due_date %} · {{ _('due {date}', date=inv.due_date) }}{% endif %} · {{ inv.currency }}</p>
     <table class="table table-sm">
       <thead><tr><th scope="col">{{ _("Item") }}</th><th scope="col" class="text-end">{{ _("Amount") }}</th></tr></thead>
       <tbody>
-        {% for line in inv.lines %}<tr><td>{{ line.description or '-' }}</td><td class="text-end">{{ fmt(line.amount_cents, 'en') }}</td></tr>{% endfor %}
+        {% for line in inv.lines %}<tr><td>{{ line.description or '-' }}</td><td class="text-end">{{ fmt(line.amount_cents, lang()) }}</td></tr>{% endfor %}
       </tbody>
       <tfoot>
-        <tr><th scope="row">{{ _("Total") }}</th><td class="text-end">{{ fmt(inv.total_cents, 'en') }}</td></tr>
-        <tr><th scope="row">{{ _("Recorded as paid") }}</th><td class="text-end">{{ fmt(inv.paid_cents, 'en') }}</td></tr>
-        <tr><th scope="row">{{ _("Still to pay") }}</th><td class="text-end">{{ fmt(inv.outstanding_cents, 'en') }}</td></tr>
+        <tr><th scope="row">{{ _("Total") }}</th><td class="text-end">{{ fmt(inv.total_cents, lang()) }}</td></tr>
+        <tr><th scope="row">{{ _("Recorded as paid") }}</th><td class="text-end">{{ fmt(inv.paid_cents, lang()) }}</td></tr>
+        <tr><th scope="row">{{ _("Still to pay") }}</th><td class="text-end">{{ fmt(inv.outstanding_cents, lang()) }}</td></tr>
       </tfoot>
     </table>
     {% if inv.installments %}
     <h2 class="h6">{{ _("Installments") }}</h2>
-    <ul>{% for i in inv.installments %}<li>{{ i.due_date }}: {{ fmt(i.amount_cents, 'en') }}{% if not i.open_cents %} (covered){% endif %}</li>{% endfor %}</ul>
+    <ul>{% for i in inv.installments %}<li>{{ i.due_date }}: {{ fmt(i.amount_cents, lang()) }}{% if not i.open_cents %} {{ _('(covered)') }}{% endif %}</li>{% endfor %}</ul>
     {% endif %}
   </div>
 </section>

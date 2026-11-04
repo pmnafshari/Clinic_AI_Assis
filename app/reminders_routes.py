@@ -5,13 +5,14 @@ import reminders
 from auth import authorize, log_audit
 
 from .db import get_db
+from .i18n import _
 
 reminders_bp = Blueprint("reminders", __name__)
 
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("You don't have permission to see reminders.", "danger")
+    flash(_("You don't have permission to see reminders."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -39,7 +40,7 @@ def retry(job_id):
         done = reminders.retry(get_db(), job_id, g.user["username"], g.user["role"])
     except PermissionError:
         return _refuse("retry_reminder", f"reminder:{job_id}")
-    flash("Back in the queue. Nothing is sent until a provider is configured." if done
-          else "That reminder is not in a state that can be retried.",
+    flash(_("Back in the queue. Nothing is sent until a provider is configured.") if done
+          else _("That reminder is not in a state that can be retried."),
           "success" if done else "danger")
     return redirect(url_for("reminders.index", status=request.form.get("status") or None))

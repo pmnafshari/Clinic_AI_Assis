@@ -24,9 +24,13 @@ CONVERTED = ["base.html", "_sidebar.html", "_topbar.html", "patients_new.html",
              "patients_list.html", "patients_detail.html", "documents.html", "document_detail.html", "_patient_candidates.html",
              "_visit_edit_form.html", "_patient_files.html", "_patient_pin.html", "_patient_pin_revoked.html",
              "_confirm_diff.html", "_edit_form.html",
-             "appointments.html", "requests.html", "dashboard.html", "_reason.html", "_recent_intake.html"]
+             "appointments.html", "requests.html", "dashboard.html", "_reason.html", "_recent_intake.html",
+             "billing.html", "billing_patient.html", "billing_payment.html", "billing_preview.html", "stock.html",
+             "stock_item.html", "handoffs.html", "reminders.html", "data_requests.html", "reports.html"]
 # modules that say nothing to a person outside _()
-CONVERTED_PY = ["patients_routes.py", "document_routes.py", "appointments_routes.py", "dashboard_routes.py", "requests_routes.py"]
+CONVERTED_PY = ["patients_routes.py", "document_routes.py", "appointments_routes.py", "dashboard_routes.py", "requests_routes.py",
+                "billing_routes.py", "stock_routes.py", "handoff_routes.py", "reminders_routes.py", "data_requests_routes.py",
+                "reports_routes.py"]
 # words that stay as they are in both languages
 ALLOW = {"Dental AI", "English", "Italiano", "OK"}
 # technical terms that are the same in both languages
@@ -78,7 +82,7 @@ def _messages_in(path, function=None):
         if function and isinstance(node, ast.Return) and node.value is not None:
             out.append(_sentence(node.value))
         if not function and isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) \
-                and getattr(node.exc.func, "id", "") == "ValueError" and node.exc.args:
+                and getattr(node.exc.func, "id", "") in ("ValueError", "LedgerError", "StockError") and node.exc.args:
             out.append(_sentence(node.exc.args[0]))
     return {m for m in out if m}
 
@@ -122,6 +126,22 @@ def harvest():
     found |= set(dashboard_routes._TOOL_WORDS.values()) | set(dashboard_routes._FIELD_WORDS.values())
     found |= set(dashboard_routes._STATE_WORDS.values()) | {"Record changed"}
     found |= set(imaging_bookings.FLAGS.values())
+    # stage 4: billing, stock, call-backs, reminders, data requests, reports
+    import handoff
+    import inventory_job
+    import ledger
+    import reminder_job
+    import reminders
+    from app.reports_routes import PERIODS
+    found |= _messages_in(ROOT / "ledger.py") | _messages_in(ROOT / "inventory.py")
+    found |= {"issued", "partially paid", "paid", "void", "cash", "card", "bank transfer", "other", "manual", "reconciliation",
+              "demo fixture", "provider", ledger.ALLOCATION_ORDER, "Kept in full", "Fully refunded", "Reversed", "Refund", "Reversal"}
+    found |= {inventory_job.SCHEDULE, reminder_job.SCHEDULE, reminders.DisabledTransport.reason, "ok", "failed", "never"}
+    for status in ("scheduled", "claimed", "sent", "delivered", "failed", "cancelled"):
+        found |= {status, status.capitalize()}
+    found |= {"appointment", "invoice", "installment"} | {r.replace("_", " ") for r in reminders.CANCEL_REASONS + reminders.ERRORS}
+    found |= set(handoff.TOPICS) | {"access", "export", "amend", "erasure", "open", "approved", "rejected", "done"}
+    found |= {"invoices kept under the retention policy (demo template: {a})"} | {v[1] for v in PERIODS.values()}
     return found
 
 
@@ -230,6 +250,12 @@ def selftest():
     for en, it in IT.items():
         assert set(re.findall(r"\{\w+\}", en)) == set(re.findall(r"\{\w+\}", it)), f"1: placeholders differ: {en!r} / {it!r}"
 
+    # 1b. no app module binds _ (a throwaway "_, x = ..." silently replaces the translation in that function)
+    for f in (ROOT / "app").glob("*.py"):
+        bound = [l.strip() for l in f.read_text(encoding="utf-8").splitlines()
+                 if re.search(r"(^|[ (,])_\s*(=[^=]|,)|\bfor _\b|\bfor _," , l) and "import" not in l]
+        assert not bound, f"1b: {f.name} binds _: {bound[:2]}"
+
     # 2. a converted page leaves no text outside _()
     for name in CONVERTED:
         left = loose_text((TEMPLATES / name).read_text(encoding="utf-8"))
@@ -287,7 +313,13 @@ def selftest():
                                  (c, "/appointments?view=week", ("Settimana del", "Richieste dei pazienti", "Giorno")),
                                  (c, "/appointments?view=month", ("Scegli un giorno per aprire", "Mese precedente")),
                                  (c, "/requests", ("Richieste di appuntamento", "Lavoro di imaging")),
-                                 (c, "/", ("Azioni rapide", "La tua attività recente"))):
+                                 (c, "/", ("Azioni rapide", "La tua attività recente")),
+                                 (c, "/billing", ("Fatture e pagamenti", "Ancora da pagare")),
+                                 (c, "/stock", ("Materiali di consumo", "Articoli")),
+                                 (c, "/handoffs", ("Cos'è una richiamata", "La coda")),
+                                 (c, "/reminders", ("Coda d'invio", "L'invio è spento")),
+                                 (d, "/data-requests", ("Nessuna richiesta sui dati",)),
+                                 (d, "/reports", ("Cosa questa pagina può e non può mostrare", "Tutta la clinica"))):
             page = who.get(path).get_data(as_text=True)
             for word in words:
                 assert word in page, f"4: {word!r} is not on the Italian {path}"

@@ -5,16 +5,16 @@
   <div>
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
     <h1 class="ds-page-title">{% if receipt %}{{ _("Payment recorded") }}{% else %}{{ _("Record a payment") }}{% endif %}</h1>
-    <p class="ds-page-meta">Invoice #{{ invoice.id }} · Still to pay {{ fmt(invoice.outstanding_cents, 'en') }}</p>
+    <p class="ds-page-meta">{{ _('Invoice #{id} · Still to pay {amount}', id=invoice.id, amount=fmt(invoice.outstanding_cents, lang())) }}</p>
   </div>
 </div>
 <section class="card dash-card p-3 p-md-4" aria-label="{{ _('Payment details') }}">
 {% if problem %}
-  <p class="ds-alert ds-alert-warning" role="alert">{{ problem }}. Nothing new was recorded by opening this page.</p>
+  <p class="ds-alert ds-alert-warning" role="alert">{{ _('{problem}. Nothing new was recorded by opening this page.', problem=_msg(problem)) }}</p>
   <a class="btn btn-outline-primary" href="{{ billing_url }}">{{ _("Review invoice") }}</a>
 {% elif receipt %}
   <dl>
-    <dt>{{ _("Payment") }}</dt><dd>#{{ receipt.id }} · {{ fmt(receipt.amount_cents, 'en') }}</dd>
+    <dt>{{ _("Payment") }}</dt><dd>#{{ receipt.id }} · {{ fmt(receipt.amount_cents, lang()) }}</dd>
     <dt>{{ _("Method") }}</dt><dd>{{ receipt.method | replace('_', ' ') }}</dd>
     <dt>{{ _("Received on") }}</dt><dd>{{ receipt.received_on }}</dd>
     <dt>{{ _("Recorded by") }}</dt><dd>{{ receipt.recorded_by }}</dd>
@@ -37,7 +37,7 @@
       <div class="col-12 col-md-4">
         <label class="form-label" for="amount">{{ _("Amount received (EUR)") }}</label>
         <input class="form-control" id="amount" name="amount" inputmode="decimal" maxlength="20" required autofocus aria-describedby="amount-help">
-        <small id="amount-help">Up to {{ fmt(invoice.outstanding_cents, 'en') }}. Use a comma or decimal point.</small>
+        <small id="amount-help">{{ _('Up to {amount}. Use a comma or decimal point.', amount=fmt(invoice.outstanding_cents, lang())) }}</small>
       </div>
       <div class="col-12 col-md-4">
         <label class="form-label" for="method">{{ _("Method") }}</label>
@@ -49,7 +49,7 @@
         <small id="reference-help">{{ _("Maximum 60 characters.") }}</small>
       </div>
     </div>
-    <p class="mt-3">Received on {{ intent.received_on }}. This form expires after 15 minutes.</p>
+    <p class="mt-3">{{ _('Received on {date}. This form expires after 15 minutes.', date=intent.received_on) }}</p>
     <div class="d-flex flex-wrap gap-2">
       <button class="btn btn-primary" type="submit">{{ _("Record payment") }}</button>
       <a class="btn btn-outline-secondary" href="{{ billing_url }}">{{ _("Cancel") }}</a>

@@ -10,6 +10,7 @@ from storage import lookup_patient
 
 from . import reasons
 from .db import get_db
+from .i18n import _, message as said
 from . import payment_intent
 
 billing_bp = Blueprint("billing", __name__)
@@ -27,7 +28,7 @@ def private_billing_response(response):
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("You don't have permission to do that with billing.", "danger")
+    flash(_("You don't have permission to do that with billing."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -102,22 +103,22 @@ def invoice_action(invoice_id, action):
     try:
         if action == "issue":
             ledger.issue(conn, invoice_id, who, role, form.get("due_date") or None)
-            message = "Invoice issued (internal - no fiscal document is produced)."
+            message = _("Invoice issued (internal - no fiscal document is produced).")
         elif action == "void":
             ledger.void(conn, invoice_id, who, role, form.get("reason"))
-            message = "Invoice voided."
+            message = _("Invoice voided.")
         elif action == "reconcile":
             ledger.reconcile(conn, invoice_id, form.get("outcome"), who, role, form.get("key"),
                              amount=form.get("amount") or None, method=form.get("method") or "other",
                              received_on=form.get("received_on") or None, note=form.get("note"))
-            message = "Invoice reconciled."
+            message = _("Invoice reconciled.")
         else:
             ledger.plan_installments(conn, invoice_id, form.get("count", "0"),
                                      form.get("first_due", ""), who, role)
-            message = "Installment plan created."
+            message = _("Installment plan created.")
         flash(message, "removed" if action == "void" else "success")
     except (ledger.LedgerError, ValueError) as e:
-        flash(f"Not done: {e}.", "danger")
+        flash(_("Not done: {why}.", why=said(str(e))), "danger")
     return redirect(_patient_url(inv["patient_id"]))
 
 
@@ -145,7 +146,7 @@ def record_payment(invoice_id):
     except ledger.LedgerError as e:
         log_audit(conn, g.user["username"], g.user["role"], "record_payment",
                   inv["patient_id"], allowed=0, reason="invalid_intent")
-        flash(f"Not done: {e}.", "danger")
+        flash(_("Not done: {why}.", why=said(str(e))), "danger")
         return redirect(_patient_url(inv["patient_id"]), code=303)
     try:
         payment_id, created = ledger.record_payment(
@@ -154,12 +155,12 @@ def record_payment(invoice_id):
             form.get("reference") or None, form.get("note") or None,
             expected_revision=intent["revision"], expires_at=intent["expires"],
             expected_patient=intent["patient"])
-        flash("Payment recorded." if created else "That payment was already recorded.", "success")
+        flash(_("Payment recorded.") if created else _("That payment was already recorded."), "success")
         return redirect(url_for("billing.payment_form", invoice_id=invoice_id, receipt=payment_id), code=303)
     except (ledger.LedgerError, ValueError) as e:
         log_audit(conn, g.user["username"], g.user["role"], "record_payment",
                   inv["patient_id"], allowed=0, reason="invalid_payment")
-        flash(f"Not done: {e}.", "danger")
+        flash(_("Not done: {why}.", why=said(str(e))), "danger")
     return redirect(url_for("billing.payment_form", invoice_id=invoice_id, form=form_id), code=303)
 
 
@@ -172,7 +173,7 @@ def new_payment(invoice_id):
     if inv is None:
         abort(404)
     if inv["state"] not in ("issued", "partially_paid"):
-        flash("Payments can only be recorded against an issued invoice with money still owed.", "danger")
+        flash(_("Payments can only be recorded against an issued invoice with money still owed."), "danger")
         return redirect(_patient_url(inv["patient_id"]))
     form_id = payment_intent.stage(conn, inv, g.user)
     return redirect(url_for("billing.payment_form", invoice_id=invoice_id, form=form_id), code=303)
@@ -226,15 +227,15 @@ def payment_action(payment_id, action):
     who, role, form = g.user["username"], g.user["role"], request.form
     try:
         if action == "refund":
-            _, created = ledger.refund(conn, payment_id, form.get("amount"), form.get("key"),
+            _counter, created = ledger.refund(conn, payment_id, form.get("amount"), form.get("key"),
                                        who, role, reasons.chosen(form, reasons.REFUND))
         else:
-            _, created = ledger.reverse(conn, payment_id, form.get("key"), who, role,
+            _counter, created = ledger.reverse(conn, payment_id, form.get("key"), who, role,
                                         reasons.chosen(form, reasons.REVERSE))
-        flash(("Refund recorded." if action == "refund" else "Payment reversed.")
-              if created else "That was already recorded.", "removed" if created else "success")
+        flash((_("Refund recorded.") if action == "refund" else _("Payment reversed."))
+              if created else _("That was already recorded."), "removed" if created else "success")
     except (ledger.LedgerError, ValueError) as e:
-        flash(f"Not done: {e}.", "danger")
+        flash(_("Not done: {why}.", why=said(str(e))), "danger")
     return redirect(_patient_url(row["patient_id"]))
 
 

@@ -11,7 +11,7 @@
   <div>
     <p class="ds-page-eyebrow">{{ _("Stock") }}</p>
     <h1 class="ds-page-title">{{ item.name }}</h1>
-    <p class="ds-page-meta">{{ item.unit }} · every change below is kept with who made it and why</p>
+    <p class="ds-page-meta">{{ item.unit }} · {{ _('every change below is kept with who made it and why') }}</p>
   </div>
 </div>
 {# P29 R-012: what is on the shelf and when it alerts, apart from the history #}
@@ -29,12 +29,12 @@
       <input type="hidden" name="key" value="{{ key() }}">
       <div><label class="form-label small" for="kind">{{ _("What happened") }}</label>
       <select class="form-select form-select-sm" id="kind" name="kind">
-        {% for k, label in [('receipt', 'Received'), ('consumption', 'Used'), ('count', 'Counted on the shelf'), ('correction', 'Correction (+ or -)')] %}
+        {% for k, label in [('receipt', _('Received')), ('consumption', _('Used')), ('count', _('Counted on the shelf')), ('correction', _('Correction (+ or -)'))] %}
         {% if k != 'correction' or can_manage %}<option value="{{ k }}"{{ ' selected' if retry and retry.kind == k else '' }}>{{ label }}</option>{% endif %}
         {% endfor %}
       </select></div>
-      <div><label class="form-label small" for="qty">Quantity ({{ item.unit }})</label><input class="form-control form-control-sm" id="qty" name="quantity" type="number" required{% if retry %} value="{{ retry.quantity }}"{% endif %}></div>
-      <div>{{ reason_box('why', reasons.STOCK, 'Reason (needed for a count or correction)', required=false, picked=retry.reason_choice if retry else '', value=retry.reason if retry else '') }}</div>
+      <div><label class="form-label small" for="qty">{{ _('Quantity ({unit})', unit=item.unit) }}</label><input class="form-control form-control-sm" id="qty" name="quantity" type="number" required{% if retry %} value="{{ retry.quantity }}"{% endif %}></div>
+      <div>{{ reason_box('why', reasons.STOCK, _('Reason (needed for a count or correction)'), required=false, picked=retry.reason_choice if retry else '', value=retry.reason if retry else '') }}</div>
       <button class="btn btn-primary btn-sm" type="submit">{{ _("Record") }}</button>
     </form>
     <p class="small mt-2 mb-0">{{ _("Stock cannot go below zero. A count records the difference from the balance, so the history still explains every number.") }}</p>
@@ -59,13 +59,13 @@
   <div class="dash-card-body">
     {% if history %}
     <table class="ux-table ux-table-page">
-      <caption class="visually-hidden">Stock movements of {{ item.name }}, newest first</caption>
+      <caption class="visually-hidden">{{ _('Stock movements of {name}, newest first', name=item.name) }}</caption>
       <thead><tr><th scope="col">{{ _("When") }}</th><th scope="col">{{ _("Movement") }}</th><th scope="col">{{ _("Change") }}</th><th scope="col">{{ _("Balance after") }}</th><th scope="col">{{ _("Who") }}</th><th scope="col">{{ _("Reason") }}</th></tr></thead>
       <tbody>
       {% for m in history %}
       <tr>
         <td data-label="{{ _('When') }}"><span class="ux-nowrap">{{ m.ts | appt_date }} {{ m.ts | appt_time }}</span></td>
-        <td data-label="{{ _('Movement') }}">{{ {'receipt': 'Received', 'consumption': 'Used', 'count': 'Counted', 'correction': 'Correction'}[m.kind] }}{% if m.kind == 'count' %} <span class="ux-muted">({{ m.counted }} on the shelf)</span>{% endif %}</td>
+        <td data-label="{{ _('Movement') }}">{{ {'receipt': _('Received'), 'consumption': _('Used'), 'count': _('Counted'), 'correction': _('Correction')}[m.kind] }}{% if m.kind == 'count' %} <span class="ux-muted">{{ _('({n} on the shelf)', n=m.counted) }}</span>{% endif %}</td>
         <td data-label="{{ _('Change') }}">{{ '%+d' % m.delta }}</td>
         <td data-label="{{ _('Balance after') }}">{{ m.after }}</td>
         <td data-label="{{ _('Who') }}">{{ m.actor }}</td>

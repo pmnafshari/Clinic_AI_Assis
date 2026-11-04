@@ -12,7 +12,7 @@ def local_destination(value):
     if any(char.isspace() for char in value):
         return ""
     decoded = value
-    for _ in range(5):
+    for _try in range(5):
         if any(ord(char) < 32 or ord(char) == 127 or char == "\\" for char in decoded):
             return ""
         try:
@@ -30,7 +30,7 @@ def local_destination(value):
     else:
         return ""
     try:
-        endpoint, _ = current_app.url_map.bind("localhost").match(parts.path, method="GET")
+        endpoint, _args = current_app.url_map.bind("localhost").match(parts.path, method="GET")
     except (HTTPException, RoutingException):
         return ""
     if (endpoint in ("static", "shared", "jarvis.handoff")

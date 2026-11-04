@@ -232,6 +232,6 @@ def _show_preview(token):
             return redirect(url_for("dashboard.index"))
         return render_template("notes_new.html", locked=None, **_dictation(),
                                error="This draft has expired. Extract the note again.")
-    _, cf, note, mismatch = held
+    _held_id, cf, note, mismatch = held
     return render_template("notes_new.html", preview=note, locked=_locked_patient(cf),
                            mismatch=mismatch, confirm_token=token)

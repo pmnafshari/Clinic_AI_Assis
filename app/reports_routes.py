@@ -55,7 +55,7 @@ def _procedure_distribution(conn, top_n=TOP_N, since=None):
     tail = ordered[top_n:]
 
     labels = [code for code, _ in head]
-    values = [n for _, n in head]
+    values = [n for _label, n in head]
     # uncoded terms are shown, not tidied away: an unrecognised code is
     # flagged for review and still files (extract_note.py:48-50), so the
     # distribution is where that shows up honestly.
@@ -63,7 +63,7 @@ def _procedure_distribution(conn, top_n=TOP_N, since=None):
 
     if tail:
         labels.append(f"other ({len(tail)})")
-        values.append(sum(n for _, n in tail))
+        values.append(sum(n for _label, n in tail))
         uncoded.append(False)
 
     return labels, values, uncoded
@@ -127,7 +127,7 @@ def index():
         proc_uncoded=proc_uncoded,
         proc_has_data=bool(proc_values),
         billed_months=billed_months,
-        recorded=ledger.fmt(_recorded_payments(conn), "en"),
+        recorded=ledger.fmt(_recorded_payments(conn), "en"), recorded_cents=_recorded_payments(conn), fmt=ledger.fmt,
         billed_values=billed_values,
         billed_has_data=bool(billed_values),
         visit_months=visit_months,

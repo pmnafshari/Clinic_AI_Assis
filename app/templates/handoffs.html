@@ -5,16 +5,16 @@
     <p class="ds-page-eyebrow">{{ _("Patients") }}</p>
     <h1 class="ds-page-title">{{ _("Call-backs") }}</h1>
     <p class="ds-page-meta">
-      {%- if open_now %}Clinic open now{% elif next_opening %}Clinic closed · opens {{ next_opening.strftime('%Y-%m-%d %H:%M') }}{% else %}Clinic closed{% endif -%}
+      {%- if open_now %}{{ _('Clinic open now') }}{% elif next_opening %}{{ _('Clinic closed · opens {when}', when=next_opening.strftime('%Y-%m-%d %H:%M')) }}{% else %}{{ _('Clinic closed') }}{% endif -%}
     </p>
   </div>
 </div>
 
 {# P29 R-019: what a call-back is, where it comes from, and that a missed call is never one #}
-{% set state_words = {'open': 'Waiting', 'claimed': 'Taken', 'resolved': 'Done'} %}
-{% set why_words = {'patient_asked': 'asked for a person', 'payment_unknown': 'asked whether an invoice is paid - not recorded here',
-                    'no_content': "asked something the clinic's content does not cover", 'symptom': 'described a symptom',
-                    'treatment': 'asked about medication or treatment', 'advice': 'asked for an opinion'} %}
+{% set state_words = {'open': _('Waiting'), 'claimed': _('Taken'), 'resolved': _('Done')} %}
+{% set why_words = {'patient_asked': _('asked for a person'), 'payment_unknown': _('asked whether an invoice is paid - not recorded here'),
+                    'no_content': _("asked something the clinic's content does not cover"), 'symptom': _('described a symptom'),
+                    'treatment': _('asked about medication or treatment'), 'advice': _('asked for an opinion')} %}
 <section class="ds-alert ds-alert-info mb-4" role="note" data-ux="callback-purpose" aria-label="{{ _('What a call-back is') }}">
   <div><strong class="ds-alert-title">{{ _("What a call-back is") }}</strong>
   {{ _("A patient asked the assistant for a person, or asked something it must not answer - a symptom, a treatment, an opinion, whether an invoice is paid, or something the clinic's content does not cover. Someone here calls the patient back: take it, call, then mark it done.") }}
@@ -33,7 +33,7 @@
 
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
-    <h2 class="ds-card-title" id="queue-title">{{ (state_words[status] ~ ' call-backs') if status else 'The queue' }}</h2>
+    <h2 class="ds-card-title" id="queue-title">{{ {'open': _('Waiting call-backs'), 'claimed': _('Taken call-backs'), 'resolved': _('Done call-backs')}[status] if status else _('The queue') }}</h2>
     {# P29 redesign: the states are a tab control - the count on each, the current one marked #}
     <nav class="sx-tabs sx-tabs-sm" aria-label="{{ _('Show') }}">
       <a href="{{ url_for('handoff.index') }}"{% if not status %} aria-current="page"{% endif %}>{{ _("All") }}</a>
@@ -45,31 +45,31 @@
   {# P30: Sort and Filter on the rows loaded here (the tabs above choose a state on the server) #}
   {% if rows %}
   <div class="sx-tools sx-tools-row" data-list-tools data-for="handoff-rows" data-noun="{{ _('call-back|call-backs') }}"
-       data-sorts='{{ [['raised', 'text', 1, 'Oldest first'], ['raised', 'text', -1, 'Newest first'], ['state', 'num', 1, 'Waiting first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
-       data-filters='{{ [['about', 'About', [['appointment', 'Appointment'], ['billing', 'Billing'], ['clinical', 'Clinical'], ['records', 'Records'], ['other', 'Other']]],
-                         ['why', 'Why', [['patient_asked', 'Asked for a person'], ['payment_unknown', 'Payment unknown'], ['no_content', 'Not covered'], ['symptom', 'Symptom'], ['treatment', 'Treatment'], ['advice', 'Advice']]]] | tojson }}'></div>
+       data-sorts='{{ [['raised', 'text', 1, _('Oldest first')], ['raised', 'text', -1, _('Newest first')], ['state', 'num', 1, _('Waiting first')], ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+       data-filters='{{ [['about', _('About'), [['appointment', _('Appointment')], ['billing', _('Billing')], ['clinical', _('Clinical')], ['records', _('Records')], ['other', _('Other')]]],
+                         ['why', _('Why'), [['patient_asked', _('Asked for a person')], ['payment_unknown', _('Payment unknown')], ['no_content', _('Not covered')], ['symptom', _('Symptom')], ['treatment', _('Treatment')], ['advice', _('Advice')]]]] | tojson }}'></div>
   {% endif %}
   <div class="dash-card-body">
     {% if rows %}
     <ul class="ds-rows sx-box" id="handoff-rows">
       {% for r in rows %}
-      <li class="ds-row" data-name="{{ r.patient_name or 'Erased patient' }}" data-raised="{{ r.created_at }}" data-about="{{ r.topic }}"
+      <li class="ds-row" data-name="{{ r.patient_name or _('Erased patient') }}" data-raised="{{ r.created_at }}" data-about="{{ r.topic }}"
           data-why="{{ r.reason }}" data-state="{{ {'open': 0, 'claimed': 1, 'resolved': 2}[r.status] }}">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ r.patient_name or 'Erased patient' }} · {{ r.topic }}</span>
+          <span class="ds-row-title">{{ r.patient_name or _('Erased patient') }} · {{ r.topic }}</span>
           <span class="ds-row-sub">
-            <b>{% if r.status == 'claimed' %}Taken by {{ 'you' if r.claimed_by == me else r.claimed_by }}{% else %}{{ state_words[r.status] }}{% endif %}</b>
-            · the patient {{ why_words.get(r.reason, r.reason) }} · raised <span class="ux-nowrap">{{ r.created_at | appt_date }} {{ r.created_at | appt_time }}</span>
+            <b>{% if r.status == 'claimed' %}{{ _('Taken by you') if r.claimed_by == me else _('Taken by {who}', who=r.claimed_by) }}{% else %}{{ state_words[r.status] }}{% endif %}</b>
+            · {{ _('the patient {why}', why=why_words.get(r.reason, r.reason)) }} · {{ _('raised {when}', when=(r.created_at | appt_date) ~ ' ' ~ (r.created_at | appt_time)) }}
           </span>
           <span class="ds-row-sub">
             {%- if r.phone %}<span class="ux-nowrap"><i class="bi bi-telephone" aria-hidden="true"></i> {{ r.phone }}</span>{% else %}{{ _("No phone on file") }}{% endif %}
             {%- if r.codice_fiscale %} · <a class="ux-nowrap" href="{{ url_for('patients.detail_view', cf=r.codice_fiscale) }}" tabindex="0">{{ _("Open record") }}</a>{% endif %}
           </span>
           <span class="ds-row-sub" data-next>
-            {%- if r.status == 'open' %}Next: take it, then call the patient back.
-            {%- elif r.status == 'claimed' and r.claimed_by == me %}Next: call {{ r.phone or 'the patient' }} back, then mark it done.
-            {%- elif r.status == 'claimed' %}{{ r.claimed_by }} is calling. Only they or a dentist can mark it done.
-            {%- else %}Marked done by {{ r.resolved_by }} <span class="ux-nowrap">{{ r.resolved_at | appt_date }} {{ r.resolved_at | appt_time }}</span>.{% endif %}
+            {%- if r.status == 'open' %}{{ _('Next: take it, then call the patient back.') }}
+            {%- elif r.status == 'claimed' and r.claimed_by == me %}{{ _('Next: call {who} back, then mark it done.', who=r.phone or _('the patient')) }}
+            {%- elif r.status == 'claimed' %}{{ _('{who} is calling. Only they or a dentist can mark it done.', who=r.claimed_by) }}
+            {%- else %}{{ _('Marked done by {who} {when}.', who=r.resolved_by, when=(r.resolved_at | appt_date) ~ ' ' ~ (r.resolved_at | appt_time)) }}{% endif %}
           </span>
         </span>
         {% if r.status == 'open' %}

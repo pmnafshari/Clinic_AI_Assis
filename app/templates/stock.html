@@ -4,7 +4,7 @@
   <div>
     <p class="ds-page-eyebrow">{{ _("Stock") }}</p>
     <h1 class="ds-page-title">{{ _("Consumables") }}</h1>
-    <p class="ds-page-meta">Daily check: last run {{ last_run.started_at | appt_date ~ ' ' ~ (last_run.started_at | appt_time) if last_run else 'never' }}{% if last_run and last_run.status != 'ok' %} ({{ last_run.status }}){% endif %} · daily schedule: {{ schedule }}</p>
+    <p class="ds-page-meta">{{ _('Daily check: last run {when}', when=((last_run.started_at | appt_date) ~ ' ' ~ (last_run.started_at | appt_time)) if last_run else _('never')) }}{% if last_run and last_run.status != 'ok' %} ({{ _(last_run.status) }}){% endif %} · {{ _('daily schedule: {schedule}', schedule=_(schedule)) }}</p>
   </div>
 </div>
 
@@ -19,14 +19,14 @@
   <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Low on stock") }}</span>
     <span class="ux-kpi-value">{{ low_count }}</span><span class="ux-kpi-sub">{{ _("at or below the alert level") }}</span></div>
   <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Open alerts") }}</span>
-    <span class="ux-kpi-value">{{ alerts | length }}</span><span class="ux-kpi-sub">{{ alerts | rejectattr('acknowledged_at') | list | length }} not seen yet</span></div>
+    <span class="ux-kpi-value">{{ alerts | length }}</span><span class="ux-kpi-sub">{{ _('{n} not seen yet', n=alerts | rejectattr('acknowledged_at') | list | length) }}</span></div>
 <!--/page-tiles--></div>
 
 {# P30: Low stock beside Add an item, one size; the item list full width below #}
 <div class="sx-panel sx-panel-2 sx-page">
 {% if alerts %}
 <section class="card dash-card {{ 'sx-h-m' if can_manage else 'sx-h-m sx-wide' }} sx-order-1" aria-labelledby="alerts-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="alerts-title">Low stock ({{ alerts | length }})</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="alerts-title">{{ _('Low stock ({n})', n=alerts | length) }}</h2></div>
   {# P29 R-003: one row per alert, the numbers in their own columns and when it started #}
   <div class="dash-card-body"><div class="sx-box sx-box-md">
     <table class="ux-table ux-table-page ux-stock">
@@ -39,7 +39,7 @@
         <td class="ux-num" data-label="{{ _('In stock then') }}">{{ a.balance_at_open }} {{ a.unit }}</td>
         <td class="ux-num" data-label="{{ _('Alert at or below') }}">{{ a.threshold_at_open }} {{ a.unit }}</td>
         <td data-label="{{ _('Since') }}"><span class="ux-nowrap">{{ a.opened_at | appt_date }} {{ a.opened_at | appt_time }}</span></td>
-        <td data-label="{{ _('Seen') }}" data-col="seen">{% if a.acknowledged_at %}by {{ a.acknowledged_by }}{% else %}
+        <td data-label="{{ _('Seen') }}" data-col="seen">{% if a.acknowledged_at %}{{ _('by {who}', who=a.acknowledged_by) }}{% else %}
           <form method="post" action="{{ url_for('stock.acknowledge', alert_id=a.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">{{ _("Mark as seen") }}<span class="visually-hidden">: {{ a.name }}</span></button>
@@ -55,18 +55,18 @@
 
 <section class="card dash-card sx-h-l sx-wide sx-order-3" aria-labelledby="items-title">
   <div class="dash-card-head">
-    <h2 class="ds-card-title" id="items-title">{{ 'Items - low only' if low_only else 'Items' }}</h2>
+    <h2 class="ds-card-title" id="items-title">{{ _('Items - low only') if low_only else _('Items') }}</h2>
     {# P29 R-003: each tab says how many it holds; the one applied is marked and said under the head #}
     <nav class="sx-tabs sx-tabs-sm" aria-label="{{ _('Show') }}"><a href="{{ url_for('stock.index') }}"{% if not low_only %} aria-current="page"{% endif %}>{{ _("All") }} <span class="sx-count">{{ item_count }}</span></a><a href="{{ url_for('stock.index', show='low') }}"{% if low_only %} aria-current="page"{% endif %}>{{ _("Low only") }} <span class="sx-count">{{ low_count }}</span></a></nav>
   </div>
-  {% if low_only and items %}<p class="ux-filter-note" data-ux="stock-filter">Showing the {{ low_count }} item{{ '' if low_count == 1 else 's' }} at or below {{ 'its' if low_count == 1 else 'their' }} alert level. <a href="{{ url_for('stock.index') }}">Show all {{ item_count }}</a></p>{% endif %}
+  {% if low_only and items %}<p class="ux-filter-note" data-ux="stock-filter">{{ _('Showing the {n} item at or below its alert level.', n=1) if low_count == 1 else _('Showing the {n} items at or below their alert level.', n=low_count) }} <a href="{{ url_for('stock.index') }}">{{ _('Show all {n}', n=item_count) }}</a></p>{% endif %}
   {# P30: search, Filter by unit and Sort on the items loaded here #}
   {% if items %}
   {% set unit_options = [] %}{% for u in units %}{% set _u = unit_options.append([u, u]) %}{% endfor %}
   <div class="sx-tools sx-tools-row" data-list-tools data-for="stock-rows" data-noun="{{ _('item|items') }}" data-search="{{ _('Find an item') }}" data-find="name"
-       data-sorts='{{ [['status', 'num', 1, 'Needs attention first'], ['ratio', 'num', 1, 'Stock left (lowest first)'], ['ratio', 'num', -1, 'Stock left (highest first)'],
-                       ['name', 'text', 1, 'Name (A-Z)'], ['name', 'text', -1, 'Name (Z-A)']] | tojson }}'
-       data-filters='{{ [['unit', 'Unit', unit_options]] | tojson }}'></div>
+       data-sorts='{{ [['status', 'num', 1, _('Needs attention first')], ['ratio', 'num', 1, _('Stock left (lowest first)')], ['ratio', 'num', -1, _('Stock left (highest first)')],
+                       ['name', 'text', 1, _('Name (A-Z)')], ['name', 'text', -1, _('Name (Z-A)')]] | tojson }}'
+       data-filters='{{ [['unit', _('Unit'), unit_options]] | tojson }}'></div>
   {% endif %}
   <div class="dash-card-body">
     {% if items %}
@@ -74,7 +74,7 @@
     {% set low_since = {} %}{% for a in alerts %}{% set _l = low_since.update({a.item_id: a.opened_at}) %}{% endfor %}
     <div class="sx-box">
     <table class="ux-table ux-table-page ux-stock">
-      <caption class="visually-hidden">Stock items{{ ', low only' if low_only else '' }}</caption>
+      <caption class="visually-hidden">{{ _('Stock items, low only') if low_only else _('Stock items') }}</caption>
       <thead><tr><th scope="col">{{ _("Item") }}</th><th scope="col" class="ux-num">{{ _("In stock") }}</th><th scope="col">{{ _("Unit") }}</th><th scope="col" class="ux-num">{{ _("Alert at or below") }}</th><th scope="col">{{ _("State") }}</th><th scope="col">{{ _("Low since") }}</th><th scope="col"><span class="visually-hidden">{{ _("Actions") }}</span></th></tr></thead>
       <tbody id="stock-rows">
       {% for i in items %}
@@ -94,7 +94,7 @@
     </div>
     {% else %}
     {# P29 U-006: say why it is empty and what to do #}
-    <p class="dash-empty-line">{% if not item_count %}No items yet. {{ 'Add one in Add an item.' if can_manage else 'A dentist adds them.' }}{% else %}Nothing is low: every item is above its alert level. <a href="{{ url_for('stock.index') }}">Show all {{ item_count }}</a>{% endif %}</p>
+    <p class="dash-empty-line">{% if not item_count %}{{ _('No items yet.') }} {{ _('Add one in Add an item.') if can_manage else _('A dentist adds them.') }}{% else %}{{ _('Nothing is low: every item is above its alert level.') }} <a href="{{ url_for('stock.index') }}">{{ _('Show all {n}', n=item_count) }}</a>{% endif %}</p>
     {% endif %}
   </div>
 </section>

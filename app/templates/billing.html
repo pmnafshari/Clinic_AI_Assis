@@ -24,12 +24,12 @@
 <div class="ux-kpis ux-kpis-3" data-ux="billing-totals">
   <div class="ux-kpi ux-kpi-static">
     <span class="ux-kpi-label">{{ _("Still to pay (issued invoices)") }}</span>
-    <span class="ux-kpi-value">{{ fmt(owed, 'en') }}</span>
-    <span class="ux-kpi-sub">{{ work.owed | length }} invoice{{ 's' if work.owed | length != 1 else '' }}</span>
+    <span class="ux-kpi-value">{{ fmt(owed, lang()) }}</span>
+    <span class="ux-kpi-sub">{{ _('{n} invoice', n=1) if work.owed | length == 1 else _('{n} invoices', n=work.owed | length) }}</span>
   </div>
   <div class="ux-kpi ux-kpi-static">
     <span class="ux-kpi-label">{{ _("Recorded payments, net of refunds") }}</span>
-    <span class="ux-kpi-value">{{ fmt(recorded, 'en') }}</span>
+    <span class="ux-kpi-value">{{ fmt(recorded, lang()) }}</span>
     <span class="ux-kpi-sub">{{ _("entered by staff") }}</span>
   </div>
   <div class="ux-kpi ux-kpi-static">
@@ -56,9 +56,9 @@
   </div>
   <div class="sx-card-body">
 {% for key, title, meta, empty in [
-     ('owed', 'Issued and outstanding', 'By due date. Only these are counted as owed.', 'Nothing owed on issued invoices.'),
-     ('unknown', 'Needs reconciliation', 'From before the ledger. Not counted as owed until reconciled.', 'Nothing to reconcile.'),
-     ('draft', 'Drafts', 'Not yet issued. Not counted as owed.', 'No drafts.')] %}
+     ('owed', _('Issued and outstanding'), _('By due date. Only these are counted as owed.'), _('Nothing owed on issued invoices.')),
+     ('unknown', _('Needs reconciliation'), _('From before the ledger. Not counted as owed until reconciled.'), _('Nothing to reconcile.')),
+     ('draft', _('Drafts'), _('Not yet issued. Not counted as owed.'), _('No drafts.'))] %}
 <div class="sx-bill-panel" data-bill-panel="{{ key }}" role="region" aria-labelledby="bill-{{ key }}">
   <div class="ux-card-head">
     <div>
@@ -68,11 +68,11 @@
     {# P30: Sort and Filter on this section's rows #}
     {% if work[key] %}
     <div class="sx-tools" data-list-tools data-for="bill-rows-{{ key }}" data-noun="{{ _('invoice|invoices') }}"
-         data-sorts='{{ [['no', 'num', -1, 'Invoice number (newest)'], ['no', 'num', 1, 'Invoice number (oldest)'], ['amount', 'num', -1, 'Amount (highest first)'],
-                         ['amount', 'num', 1, 'Amount (lowest first)'], ['due', 'text', 1, 'Due date (soonest)'], ['visit', 'text', -1, 'Visit date (newest)'],
-                         ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
-         data-filters='{{ [['band', 'Amount', [['u100', 'Under 100'], ['m', '100 to 200'], ['o200', 'Over 200']]],
-                           ['state', 'Status', [['draft', 'Draft'], ['issued', 'Issued'], ['partially_paid', 'Part paid'], ['unknown', 'Unknown']]]] | tojson }}'></div>
+         data-sorts='{{ [['no', 'num', -1, _('Invoice number (newest)')], ['no', 'num', 1, _('Invoice number (oldest)')], ['amount', 'num', -1, _('Amount (highest first)')],
+                         ['amount', 'num', 1, _('Amount (lowest first)')], ['due', 'text', 1, _('Due date (soonest)')], ['visit', 'text', -1, _('Visit date (newest)')],
+                         ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+         data-filters='{{ [['band', _('Amount'), [['u100', _('Under 100')], ['m', '100 to 200'], ['o200', _('Over 200')]]],
+                           ['state', _('Status'), [['draft', _('Draft')], ['issued', _('Issued')], ['partially_paid', _('Part paid')], ['unknown', _('Unknown')]]]] | tojson }}'></div>
     {% endif %}
   </div>
   <div data-ux="billing-{{ key }}">
@@ -92,17 +92,17 @@
         data-visit="{{ s.visit_date or '' }}" data-band="{{ 'u100' if cents < 10000 else 'm' if cents <= 20000 else 'o200' }}"
         data-state="{{ s.state if s.state in ('draft', 'unknown', 'partially_paid') else 'issued' }}">
       <td data-label="{{ _('Patient') }}"><strong>{{ s.patient_name }}</strong></td>
-      <td data-label="{{ _('Invoice') }}">#{{ s.id }} <span class="ux-muted ux-sub">visit {{ s.visit_date or 'undated' }}</span></td>
+      <td data-label="{{ _('Invoice') }}">#{{ s.id }} <span class="ux-muted ux-sub">{{ _('visit {date}', date=s.visit_date) if s.visit_date else _('visit undated') }}</span></td>
       <td data-label="{{ _('Due') }}">{% if key == 'owed' and s.due_date %}<span class="ux-nowrap">{{ s.due_date }}</span>{% else %}<span class="ux-muted">-</span>{% endif %}</td>
       <td data-label="{{ _('Amount') }}" class="ux-num">
-        {% if key == 'owed' %}<strong class="ux-nowrap">{{ fmt(s.outstanding_cents, 'en') }}</strong> <span class="ux-muted ux-sub">of {{ fmt(s.total_cents, 'en') }}</span>
-        {% else %}{{ fmt(s.total_cents, 'en') }}{% endif %}</td>
+        {% if key == 'owed' %}<strong class="ux-nowrap">{{ fmt(s.outstanding_cents, lang()) }}</strong> <span class="ux-muted ux-sub">{{ _('of {total}', total=fmt(s.total_cents, lang())) }}</span>
+        {% else %}{{ fmt(s.total_cents, lang()) }}{% endif %}</td>
       <td data-label="{{ _('Status') }}">{{ state_badge(s) }}</td>
       <td data-label="{{ _('Action') }}">
-        {% if key == 'owed' and can_record %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Record payment for {{ s.patient_name }}, invoice #{{ s.id }}">{{ _("Record payment") }}</a>
-        {% elif key == 'unknown' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Reconcile {{ s.patient_name }}'s invoice #{{ s.id }}">{{ _("Reconcile") }}</a>
-        {% elif key == 'draft' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Issue {{ s.patient_name }}'s invoice #{{ s.id }}">{{ _("Issue") }}</a>
-        {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ href }}" aria-label="View {{ s.patient_name }}'s invoice #{{ s.id }}">{{ _("View") }}</a>{% endif %}
+        {% if key == 'owed' and can_record %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="{{ _('Record payment for {name}, invoice #{id}', name=s.patient_name, id=s.id) }}">{{ _("Record payment") }}</a>
+        {% elif key == 'unknown' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="{{ _("Reconcile {name}'s invoice #{id}", name=s.patient_name, id=s.id) }}">{{ _("Reconcile") }}</a>
+        {% elif key == 'draft' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="{{ _("Issue {name}'s invoice #{id}", name=s.patient_name, id=s.id) }}">{{ _("Issue") }}</a>
+        {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ href }}" aria-label="{{ _("View {name}'s invoice #{id}", name=s.patient_name, id=s.id) }}">{{ _("View") }}</a>{% endif %}
       </td>
     </tr>
     {% endfor %}

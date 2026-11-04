@@ -9,6 +9,7 @@ from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
 
 from .db import get_chroma, get_db
+from .i18n import _
 
 data_requests_bp = Blueprint("data_requests", __name__)
 
@@ -18,7 +19,7 @@ EXPORTS_DIR = data_rights.EXPORTS_DIR
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("You don't have permission to handle data requests.", "danger")
+    flash(_("You don't have permission to handle data requests."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -40,7 +41,7 @@ def review(req_id):
     approve = request.form.get("decision") == "approve"
     row = get_db().execute("SELECT kind FROM data_requests WHERE id = ?", (req_id,)).fetchone()
     if approve and row and row["kind"] == "erasure" and request.form.get("confirm") != "yes":
-        flash("Tick the confirmation to erase a patient.", "danger")
+        flash(_("Tick the confirmation to erase a patient."), "danger")
         return redirect(url_for("data_requests.index"))
     try:
         collection = get_chroma()
@@ -83,6 +84,6 @@ def file_for_patient(cf):
     req = data_rights.file_request(conn, pid, request.form.get("kind", ""),
                                    g.user["username"], g.user["role"],
                                    request.form.get("detail"))
-    flash("Request filed for review." if req else "That request could not be filed.",
+    flash(_("Request filed for review.") if req else _("That request could not be filed."),
           "success" if req else "danger")
     return redirect(url_for("patients.detail_view", cf=cf) + "#rights-title")

@@ -19,22 +19,22 @@
   {# P30: Sort and Filter on the requests listed here #}
   {% if rows %}
   <div class="sx-tools sx-tools-row pt-3" data-list-tools data-for="data-request-rows" data-noun="{{ _('request|requests') }}"
-       data-sorts='{{ [['filed', 'text', -1, 'Newest first'], ['filed', 'text', 1, 'Oldest first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
-       data-filters='{{ [['kind', 'Kind', [['access', 'Access'], ['export', 'Copy'], ['amend', 'Correction'], ['erasure', 'Erasure']]],
-                         ['status', 'Status', [['open', 'Open'], ['approved', 'Approved'], ['rejected', 'Refused'], ['done', 'Done']]]] | tojson }}'></div>
+       data-sorts='{{ [['filed', 'text', -1, _('Newest first')], ['filed', 'text', 1, _('Oldest first')], ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+       data-filters='{{ [['kind', _('Kind'), [['access', _('Access')], ['export', _('Copy')], ['amend', _('Correction')], ['erasure', _('Erasure')]]],
+                         ['status', _('Status'), [['open', _('Open')], ['approved', _('Approved')], ['rejected', _('Refused')], ['done', _('Done')]]]] | tojson }}'></div>
   {% endif %}
   <div class="dash-card-body">
     {% if rows %}
     <ul class="ds-rows sx-box" id="data-request-rows">
       {% for r in rows %}
-      <li class="ds-row" id="req-{{ r.id }}" data-name="{{ r.patient_name or 'erased patient' }}" data-filed="{{ r.requested_at }}" data-kind="{{ r.kind }}" data-status="{{ r.status }}">
+      <li class="ds-row" id="req-{{ r.id }}" data-name="{{ r.patient_name or _('erased patient') }}" data-filed="{{ r.requested_at }}" data-kind="{{ r.kind }}" data-status="{{ r.status }}">
         <span class="ds-row-main">
-          <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
+          <span class="ds-row-title">#{{ r.id }} · {{ _(r.kind) }} · {{ _(r.status) }}</span>
           <span class="ds-row-sub">
-            {% if r.patient_name %}{{ r.patient_name }} ({{ r.codice_fiscale }}){% else %}erased patient{% endif %}
-            · filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}
+            {% if r.patient_name %}{{ r.patient_name }} ({{ r.codice_fiscale }}){% else %}{{ _('erased patient') }}{% endif %}
+            · {{ _('filed {date} by {role}', date=r.requested_at | appt_date, role=_(r.requested_role)) }}
             {% if r.reason %} · {{ r.reason }}{% endif %}
-            {% if r.hold_reason %} · held: {{ r.hold_reason }}{% endif %}
+            {% if r.hold_reason %} · {{ _('held: {why}', why=_msg(r.hold_reason)) }}{% endif %}
           </span>
           {% if r.detail %}<span class="ds-row-sub">"{{ r.detail }}"</span>{% endif %}
         </span>

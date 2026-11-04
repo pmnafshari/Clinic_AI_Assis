@@ -267,7 +267,7 @@ def payments_view(conn, pid):
             p["left"], p["state"] = 0, "Refund" if p["kind"] == "refund" else "Reversal"
             continue
         returned = sum(a["amount_cents"] for a in p["answers"])
-        p["left"] = p["amount_cents"] - returned
+        p["left"], p["returned"] = p["amount_cents"] - returned, returned
         if not returned:
             p["state"] = "Kept in full"
         elif p["left"] == 0:

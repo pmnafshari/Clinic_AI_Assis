@@ -11,7 +11,7 @@
   <div>
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
     <h1 class="ds-page-title">{{ _("Billing") }}</h1>
-    <p class="ds-page-meta">Still to pay {{ fmt(summary.outstanding_cents, 'en') }}{% if summary.unknown %} · {{ summary.unknown }} invoice(s) of unknown status, not counted{% endif %}{% if summary.next_due %} · next installment {{ summary.next_due }}{% endif %}</p>
+    <p class="ds-page-meta">{{ _('Still to pay {amount}', amount=fmt(summary.outstanding_cents, lang())) }}{% if summary.unknown %} · {{ _('{n} invoice(s) of unknown status, not counted', n=summary.unknown) }}{% endif %}{% if summary.next_due %} · {{ _('next installment {date}', date=summary.next_due) }}{% endif %}</p>
   </div>
 </div>
 
@@ -23,22 +23,22 @@
 <section class="card dash-card mb-3" id="invoice-{{ inv.id }}" aria-labelledby="inv-{{ loop.index }}">
   <div class="dash-card-head">
     <div>
-      <h2 class="ds-card-title" id="inv-{{ loop.index }}">Visit {{ inv.visit_date or 'undated' }} · {{ inv.state | replace('_', ' ') }}</h2>
-      <p class="ds-card-sub">billed {{ fmt(inv.total_cents, 'en') }} · paid {{ fmt(inv.paid_cents, 'en') }} · still to pay {{ fmt(inv.outstanding_cents, 'en') }}{% if inv.due_date %} · due {{ inv.due_date }}{% endif %}{% if inv.void_reason %} · void: {{ inv.void_reason }}{% endif %}</p>
+      <h2 class="ds-card-title" id="inv-{{ loop.index }}">{{ _('Visit {date}', date=inv.visit_date) if inv.visit_date else _('Visit undated') }} · {{ _(inv.state | replace('_', ' ')) }}</h2>
+      <p class="ds-card-sub">{{ _('billed {billed} · paid {paid} · still to pay {owed}', billed=fmt(inv.total_cents, lang()), paid=fmt(inv.paid_cents, lang()), owed=fmt(inv.outstanding_cents, lang())) }}{% if inv.due_date %} · {{ _('due {date}', date=inv.due_date) }}{% endif %}{% if inv.void_reason %} · {{ _('void: {why}', why=inv.void_reason) }}{% endif %}</p>
     </div>
     {% if inv.id %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('billing.preview', invoice_id=inv.id) }}">{{ _("Preview") }}</a>{% endif %}
   </div>
   <div class="dash-card-body">
     <ul class="ds-rows">
       {% for line in inv.lines %}
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ line.description or 'line ' ~ (line.line_index + 1) }}</span></span><span class="ds-numeral ms-auto">{{ fmt(line.amount_cents, 'en') }}</span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ line.description or _('line {n}', n=line.line_index + 1) }}</span></span><span class="ds-numeral ms-auto">{{ fmt(line.amount_cents, lang()) }}</span></li>
       {% endfor %}
     </ul>
     {% if inv.installments %}
-    <p class="small mb-1 mt-3"><strong>Installments</strong> - payments cover the {{ order }}</p>
+    <p class="small mb-1 mt-3"><strong>{{ _('Installments') }}</strong> - {{ _('payments cover the {order}', order=_(order)) }}</p>
     <ul class="ds-rows">
       {% for i in inv.installments %}
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ i.seq }}. due {{ i.due_date }}</span><span class="ds-row-sub">{{ fmt(i.amount_cents, 'en') }}</span></span><span class="ms-auto small">{% if i.open_cents %}{{ fmt(i.open_cents, 'en') }} open{% else %}covered{% endif %}</span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ _('{n}. due {date}', n=i.seq, date=i.due_date) }}</span><span class="ds-row-sub">{{ fmt(i.amount_cents, lang()) }}</span></span><span class="ms-auto small">{% if i.open_cents %}{{ _('{amount} open', amount=fmt(i.open_cents, lang())) }}{% else %}{{ _('covered') }}{% endif %}</span></li>
       {% endfor %}
     </ul>
     {% endif %}
@@ -69,11 +69,11 @@
       </form>
       {# P29 R-022: what each choice records and what it does to the amount owed #}
       <div class="small w-100" id="rhelp-{{ inv.id }}">
-        <p class="mb-1">This invoice predates the ledger. No payment is recorded for it, so what was paid is unknown and it is not counted in "still to pay". Billed: {{ fmt(inv.total_cents, 'en') }}.</p>
+        <p class="mb-1">{{ _('This invoice predates the ledger. No payment is recorded for it, so what was paid is unknown and it is not counted in "still to pay". Billed: {amount}.', amount=fmt(inv.total_cents, lang())) }}</p>
         <ul class="mb-0">
-          <li><strong>Not paid:</strong> the invoice is issued and {{ fmt(inv.total_cents, 'en') }} becomes owed.</li>
-          <li><strong>Paid in full:</strong> a payment of {{ fmt(inv.total_cents, 'en') }} is recorded as a reconciliation and nothing is owed.</li>
-          <li><strong>Partly paid:</strong> the amount you enter is recorded as a reconciliation; the rest of {{ fmt(inv.total_cents, 'en') }} becomes owed.</li>
+          <li>{{ _html('<strong>Not paid:</strong> the invoice is issued and {amount} becomes owed.', amount=fmt(inv.total_cents, lang())) }}</li>
+          <li>{{ _html('<strong>Paid in full:</strong> a payment of {amount} is recorded as a reconciliation and nothing is owed.', amount=fmt(inv.total_cents, lang())) }}</li>
+          <li>{{ _html('<strong>Partly paid:</strong> the amount you enter is recorded as a reconciliation; the rest of {amount} becomes owed.', amount=fmt(inv.total_cents, lang())) }}</li>
         </ul>
       </div>
       {% endif %}
@@ -117,31 +117,31 @@
       {% for p in payments %}
       <li class="ds-row pay-row" id="pay-{{ p.id }}">
         <span class="ds-row-main">
-          <span class="ds-row-title">#{{ p.id }} {{ {'payment': 'Payment', 'refund': 'Refund', 'reversal': 'Reversal'}[p.kind] }}
-            <span class="pay-amount {{ 'is-in' if p.signed > 0 else 'is-out' }}">{{ '+' if p.signed > 0 else '−' }}{{ fmt(p.amount_cents, 'en') }}</span>
-            <span class="pay-state">{{ p.state }}</span></span>
-          <span class="ds-row-sub">received {{ p.received_on }} · {{ p.method | replace('_', ' ') }}
-            {%- if p.reverses_payment_id %} · Against payment <a href="#pay-{{ p.reverses_payment_id }}">#{{ p.reverses_payment_id }}</a>{% endif %}
-            {%- for a in p.answers %} · {{ 'Refunded' if a.kind == 'refund' else 'Reversed' }} by <a href="#pay-{{ a.id }}">#{{ a.id }}</a>{% endfor %}</span>
+          <span class="ds-row-title">#{{ p.id }} {{ {'payment': _('Payment'), 'refund': _('Refund'), 'reversal': _('Reversal')}[p.kind] }}
+            <span class="pay-amount {{ 'is-in' if p.signed > 0 else 'is-out' }}">{{ '+' if p.signed > 0 else '−' }}{{ fmt(p.amount_cents, lang()) }}</span>
+            <span class="pay-state">{% if p.returned and p.left %}{{ _('{kept} kept, {back} refunded', kept=fmt(p.left, lang()), back=fmt(p.returned, lang())) }}{% else %}{{ _(p.state) }}{% endif %}</span></span>
+          <span class="ds-row-sub">{{ _('received {date}', date=p.received_on) }} · {{ _(p.method | replace('_', ' ')) }}
+            {%- if p.reverses_payment_id %} · {{ _html('Against payment <a href="#pay-{id}">#{id}</a>', id=p.reverses_payment_id) }}{% endif %}
+            {%- for a in p.answers %} · {{ _html('Refunded by <a href="#pay-{id}">#{id}</a>', id=a.id) if a.kind == 'refund' else _html('Reversed by <a href="#pay-{id}">#{id}</a>', id=a.id) }}{% endfor %}</span>
           <details class="pay-detail">
-            <summary>{{ _("Details") }}<span class="visually-hidden"> of #{{ p.id }}</span></summary>
+            <summary>{{ _("Details") }}<span class="visually-hidden">{{ _(' of #{id}', id=p.id) }}</span></summary>
             <dl class="confirm-rows">
-              <dt>{{ _("Recorded") }}</dt><dd>recorded by {{ p.recorded_by }} ({{ p.recorded_role }}), {{ p.source | replace('_', ' ') }}</dd>
+              <dt>{{ _("Recorded") }}</dt><dd>{{ _('recorded by {who} ({role}), {source}', who=p.recorded_by, role=_(p.recorded_role), source=_(p.source | replace('_', ' '))) }}</dd>
               {% if p.reference %}<dt>{{ _("Receipt") }}</dt><dd>{{ p.reference }}</dd>{% endif %}
-              {% if p.note %}<dt>{{ 'Note' if p.kind == 'payment' else 'Reason' }}</dt><dd>{{ p.note }}</dd>{% endif %}
-              <dt>{{ _("Set against") }}</dt><dd>{% for a in p.allocations %}invoice #{{ a.invoice_id }} {{ fmt(a.c, 'en') }}{{ ', ' if not loop.last else '' }}{% else %}no invoice{% endfor %}</dd>
+              {% if p.note %}<dt>{{ _('Note') if p.kind == 'payment' else _('Reason') }}</dt><dd>{{ p.note }}</dd>{% endif %}
+              <dt>{{ _("Set against") }}</dt><dd>{% for a in p.allocations %}{{ _('invoice #{id} {amount}', id=a.invoice_id, amount=fmt(a.c, lang())) }}{{ ', ' if not loop.last else '' }}{% else %}{{ _('no invoice') }}{% endfor %}</dd>
             </dl>
             {% if can_change and p.kind == 'payment' and p.left > 0 %}
             <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='refund') }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ key() }}">
-              <div><label class="form-label small" for="ra-{{ p.id }}">Refund amount (at most {{ fmt(p.left, 'en') }})</label>
+              <div><label class="form-label small" for="ra-{{ p.id }}">{{ _('Refund amount (at most {amount})', amount=fmt(p.left, lang())) }}</label>
                 <input class="form-control form-control-sm" id="ra-{{ p.id }}" name="amount" inputmode="decimal" required></div>
-              <div>{{ reason_box('rr-' ~ p.id, reasons.REFUND, 'Reason for the refund') }}</div>
+              <div>{{ reason_box('rr-' ~ p.id, reasons.REFUND, _('Reason for the refund')) }}</div>
               <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Refund") }}</button>
             </form>
             <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='reverse') }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ key() }}">
-              <div>{{ reason_box('rv-' ~ p.id, reasons.REVERSE, 'Reason to reverse it (takes out ' ~ fmt(p.left, 'en') ~ ')') }}</div>
+              <div>{{ reason_box('rv-' ~ p.id, reasons.REVERSE, _('Reason to reverse it (takes out {amount})', amount=fmt(p.left, lang()))) }}</div>
               <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Reverse (entered by mistake)") }}</button>
             </form>
             {% endif %}

@@ -8,6 +8,7 @@ from auth import authorize, log_audit
 
 from . import reasons
 from .db import get_db
+from .i18n import _, message
 
 MOVE_FIELDS = ("kind", "quantity", "reason_choice", "reason")
 _move_retry = {}
@@ -17,7 +18,7 @@ stock_bp = Blueprint("stock", __name__)
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("You don't have permission to do that with stock.", "danger")
+    flash(_("You don't have permission to do that with stock."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -60,14 +61,14 @@ def move(item_id):
         return _refuse("stock_move", f"item:{item_id}")
     form = request.form
     try:
-        _, created = inventory.move(get_db(), item_id, form.get("kind", ""), form.get("quantity"),
+        _moved, created = inventory.move(get_db(), item_id, form.get("kind", ""), form.get("quantity"),
                                     g.user["username"], g.user["role"], reasons.chosen(form, reasons.STOCK),
                                     form.get("key") or None)
-        flash("Recorded." if created else "That was already recorded.", "success")
+        flash("Recorded." if created else _("That was already recorded."), "success")
     except PermissionError:
         flash("A correction is for a dentist. Use a count to record what is on the shelf.", "danger")
     except inventory.StockError as e:
-        flash(f"Not recorded: {e}.", "danger")
+        flash(_("Not recorded: {why}.", why=message(str(e))), "danger")
         # P29 R-012: the form comes back with what was typed, once
         _move_retry[(g.user["username"], item_id)] = {k: form.get(k, "") for k in MOVE_FIELDS}
     return redirect(url_for("stock.item", item_id=item_id))
@@ -81,10 +82,10 @@ def create():
         item_id = inventory.create_item(get_db(), request.form.get("name"), request.form.get("unit"),
                                         request.form.get("threshold"), g.user["username"],
                                         g.user["role"])
-        flash("Item added.", "success")
+        flash(_("Item added."), "success")
         return redirect(url_for("stock.item", item_id=item_id))
     except inventory.StockError as e:
-        flash(f"Not added: {e}.", "danger")
+        flash(_("Not added: {why}.", why=message(str(e))), "danger")
         return redirect(url_for("stock.index"))
 
 
@@ -95,9 +96,9 @@ def threshold(item_id):
     try:
         inventory.set_threshold(get_db(), item_id, request.form.get("threshold"),
                                 g.user["username"], g.user["role"])
-        flash("Threshold changed.", "success")
+        flash(_("Threshold changed."), "success")
     except inventory.StockError as e:
-        flash(f"Not changed: {e}.", "danger")
+        flash(_("Not changed: {why}.", why=message(str(e))), "danger")
     return redirect(url_for("stock.item", item_id=item_id))
 
 
