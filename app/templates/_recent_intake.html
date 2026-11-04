@@ -18,7 +18,7 @@
     {% elif row.state == 'external' %}
     <span class="badge text-bg-secondary">{{ _("External") }}</span>
     {% elif row.state == 'needs_review' %}
-    <span class="badge text-bg-dark" title="{{ row.reason or 'open the file to see why' }}">{{ _("Needs Review") }}</span>
+    <span class="badge text-bg-dark" title="{{ row.reason or _('open the file to see why') }}">{{ _("Needs Review") }}</span>
     {% elif row.state == 'awaiting_review' %}
     <span class="badge text-bg-secondary" title="{{ _('A dentist confirms it before it joins the record') }}">{{ _("Awaiting review") }}</span>
     {% elif row.state == 'sorted' %}

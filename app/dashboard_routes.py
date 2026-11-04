@@ -13,6 +13,7 @@ from auth import authorize
 from shared.names import initials, tint
 
 from .db import get_db
+from .i18n import _, day_label, full_date, stamp, weekday
 from .upload_routes import _intake_state
 
 dashboard_bp = Blueprint("dashboard", __name__)
@@ -167,24 +168,24 @@ def index():
     # separate review-and-alerts card repeated it)
     alerts = []
     if reviews:
-        alerts.append((f"{reviews} note{'s' if reviews != 1 else ''} awaiting a dentist", url_for("review.queue")))
+        alerts.append((_("{n} note awaiting a dentist", n=reviews) if reviews == 1 else _("{n} notes awaiting a dentist", n=reviews), url_for("review.queue")))
     if stock_low:
-        alerts.append((f"{stock_low} item{'s' if stock_low != 1 else ''} low on stock", url_for("stock.index")))
+        alerts.append((_("{n} item low on stock", n=stock_low) if stock_low == 1 else _("{n} items low on stock", n=stock_low), url_for("stock.index")))
     if callbacks:
-        alerts.append((f"{callbacks} call-back{'s' if callbacks != 1 else ''} open", url_for("handoff.index")))
+        alerts.append((_("{n} call-back open", n=callbacks) if callbacks == 1 else _("{n} call-backs open", n=callbacks), url_for("handoff.index")))
     attention = []
     if pending:
-        attention.append((f"{len(pending)} request{'s' if len(pending) != 1 else ''} to confirm", url_for("appointments.index") + "#requests"))
+        attention.append((_("{n} request to confirm", n=len(pending)) if len(pending) == 1 else _("{n} requests to confirm", n=len(pending)), url_for("appointments.index") + "#requests"))
     attention += alerts
 
     kpis = []
     if may_book:
-        kpis.append(("Appointments today", len(agenda), "booked on the schedule", url_for("appointments.index", day=today), "bi-calendar3"))
-        kpis.append(("Requests to confirm", len(pending), "not bookings yet", url_for("appointments.index") + "#requests", "bi-inbox"))
+        kpis.append((_("Appointments today"), len(agenda), _("booked on the schedule"), url_for("appointments.index", day=today), "bi-calendar3"))
+        kpis.append((_("Requests to confirm"), len(pending), _("not bookings yet"), url_for("appointments.index") + "#requests", "bi-inbox"))
     if reviews is not None:
-        kpis.append(("Notes to review", reviews, "a dentist confirms them", url_for("review.queue"), "bi-clipboard-check"))
+        kpis.append((_("Notes to review"), reviews, _("a dentist confirms them"), url_for("review.queue"), "bi-clipboard-check"))
     if stock_low is not None:
-        kpis.append(("Low stock", stock_low, "open stock alerts", url_for("stock.index"), "bi-box-seam"))
+        kpis.append((_("Low stock"), stock_low, _("open stock alerts"), url_for("stock.index"), "bi-box-seam"))
 
     # a quiet day says so, and offers the next day with a CONFIRMED booking (a real link, not a filler row)
     next_day = None
@@ -192,7 +193,7 @@ def index():
         row = appointments.next_confirmed(conn, today)
         if row:
             d = clinic_time.local_of(row["starts_at"]).date()
-            next_day = {"iso": d.isoformat(), "label": f"{d:%a} {d.day} {d:%b}"}
+            next_day = {"iso": d.isoformat(), "label": day_label(d)}
 
     # correction 2: one operational chart - confirmed bookings per clinic day, the next 14 days, all clinicians,
     # read from the appointment book by the same query the Appointments views use
@@ -204,7 +205,7 @@ def index():
             k = clinic_time.local_date(r["starts_at"])
             per_day[k] = per_day.get(k, 0) + 1
         days = [now.date() + timedelta(days=i) for i in range(14)]
-        bars = [{"iso": d.isoformat(), "label": f"{d:%a} {d.day} {d:%b}", "wd": f"{d:%a}"[:2], "num": d.day,
+        bars = [{"iso": d.isoformat(), "label": day_label(d), "wd": weekday(d)[:2], "num": d.day,
                  "count": per_day.get(d.isoformat(), 0)} for d in days]
         peak = max([b["count"] for b in bars] + [1])
         for b in bars:
@@ -215,9 +216,9 @@ def index():
             row = appointments.next_confirmed(conn, days[-1].isoformat())
             if row:
                 at = clinic_time.local_of(row["starts_at"])
-                upcoming = {"iso": at.date().isoformat(), "label": f"{at:%a} {at.day} {at:%b}, {at:%H:%M}"}
+                upcoming = {"iso": at.date().isoformat(), "label": f"{day_label(at)}, {at:%H:%M}"}
         chart = {"bars": bars, "total": total, "peak": peak, "upcoming": upcoming,
-                 "period": f"{days[0]:%a} {days[0].day} {days[0]:%b} - {days[-1]:%a} {days[-1].day} {days[-1]:%b}"}
+                 "period": f"{day_label(days[0])} - {day_label(days[-1])}"}
 
     # P29 redesign: the dark card that leads home. a dentist sees their own next patient today (the clinic's next
     # when they have none of their own); reception sees the front desk - requests and call-backs. every value is
@@ -231,7 +232,7 @@ def index():
     intake = _intake_counts(conn, g.user["username"]) if show_intake else None
     return render_template(
         "dashboard.html", hero_kind=hero_kind, next_up=next_up, next_is_own=bool(own), callbacks=callbacks,
-        today_label=f"{now:%A} {now.day} {now:%B %Y}", today_iso=today,
+        today_label=full_date(now), today_iso=today,
         may_book=may_book, agenda=agenda, requests=_request_view(pending) if pending else [],
         request_total=len(pending) if pending is not None else None,
         attention=attention, kpis=kpis, next_day=next_day, chart=chart,
@@ -258,12 +259,14 @@ def _review_words(conn, name, username):
                        " AND created_by = ? ORDER BY id DESC LIMIT 1", (name, username)).fetchone()
     if row is None or row["status"] in ("pending", "confirming"):
         return None
-    by = row["decided_by"] or "a dentist"
+    by = row["decided_by"] or _("a dentist")
     if row["status"] == "confirmed":
-        return f"Note confirmed by {by}"
+        return _("Note confirmed by {who}", who=by)
     if row["status"] == "rejected":
-        return f"Note rejected by {by}" + (f": {row['decision_reason']}" if row["decision_reason"] else "")
-    return "Note could not be read"
+        if row["decision_reason"]:
+            return _("Note rejected by {who}: {reason}", who=by, reason=row["decision_reason"])
+        return _("Note rejected by {who}", who=by)
+    return _("Note could not be read")
 
 
 def _who(conn, key):
@@ -298,16 +301,16 @@ def _activity(conn, username, limit=6):
     for i, entry in enumerate(_user_undo_history(username, limit=limit)):
         field = (entry.get("target") or "").split(":")[1] if ":" in (entry.get("target") or "") else ""
         who = _who(conn, entry.get("codice_fiscale"))
-        what = _TOOL_WORDS.get(entry.get("tool"), "Record changed")
-        detail = _FIELD_WORDS.get(field.rsplit(":", 1)[0], "")
+        what = _(_TOOL_WORDS.get(entry.get("tool"), "Record changed"))
+        detail = _(_FIELD_WORDS[field.rsplit(":", 1)[0]]) if field.rsplit(":", 1)[0] in _FIELD_WORDS else ""
         try:
             local = clinic_time.local_of(entry["ts"])     # stored in UTC
-            when = local.strftime("%-d %b, %H:%M" if local.year == now.year else "%-d %b %Y, %H:%M")
+            when = stamp(local, now)
         except (KeyError, ValueError):
             # an entry from before stamps were UTC has no known zone: its day, not a guessed time
             when = (entry.get("ts") or "")[:10]
         items.append({"when": when, "at": _instant(entry.get("ts")), "text": f"{what}{' (' + detail + ')' if detail else ''}",
-                      "who": who or "a patient no longer on record", "undo": i == 0})
+                      "who": who or _("a patient no longer on record"), "undo": i == 0})
     rows = conn.execute("SELECT id, ts, target, action, allowed, reason FROM audit_log WHERE username = ? AND action IN"
                         " ('queue_upload', 'upload_file', 'sync_note', 'note_staged') ORDER BY id DESC LIMIT ?",
                         (username, limit * 4)).fetchall()
@@ -320,15 +323,15 @@ def _activity(conn, username, limit=6):
         parts = Path(r["target"] or "").parts
         who = _who(conn, parts[1]) if len(parts) > 2 and parts[0] == "sorted" else None
         state = _intake_state(r)
-        text = "Document filed" if state == "sorted" and "documents" in parts[:-1] else _STATE_WORDS[state]
+        text = _("Document filed") if state == "sorted" and "documents" in parts[:-1] else _(_STATE_WORDS[state])
         # P29 F-019: the latest state of the file, not the step that logged it
         if state == "awaiting_review":
             text = _review_words(conn, key, username) or text
         elif state == "rejected" and r["action"] == "upload_file":
-            text, who = "Upload refused - this file type is not accepted", _CF_IN_NAME.sub("…", key)
+            text, who = _("Upload refused - this file type is not accepted"), _CF_IN_NAME.sub("…", key)
         local = clinic_time.local_of(r["ts"]) if r["ts"] else None
-        items.append({"when": local.strftime("%-d %b, %H:%M" if local.year == now.year else "%-d %b %Y, %H:%M") if local else "",
-                      "at": _instant(r["ts"]), "text": text, "who": who or "no patient matched yet", "undo": False})
+        items.append({"when": stamp(local, now) if local else "",
+                      "at": _instant(r["ts"]), "text": text, "who": who or _("no patient matched yet"), "undo": False})
     items.sort(key=lambda x: x["at"], reverse=True)
     items = items[:limit]
     week_ago = clinic_time.to_utc(now - _td(days=7))

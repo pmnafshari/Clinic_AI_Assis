@@ -10,6 +10,7 @@ from auth import authorize, log_audit
 
 from . import reasons
 from .db import get_db
+from .i18n import _, DAYS, current, day_label as _day_name, long_date, message, month_year, short_date, weekday
 
 appointments_bp = Blueprint("appointments", __name__)
 
@@ -36,8 +37,8 @@ def _when(appointment_id):
                            (appointment_id,)).fetchone()
     start = clinic_time.local_of(row["starts_at"])
     end = start + timedelta(minutes=row["minutes"])
-    return (f"{WEEKDAYS[start.weekday()]} {start.day} {start.strftime('%b')}, "
-            f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')} with {row['dentist']}")
+    return _("{day}, {start}–{end} with {dentist}", day=_day_name(start), start=start.strftime("%H:%M"),
+             end=end.strftime("%H:%M"), dentist=row["dentist"])
 
 
 def _pick_day(raw):
@@ -71,19 +72,19 @@ def _shift_month(first, step):
 
 def _day_label(d, booked, requested, word="booked", past=False):
     # what a screen reader gets instead of a bare number in a grid
-    parts = [d.strftime("%-d %B %Y")]
+    parts = [long_date(d)]
     counts = []
     if booked:
-        counts.append(f"{booked} {word}")
+        counts.append(_(f"{{n}} {word}", n=booked))
     if requested:
-        counts.append(f"{requested} request" if requested == 1 else f"{requested} requests")
+        counts.append(_("{n} request", n=requested) if requested == 1 else _("{n} requests", n=requested))
         if past:
             # P29 U-014: the preferred day is gone and nobody confirmed it - not one more upcoming request
-            counts[-1] += ", day passed - not booked"
+            counts[-1] += _(", day passed - not booked")
     if counts:
         parts.append(", ".join(counts))
     else:
-        parts.append(f"nothing {word}")
+        parts.append(_(f"nothing {word}"))
     return ": ".join(parts)
 
 
@@ -162,8 +163,9 @@ def index():
     for r in appointments.range_rows(conn, lo.isoformat(), hi.isoformat(), statuses, dentist):
         per_day.setdefault(clinic_time.local_date(r["starts_at"]), []).append(_slot(r))
     total = sum(len(v) for v in per_day.values())
-    period = {"day": f"on {selected:%a %-d %b}", "week": "this week", "month": f"in {first:%B %Y}"}[view]
-    summary = f"{total} {one if total == 1 else many} {period} · {dentist or 'all clinicians'}"
+    period = {"day": _("on {day}", day=_day_name(selected)), "week": _("this week"), "month": _("in {month}", month=month_year(first))}[view]
+    summary = _("{count} {period} · {who}", count=_(f"{{n}} {one if total == 1 else many}", n=total), period=period,
+                who=dentist or _("all clinicians"))
 
     # an empty view sends the user to the next CONFIRMED booking after it (with the clinician filter)
     upcoming = None
@@ -171,7 +173,7 @@ def index():
         nxt = appointments.next_confirmed(conn, (hi - timedelta(days=1)).isoformat(), dentist)
         if nxt:
             at = clinic_time.local_of(nxt["starts_at"])
-            upcoming = {"iso": at.date().isoformat(), "label": f"{at:%a %-d %b}, {at:%H:%M}", "patient": nxt["patient_name"]}
+            upcoming = {"iso": at.date().isoformat(), "label": f"{_day_name(at)}, {at:%H:%M}", "patient": nxt["patient_name"]}
 
     columns = [dentist] if dentist else dentists
     slots = per_day.get(day, []) if view == "day" else []
@@ -181,8 +183,8 @@ def index():
         hours = range(min(s["hour"] for s in slots), max(s["hour"] for s in slots) + 1)
         grid = [{"hour": f"{h:02d}:00–{h + 1:02d}:00", "cells": [[s for s in slots if s["hour"] == h and s["dentist"] == c] for c in columns]}
                 for h in hours]
-    week = [{"iso": (monday + timedelta(days=i)).isoformat(), "label": f"{(monday + timedelta(days=i)):%a %-d %b}",
-             "name": f"{(monday + timedelta(days=i)):%a}", "date": f"{(monday + timedelta(days=i)):%-d %b}",
+    week = [{"iso": (monday + timedelta(days=i)).isoformat(), "label": _day_name(monday + timedelta(days=i)),
+             "name": weekday(monday + timedelta(days=i)), "date": short_date(monday + timedelta(days=i)),
              "is_today": monday + timedelta(days=i) == clinic_time.now().date(),
              "slots": per_day.get((monday + timedelta(days=i)).isoformat(), [])}
             for i in range(7)] if view == "week" else None
@@ -195,16 +197,16 @@ def index():
         "SELECT patient_id, codice_fiscale, patient_name FROM patients ORDER BY patient_name").fetchall()
     return render_template(
         "appointments.html",
-        view=view, day=day, day_label=f"{selected:%a %-d %b %Y}", status=status, dentist=dentist,
+        view=view, day=day, day_label=f"{_day_name(selected)} {selected.year}", status=status, dentist=dentist,
         dentists=[{"username": d} for d in dentists], dentist_names=dentists, columns=columns, grid=grid,
-        slot_count=len(slots), week=week, week_label=f"{monday:%-d %b} - {(monday + timedelta(days=6)):%-d %b %Y}",
+        slot_count=len(slots), week=week, week_label=f"{short_date(monday)} - {short_date(monday + timedelta(days=6))} {(monday + timedelta(days=6)).year}",
         summary=summary, upcoming=upcoming, word=word, total=total,
         prev_day=prev_day, next_day=next_day,
         requests_pending=appointments.pending_requests(conn), patients=patients,
         open_booking=request.args.get("book") == "1",
         retry=_book_retry.pop(g.user["username"], None),
-        weeks=_month_grid(conn, first, selected, per_day, word) if view == "month" else [], weekdays=WEEKDAYS,
-        month=first.isoformat()[:7], month_label=first.strftime("%B %Y"),
+        weeks=_month_grid(conn, first, selected, per_day, word) if view == "month" else [], weekdays=DAYS[current()],
+        month=first.isoformat()[:7], month_label=month_year(first),
         today=clinic_time.now().date().isoformat(),
     )
 
@@ -235,12 +237,12 @@ def book():
         )
     except ValueError as e:
         # an overlap is a user mistake, not a server error
-        flash(f"The appointment was not booked: {e}", "error")
+        flash(_("The appointment was not booked: {why}", why=message(str(e))), "error")
         _book_retry[g.user["username"]] = {**{k: request.form.get(k, "") for k in BOOK_FIELDS}, "error": str(e)}
         return redirect(url_for("appointments.index", day=day, book=1) + "#book")
     else:
         _allowed("book_appointment", str(new_id))
-        flash(f"Appointment booked: {_when(new_id)}.", "success")
+        flash(_("Appointment booked: {when}.", when=_when(new_id)), "success")
     return redirect(url_for("appointments.index", day=day))
 
 
@@ -254,10 +256,10 @@ def cancel(appointment_id):
     try:
         appointments.cancel(get_db(), appointment_id)
     except ValueError as e:
-        flash(str(e), "error")
+        flash(message(str(e)), "error")
     else:
         _allowed("cancel_appointment", str(appointment_id))
-        flash("Appointment cancelled.", "removed")
+        flash(_("Appointment cancelled."), "removed")
     return redirect(url_for("appointments.index", day=day))
 
 
@@ -274,10 +276,10 @@ def reschedule(appointment_id):
             get_db(), appointment_id, starts_at, request.form.get("minutes", "")
         )
     except ValueError as e:
-        flash(str(e), "error")
+        flash(message(str(e)), "error")
     else:
         _allowed("reschedule_appointment", str(appointment_id))
-        flash("Appointment moved.", "success")
+        flash(_("Appointment moved."), "success")
         day = request.form.get("date") or day
     return redirect(url_for("appointments.index", day=day))
 
@@ -303,10 +305,10 @@ def confirm(appointment_id):
             starts_at, request.form.get("minutes", ""),
         )
     except ValueError as e:
-        flash(str(e), "error")
+        flash(message(str(e)), "error")
     else:
         _allowed("confirm_appointment_request", str(appointment_id))
-        flash("Request confirmed.", "success")
+        flash(_("Request confirmed."), "success")
     return redirect(url_for("appointments.index", day=day))
 
 
@@ -320,8 +322,8 @@ def decline(appointment_id):
     try:
         appointments.decline(get_db(), appointment_id, reasons.chosen(request.form, reasons.DECLINE) or None)
     except ValueError as e:
-        flash(str(e), "error")
+        flash(message(str(e)), "error")
     else:
         _allowed("decline_appointment_request", str(appointment_id))
-        flash("Request declined.", "removed")
+        flash(_("Request declined."), "removed")
     return redirect(url_for("appointments.index", day=day))

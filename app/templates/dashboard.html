@@ -34,7 +34,7 @@
     <p class="ux-empty">{{ _("Nothing yet. Notes you file and records you change appear here.") }}</p>
     {% endif %}
     {% if show_intake and intake %}
-    <p class="ux-muted ux-intake">Your uploads: {{ intake.sorted }} filed · {{ intake.needs_review }} need review · {{ intake.not_searchable }} not searchable · {{ intake.rejected }} refused</p>
+    <p class="ux-muted ux-intake">{{ _('Your uploads: {filed} filed · {review} need review · {hidden} not searchable · {refused} refused', filed=intake.sorted, review=intake.needs_review, hidden=intake.not_searchable, refused=intake.rejected) }}</p>
     {% endif %}
     <!--/activity--></div>
   </section>
@@ -60,11 +60,11 @@
 <section class="sx-hero" data-ux="hero" data-kind="{{ hero_kind }}" aria-labelledby="hero-title">
   {% if hero_kind == 'dentist' %}
   {% if next_up %}
-  <span class="sx-tile" aria-hidden="true"><small>{{ 'Now' if next_up.is_current else 'Next' }}</small><b>{{ next_up.time }}</b><small>{{ next_up.minutes }} min</small></span>
+  <span class="sx-tile" aria-hidden="true"><small>{{ _('Now') if next_up.is_current else _('Next') }}</small><b>{{ next_up.time }}</b><small>{{ _('{n} min', n=next_up.minutes) }}</small></span>
   <div class="sx-hero-text">
-    <p class="sx-hero-k" id="hero-title">{{ 'Your next patient' if next_is_own else 'Next patient in the clinic' }}</p>
+    <p class="sx-hero-k" id="hero-title">{{ _('Your next patient') if next_is_own else _('Next patient in the clinic') }}</p>
     <p class="sx-hero-big">{{ next_up.patient_name }}</p>
-    <p class="sx-hero-meta">{{ next_up.time }} - {{ next_up.end }} · with {{ next_up.dentist }}{% if next_up.is_current %} · in progress{% endif %}</p>
+    <p class="sx-hero-meta">{{ next_up.time }} - {{ next_up.end }} · {{ _('with {dentist}', dentist=next_up.dentist) }}{% if next_up.is_current %} · {{ _('in progress') }}{% endif %}</p>
   </div>
   <div class="sx-hero-acts">
     <a class="btn btn-light" href="{{ url_for('patients.detail_view', cf=next_up.cf) }}"><i class="bi bi-person-vcard" aria-hidden="true"></i> {{ _("Open record") }}</a>
@@ -74,7 +74,7 @@
   <div class="sx-hero-text">
     <p class="sx-hero-k" id="hero-title">{{ _("Your next patient") }}</p>
     <p class="sx-hero-big">{{ _("No more patients today") }}</p>
-    {% if next_day %}<p class="sx-hero-meta">Next booked day: {{ next_day.label }}</p>{% endif %}
+    {% if next_day %}<p class="sx-hero-meta">{{ _('Next booked day: {day}', day=next_day.label) }}</p>{% endif %}
   </div>
   <div class="sx-hero-acts"><a class="btn btn-light" href="{{ url_for('appointments.index', view='week', day=today_iso) }}">{{ _("Open the schedule") }}</a></div>
   {% endif %}
@@ -82,8 +82,8 @@
   <span class="sx-tile" aria-hidden="true"><small>{{ _("Desk") }}</small><b>{{ request_total }}</b><small>{{ _("waiting") }}</small></span>
   <div class="sx-hero-text">
     <p class="sx-hero-k" id="hero-title">{{ _("Front desk") }}</p>
-    <p class="sx-hero-big">{{ request_total }} request{{ '' if request_total == 1 else 's' }} to confirm{% if callbacks is not none %} · {{ callbacks }} call-back{{ '' if callbacks == 1 else 's' }} open{% endif %}</p>
-    <p class="sx-hero-meta">{% if next_up %}Next patient: {{ next_up.time }}, {{ next_up.patient_name }} with {{ next_up.dentist }}{% else %}No more patients today{% endif %}</p>
+    <p class="sx-hero-big">{{ _('{n} request to confirm', n=request_total) if request_total == 1 else _('{n} requests to confirm', n=request_total) }}{% if callbacks is not none %} · {{ _('{n} call-back open', n=callbacks) if callbacks == 1 else _('{n} call-backs open', n=callbacks) }}{% endif %}</p>
+    <p class="sx-hero-meta">{% if next_up %}{{ _('Next patient: {time}, {name} with {dentist}', time=next_up.time, name=next_up.patient_name, dentist=next_up.dentist) }}{% else %}{{ _('No more patients today') }}{% endif %}</p>
   </div>
   <div class="sx-hero-acts">
     <a class="btn btn-light" href="{{ url_for('appointments.index', view='day', day=today_iso) }}#requests"><i class="bi bi-inbox" aria-hidden="true"></i> {{ _("Review requests") }}</a>
@@ -124,7 +124,7 @@
     <div class="ux-card-head">
       <div>
         <h2 class="ux-card-title" id="agenda-title">{{ _("Today's agenda") }}</h2>
-        <p class="ux-card-meta">{{ agenda | length }} confirmed booking{{ '' if agenda | length == 1 else 's' }} today</p>
+        <p class="ux-card-meta">{{ _('{n} confirmed booking today', n=1) if agenda | length == 1 else _('{n} confirmed bookings today', n=agenda | length) }}</p>
       </div>
       <a class="ux-link" href="{{ url_for('appointments.index', view='week', day=today_iso) }}">{{ _("All appointments") }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
     </div>
@@ -140,8 +140,8 @@
         <td data-label="{{ _('Time') }}"><strong class="ux-time">{{ row.time }}</strong><span class="ux-muted ux-time-end">{{ row.end }}</span></td>
         <td data-label="{{ _('Patient') }}"><span class="ds-avatar ds-avatar-sm {{ row.tint }}" aria-hidden="true">{{ row.initials }}</span> <strong>{{ row.patient_name }}</strong></td>
         <td data-label="{{ _('Clinician') }}">{{ row.dentist }}</td>
-        <td data-label="{{ _('Status') }}"><span class="ux-badge ux-badge-booked">{{ 'Now' if row.is_current else ('Done' if row.is_past else 'Booked') }}</span></td>
-        <td data-label="{{ _('Record') }}"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=row.cf) }}" aria-label="Open {{ row.patient_name }}'s record ({{ row.time }})">{{ _("Open") }} <i class="bi bi-chevron-right" aria-hidden="true"></i></a></td>
+        <td data-label="{{ _('Status') }}"><span class="ux-badge ux-badge-booked">{{ _('Now') if row.is_current else (_('Done') if row.is_past else _('Booked')) }}</span></td>
+        <td data-label="{{ _('Record') }}"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=row.cf) }}" aria-label="{{ _("Open {name}'s record ({time})", name=row.patient_name, time=row.time) }}">{{ _("Open") }} <i class="bi bi-chevron-right" aria-hidden="true"></i></a></td>
       </tr>
       {% endfor %}
       </tbody>
@@ -150,7 +150,7 @@
     {% else %}
     <div class="ux-empty-block">
       <p class="ux-empty">{{ _("Nothing booked today.") }}</p>
-      {% if next_day %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=next_day.iso) }}">Next booked day: {{ next_day.label }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      {% if next_day %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=next_day.iso) }}">{{ _('Next booked day: {day}', day=next_day.label) }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
       {% else %}<span class="ux-muted">{{ _("Nothing confirmed after today.") }}</span>{% endif %}
     </div>
     {% endif %}
@@ -159,7 +159,7 @@
   <section class="card ux-card ux-home-chart sx-wide" aria-labelledby="chart-title" data-ux="bookings-14d">
     <div class="ux-card-head"><div>
       <h2 class="ux-card-title" id="chart-title">{{ _("Confirmed bookings, next 14 days") }}</h2>
-      <p class="ux-card-meta">{{ chart.period }} · {{ chart.total }} in total · all clinicians · booked only (requests and cancellations are not counted) · source: the appointment book</p>
+      <p class="ux-card-meta">{{ _('{period} · {n} in total · all clinicians · booked only (requests and cancellations are not counted) · source: the appointment book', period=chart.period, n=chart.total) }}</p>
     </div></div>
     {% if chart.total %}
     <div class="ux-bars" aria-hidden="true">
@@ -172,14 +172,14 @@
     {% else %}
     <div class="ux-empty-block">
       <p class="ux-empty">{{ _("No confirmed bookings in the next 14 days.") }}</p>
-      {% if chart.upcoming %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=chart.upcoming.iso) }}">Next confirmed booking: {{ chart.upcoming.label }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
+      {% if chart.upcoming %}<a class="ux-link" href="{{ url_for('appointments.index', view='day', day=chart.upcoming.iso) }}">{{ _('Next confirmed booking: {when}', when=chart.upcoming.label) }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>
       {% else %}<span class="ux-muted">{{ _("Nothing confirmed after that either.") }}</span>{% endif %}
     </div>
     {% endif %}
     <details class="ux-bars-table"{% if not chart.total %} hidden{% endif %}>
       <summary>{{ _("Show as a table") }}</summary>
       <table class="ux-table">
-        <caption class="visually-hidden">Confirmed bookings per day, {{ chart.period }}</caption>
+        <caption class="visually-hidden">{{ _('Confirmed bookings per day, {period}', period=chart.period) }}</caption>
         <thead><tr><th scope="col">{{ _("Day") }}</th><th scope="col">{{ _("Confirmed bookings") }}</th></tr></thead>
         <tbody>{% for b in chart.bars %}<tr><th scope="row">{{ b.label }}</th><td>{{ b.count }}</td></tr>{% endfor %}</tbody>
       </table>
@@ -197,15 +197,15 @@
           <h2 class="ux-card-title" id="requests-title">{{ _("Requests to confirm") }}</h2>
           <p class="ux-card-meta">{{ _("Requests are not bookings") }}</p>
         </div>
-        {% if request_total %}<span class="ux-badge ux-badge-requested">{{ request_total }} waiting</span>{% endif %}
+        {% if request_total %}<span class="ux-badge ux-badge-requested">{{ _('{n} waiting', n=request_total) }}</span>{% endif %}
       </div>
       <div class="sx-card-body">
       {% if requests %}
       {# P30: each request opens its preferred day, where the free slots and the confirm form are #}
       <ul class="ux-list ux-home-request-list">
         {% for r in requests %}
-        <li class="ux-request-row"><span><strong>{{ r.patient_name }}</strong><span class="ux-muted">Preferred day: {{ r.day | appt_date_label }} · {{ r.period }}</span></span>
-          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests">{{ _("Open day") }}<span class="visually-hidden">: {{ r.patient_name }}'s request for {{ r.day | appt_date_label }}</span></a></li>
+        <li class="ux-request-row"><span><strong>{{ r.patient_name }}</strong><span class="ux-muted">{{ _('Preferred day: {day} · {period}', day=r.day | appt_date_label, period=_(r.period)) }}</span></span>
+          <a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests">{{ _("Open day") }}<span class="visually-hidden">{{ _(": {name}'s request for {day}", name=r.patient_name, day=r.day | appt_date_label) }}</span></a></li>
         {% endfor %}
       </ul>
       <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('appointments.index', view='day', day=today_iso) }}#requests">{{ _("Confirm or decline") }} <i class="bi bi-arrow-right" aria-hidden="true"></i></a>

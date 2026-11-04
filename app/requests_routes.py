@@ -10,6 +10,7 @@ import imaging_bookings
 from auth import authorize, log_audit
 
 from .db import get_db
+from .i18n import _
 
 requests_bp = Blueprint("requests", __name__)
 
@@ -20,7 +21,7 @@ DATA_KINDS = {"access": "Access", "export": "Copy of data", "amend": "Correction
 def index():
     if not authorize(g.user["role"], "manage_appointments"):
         log_audit(get_db(), g.user["username"], g.user["role"], "view_requests", None, allowed=0)
-        flash("You don't have permission to see requests.", "danger")
+        flash(_("You don't have permission to see requests."), "danger")
         return redirect(url_for("dashboard.index"))
     conn = get_db()
     today = clinic_time.now().date().isoformat()

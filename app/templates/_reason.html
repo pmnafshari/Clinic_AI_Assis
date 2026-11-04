@@ -4,7 +4,7 @@
 <label class="form-label small" for="{{ id }}-pick">{{ label }}{% if who %}<span class="visually-hidden"> ({{ who }})</span>{% endif %}</label>
 <select class="form-select form-select-sm" id="{{ id }}-pick" name="reason_choice" data-reason-pick="{{ id }}"{% if required %} required{% endif %}>
   <option value="">{{ _("Choose a reason") }}</option>
-  {% for c in choices %}<option value="{{ c }}"{{ ' selected' if picked == c else '' }}>{{ c }}</option>{% endfor %}
+  {% for c in choices %}<option value="{{ c }}"{{ ' selected' if picked == c else '' }}>{{ _(c) }}</option>{% endfor %}
   <option value="other"{{ ' selected' if picked == 'other' else '' }}>{{ _("Other - type it below") }}</option>
 </select>
 <label class="form-label small mt-1" for="{{ id }}">{{ _("In your words") }} <span class="text-body-secondary">{{ _("(needed for Other)") }}</span>{% if who %}<span class="visually-hidden"> ({{ who }})</span>{% endif %}</label>

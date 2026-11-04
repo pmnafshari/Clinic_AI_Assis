@@ -19,11 +19,11 @@
     <ul class="ds-rows sx-box">
       {% for r in asked %}
       <li class="ds-row"><span class="ds-row-main">
-        <span class="ds-row-title">{{ r.patient_name }} · asks for <span class="ux-nowrap">{{ r.day }}</span>{% if r.period %} ({{ r.period }}){% endif %}</span>
-        <span class="ds-row-sub"><b>{{ 'Day passed - not booked' if r.passed else 'Waiting to be booked' }}</b> · Reception or a dentist
-          · Asked <span class="ux-nowrap">{{ r.created_at | appt_date }} {{ r.created_at | appt_time }}</span>{% if r.note %} · "{{ r.note }}"{% endif %}</span>
-        <span class="ds-row-sub">Next: book a time or decline it{{ ', and tell the patient - the day has passed' if r.passed else ' on that day' }}.</span>
-      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests" tabindex="0">{{ _("Open day") }}<span class="visually-hidden">: {{ r.patient_name }}'s request for {{ r.day }}</span></a></span></li>
+        <span class="ds-row-title">{{ _('{name} · asks for {day} ({period})', name=r.patient_name, day=r.day, period=_(r.period)) if r.period else _('{name} · asks for {day}', name=r.patient_name, day=r.day) }}</span>
+        <span class="ds-row-sub"><b>{{ _('Day passed - not booked') if r.passed else _('Waiting to be booked') }}</b> · {{ _('Reception or a dentist') }}
+          · {{ _('Asked {when}', when=(r.created_at | appt_date) ~ ' ' ~ (r.created_at | appt_time)) }}{% if r.note %} · "{{ r.note }}"{% endif %}</span>
+        <span class="ds-row-sub">{{ _('Next: book a time or decline it, and tell the patient - the day has passed.') if r.passed else _('Next: book a time or decline it on that day.') }}</span>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests" tabindex="0">{{ _("Open day") }}<span class="visually-hidden">{{ _(": {name}'s request for {day}", name=r.patient_name, day=r.day) }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}
@@ -42,11 +42,11 @@
     <ul class="ds-rows sx-box">
       {% for t in imaging %}
       <li class="ds-row"><span class="ds-row-main">
-        <span class="ds-row-title">{{ t.patient_name }} · appointment <span class="ux-nowrap">{{ t.when }}</span></span>
-        <span class="ds-row-sub"><b>Needs reception action</b>: {{ t.reason }} · Reception
-          · Flagged <span class="ux-nowrap">{{ t.flagged_at | appt_date }} {{ t.flagged_at | appt_time }}</span></span>
+        <span class="ds-row-title">{{ _('{name} · appointment {when}', name=t.patient_name, when=t.when) }}</span>
+        <span class="ds-row-sub"><b>{{ _('Needs reception action') }}</b>: {{ _(t.reason) }} · {{ _('Reception') }}
+          · {{ _('Flagged {when}', when=(t.flagged_at | appt_date) ~ ' ' ~ (t.flagged_at | appt_time)) }}</span>
         <span class="ds-row-sub">{{ _("Next: record what reception did with the appointment.") }}</span>
-      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking" tabindex="0">{{ _("Open") }}<span class="visually-hidden">: {{ t.patient_name }}, appointment {{ t.when }}</span></a></span></li>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking" tabindex="0">{{ _("Open") }}<span class="visually-hidden">{{ _(': {name}, appointment {when}', name=t.patient_name, when=t.when) }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}
@@ -66,10 +66,10 @@
     <ul class="ds-rows sx-box">
       {% for r in data %}
       <li class="ds-row"><span class="ds-row-main">
-        <span class="ds-row-title">{{ data_kinds.get(r.kind, r.kind) }} · {{ r.patient_name or 'Erased patient' }}</span>
-        <span class="ds-row-sub">{{ _html("<b>Waiting for review</b> · A dentist · Filed") }} <span class="ux-nowrap">{{ r.requested_at | appt_date }}</span> by {{ r.requested_role }}{% if r.detail %} · "{{ r.detail }}"{% endif %}</span>
+        <span class="ds-row-title">{{ _(data_kinds.get(r.kind, r.kind)) }} · {{ r.patient_name or _('Erased patient') }}</span>
+        <span class="ds-row-sub"><b>{{ _('Waiting for review') }}</b> · {{ _('A dentist') }} · {{ _('Filed {date} by {role}', date=r.requested_at | appt_date, role=_(r.requested_role)) }}{% if r.detail %} · "{{ r.detail }}"{% endif %}</span>
         <span class="ds-row-sub">{{ _("Next: review it - approve or reject, with a reason.") }}</span>
-      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}" tabindex="0">{{ _("Open") }}<span class="visually-hidden">: data request {{ r.id }}</span></a></span></li>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}" tabindex="0">{{ _("Open") }}<span class="visually-hidden">{{ _(': data request {id}', id=r.id) }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}

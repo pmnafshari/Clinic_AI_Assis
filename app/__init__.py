@@ -83,6 +83,8 @@ def create_app():
     from . import i18n
     app.jinja_env.globals["_"] = i18n.template_text
     app.jinja_env.globals["_html"] = i18n.markup
+    app.jinja_env.globals["_msg"] = i18n.message
+    app.jinja_env.globals["_ctx"] = i18n.in_context
     app.jinja_env.globals["lang"] = i18n.current
     app.jinja_env.globals["flash_kind"] = lambda category: i18n.FLASH_KINDS.get(category, i18n.FLASH_NOTE)
 

@@ -23,9 +23,10 @@ TEMPLATES = ROOT / "app" / "templates"
 CONVERTED = ["base.html", "_sidebar.html", "_topbar.html", "patients_new.html",
              "patients_list.html", "patients_detail.html", "documents.html", "document_detail.html", "_patient_candidates.html",
              "_visit_edit_form.html", "_patient_files.html", "_patient_pin.html", "_patient_pin_revoked.html",
-             "_confirm_diff.html", "_edit_form.html"]
+             "_confirm_diff.html", "_edit_form.html",
+             "appointments.html", "requests.html", "dashboard.html", "_reason.html", "_recent_intake.html"]
 # modules that say nothing to a person outside _()
-CONVERTED_PY = ["patients_routes.py", "document_routes.py"]
+CONVERTED_PY = ["patients_routes.py", "document_routes.py", "appointments_routes.py", "dashboard_routes.py", "requests_routes.py"]
 # words that stay as they are in both languages
 ALLOW = {"Dental AI", "English", "Italiano", "OK"}
 # technical terms that are the same in both languages
@@ -49,6 +50,37 @@ def _errors_in(path, names=("DocumentError",)):
             if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
                 out.append(node.args[1].value)
     return out
+
+
+def _sentence(node):
+    """a string constant, or an f-string as the catalog writes it: each value a placeholder {a}, {b}, ... in order"""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.JoinedStr):
+        out, n = [], 0
+        for part in node.values:
+            if isinstance(part, ast.Constant):
+                out.append(part.value)
+            else:
+                out.append("{" + "abcdefgh"[n] + "}")
+                n += 1
+        return "".join(out)
+    return None
+
+
+def _messages_in(path, function=None):
+    """what a module raises as ValueError, or what one function returns, as sentences"""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    if function:
+        tree = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == function)
+    out = []
+    for node in ast.walk(tree):
+        if function and isinstance(node, ast.Return) and node.value is not None:
+            out.append(_sentence(node.value))
+        if not function and isinstance(node, ast.Raise) and isinstance(node.exc, ast.Call) \
+                and getattr(node.exc.func, "id", "") == "ValueError" and node.exc.args:
+            out.append(_sentence(node.exc.args[0]))
+    return {m for m in out if m}
 
 
 def _returns_of(path, function):
@@ -75,11 +107,26 @@ def harvest():
               "Absorbed the record of {who}", "{cf}, merged by {who}"}
     found |= set(patient_identity.BILL_STATE_WORDS.values()) | set(patient_identity.BILL_STATE_SHORT.values())
     found |= {"draft", "active", "cancelled", "superseded", "patient"}
+    # stage 3: appointments, requests and Home
+    import appointments
+    import imaging_bookings
+    from app import dashboard_routes, reasons
+    from app.appointments_routes import STATUS_WORDS
+    found |= _messages_in(ROOT / "appointments.py") | _messages_in(ROOT / "availability.py", "refusal")
+    found |= {appointments.SLOT_TAKEN, "the clinic is closed", "away"}
+    found |= {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"}
+    for one, many, word in STATUS_WORDS.values():
+        found |= {f"{{n}} {one}", f"{{n}} {many}", word, f"{{n}} {word}", f"nothing {word}"}
+    found |= {"morning", "afternoon", "booked", "requested", "declined"}
+    found |= set(reasons.DECLINE) | set(reasons.REJECT_NOTE) | set(reasons.STOCK) | set(reasons.REFUND) | set(reasons.REVERSE)
+    found |= set(dashboard_routes._TOOL_WORDS.values()) | set(dashboard_routes._FIELD_WORDS.values())
+    found |= set(dashboard_routes._STATE_WORDS.values()) | {"Record changed"}
+    found |= set(imaging_bookings.FLAGS.values())
     return found
 
 
 def all_texts():
-    found = set()
+    found = {"appointment|booked", "appointment|cancelled", "appointment|requested"}
     files = [TEMPLATES / name for name in CONVERTED] + [ROOT / "app" / name for name in CONVERTED_PY + ["nav.py", "patients_routes.py"]]
     for f in files + [ROOT / "patient_identity.py"]:
         found.update(_literals_in(f.read_text(encoding="utf-8")))
@@ -140,7 +187,9 @@ def loose_text(src):
             lit = m.group(1) or m.group(2) or ""
             # words joined to an expression with ~ are a sentence in pieces, whatever they look like
             joined = re.search(r"~\s*$", e[:m.start()]) or re.match(r"\s*~", e[m.end():])
-            if joined and re.search(r"[A-Za-z]{2,}", lit) and lit.strip() not in ALLOW and not re.match(r"^[#/?&]", lit):
+            # an id prefix ('dreason-' ~ r.id) or a link part is markup, not words
+            if joined and re.search(r"[A-Za-z]{2,}", lit) and lit.strip() not in ALLOW and not re.match(r"^[#/?&]", lit) \
+                    and not re.fullmatch(r"[a-z0-9-]+-", lit):
                 prose.append(lit)
                 continue
             tokens = lit.split()
@@ -234,7 +283,11 @@ def selftest():
         d.get("/lang/it?next=/")
         for who, path, words in ((c, "/patients", ("Filtra questo elenco", "Nuovo paziente", "Prossimo appuntamento")),
                                  (c, "/patients/ZZIT800101010101", ("Panoramica", "Dati anagrafici", "Cronologia della cartella")),
-                                 (d, "/patients/ZZIT800101010101/documents", ("Cronologia dei file", "Due decisioni separate", "Carica"))):
+                                 (d, "/patients/ZZIT800101010101/documents", ("Cronologia dei file", "Due decisioni separate", "Carica")),
+                                 (c, "/appointments?view=week", ("Settimana del", "Richieste dei pazienti", "Giorno")),
+                                 (c, "/appointments?view=month", ("Scegli un giorno per aprire", "Mese precedente")),
+                                 (c, "/requests", ("Richieste di appuntamento", "Lavoro di imaging")),
+                                 (c, "/", ("Azioni rapide", "La tua attività recente"))):
             page = who.get(path).get_data(as_text=True)
             for word in words:
                 assert word in page, f"4: {word!r} is not on the Italian {path}"
