@@ -2344,6 +2344,32 @@ def selftest():
         assert on_page(t("chat_consent_state", "it", state=t("consent_withdrawn", "it")),
                        other34.get("/chat").text), "34f: a withdrawal reads as withdrawn"
 
+        # 34f2. P29 R-017: the consent is asked right here, in a dialog with the words the profile shows, beside
+        # allow and not now; allowing it comes back to the assistant, and until then no answer about the patient
+        page34 = other34.get("/chat").text
+        dialog34 = re.search(r'<dialog[^>]*id="consent-dialog".*?</dialog>', page34, re.S)
+        assert dialog34 and "data-consent-open" in page34, "34f2 R-017: no consent dialog on the assistant page"
+        c = raw_db()
+        words34 = [x for x in consent.state(c, pid34_other, "it") if x["purpose"] == "ai_assistant"][0]["text"]
+        c.close()
+        box34 = dialog34.group(0)
+        assert on_page(words34, box34), "34f2: the dialog does not show the consent's own words"
+        assert all(f in box34 for f in ('name="purpose" value="ai_assistant"', 'name="granted" value="1"', 'name="back" value="chat"')) \
+            and on_page(t("chat_consent_allow", "it"), box34) and on_page(t("chat_consent_not_now", "it"), box34), \
+            "34f2: the dialog cannot allow it, or cannot be closed"
+        assert 'name="question"' not in page34, "34f2: the question box shows before consent"
+        given34 = other34.post("/consent", data={"purpose": "ai_assistant", "granted": "1", "back": "chat",
+                                                 "csrf_token": _csrf_from(page34)})
+        assert given34.headers["Location"] == "/chat", f"34f2: allowing did not come back: {given34.headers.get('Location')}"
+        c = raw_db()
+        assert consent.allows(c, pid34_other, "ai_assistant"), "34f2: the consent was not recorded"
+        c.close()
+        after34 = other34.get("/chat").text
+        assert 'id="consent-dialog"' not in after34 and 'name="question"' in after34, "34f2: the assistant did not open"
+        back34 = other34.post("/consent", data={"purpose": "ai_assistant", "granted": "0", "back": "https://elsewhere.example",
+                                                "csrf_token": _csrf_from(after34)})
+        assert back34.headers["Location"] == "/profile#consent", "34f2: a made-up return goes somewhere else"
+
         # 34g. both languages on every changed page, no mixed fragments, and
         # switching keeps the page and the session
         switched = client34.get("/lang/en", query_string={"page": "patient.billing"})

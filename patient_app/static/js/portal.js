@@ -140,3 +140,13 @@ document.querySelectorAll('[data-reason-pick]').forEach(pick => {
   pick.addEventListener('change', sync);
   sync();
 });
+
+// P29 R-017: the assistant's consent dialog - opened by its button, closed by Not now or Esc
+(() => {
+  const box = document.getElementById('consent-dialog');
+  const opener = document.querySelector('[data-consent-open]');
+  if (!box || !opener || typeof box.showModal !== 'function') return;
+  opener.addEventListener('click', () => box.showModal());
+  box.querySelector('[data-consent-close]').addEventListener('click', () => box.close());
+  box.addEventListener('close', () => opener.focus());
+})();

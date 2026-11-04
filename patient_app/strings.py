@@ -322,6 +322,13 @@ STRINGS = {
     "chat_consent_state": {"it": "Consenso per l'assistente: {state}",
                            "en": "Consent for the assistant: {state}"},
     "chat_consent_open": {"it": "Gestisci il consenso nel profilo", "en": "Manage this consent in your profile"},
+    # P29 R-017: the consent asked on the assistant page. Italian awaits native-speaker review.
+    "chat_consent_read": {"it": "Leggi e decidi", "en": "Read and decide"},
+    "chat_consent_dialog_title": {"it": "Usare l'assistente con i tuoi dati?", "en": "Use the assistant with your records?"},
+    "chat_consent_allow": {"it": "Acconsento alle risposte sui miei dati", "en": "Allow answers about my records"},
+    "chat_consent_not_now": {"it": "Non ora", "en": "Not now"},
+    "chat_consent_after": {"it": "Puoi ritirare il consenso in qualsiasi momento dal tuo profilo.",
+                           "en": "You can withdraw it at any time in your profile."},
     # P29 redesign: the assistant page. Italian awaits native-speaker review.
     "chat_privacy_note": {"it": "L'assistente legge solo i tuoi dati. Non dà consigli medici e non conserva le tue domande.",
                           "en": "The assistant reads only your own records. It gives no medical advice and does not keep your questions."},

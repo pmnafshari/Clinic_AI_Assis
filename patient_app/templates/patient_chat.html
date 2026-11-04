@@ -14,7 +14,28 @@
   {% set c = consent_row %}
   <p class="mb-2"><strong>{{ t('chat_consent_state', lang).format(state=t('consent_given', lang) if c.granted and not c.outdated else t('consent_outdated', lang) if c.outdated else t('consent_withdrawn', lang) if c.recorded else t('consent_not_asked', lang)) }}</strong></p>
   {% endif %}
+  {# P29 R-017: decide here, in a dialog with the consent's own words; the profile stays the place to change it later #}
+  {% if consent_row %}
+  <div class="d-flex flex-wrap gap-2">
+    <button type="button" class="btn btn-dark btn-sm" data-consent-open>{{ t('chat_consent_read', lang) }}</button>
+    <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-outline-secondary btn-sm">{{ t('chat_consent_open', lang) }}</a>
+  </div>
+  <dialog class="patient-dialog" id="consent-dialog" aria-labelledby="consent-dialog-title">
+    <h2 id="consent-dialog-title">{{ t('chat_consent_dialog_title', lang) }}</h2>
+    <p>{{ consent_row.text }}</p>
+    <p class="pp-muted small">{{ t('chat_consent_after', lang) }}</p>
+    <form method="post" action="{{ url_for('patient.consent_submit') }}" class="patient-dialog-actions">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="purpose" value="ai_assistant">
+      <input type="hidden" name="granted" value="1">
+      <input type="hidden" name="back" value="chat">
+      <button class="btn btn-outline-secondary" type="button" data-consent-close autofocus>{{ t('chat_consent_not_now', lang) }}</button>
+      <button class="btn btn-dark" type="submit">{{ t('chat_consent_allow', lang) }}</button>
+    </form>
+  </dialog>
+  {% else %}
   <a href="{{ url_for('patient.profile') }}#consent" class="btn btn-dark btn-sm">{{ t('chat_consent_open', lang) }}</a>
+  {% endif %}
 </div>
 {% else %}
 

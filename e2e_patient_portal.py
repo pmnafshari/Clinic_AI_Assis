@@ -203,6 +203,46 @@ def redesign_checks(browser, base, token, results):
         context.close()
 
 
+def consent_check(p, app, browser, base, token, results):
+    """P29 R-017: without consent the assistant asks in its own dialog - Not now closes it and puts the cursor back
+    on its button; Allow records the consent and the assistant opens. Chromium and WebKit (Safari)."""
+    webkit = p.webkit.launch()
+    secure = app.config["SESSION_COOKIE_SECURE"]
+    for name, engine in (('chromium', browser), ('webkit', webkit)):
+        # WebKit keeps a Secure cookie off plain http even on 127.0.0.1 (Chromium counts it as secure), so the form's
+        # session cookie never comes back; on this throwaway app only, and only for WebKit, it is sent over http
+        app.config["SESSION_COOKIE_SECURE"] = secure if name == 'chromium' else False
+        conn = sqlite3.connect(routes.DB_PATH)
+        conn.row_factory = sqlite3.Row
+        consent.record(conn, patient_id.resolve(conn, fx.CF['rossi']), 'ai_assistant', False, 'fixture', 'dentist')
+        conn.close()
+        context = engine.new_context(viewport={'width': 390, 'height': 900})
+        context.add_cookies([{'name': patient_auth.PATIENT_COOKIE_NAME, 'value': token, 'url': base},
+                             {'name': 'patient_lang', 'value': 'en', 'url': base}])
+        page = context.new_page()
+        errors = []
+        page.on('pageerror', lambda error: errors.append(str(error)))
+        page.goto(base + '/chat')
+        expect(page.locator('[name=question]')).to_have_count(0)
+        opener = page.locator('[data-consent-open]')
+        opener.click()
+        dialog = page.locator('#consent-dialog')
+        expect(dialog).to_be_visible()
+        expect(dialog.locator('h2')).to_have_text('Use the assistant with your records?')
+        dialog.locator('[data-consent-close]').click()
+        expect(dialog).to_be_hidden()
+        expect(opener).to_be_focused()
+        opener.click()
+        dialog.get_by_role('button', name='Allow answers about my records').click()
+        expect(page.locator('[name=question]')).to_be_visible()
+        assert urlsplit(page.url).path == '/chat', page.url
+        assert not errors, errors
+        context.close()
+        results.append(f'R-017 consent dialog {name}')
+    app.config["SESSION_COOKIE_SECURE"] = secure
+    webkit.close()
+
+
 def walk():
     EVIDENCE.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='clinic-p29-patient-') as temp:
@@ -374,6 +414,7 @@ def walk():
                 page.wait_for_url(base + '/billing')
                 context.close()
                 redesign_checks(browser, base, token, results)
+                consent_check(p, app, browser, base, token, results)
                 browser.close()
         finally:
             server.shutdown()

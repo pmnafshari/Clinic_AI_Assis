@@ -359,6 +359,9 @@ def consent_submit():
     pid = g.patient["patient_id"]
     consent.record(get_db(), pid, request.form.get("purpose", ""),
                    request.form.get("granted") == "1", pid, "patient")
+    # P29 R-017: asked from the assistant's own dialog, the answer goes back there. one fixed value, never an address
+    if request.form.get("back") == "chat":
+        return redirect(url_for("patient.chat"))
     return redirect(url_for("patient.profile") + "#consent")
 
 
