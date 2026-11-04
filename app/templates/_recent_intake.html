@@ -14,23 +14,23 @@
       <span class="text-break">{{ row.target }}</span>
     </div>
     {% if row.state == 'queued' %}
-    <span class="badge text-bg-secondary">Queued</span>
+    <span class="badge text-bg-secondary">{{ _("Queued") }}</span>
     {% elif row.state == 'external' %}
-    <span class="badge text-bg-secondary">External</span>
+    <span class="badge text-bg-secondary">{{ _("External") }}</span>
     {% elif row.state == 'needs_review' %}
-    <span class="badge text-bg-dark" title="{{ row.reason or 'open the file to see why' }}">Needs Review</span>
+    <span class="badge text-bg-dark" title="{{ row.reason or 'open the file to see why' }}">{{ _("Needs Review") }}</span>
     {% elif row.state == 'awaiting_review' %}
-    <span class="badge text-bg-secondary" title="A dentist confirms it before it joins the record">Awaiting review</span>
+    <span class="badge text-bg-secondary" title="{{ _('A dentist confirms it before it joins the record') }}">{{ _("Awaiting review") }}</span>
     {% elif row.state == 'sorted' %}
-    <span class="badge text-bg-primary">Sorted</span>
+    <span class="badge text-bg-primary">{{ _("Sorted") }}</span>
     {% elif row.state == 'not_searchable' %}
-    <span class="badge text-bg-warning">Not searchable</span>
+    <span class="badge text-bg-warning">{{ _("Not searchable") }}</span>
     {% else %}
-    <span class="badge text-bg-danger">Rejected</span>
+    <span class="badge text-bg-danger">{{ _("Rejected") }}</span>
     {% endif %}
   </div>
   {% endfor %}
 </div>
 {% else %}
-<p class="text-secondary mb-0">No recent uploads. Files you upload will appear here once they're processed.</p>
+<p class="text-secondary mb-0">{{ _("No recent uploads. Files you upload will appear here once they're processed.") }}</p>
 {% endif %}

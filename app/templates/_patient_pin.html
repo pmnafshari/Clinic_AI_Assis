@@ -1,8 +1,7 @@
 {# the plaintext pin exists only in this response. only its hash is stored, so
    there is no way to show it again - reissuing is the only option. #}
 <div class="ds-alert ds-alert-success mt-3 mb-0 flex-column">
-  <span class="ds-alert-title">PIN for this patient:</span>
+  <span class="ds-alert-title">{{ _("PIN for this patient:") }}</span>
   <span class="pin-display ds-numeral">{{ pin }}</span>
-  <span class="small">Read it to the patient now. It is shown only once - if it is
-    lost, issue a new one. Issuing again replaces this PIN.</span>
+  <span class="small">{{ _("Read it to the patient now. It is shown only once - if it is lost, issue a new one. Issuing again replaces this PIN.") }}</span>
 </div>

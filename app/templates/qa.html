@@ -6,28 +6,28 @@
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Ask records</p>
-    <h1 class="ds-page-title">Ask a question</h1>
-    <p class="ds-page-meta">Answers are read from filed records, on this machine - only patients you may see</p>
+    <p class="ds-page-eyebrow">{{ _("Ask records") }}</p>
+    <h1 class="ds-page-title">{{ _("Ask a question") }}</h1>
+    <p class="ds-page-meta">{{ _("Answers are read from filed records, on this machine - only patients you may see") }}</p>
   </div>
 <!--/page-head--></div>
 
 {% if refused %}
 <section class="card ux-card" data-ux="refused">
   <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
-  <p class="ux-muted">Asking the records is for clinical staff. Your account can manage staff accounts and duplicates.</p>
+  <p class="ux-muted">{{ _("Asking the records is for clinical staff. Your account can manage staff accounts and duplicates.") }}</p>
 <!--/refused--></section>
 {% else %}
 <div class="ux-grid">
   <section class="card ux-card ux-span-2" aria-labelledby="ask-title">
-    <h2 class="ux-card-title visually-hidden" id="ask-title">Question</h2>
+    <h2 class="ux-card-title visually-hidden" id="ask-title">{{ _("Question") }}</h2>
     {% if error %}<div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>{% endif %}
     <form method="post" action="{{ url_for('qa.qa_page') }}" class="ux-form" data-busy-form>
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label for="question" class="form-label">Your question</label>
+      <label for="question" class="form-label">{{ _("Your question") }}</label>
       <input type="text" id="question" name="question" value="{{ question or '' }}" class="form-control" required
-             placeholder="e.g. What is patient Rossi's next appointment?" aria-describedby="question-help">
-      <p class="ux-muted" id="question-help">Write "patient" before the name, and ask about an appointment, phone, invoice or visit date. One patient per question.</p>
+             placeholder="{{ _('e.g. What is patient Rossi\'s next appointment?') }}" aria-describedby="question-help">
+      <p class="ux-muted" id="question-help">{{ _("Write \"patient\" before the name, and ask about an appointment, phone, invoice or visit date. One patient per question.") }}</p>
       {% if candidates %}
       <fieldset class="ux-candidates">
         <legend class="form-label">More than one patient is called {{ name }} - choose one</legend>
@@ -37,19 +37,19 @@
       </fieldset>
       {% endif %}
       <div class="ux-actions">
-        <button type="submit" class="btn btn-primary" data-busy-label="Reading the records...">Ask</button>
+        <button type="submit" class="btn btn-primary" data-busy-label="Reading the records...">{{ _("Ask") }}</button>
         <span class="ux-muted" role="status" aria-live="polite" data-busy-status></span>
       </div>
     </form>
 
     {% if answer %}
-    <div class="ux-answer{{ ' ux-answer-empty' if no_record else '' }}" role="region" aria-label="Answer">
+    <div class="ux-answer{{ ' ux-answer-empty' if no_record else '' }}" role="region" aria-label="{{ _('Answer') }}">
       <p class="ux-answer-q">{{ question }}</p>
       {% if no_record %}
       <p><strong>No record found.</strong> {{ answer[0] | upper }}{{ answer[1:] }}.</p>
-      <p class="ux-muted">Check the spelling, or open <a class="ux-link" href="{{ url_for('patients.list_view') }}">Patients</a> to search by name or codice fiscale.</p>
+      <p class="ux-muted">{{ _html('Check the spelling, or open <a class="ux-link" href="{href}">Patients</a> to search by name or codice fiscale.', href=url_for('patients.list_view')) }}</p>
       {% else %}
-      {% set body, _, source = answer.partition(' [source: ') %}
+      {% set body, _sep, source = answer.partition(' [source: ') %}
       <p>{{ body }}</p>
       {% if source %}<p class="ux-muted"><i class="bi bi-journal-text" aria-hidden="true"></i> Source: {{ source.rstrip(']').replace('] [source: ', '; ') }}</p>{% endif %}
       {% endif %}
@@ -58,14 +58,14 @@
   </section>
 
   <aside class="card ux-card" aria-labelledby="examples-title">
-    <h2 class="ux-card-title" id="examples-title">Examples</h2>
-    <p class="ux-muted">Pick one to fill the question, then change the name.</p>
+    <h2 class="ux-card-title" id="examples-title">{{ _("Examples") }}</h2>
+    <p class="ux-muted">{{ _("Pick one to fill the question, then change the name.") }}</p>
     <ul class="ux-examples">
       {% for ex in ["What is patient Rossi's next appointment?", "What is patient Ferrari's phone number?", "What is patient Gallo's invoice amount?", "What is patient Conti's last visit date?", "Which patients had a root canal?"] %}
       <li><button type="button" class="btn btn-sm btn-outline-secondary" data-example="{{ ex }}">{{ ex }}</button></li>
       {% endfor %}
     </ul>
-    <p class="ux-muted">It answers from the records only - appointments come from the appointment book, never from a note's recall. It does not give clinical advice.</p>
+    <p class="ux-muted">{{ _("It answers from the records only - appointments come from the appointment book, never from a note's recall. It does not give clinical advice.") }}</p>
   </aside>
 </div>
 <script>

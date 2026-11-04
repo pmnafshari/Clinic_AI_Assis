@@ -67,7 +67,7 @@ def _flagged(conn):
 def list_view():
     if not authorize(g.user["role"], "read_notes"):
         log_audit(get_db(), g.user["username"], g.user["role"], "read_notes", None, allowed=0)
-        flash("You don't have permission to view patient records.")
+        flash(_("You don't have permission to view patient records."))
         return redirect(url_for("dashboard.index"))
 
     conn = get_db()
@@ -174,7 +174,7 @@ def duplicates_view():
     if not authorize(g.user["role"], "manage_users"):
         log_audit(get_db(), g.user["username"], g.user["role"],
                   "review_duplicates", None, allowed=0)
-        flash("You don't have permission to review duplicate records.")
+        flash(_("You don't have permission to review duplicate records."))
         return redirect(url_for("dashboard.index"))
 
     conn = get_db()
@@ -242,7 +242,7 @@ def duplicates_merge():
     cf_b = request.form.get("cf_b", "")
     keep = request.form.get("keep", "")
     if request.form.get("confirm") != "yes":
-        flash("Tick the confirmation to merge two records.", "error")
+        flash(_("Tick the confirmation to merge two records."), "error")
         return redirect(url_for("patients.duplicates_view"))
     # the form sends both records and which one survives; the other is derived
     # here rather than posted, so the page cannot disagree with itself about
@@ -254,7 +254,7 @@ def duplicates_merge():
     # this guard buys is an incoherent or half-filled form getting a clear
     # answer here instead of a confusing one from three layers down.
     if keep not in (cf_a, cf_b) or cf_a == cf_b or not cf_a or not cf_b:
-        flash("Choose which record to keep.", "error")
+        flash(_("Choose which record to keep."), "error")
         return redirect(url_for("patients.duplicates_view"))
     target = keep
     source = cf_b if keep == cf_a else cf_a
@@ -285,7 +285,7 @@ def get_collection_or_none():
 def detail_view(cf):
     if not authorize(g.user["role"], "read_notes"):
         log_audit(get_db(), g.user["username"], g.user["role"], "read_notes", cf, allowed=0)
-        flash("You don't have permission to view patient records.")
+        flash(_("You don't have permission to view patient records."))
         return redirect(url_for("dashboard.index"))
 
     # validate before any db/filesystem access - cf is a raw path segment
@@ -304,7 +304,7 @@ def detail_view(cf):
     current = conn.execute(
         "SELECT codice_fiscale FROM patients WHERE patient_id = ?", (pid,)).fetchone()
     if current is not None and cf not in (pid, current["codice_fiscale"]):
-        flash(f"{cf} was merged into this record.")
+        flash(_("{cf} was merged into this record.", cf=cf))
         return redirect(url_for("patients.detail_view", cf=current["codice_fiscale"]))
 
     patient = lookup_patient(pid, conn)
@@ -463,7 +463,7 @@ def consent_submit(cf):
     # grant or withdraw from the portal profile. either way it is a new row.
     if not authorize(g.user["role"], "record_consent"):
         log_audit(get_db(), g.user["username"], g.user["role"], "record_consent", cf, allowed=0)
-        flash("You don't have permission to record consent.", "danger")
+        flash(_("You don't have permission to record consent."), "danger")
         return redirect(url_for("dashboard.index"))
 
     if not is_valid_cf(cf):
@@ -476,7 +476,7 @@ def consent_submit(cf):
     ok, message = consent.record(get_db(), pid, request.form.get("purpose", ""),
                                  request.form.get("granted") == "1",
                                  g.user["username"], g.user["role"], note)
-    flash("Consent recorded." if ok else f"Not recorded: {message}.", "success" if ok else "danger")
+    flash(_("Consent recorded.") if ok else f"Not recorded: {message}.", "success" if ok else "danger")
     return redirect(url_for("patients.detail_view", cf=cf) + "#consent-title")
 
 

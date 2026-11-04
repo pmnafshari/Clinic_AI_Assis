@@ -2,24 +2,23 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Stock</p>
-    <h1 class="ds-page-title">Consumables</h1>
+    <p class="ds-page-eyebrow">{{ _("Stock") }}</p>
+    <h1 class="ds-page-title">{{ _("Consumables") }}</h1>
     <p class="ds-page-meta">Daily check: last run {{ last_run.started_at | appt_date ~ ' ' ~ (last_run.started_at | appt_time) if last_run else 'never' }}{% if last_run and last_run.status != 'ok' %} ({{ last_run.status }}){% endif %} · daily schedule: {{ schedule }}</p>
   </div>
 </div>
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
-  <div><strong class="ds-alert-title">Demo clinic - synthetic stock</strong>
-  Low-stock alerts appear here only - nothing is sent to anyone and nothing is ordered. The daily
-  check runs when <strong>inventory_job.py</strong> is run; no automatic schedule is set up.</div>
+  <div><strong class="ds-alert-title">{{ _("Demo clinic - synthetic stock") }}</strong>
+  {{ _html("Low-stock alerts appear here only - nothing is sent to anyone and nothing is ordered. The daily check runs when <strong>inventory_job.py</strong> is run; no automatic schedule is set up.") }}</div>
 </div>
 
 <div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Items</span>
-    <span class="ux-kpi-value">{{ item_count }}</span><span class="ux-kpi-sub">tracked supplies</span></div>
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Low on stock</span>
-    <span class="ux-kpi-value">{{ low_count }}</span><span class="ux-kpi-sub">at or below the alert level</span></div>
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Open alerts</span>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Items") }}</span>
+    <span class="ux-kpi-value">{{ item_count }}</span><span class="ux-kpi-sub">{{ _("tracked supplies") }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Low on stock") }}</span>
+    <span class="ux-kpi-value">{{ low_count }}</span><span class="ux-kpi-sub">{{ _("at or below the alert level") }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Open alerts") }}</span>
     <span class="ux-kpi-value">{{ alerts | length }}</span><span class="ux-kpi-sub">{{ alerts | rejectattr('acknowledged_at') | list | length }} not seen yet</span></div>
 <!--/page-tiles--></div>
 
@@ -31,21 +30,21 @@
   {# P29 R-003: one row per alert, the numbers in their own columns and when it started #}
   <div class="dash-card-body"><div class="sx-box sx-box-md">
     <table class="ux-table ux-table-page ux-stock">
-      <caption class="visually-hidden">Open low-stock alerts, oldest first</caption>
-      <thead><tr><th scope="col">Item</th><th scope="col" class="ux-num">In stock then</th><th scope="col" class="ux-num">Alert at or below</th><th scope="col">Since</th><th scope="col">Seen</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <caption class="visually-hidden">{{ _("Open low-stock alerts, oldest first") }}</caption>
+      <thead><tr><th scope="col">{{ _("Item") }}</th><th scope="col" class="ux-num">{{ _("In stock then") }}</th><th scope="col" class="ux-num">{{ _("Alert at or below") }}</th><th scope="col">{{ _("Since") }}</th><th scope="col">{{ _("Seen") }}</th><th scope="col"><span class="visually-hidden">{{ _("Actions") }}</span></th></tr></thead>
       <tbody>
       {% for a in alerts %}
       <tr>
-        <td data-label="Item"><strong>{{ a.name }}</strong></td>
-        <td class="ux-num" data-label="In stock then">{{ a.balance_at_open }} {{ a.unit }}</td>
-        <td class="ux-num" data-label="Alert at or below">{{ a.threshold_at_open }} {{ a.unit }}</td>
-        <td data-label="Since"><span class="ux-nowrap">{{ a.opened_at | appt_date }} {{ a.opened_at | appt_time }}</span></td>
-        <td data-label="Seen">{% if a.acknowledged_at %}by {{ a.acknowledged_by }}{% else %}
+        <td data-label="{{ _('Item') }}"><strong>{{ a.name }}</strong></td>
+        <td class="ux-num" data-label="{{ _('In stock then') }}">{{ a.balance_at_open }} {{ a.unit }}</td>
+        <td class="ux-num" data-label="{{ _('Alert at or below') }}">{{ a.threshold_at_open }} {{ a.unit }}</td>
+        <td data-label="{{ _('Since') }}"><span class="ux-nowrap">{{ a.opened_at | appt_date }} {{ a.opened_at | appt_time }}</span></td>
+        <td data-label="{{ _('Seen') }}" data-col="seen">{% if a.acknowledged_at %}by {{ a.acknowledged_by }}{% else %}
           <form method="post" action="{{ url_for('stock.acknowledge', alert_id=a.id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">Mark as seen<span class="visually-hidden">: {{ a.name }}</span></button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">{{ _("Mark as seen") }}<span class="visually-hidden">: {{ a.name }}</span></button>
           </form>{% endif %}</td>
-        <td data-label="Actions"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.item', item_id=a.item_id) }}" tabindex="0">Open<span class="visually-hidden">: {{ a.name }}</span></a></td>
+        <td data-label="{{ _('Actions') }}"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.item', item_id=a.item_id) }}" tabindex="0">{{ _("Open") }}<span class="visually-hidden">: {{ a.name }}</span></a></td>
       </tr>
       {% endfor %}
       </tbody>
@@ -58,13 +57,13 @@
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="items-title">{{ 'Items - low only' if low_only else 'Items' }}</h2>
     {# P29 R-003: each tab says how many it holds; the one applied is marked and said under the head #}
-    <nav class="sx-tabs sx-tabs-sm" aria-label="Show"><a href="{{ url_for('stock.index') }}"{% if not low_only %} aria-current="page"{% endif %}>All <span class="sx-count">{{ item_count }}</span></a><a href="{{ url_for('stock.index', show='low') }}"{% if low_only %} aria-current="page"{% endif %}>Low only <span class="sx-count">{{ low_count }}</span></a></nav>
+    <nav class="sx-tabs sx-tabs-sm" aria-label="{{ _('Show') }}"><a href="{{ url_for('stock.index') }}"{% if not low_only %} aria-current="page"{% endif %}>{{ _("All") }} <span class="sx-count">{{ item_count }}</span></a><a href="{{ url_for('stock.index', show='low') }}"{% if low_only %} aria-current="page"{% endif %}>{{ _("Low only") }} <span class="sx-count">{{ low_count }}</span></a></nav>
   </div>
   {% if low_only and items %}<p class="ux-filter-note" data-ux="stock-filter">Showing the {{ low_count }} item{{ '' if low_count == 1 else 's' }} at or below {{ 'its' if low_count == 1 else 'their' }} alert level. <a href="{{ url_for('stock.index') }}">Show all {{ item_count }}</a></p>{% endif %}
   {# P30: search, Filter by unit and Sort on the items loaded here #}
   {% if items %}
-  {% set unit_options = [] %}{% for u in units %}{% set _ = unit_options.append([u, u]) %}{% endfor %}
-  <div class="sx-tools sx-tools-row" data-list-tools data-for="stock-rows" data-noun="item|items" data-search="Find an item" data-find="name"
+  {% set unit_options = [] %}{% for u in units %}{% set _u = unit_options.append([u, u]) %}{% endfor %}
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="stock-rows" data-noun="{{ _('item|items') }}" data-search="{{ _('Find an item') }}" data-find="name"
        data-sorts='{{ [['status', 'num', 1, 'Needs attention first'], ['ratio', 'num', 1, 'Stock left (lowest first)'], ['ratio', 'num', -1, 'Stock left (highest first)'],
                        ['name', 'text', 1, 'Name (A-Z)'], ['name', 'text', -1, 'Name (Z-A)']] | tojson }}'
        data-filters='{{ [['unit', 'Unit', unit_options]] | tojson }}'></div>
@@ -72,22 +71,22 @@
   <div class="dash-card-body">
     {% if items %}
     {# P29 R-003: a table - the numbers in their own aligned columns, the state in words, and since when it is low #}
-    {% set low_since = {} %}{% for a in alerts %}{% set _ = low_since.update({a.item_id: a.opened_at}) %}{% endfor %}
+    {% set low_since = {} %}{% for a in alerts %}{% set _l = low_since.update({a.item_id: a.opened_at}) %}{% endfor %}
     <div class="sx-box">
     <table class="ux-table ux-table-page ux-stock">
       <caption class="visually-hidden">Stock items{{ ', low only' if low_only else '' }}</caption>
-      <thead><tr><th scope="col">Item</th><th scope="col" class="ux-num">In stock</th><th scope="col">Unit</th><th scope="col" class="ux-num">Alert at or below</th><th scope="col">State</th><th scope="col">Low since</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead>
+      <thead><tr><th scope="col">{{ _("Item") }}</th><th scope="col" class="ux-num">{{ _("In stock") }}</th><th scope="col">{{ _("Unit") }}</th><th scope="col" class="ux-num">{{ _("Alert at or below") }}</th><th scope="col">{{ _("State") }}</th><th scope="col">{{ _("Low since") }}</th><th scope="col"><span class="visually-hidden">{{ _("Actions") }}</span></th></tr></thead>
       <tbody id="stock-rows">
       {% for i in items %}
       <tr data-name="{{ i.name }}" data-unit="{{ i.unit }}" data-status="{{ 0 if i.low else 1 }}"
           data-ratio="{{ '%.3f' | format(i.balance / i.threshold if i.threshold else 99) }}">
-        <td data-label="Item"><strong>{{ i.name }}</strong></td>
-        <td class="ux-num ds-numeral" data-label="In stock">{{ i.balance }}</td>
-        <td data-label="Unit">{{ i.unit }}</td>
-        <td class="ux-num" data-label="Alert at or below">{{ i.threshold }}</td>
-        <td data-label="State">{% if i.low %}<span class="ux-badge ux-badge-low">Low</span>{% else %}<span class="ux-badge ux-badge-ok">OK</span>{% endif %}</td>
-        <td data-label="Low since">{% if i.low and low_since.get(i.id) %}<span class="ux-nowrap">{{ low_since[i.id] | appt_date }}</span>{% else %}-{% endif %}</td>
-        <td data-label="Actions"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.item', item_id=i.id) }}" tabindex="0">Open<span class="visually-hidden">: {{ i.name }}</span></a></td>
+        <td data-label="{{ _('Item') }}"><strong>{{ i.name }}</strong></td>
+        <td class="ux-num ds-numeral" data-label="{{ _('In stock') }}">{{ i.balance }}</td>
+        <td data-label="{{ _('Unit') }}">{{ i.unit }}</td>
+        <td class="ux-num" data-label="{{ _('Alert at or below') }}">{{ i.threshold }}</td>
+        <td data-label="{{ _('State') }}">{% if i.low %}<span class="ux-badge ux-badge-low">{{ _("Low") }}</span>{% else %}<span class="ux-badge ux-badge-ok">{{ _("OK") }}</span>{% endif %}</td>
+        <td data-label="{{ _('Low since') }}">{% if i.low and low_since.get(i.id) %}<span class="ux-nowrap">{{ low_since[i.id] | appt_date }}</span>{% else %}-{% endif %}</td>
+        <td data-label="{{ _('Actions') }}"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('stock.item', item_id=i.id) }}" tabindex="0">{{ _("Open") }}<span class="visually-hidden">: {{ i.name }}</span></a></td>
       </tr>
       {% endfor %}
       </tbody>
@@ -102,14 +101,14 @@
 
 {% if can_manage %}
 <section class="card dash-card {{ 'sx-h-m' if alerts else 'sx-h-s sx-wide' }} sx-order-2" aria-labelledby="new-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="new-title">Add an item</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="new-title">{{ _("Add an item") }}</h2></div>
   <div class="dash-card-body">
     <form method="post" action="{{ url_for('stock.create') }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label class="form-label small" for="new-name">Name</label><input class="form-control form-control-sm" id="new-name" name="name" maxlength="120" required></div>
-      <div><label class="form-label small" for="new-unit">Unit</label><select class="form-select form-select-sm" id="new-unit" name="unit">{% for u in units %}<option>{{ u }}</option>{% endfor %}</select></div>
-      <div><label class="form-label small" for="new-threshold">Alert at or below</label><input class="form-control form-control-sm" id="new-threshold" name="threshold" type="number" min="0" required></div>
-      <button class="btn btn-primary btn-sm" type="submit">Add</button>
+      <div><label class="form-label small" for="new-name">{{ _("Name") }}</label><input class="form-control form-control-sm" id="new-name" name="name" maxlength="120" required></div>
+      <div><label class="form-label small" for="new-unit">{{ _("Unit") }}</label><select class="form-select form-select-sm" id="new-unit" name="unit">{% for u in units %}<option>{{ u }}</option>{% endfor %}</select></div>
+      <div><label class="form-label small" for="new-threshold">{{ _("Alert at or below") }}</label><input class="form-control form-control-sm" id="new-threshold" name="threshold" type="number" min="0" required></div>
+      <button class="btn btn-primary btn-sm" type="submit">{{ _("Add") }}</button>
     </form>
   </div>
 </section>

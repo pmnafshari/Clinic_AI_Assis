@@ -11,13 +11,14 @@ from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
+from .i18n import _
 
 documents_bp = Blueprint("documents", __name__)
 
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only a dentist can work with clinical documents.", "danger")
+    flash(_("Only a dentist can work with clinical documents."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -61,14 +62,14 @@ def upload(cf):
     conn, pid, _patient_row = _patient(cf)
     blob = request.files.get("file")
     if blob is None or not blob.filename:
-        flash("Choose a file to upload.", "danger")
+        flash(_("Choose a file to upload."), "danger")
         return redirect(url_for("documents.index", cf=cf))
     data = blob.read(docs.MAX_BYTES + 1)
     doc_id = docs.ingest(conn, pid, data, blob.filename, *_who())
     status = docs.row(conn, doc_id)["status"]
-    flash({"pending_review": "Read. Check the text and confirm it before it can be searched.",
-           "quarantined": "Not accepted: the file was kept but not read.",
-           "extraction_failed": "The file was kept, but it could not be read."}.get(status, "Saved."),
+    flash({"pending_review": _("Read. Check the text and confirm it before it can be searched."),
+           "quarantined": _("Not accepted: the file was kept but not read."),
+           "extraction_failed": _("The file was kept, but it could not be read.")}.get(status, "Saved."),
           "success" if status == "pending_review" else "danger")
     return redirect(url_for("documents.detail", cf=cf, did=doc_id))
 
@@ -98,7 +99,7 @@ def _step(cf, did, fn, done, back="detail", kind="success", **kwargs):
     except LookupError:
         abort(404)
     except docs.DocumentError as e:
-        flash(str(e), "danger")
+        flash(_(str(e)), "danger")
         return redirect(url_for("documents.detail", cf=cf, did=did))
     flash(done, kind)
     if back == "index":
@@ -110,21 +111,21 @@ def _step(cf, did, fn, done, back="detail", kind="success", **kwargs):
 def confirm(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_confirm", f"document:{did}")
-    return _step(cf, did, docs.confirm, "Confirmed. It is now part of the record and can be searched.")
+    return _step(cf, did, docs.confirm, _("Confirmed. It is now part of the record and can be searched."))
 
 
 @documents_bp.route("/patients/<cf>/documents/<int:did>/retry", methods=["POST"])
 def retry(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_retry", f"document:{did}")
-    return _step(cf, did, docs.retry, "Read again. Check the result below.")
+    return _step(cf, did, docs.retry, _("Read again. Check the result below."))
 
 
 @documents_bp.route("/patients/<cf>/documents/<int:did>/reject", methods=["POST"])
 def reject(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_reject", f"document:{did}")
-    return _step(cf, did, docs.reject, "Rejected. The file is kept; it is not part of the record.", kind="removed",
+    return _step(cf, did, docs.reject, _("Rejected. The file is kept; it is not part of the record."), kind="removed",
                  reason=request.form.get("reason", ""))
 
 
@@ -134,7 +135,7 @@ def replace(cf, did):
         return _refuse("document_replace", f"document:{did}")
     blob = request.files.get("file")
     data = blob.read(docs.MAX_BYTES + 1) if blob else b""
-    return _step(cf, did, docs.replace, "Replaced. The earlier version is kept in the history.",
+    return _step(cf, did, docs.replace, _("Replaced. The earlier version is kept in the history."),
                  data=data, name=blob.filename if blob else "")
 
 
@@ -218,14 +219,14 @@ def preview(cf, did):
 def publish(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_publish", f"document:{did}")
-    return _step(cf, did, pf.publish, "Shown to the patient in their portal.", back="index")
+    return _step(cf, did, pf.publish, _("Shown to the patient in their portal."), back="index")
 
 
 @documents_bp.route("/patients/<cf>/documents/<int:did>/withdraw", methods=["POST"])
 def withdraw(cf, did):
     if not authorize(g.user["role"], docs.CAPABILITY):
         return _refuse("document_withdraw", f"document:{did}")
-    return _step(cf, did, pf.withdraw, "No longer shown to the patient.", back="index", kind="removed",
+    return _step(cf, did, pf.withdraw, _("No longer shown to the patient."), back="index", kind="removed",
                  reason=request.form.get("reason", ""))
 
 
@@ -239,7 +240,7 @@ def correct(cf, did):
     except LookupError:
         abort(404)
     except docs.DocumentError as e:
-        flash(str(e), "danger")
+        flash(_(str(e)), "danger")
         return redirect(url_for("documents.detail", cf=cf, did=did))
-    flash("Moved to the other patient's record. It is no longer shown to anyone in the portal.", "success")
+    flash(_("Moved to the other patient's record. It is no longer shown to anyone in the portal."), "success")
     return redirect(url_for("documents.index", cf=cf))

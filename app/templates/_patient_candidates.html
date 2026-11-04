@@ -1,7 +1,7 @@
 {# P29 U-021: tabindex="0" because WebKit leaves plain links out of Tab; app.js moves through them with the arrows #}
 {% if candidates %}
 <div>
-<p class="app-search-keys">{{ candidates | length }} found · ↓ to choose, Enter to open, Esc to close</p>
+<p class="app-search-keys">{{ _('{n} found · ↓ to choose, Enter to open, Esc to close', n=candidates | length) }}</p>
 <div class="list-group">
   {% for cf, name in candidates %}
   <a href="{{ url_for('patients.detail_view', cf=cf) }}" class="list-group-item list-group-item-action" tabindex="0">
@@ -11,5 +11,5 @@
 </div>
 </div>
 {% elif query %}
-<p class="text-secondary mt-2 mb-0">No patients match '{{ query }}'.</p>
+<p class="text-secondary mt-2 mb-0">{{ _("No patients match '{q}'.", q=query) }}</p>
 {% endif %}

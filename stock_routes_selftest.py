@@ -101,7 +101,7 @@ def selftest():
         alert_id = re.search(r"/stock/alerts/(\d+)/acknowledge", page).group(1)
         reception.post(f"/stock/alerts/{alert_id}/acknowledge", data={"csrf_token": _csrf(page)})
         page = reception.get("/stock").text
-        assert 'data-label="Seen">by st_assist<' in page and "Low stock (1)" in page, "4: seen is not resolved"
+        assert re.search(r'data-label="Seen"[^>]*>by st_assist<', page) and "Low stock (1)" in page, "4: seen is not resolved"
 
         # 5. history explains the balance, and admin sees none of it
         hist = " ".join(re.sub(r"<[^>]+>", " ", dentist.get(f"/stock/{item_id}").text).split())

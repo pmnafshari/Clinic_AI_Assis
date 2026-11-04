@@ -1,12 +1,12 @@
 {% set locked = row.locked_until is not none %}
 <tr id="user-row-{{ row.username }}">
-  <td data-label="Username">
+  <td data-label="{{ _('Username') }}">
     <span class="ds-person">
       <span class="ds-avatar ds-avatar-sm {{ row.username | tint }}" aria-hidden="true">{{ row.username | initials }}</span>
       <span>
         {{ row.username }}
         {% if row.username == me %}
-        <span class="ds-badge ds-badge-primary ms-1">This is you</span>
+        <span class="ds-badge ds-badge-primary ms-1">{{ _("This is you") }}</span>
         {% endif %}
         {% if locked %}
         <small class="text-secondary d-block">Locked after {{ row.failed_attempts }} failed attempts.</small>
@@ -14,14 +14,14 @@
       </span>
     </span>
   </td>
-  <td data-label="Role"><span class="text-capitalize">{{ row.role }}</span></td>
-  <td data-label="Status">
+  <td data-label="{{ _('Role') }}"><span class="text-capitalize">{{ row.role }}</span></td>
+  <td data-label="{{ _('Status') }}">
     {% if locked %}
-    <span class="ds-badge ds-badge-warning">Locked</span>
+    <span class="ds-badge ds-badge-warning">{{ _("Locked") }}</span>
     {% elif row.active %}
-    <span class="ds-badge ds-badge-success">Active</span>
+    <span class="ds-badge ds-badge-success">{{ _("Active") }}</span>
     {% else %}
-    <span class="ds-badge ds-badge-neutral">Disabled</span>
+    <span class="ds-badge ds-badge-neutral">{{ _("Disabled") }}</span>
     {% endif %}
   </td>
   <td data-label="">
@@ -30,23 +30,23 @@
       <button type="button" class="btn btn-outline-secondary btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=role&new_role={{ 'dentist' if row.role != 'dentist' else 'assistant' }}"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Change role for {{ row.username }}">Change role</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Change role for {{ row.username }}">{{ _("Change role") }}</button>
       {% if row.active %}
       <button type="button" class="btn btn-outline-danger btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=active"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Disable {{ row.username }}">Disable</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Disable {{ row.username }}">{{ _("Disable") }}</button>
       {% else %}
       <button type="button" class="btn btn-outline-secondary btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=active"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Enable {{ row.username }}">Enable</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Enable {{ row.username }}">{{ _("Enable") }}</button>
       {% endif %}
       {% if locked %}
       <button type="button" class="btn btn-outline-secondary btn-sm"
               hx-get="{{ url_for('admin.confirm_fragment', username=row.username) }}?action=lockout"
               hx-target="#admin-modal-body"
-              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Clear lockout for {{ row.username }}">Clear lockout</button>
+              data-bs-toggle="modal" data-bs-target="#admin-modal" aria-label="Clear lockout for {{ row.username }}">{{ _("Clear lockout") }}</button>
       {% endif %}
       {% endif %}
     </div>

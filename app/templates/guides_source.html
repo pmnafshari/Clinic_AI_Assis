@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
-  <ol class="ds-breadcrumb"><li><a href="{{ url_for('guides.library') }}">Guides library</a></li><li aria-current="page">{{ s.title }}</li></ol>
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
+  <ol class="ds-breadcrumb"><li><a href="{{ url_for('guides.library') }}">{{ _("Guides library") }}</a></li><li aria-current="page">{{ s.title }}</li></ol>
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
@@ -25,22 +25,22 @@
 
 {% if reviewer %}
 <section class="card dash-card mb-3" aria-labelledby="decide-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="decide-title">Review</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="decide-title">{{ _("Review") }}</h2></div>
   <div class="dash-card-body d-flex flex-wrap gap-3 align-items-end">
     {% if s.status == 'pending_review' %}
-    <form method="post" action="{{ url_for('guides.approve', guide_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm" type="submit">Approve</button></form>
+    <form method="post" action="{{ url_for('guides.approve', guide_id=s.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary btn-sm" type="submit">{{ _("Approve") }}</button></form>
     <form method="post" action="{{ url_for('guides.reject', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="rreason" class="form-label">Why reject it</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
-      <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button></form>
+      <div><label for="rreason" class="form-label">{{ _("Why reject it") }}</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Reject") }}</button></form>
     {% endif %}
     {% if s.status == 'approved' %}
     <form method="post" action="{{ url_for('guides.withdraw', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="wreason" class="form-label">Why withdraw it</label><textarea id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
-      <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw from answers</button></form>
+      <div><label for="wreason" class="form-label">{{ _("Why withdraw it") }}</label><textarea id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Withdraw from answers") }}</button></form>
     {% if approve and others %}
     <form method="post" action="{{ url_for('guides.supersede', guide_id=s.id) }}" class="d-flex gap-2 align-items-end"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="old_id" class="form-label">This edition replaces</label><select id="old_id" name="old_id" class="form-select form-select-sm">{% for o in others %}<option value="{{ o.id }}">{{ o.title }} - {{ o.edition or o.version }}</option>{% endfor %}</select></div>
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Replace it</button></form>
+      <div><label for="old_id" class="form-label">{{ _("This edition replaces") }}</label><select id="old_id" name="old_id" class="form-select form-select-sm">{% for o in others %}<option value="{{ o.id }}">{{ o.title }} - {{ o.edition or o.version }}</option>{% endfor %}</select></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Replace it") }}</button></form>
     {% endif %}
     {% endif %}
   </div>
@@ -48,10 +48,10 @@
   <div class="dash-card-body pt-0">
     <form method="post" action="{{ url_for('guides.restrict', guide_id=s.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <fieldset><legend class="form-label">Pages for the dentist only (service menus, calibration)</legend>
+      <fieldset><legend class="form-label">{{ _("Pages for the dentist only (service menus, calibration)") }}</legend>
       <div class="d-flex flex-wrap gap-3">{% for p in pages %}<div class="form-check"><input class="form-check-input" type="checkbox" name="restricted" value="{{ p.page }}" id="r{{ p.page }}" {% if p.restricted %}checked{% endif %}><label class="form-check-label" for="r{{ p.page }}">Page {{ p.page }}</label></div>{% endfor %}</div>
       </fieldset>
-      <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">Save restricted pages</button>
+      <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">{{ _("Save restricted pages") }}</button>
     </form>
   </div>
   {% endif %}
@@ -61,13 +61,13 @@
 {% for p in pages %}
 <section class="card dash-card mb-3{% if focus == p.page %} guide-focus{% endif %}" aria-labelledby="page-{{ p.page }}-title" id="page-{{ p.page }}">
   <div class="dash-card-head"><h2 class="ds-card-title" id="page-{{ p.page }}-title">Page {{ p.page }}</h2>
-    <span>{% if p.restricted %}<span class="ds-badge ds-badge-warning">Dentist only</span>{% endif %}
+    <span>{% if p.restricted %}<span class="ds-badge ds-badge-warning">{{ _("Dentist only") }}</span>{% endif %}
     {% if not p.readable %}<span class="ds-badge ds-badge-warning">Cannot be read reliably ({{ p.ocr_conf|round|int }}%)</span>{% endif %}</span></div>
   <div class="dash-card-body">
     <div class="guide-page">
       {% if p.image_path %}<img class="guide-page-image" src="{{ url_for('guides.page_image', guide_id=s.id, page=p.page) }}" alt="Page {{ p.page }} of {{ s.title }}" loading="lazy">{% endif %}
       <div class="min-w-0">
-        {% if p.text %}<p class="ds-row-sub mb-1">Text of the page</p><div class="guide-text" lang="{{ s.language }}">{{ p.text }}</div>{% endif %}
+        {% if p.text %}<p class="ds-row-sub mb-1">{{ _("Text of the page") }}</p><div class="guide-text" lang="{{ s.language }}">{{ p.text }}</div>{% endif %}
         {% if p.ocr_text %}<p class="ds-row-sub mb-1 mt-2">Read from pictures by OCR ({{ p.ocr_conf|round|int }}% confidence{% if p.ocr_conf < readable_at %} - not quoted{% endif %})</p><div class="guide-text" lang="{{ s.language }}">{{ p.ocr_text }}</div>{% endif %}
         {% if reviewer and flags[p.page] %}<ul class="mt-2 mb-0">{% for f in flags[p.page] %}<li class="ds-row-sub"><strong>Check:</strong> {{ f }}</li>{% endfor %}</ul>{% endif %}
       </div>
@@ -78,7 +78,7 @@
 
 {% if reviewer and history %}
 <section class="card dash-card" aria-labelledby="hist-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">Who decided what</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">{{ _("Who decided what") }}</h2></div>
   <div class="dash-card-body"><ol class="ds-rows">{% for h in history %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ h.action.replace('_', ' ') }} by {{ h.actor }}</span><span class="ds-row-sub">{{ h.at | appt_date }} {{ h.at | appt_time }}{% if h.reason %} · {{ h.reason }}{% endif %}</span></span></li>{% endfor %}</ol></div>
 </section>
 {% endif %}

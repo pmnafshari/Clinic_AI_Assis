@@ -2,8 +2,8 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Records</p>
-    <h1 class="ds-page-title">Possible duplicates</h1>
+    <p class="ds-page-eyebrow">{{ _("Records") }}</p>
+    <h1 class="ds-page-title">{{ _("Possible duplicates") }}</h1>
     <p class="ds-page-meta">{{ pairs | length }} pair{{ '' if pairs | length == 1 else 's' }} to review</p>
   </div>
 </div>
@@ -12,9 +12,7 @@
    is a list of duplicates will click through it; staff who understand it is a
    list of QUESTIONS will read it. #}
 <div class="alert alert-secondary" role="note">
-  <strong>These are questions, not findings.</strong> Two people can share a name, and two records
-  with different codici fiscali are usually two different people. Nothing here has been merged, and
-  nothing merges on its own. Check the clinic's own records before deciding.
+  {{ _html("<strong>These are questions, not findings.</strong> Two people can share a name, and two records with different codici fiscali are usually two different people. Nothing here has been merged, and nothing merges on its own. Check the clinic's own records before deciding.") }}
 </div>
 
 {% if pairs %}
@@ -43,7 +41,7 @@
           <p class="ds-row-sub mb-1"><code>{{ side.codice_fiscale }}</code></p>
           <p class="ds-row-sub mb-2">{{ side.phone|phone or 'no phone on record' }}</p>
           <a class="btn btn-sm btn-outline-secondary"
-             href="{{ url_for('patients.detail_view', cf=side.codice_fiscale) }}">Open record</a>
+             href="{{ url_for('patients.detail_view', cf=side.codice_fiscale) }}">{{ _("Open record") }}</a>
         </div>
       </div>
       {% endfor %}
@@ -55,29 +53,26 @@
       <input type="hidden" name="cf_a" value="{{ pair.a.codice_fiscale }}">
       <input type="hidden" name="cf_b" value="{{ pair.b.codice_fiscale }}">
       <label class="form-label small" for="reason-{{ loop.index }}">
-        If these are different people, say how you know
+        {{ _("If these are different people, say how you know") }}
       </label>
       <div class="d-flex gap-2 flex-wrap">
         <textarea class="form-control w-auto flex-grow-1" id="reason-{{ loop.index }}"
-               name="reason" placeholder="e.g. checked both records, different birth dates" rows="1" data-grow></textarea>
-        <button type="submit" class="btn btn-outline-secondary">Different people</button>
+               name="reason" placeholder="{{ _('e.g. checked both records, different birth dates') }}" rows="1" data-grow></textarea>
+        <button type="submit" class="btn btn-outline-secondary">{{ _("Different people") }}</button>
       </div>
     </form>
 
     {# the merge. no default is selected: which record survives is the whole
        decision, and pre-picking one makes it a click instead of a choice. #}
     <details class="dup-merge">
-      <summary>These are the same person &mdash; merge them</summary>
+      <summary>{{ _("These are the same person — merge them") }}</summary>
       <form method="post" action="{{ url_for('patients.duplicates_merge') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <p class="ds-row-sub">
-          Everything on the record you fold in &mdash; visits, invoices, appointments and files
-          &mdash; moves to the one you keep. The folded codice fiscale keeps working as a link, and
-          its portal PIN is revoked. <strong>This is not undone from here:</strong> take a backup
-          first if you are unsure.
+          {{ _html("Everything on the record you fold in &mdash; visits, invoices, appointments and files &mdash; moves to the one you keep. The folded codice fiscale keeps working as a link, and its portal PIN is revoked. <strong>This is not undone from here:</strong> take a backup first if you are unsure.") }}
         </p>
         <fieldset class="mb-2">
-          <legend class="form-label small">Which record do you keep?</legend>
+          <legend class="form-label small">{{ _("Which record do you keep?") }}</legend>
           {% for side in (pair.a, pair.b) %}
           {% set other = pair.b if side is sameas pair.a else pair.a %}
           <div class="form-check">
@@ -101,10 +96,10 @@
           <input class="form-check-input" type="checkbox" name="confirm" value="yes"
                  id="confirm-{{ loop.index }}" required>
           <label class="form-check-label" for="confirm-{{ loop.index }}">
-            I have checked both records and they are the same person
+            {{ _("I have checked both records and they are the same person") }}
           </label>
         </div>
-        <button type="submit" class="btn btn-danger">Merge records</button>
+        <button type="submit" class="btn btn-danger">{{ _("Merge records") }}</button>
       </form>
     </details>
   </div>
@@ -114,8 +109,7 @@
 <section class="card dash-card">
   <div class="dash-card-body">
     <p class="text-secondary mb-0">
-      No pairs to review. Records that have already been marked as different people stay off this
-      list.
+      {{ _("No pairs to review. Records that have already been marked as different people stay off this list.") }}
     </p>
   </div>
 </section>

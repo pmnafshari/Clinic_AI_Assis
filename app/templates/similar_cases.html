@@ -1,17 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
-    <li aria-current="page">Similar cases</li>
+    <li aria-current="page">{{ _("Similar cases") }}</li>
   </ol>
 </nav>
 {% if off %}
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
-    <h1 class="ds-page-title">Similar cases</h1>
-    <p class="ds-page-meta">dentist only</p>
+    <h1 class="ds-page-title">{{ _("Similar cases") }}</h1>
+    <p class="ds-page-meta">{{ _("dentist only") }}</p>
   </div>
 </div>
 <div class="ds-alert ds-alert-info" role="note">
@@ -22,14 +22,14 @@
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
-    <h1 class="ds-page-title">Similar cases{% if found.view == 'teaching' %} · Teaching view{% endif %}</h1>
+    <h1 class="ds-page-title">{{ _("Similar cases") }}{% if found.view == 'teaching' %} {{ _("· Teaching view") }}{% endif %}</h1>
     <p class="ds-page-meta">This visit: {{ found.source.procedures | join(', ') or 'no procedure recorded' }} · dentist only</p>
   </div>
   <div class="ds-page-actions">
     {% if found.view == 'teaching' %}
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=vid) }}">Standard view</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=vid) }}">{{ _("Standard view") }}</a>
     {% else %}
-    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=vid, view='teaching') }}">Teaching view</a>
+    <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=vid, view='teaching') }}">{{ _("Teaching view") }}</a>
     {% endif %}
   </div>
 </div>
@@ -42,7 +42,7 @@
 </div>
 
 <section class="card dash-card mb-3" aria-labelledby="cases-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="cases-title">Cases from other patients</h2>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="cases-title">{{ _("Cases from other patients") }}</h2>
     {% if found.results %}<p class="ds-card-sub">{{ found.message }}</p>{% endif %}</div>
   <div class="dash-card-body">
     {% if found.results %}
@@ -61,16 +61,16 @@
           <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="verdict" value="similar">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Similar: {{ c.label }}">Similar</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Similar: {{ c.label }}">{{ _("Similar") }}</button>
           </form>
           <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="verdict" value="not_similar">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Not similar: {{ c.label }}">Not similar</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Not similar: {{ c.label }}">{{ _("Not similar") }}</button>
           </form>
           <form method="post" action="{{ url_for('similar.exclude', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Remove from similar-case search: {{ c.label }}">Remove from similar-case search</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Remove from similar-case search: {{ c.label }}">{{ _("Remove from similar-case search") }}</button>
           </form>
         </span>
       </li>

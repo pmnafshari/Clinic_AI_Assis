@@ -7,13 +7,13 @@
   <div>
     <p class="ds-page-eyebrow">Intake{% if locked %} · {{ locked.patient_name }}{% endif %}</p>
     <h1 class="ds-page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
-    <p class="ds-page-meta">The notes model reads the note; you check it before it is saved</p>
+    <p class="ds-page-meta">{{ _("The notes model reads the note; you check it before it is saved") }}</p>
   </div>
 <!--/page-head--></div>
-<ol class="ux-steps" aria-label="Progress">
-  <li data-step="1"{% if step == 1 %} aria-current="step"{% endif %} class="{{ 'done' if step > 1 else '' }}"><span class="ux-step-num">1</span> Write or paste the note</li>
-  <li data-step="2"{% if step == 2 %} aria-current="step"{% endif %}><span class="ux-step-num">2</span> Check the draft</li>
-  <li data-step="3"><span class="ux-step-num">3</span> Saved to the record</li>
+<ol class="ux-steps" aria-label="{{ _('Progress') }}">
+  <li data-step="1"{% if step == 1 %} aria-current="step"{% endif %} class="{{ 'done' if step > 1 else '' }}"><span class="ux-step-num">1</span> {{ _("Write or paste the note") }}</li>
+  <li data-step="2"{% if step == 2 %} aria-current="step"{% endif %}><span class="ux-step-num">2</span> {{ _("Check the draft") }}</li>
+  <li data-step="3"><span class="ux-step-num">3</span> {{ _("Saved to the record") }}</li>
 </ol>
 <div class="row g-3">
 <div class="col-12 col-xl-8">
@@ -36,13 +36,13 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
     <div class="mb-3">
-      <label for="raw_note" class="form-label">The note, as written</label>
+      <label for="raw_note" class="form-label">{{ _("The note, as written") }}</label>
       {% if dictated %}
-      <div class="ds-alert ds-alert-warning mb-2" role="note"><div><strong class="ds-alert-title">Dictated - check it</strong>
-      This is what the speech model heard. Correct it before extracting; nothing is saved until you confirm.</div></div>
+      <div class="ds-alert ds-alert-warning mb-2" role="note"><div><strong class="ds-alert-title">{{ _("Dictated - check it") }}</strong>
+      {{ _("This is what the speech model heard. Correct it before extracting; nothing is saved until you confirm.") }}</div></div>
       {% endif %}
       <textarea id="raw_note" name="raw_note" rows="6" class="form-control" required aria-describedby="raw-help"{% if not preview %} autofocus{% endif %}>{{ dictated or '' }}</textarea>
-      <p class="ux-muted" id="raw-help">Shorthand and Italian are fine. Nothing is saved at this step.</p>
+      <p class="ux-muted" id="raw-help">{{ _("Shorthand and Italian are fine. Nothing is saved at this step.") }}</p>
     </div>
     <button type="submit" class="btn {{ 'btn-outline-primary' if preview else 'btn-primary' }}">{{ 'Read it again' if preview else 'Extract the draft' }}</button>
   </form>
@@ -52,9 +52,9 @@
   <form method="post" action="{{ url_for('notes.dictate') }}" enctype="multipart/form-data" class="mt-3">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if locked %}<input type="hidden" name="cf" value="{{ locked.cf }}">{% endif %}
-    <label for="audio" class="form-label">Or dictate it (the recording is not kept)</label>
+    <label for="audio" class="form-label">{{ _("Or dictate it (the recording is not kept)") }}</label>
     <input id="audio" name="audio" type="file" accept="audio/wav,.wav" class="form-control mb-2">
-    <button type="submit" class="btn btn-outline-secondary btn-sm">Turn into text</button>
+    <button type="submit" class="btn btn-outline-secondary btn-sm">{{ _("Turn into text") }}</button>
   </form>
   {% else %}
   <p class="dash-empty-line mt-3">{{ dictation_why or 'Dictation is not available.' }}</p>
@@ -64,10 +64,10 @@
   {% if preview %}
   <hr class="my-4">
   <div class="ux-card-head">
-    <h2 class="ux-card-title">Check the draft</h2>
-    <span class="ux-badge ux-badge-draft" role="status">Draft - not saved</span>
+    <h2 class="ux-card-title">{{ _("Check the draft") }}</h2>
+    <span class="ux-badge ux-badge-draft" role="status">{{ _("Draft - not saved") }}</span>
   </div>
-  <p class="ux-muted">Every field can be corrected. Saving files it to the patient's record; until then it exists nowhere.</p>
+  <p class="ux-muted">{{ _("Every field can be corrected. Saving files it to the patient's record; until then it exists nowhere.") }}</p>
   <form method="post" action="{{ url_for('notes.new_note') }}" data-unsaved-guard data-dirty-from-start>
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="confirm_token" value="{{ confirm_token }}">
@@ -76,7 +76,7 @@
     <div class="ds-alert ds-alert-warning mb-3" role="alert">{{ mismatch }}</div>
     {% endif %}
     <div class="mb-3">
-      <label for="patient_name" class="form-label">Patient name</label>
+      <label for="patient_name" class="form-label">{{ _("Patient name") }}</label>
       {% if locked %}
       <input type="text" id="patient_name" name="patient_name" value="{{ locked.patient_name }}" class="form-control bg-body-secondary" readonly>
       {% else %}
@@ -84,41 +84,41 @@
       {% endif %}
     </div>
     <div class="mb-3">
-      <label for="codice_fiscale" class="form-label">Codice fiscale</label>
+      <label for="codice_fiscale" class="form-label">{{ _("Codice fiscale") }}</label>
       {% if locked %}
       <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ locked.cf }}" class="form-control bg-body-secondary" readonly>
       {% else %}
       <input type="text" id="codice_fiscale" name="codice_fiscale" value="{{ preview.codice_fiscale }}" class="form-control" required
-             pattern="[A-Za-z0-9]{16}" title="16 letters and digits" aria-describedby="cf-help">
-      <p class="ux-muted" id="cf-help">16 letters and digits.</p>
+             pattern="[A-Za-z0-9]{16}" title="{{ _('16 letters and digits') }}" aria-describedby="cf-help">
+      <p class="ux-muted" id="cf-help">{{ _("16 letters and digits.") }}</p>
       {% endif %}
     </div>
     <div class="mb-3">
-      <label for="phone" class="form-label">Phone</label>
+      <label for="phone" class="form-label">{{ _("Phone") }}</label>
       <input type="text" id="phone" name="phone" value="{{ preview.phone or '' }}" class="form-control" inputmode="tel"
              aria-describedby="phone-help">
-      <div class="form-text" id="phone-help">Needed when this note creates a new patient.</div>
+      <div class="form-text" id="phone-help">{{ _("Needed when this note creates a new patient.") }}</div>
     </div>
     <div class="mb-3">
-      <label for="visit_date" class="form-label">Visit date</label>
+      <label for="visit_date" class="form-label">{{ _("Visit date") }}</label>
       <input type="text" id="visit_date" name="visit_date" value="{{ preview.visit_date or '' }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="clinical_notes" class="form-label">Clinical notes</label>
+      <label for="clinical_notes" class="form-label">{{ _("Clinical notes") }}</label>
       <input type="text" id="clinical_notes" name="clinical_notes" value="{{ preview.clinical_notes }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="procedures" class="form-label">Procedures</label>
+      <label for="procedures" class="form-label">{{ _("Procedures") }}</label>
       <input type="text" id="procedures" name="procedures" value="{{ preview.procedures|join(', ') }}" class="form-control">
     </div>
     <div class="mb-3">
-      <label for="next_appointment" class="form-label">Recall, as written in the note</label>
-      <p class="ux-muted mb-1">Not a booking - book the visit in Appointments.</p>
+      <label for="next_appointment" class="form-label">{{ _("Recall, as written in the note") }}</label>
+      <p class="ux-muted mb-1">{{ _("Not a booking - book the visit in Appointments.") }}</p>
       <input type="text" id="next_appointment" name="next_appointment" value="{{ preview.next_appointment or '' }}" class="form-control">
     </div>
     {% if preview.invoices %}
     <div class="mb-3">
-      <p class="form-label mb-1">Invoices</p>
+      <p class="form-label mb-1">{{ _("Invoices") }}</p>
       <ul class="list-group">
         {% for inv in preview.invoices %}
         <li class="list-group-item">
@@ -130,18 +130,18 @@
       </ul>
     </div>
     {% endif %}
-    <button type="submit" class="btn btn-primary">Save to the record</button>
+    <button type="submit" class="btn btn-primary">{{ _("Save to the record") }}</button>
   </form>
   {% endif %}
 </div>
 </div>
 <div class="col-12 col-xl-4">
   <aside class="card ux-card" aria-labelledby="note-help-title">
-    <h2 class="ux-card-title" id="note-help-title">What happens to the note</h2>
+    <h2 class="ux-card-title" id="note-help-title">{{ _("What happens to the note") }}</h2>
     <ul class="ux-muted ux-help-list">
-      <li>The model reads it on this machine; nothing leaves the clinic.</li>
-      <li>You correct the draft; only then is it saved.</li>
-      <li>An uploaded note waits for a dentist in Notes to review.</li>
+      <li>{{ _("The model reads it on this machine; nothing leaves the clinic.") }}</li>
+      <li>{{ _("You correct the draft; only then is it saved.") }}</li>
+      <li>{{ _("An uploaded note waits for a dentist in Notes to review.") }}</li>
     </ul>
   </aside>
 </div>

@@ -1621,16 +1621,16 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
   .ux-table.ux-table-patients tbody tr:nth-child(even of :not([hidden])) { background: var(--sx-zebra); border-radius: 10px; }
   .ux-table.ux-table-patients td { display: block; padding: 0; min-height: 0; text-align: left; }
   .ux-table.ux-table-patients td::before, .ux-table.ux-table-patients td::after { content: none; }
-  .ux-table.ux-table-patients td[data-label="Patient"] { grid-area: name; }
-  .ux-table.ux-table-patients td[data-label="Codice fiscale"] { grid-area: cf; font-size: 0.8125rem; }
-  .ux-table.ux-table-patients td[data-label="Phone"] { grid-area: phone; font-size: 0.8125rem; color: var(--ds-text-muted); }
-  .ux-table.ux-table-patients td[data-label="Next appointment"] { grid-area: next; }
-  .ux-table.ux-table-patients td[data-label="Last visit"] { grid-area: last; }
-  .ux-table.ux-table-patients td[data-label="Record"] { grid-area: open; align-self: center; }
-  .ux-table.ux-table-patients td[data-label="Next appointment"]::before,
-  .ux-table.ux-table-patients td[data-label="Last visit"]::before {
+  .ux-table.ux-table-patients td[data-col="name"] { grid-area: name; }
+  .ux-table.ux-table-patients td[data-col="cf"] { grid-area: cf; font-size: 0.8125rem; }
+  .ux-table.ux-table-patients td[data-col="phone"] { grid-area: phone; font-size: 0.8125rem; color: var(--ds-text-muted); }
+  .ux-table.ux-table-patients td[data-col="next"] { grid-area: next; }
+  .ux-table.ux-table-patients td[data-col="last"] { grid-area: last; }
+  .ux-table.ux-table-patients td[data-col="open"] { grid-area: open; align-self: center; }
+  .ux-table.ux-table-patients td[data-col="next"]::before,
+  .ux-table.ux-table-patients td[data-col="last"]::before {
     content: attr(data-label); float: none; position: static; width: auto; margin: 0 0.375rem 0 0; font-size: 0.8125rem; }
-  .ux-table.ux-table-patients td[data-label="Next appointment"]::before { content: "Next"; }
+  .ux-table.ux-table-patients td[data-col="next"]::before { content: "Next"; }
 }
 
 /* P29 F-012 / U-014: week cards keep names whole and say start, end and status; when the week's box is too narrow
@@ -1722,7 +1722,7 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .ux-badge-ok { background: var(--ds-success-surface); color: #0f5132; border-color: #a7dcc0; }
 .ux-filter-note { margin: 0 1.25rem 0.5rem; font-size: 0.875rem; color: #334155; }
 .ux-stock td form { margin: 0; }
-.ux-stock td[data-label="Seen"] { white-space: nowrap; }
+.ux-stock td[data-col="seen"] { white-space: nowrap; }
 
 /* P29 U-004: the patients list - a number per row and the pages */
 .ux-table .ux-rownum { width: 3rem; text-align: right; color: var(--ds-text-muted); font-variant-numeric: tabular-nums; }
@@ -1756,3 +1756,8 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 
 /* P29 E-001: the language switch on the two pages without a menu */
 .auth-lang { margin: 0 0 0.5rem; text-align: right; font-size: 0.875rem; }
+
+/* P29 E-001: words the stylesheet writes, in Italian on an Italian page */
+:lang(it) .ux-table.ux-table-patients td[data-col="next"]::before { content: "Prossimo"; }
+:lang(it) .ux-panel > summary::after { content: "Apri"; }
+:lang(it) .ux-panel[open] > summary::after { content: "Chiudi"; }

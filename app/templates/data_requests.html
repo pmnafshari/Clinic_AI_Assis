@@ -2,26 +2,23 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Privacy</p>
-    <h1 class="ds-page-title">Data requests</h1>
-    <p class="ds-page-meta">Access, export, correction and erasure requests · dentist only</p>
+    <p class="ds-page-eyebrow">{{ _("Privacy") }}</p>
+    <h1 class="ds-page-title">{{ _("Data requests") }}</h1>
+    <p class="ds-page-meta">{{ _("Access, export, correction and erasure requests · dentist only") }}</p>
   </div>
 </div>
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
   <div>
-    <strong class="ds-alert-title">Demo clinic</strong>
-    Approving an access or export request builds a copy of that patient's record, downloadable
-    for 24 hours and then deleted. Approving an erasure removes the patient from every store
-    except what the retention policy holds, and the reason is recorded. The policy is a demo
-    template, not a legal position.
+    <strong class="ds-alert-title">{{ _("Demo clinic") }}</strong>
+    {{ _("Approving an access or export request builds a copy of that patient's record, downloadable for 24 hours and then deleted. Approving an erasure removes the patient from every store except what the retention policy holds, and the reason is recorded. The policy is a demo template, not a legal position.") }}
   </div>
 </div>
 
 <section class="card dash-card">
   {# P30: Sort and Filter on the requests listed here #}
   {% if rows %}
-  <div class="sx-tools sx-tools-row pt-3" data-list-tools data-for="data-request-rows" data-noun="request|requests"
+  <div class="sx-tools sx-tools-row pt-3" data-list-tools data-for="data-request-rows" data-noun="{{ _('request|requests') }}"
        data-sorts='{{ [['filed', 'text', -1, 'Newest first'], ['filed', 'text', 1, 'Oldest first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
        data-filters='{{ [['kind', 'Kind', [['access', 'Access'], ['export', 'Copy'], ['amend', 'Correction'], ['erasure', 'Erasure']]],
                          ['status', 'Status', [['open', 'Open'], ['approved', 'Approved'], ['rejected', 'Refused'], ['done', 'Done']]]] | tojson }}'></div>
@@ -44,22 +41,22 @@
         {% if r.status == 'open' %}
         <form method="post" action="{{ url_for('data_requests.review', req_id=r.id) }}" class="ms-auto d-flex gap-2 align-items-center flex-wrap">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label class="ds-sr-only" for="reason-{{ r.id }}">Reason</label>
-          <textarea class="form-control form-control-sm" id="reason-{{ r.id }}" name="reason" placeholder="Reason (needed to refuse)" maxlength="500" rows="1" data-grow></textarea>
+          <label class="ds-sr-only" for="reason-{{ r.id }}">{{ _("Reason") }}</label>
+          <textarea class="form-control form-control-sm" id="reason-{{ r.id }}" name="reason" placeholder="{{ _('Reason (needed to refuse)') }}" maxlength="500" rows="1" data-grow></textarea>
           {% if r.kind == 'erasure' %}
-          <label class="small"><input type="checkbox" name="confirm" value="yes"> Erase for good - this cannot be undone</label>
+          <label class="small"><input type="checkbox" name="confirm" value="yes"> {{ _("Erase for good - this cannot be undone") }}</label>
           {% endif %}
-          <button type="submit" name="decision" value="approve" class="btn btn-primary btn-sm">Approve</button>
-          <button type="submit" name="decision" value="reject" class="btn btn-outline-secondary btn-sm">Refuse</button>
+          <button type="submit" name="decision" value="approve" class="btn btn-primary btn-sm">{{ _("Approve") }}</button>
+          <button type="submit" name="decision" value="reject" class="btn btn-outline-secondary btn-sm">{{ _("Refuse") }}</button>
         </form>
         {% elif r.export_file %}
-        <a class="btn btn-outline-primary btn-sm ms-auto" href="{{ url_for('data_requests.download', req_id=r.id) }}">Download copy</a>
+        <a class="btn btn-outline-primary btn-sm ms-auto" href="{{ url_for('data_requests.download', req_id=r.id) }}">{{ _("Download copy") }}</a>
         {% endif %}
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No data requests. One is filed from the patient's record, in its Data requests box, when the patient asks for access, a copy of their data, a correction or erasure.</p>
+    <p class="dash-empty-line">{{ _("No data requests. One is filed from the patient's record, in its Data requests box, when the patient asks for access, a copy of their data, a correction or erasure.") }}</p>
     {% endif %}
   </div>
 </section>

@@ -2,19 +2,19 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Insights</p>
-    <h1 class="ds-page-title">Reports</h1>
-    <p class="ds-page-meta">From filed notes and their invoice lines · dentist only</p>
+    <p class="ds-page-eyebrow">{{ _("Insights") }}</p>
+    <h1 class="ds-page-title">{{ _("Reports") }}</h1>
+    <p class="ds-page-meta">{{ _("From filed notes and their invoice lines · dentist only") }}</p>
   </div>
 </div>
 
 {# P29 R-024: one period for every chart, and what the figures cover and for whom #}
-<form method="get" action="{{ url_for('reports.index') }}" class="d-flex flex-wrap gap-2 align-items-end mb-2" aria-label="Choose the period">
-  <div><label for="period" class="form-label small">Period</label>
+<form method="get" action="{{ url_for('reports.index') }}" class="d-flex flex-wrap gap-2 align-items-end mb-2" aria-label="{{ _('Choose the period') }}">
+  <div><label for="period" class="form-label small">{{ _("Period") }}</label>
     <select id="period" name="period" class="form-select form-select-sm">
       {% for key, label in periods %}<option value="{{ key }}"{{ ' selected' if key == period else '' }}>{{ label | capitalize }}</option>{% endfor %}
     </select></div>
-  <button class="btn btn-outline-primary btn-sm" type="submit">Show</button>
+  <button class="btn btn-outline-primary btn-sm" type="submit">{{ _("Show") }}</button>
 </form>
 <p class="report-scope" data-ux="report-scope">Whole clinic · {{ period_label }}{% if since %} (visits from {{ since }}){% endif %} · signed in as <strong>{{ g.user.username }}</strong> ({{ g.user.role }}).
   Visits do not record which dentist wrote them, so every figure here is the whole clinic, not yours.</p>
@@ -46,21 +46,20 @@
     <section class="card dash-card h-100" aria-labelledby="proc-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="proc-title">Procedures</h2>
-          <p class="ds-card-sub">How often each procedure code appears across all filed visits.</p>
+          <h2 class="ds-card-title" id="proc-title">{{ _("Procedures") }}</h2>
+          <p class="ds-card-sub">{{ _("How often each procedure code appears across all filed visits.") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
       {% if proc_has_data %}
       <div class="chart-box"><canvas id="proc-chart"></canvas></div>
       <p class="text-secondary small mb-0 mt-3">
-        A code the glossary does not recognise is flagged for review and still files, so it appears
-        here as itself rather than being folded away.
+        {{ _("A code the glossary does not recognise is flagged for review and still files, so it appears here as itself rather than being folded away.") }}
       </p>
       {% else %}
       <div class="chart-empty">
         <i class="bi bi-clipboard-data" aria-hidden="true"></i>
-        <p class="mb-0">No procedures yet. They appear here once a note is filed with a procedure on it.</p>
+        <p class="mb-0">{{ _("No procedures yet. They appear here once a note is filed with a procedure on it.") }}</p>
       </div>
       {% endif %}
       </div>
@@ -71,20 +70,20 @@
     <section class="card dash-card h-100" aria-labelledby="billed-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="billed-title">Billed by month</h2>
-          <p class="ds-card-sub">Invoice lines totalled against the month of their visit.</p>
+          <h2 class="ds-card-title" id="billed-title">{{ _("Billed by month") }}</h2>
+          <p class="ds-card-sub">{{ _("Invoice lines totalled against the month of their visit.") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
       {% if billed_has_data %}
       <div class="chart-box"><canvas id="billed-chart"></canvas></div>
       <p class="text-secondary small mb-0 mt-3">
-        Billed, not collected. Recorded payments are on the Billing page.
+        {{ _("Billed, not collected. Recorded payments are on the Billing page.") }}
       </p>
       {% else %}
       <div class="chart-empty">
         <i class="bi bi-receipt" aria-hidden="true"></i>
-        <p class="mb-0">Nothing billed yet. Amounts appear here once an invoice line is filed against a dated visit.</p>
+        <p class="mb-0">{{ _("Nothing billed yet. Amounts appear here once an invoice line is filed against a dated visit.") }}</p>
       </div>
       {% endif %}
       </div>
@@ -96,14 +95,14 @@
   <div class="col-12">
     <section class="card dash-card" aria-labelledby="visits-title">
       <div class="dash-card-head"><div>
-        <h2 class="ds-card-title" id="visits-title">Visits per month</h2>
-        <p class="ds-card-sub">Dated visits across the clinic, last 12 months on record.</p>
+        <h2 class="ds-card-title" id="visits-title">{{ _("Visits per month") }}</h2>
+        <p class="ds-card-sub">{{ _("Dated visits across the clinic, last 12 months on record.") }}</p>
       </div></div>
       <div class="dash-card-body">
       {% if visits_have_data %}
-      <div class="chart-box"><canvas id="visits-chart" aria-label="Visits per month" role="img"></canvas></div>
+      <div class="chart-box"><canvas id="visits-chart" aria-label="{{ _('Visits per month') }}" role="img"></canvas></div>
       {% else %}
-      <div class="chart-empty"><i class="bi bi-calendar3" aria-hidden="true"></i><p class="mb-0">No dated visits yet.</p></div>
+      <div class="chart-empty"><i class="bi bi-calendar3" aria-hidden="true"></i><p class="mb-0">{{ _("No dated visits yet.") }}</p></div>
       {% endif %}
       </div>
     </section>

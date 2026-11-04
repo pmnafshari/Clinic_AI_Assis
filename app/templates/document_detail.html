@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
-    <li><a href="{{ url_for('documents.index', cf=cf) }}">Documents</a></li>
+    <li><a href="{{ url_for('documents.index', cf=cf) }}">{{ _("Documents") }}</a></li>
     <li aria-current="page">{{ doc.display_name }}</li>
   </ol>
 </nav>
@@ -17,97 +17,94 @@
 
 {% if doc.status == 'pending_review' %}
 <div class="ds-alert ds-alert-warning mb-3" role="note">
-  <div><strong class="ds-alert-title">Not part of the record yet</strong>
-  This is what was read from the file on this machine. Check it against the original before you
-  confirm it; until then it cannot be searched. Text inside a document is only text - nothing in it
-  is followed.</div>
+  <div><strong class="ds-alert-title">{{ _("Not part of the record yet") }}</strong>
+  {{ _("This is what was read from the file on this machine. Check it against the original before you confirm it; until then it cannot be searched. Text inside a document is only text - nothing in it is followed.") }}</div>
 </div>
 {% endif %}
 
 {# P29 R-031: what can be done with this file now and, for each thing that cannot, why #}
 {% set st = doc.status %}
 {% set acts = [
-  ('confirm', 'Confirm', st == 'pending_review',
-     'it is already in the record' if st == 'confirmed' else
-     'it was quarantined before reading (' ~ (doc.reason or 'refused') ~ '), so it was never read and there is nothing to check' if st == 'quarantined' else
+  ('confirm', _('Confirm'), st == 'pending_review',
+     _('it is already in the record') if st == 'confirmed' else
+     _('it was quarantined before reading ({reason}), so it was never read and there is nothing to check', reason=doc.reason or _('refused')) if st == 'quarantined' else
      'nothing could be read from it - try reading again first' if st == 'extraction_failed' else
-     'it was rejected' if st == 'rejected' else 'a newer version replaced it'),
-  ('show', 'Show to patient', st == 'confirmed',
+     _('it was rejected') if st == 'rejected' else _('a newer version replaced it')),
+  ('show', _('Show to patient'), st == 'confirmed',
      'only a file in the record can be shown - confirm it first' if st == 'pending_review' else
-     'it is not in the record and cannot be shown to the patient'),
-  ('search', 'Find it in Search', st == 'confirmed',
-     'Search reads confirmed files only - it is not searched until it is confirmed' if st == 'pending_review' else
-     'Search reads confirmed files only'),
-  ('reject', 'Reject', st in ('pending_review', 'quarantined', 'extraction_failed'),
+     _('it is not in the record and cannot be shown to the patient')),
+  ('search', _('Find it in Search'), st == 'confirmed',
+     _('Search reads confirmed files only - it is not searched until it is confirmed') if st == 'pending_review' else
+     _('Search reads confirmed files only')),
+  ('reject', _('Reject'), st in ('pending_review', 'quarantined', 'extraction_failed'),
      'a confirmed file is not rejected: Replace it with a corrected file, or move it if it is the wrong patient' if st == 'confirmed' else
-     'it is already decided'),
-  ('reread', 'Try reading again', st == 'extraction_failed', 'only a file that could not be read is read again'),
-  ('replace', 'Replace with a corrected file', st in ('pending_review', 'confirmed'),
-     'upload the corrected file as a new document instead' if st == 'quarantined' else 'it is already decided'),
+     _('it is already decided')),
+  ('reread', _('Try reading again'), st == 'extraction_failed', _('only a file that could not be read is read again')),
+  ('replace', _('Replace with a corrected file'), st in ('pending_review', 'confirmed'),
+     _('upload the corrected file as a new document instead') if st == 'quarantined' else _('it is already decided')),
 ] %}
 <section class="card dash-card mb-3" aria-labelledby="can-title">
-  <div class="dash-card-head"><div><h2 class="ds-card-title" id="can-title">What can be done with this file</h2>
-    <p class="ds-card-sub">{{ {'pending_review': 'Read on this machine, waiting for a dentist to check it.', 'confirmed': 'In the record and searchable.', 'quarantined': 'Refused before reading and kept as uploaded.', 'extraction_failed': 'Uploaded, but nothing could be read from it.', 'rejected': 'Rejected - kept, not in the record.', 'superseded': 'Replaced by a newer version.'}[st] }}</p></div></div>
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="can-title">{{ _("What can be done with this file") }}</h2>
+    <p class="ds-card-sub">{{ {'pending_review': _('Read on this machine, waiting for a dentist to check it.'), 'confirmed': _('In the record and searchable.'), 'quarantined': _('Refused before reading and kept as uploaded.'), 'extraction_failed': 'Uploaded, but nothing could be read from it.', 'rejected': _('Rejected - kept, not in the record.'), 'superseded': _('Replaced by a newer version.')}[st] }}</p></div></div>
   <div class="dash-card-body"><ul class="doc-can">
     {% for key, name, ok, why in acts %}
     <li data-act="{{ key }}" data-ok="{{ 'yes' if ok else 'no' }}"><i class="bi {{ 'bi-check-circle' if ok else 'bi-slash-circle' }}" aria-hidden="true"></i>
-      <b>{{ name }}</b>{% if ok %} - possible now{% else %} - not possible: {{ why }}{% endif %}</li>
+      <b>{{ name }}</b>{% if ok %} - {{ _('possible now') }}{% else %} - {{ _('not possible: {why}', why=why) }}{% endif %}</li>
     {% endfor %}
   </ul></div>
 </section>
 
 <section class="card dash-card mb-3" aria-labelledby="prov-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="prov-title">Source</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="prov-title">{{ _("Source") }}</h2></div>
   <div class="dash-card-body"><ul class="ds-rows">
-    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Uploaded</span><span class="ds-row-title">{{ doc.uploaded_by }} · {{ doc.uploaded_at | appt_date }} {{ doc.uploaded_at | appt_time }}</span></span></li>
-    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">File</span><span class="ds-row-title text-break">{{ doc.kind or 'unknown type' }} · {{ doc.size }} bytes · sha256 {{ doc.sha256[:16] }}…</span></span></li>
-    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Read by</span><span class="ds-row-title">{{ doc.extractor or 'not read' }}</span></span></li>
-    {% if doc.decided_by %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Decision</span><span class="ds-row-title">{{ doc.status.replace('_', ' ') }} by {{ doc.decided_by }} · {{ doc.decided_at | appt_date }}</span></span></li>{% endif %}
-    {% if doc.supersedes_id %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Replaces</span><span class="ds-row-title">document {{ doc.supersedes_id }}</span></span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=doc.supersedes_id) }}">Open<span class="visually-hidden">: document {{ doc.supersedes_id }}</span></a></span></li>{% endif %}
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Uploaded") }}</span><span class="ds-row-title">{{ doc.uploaded_by }} · {{ doc.uploaded_at | appt_date }} {{ doc.uploaded_at | appt_time }}</span></span></li>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("File") }}</span><span class="ds-row-title text-break">{{ doc.kind or _('unknown type') }} · {{ _('{n} bytes', n=doc.size) }} · sha256 {{ doc.sha256[:16] }}…</span></span></li>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Read by") }}</span><span class="ds-row-title">{{ doc.extractor or _('not read') }}</span></span></li>
+    {% if doc.decided_by %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Decision") }}</span><span class="ds-row-title">{{ _('{status} by {who}', status=_(doc.status.replace('_', ' ')), who=doc.decided_by) }} · {{ doc.decided_at | appt_date }}</span></span></li>{% endif %}
+    {% if doc.supersedes_id %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Replaces") }}</span><span class="ds-row-title">{{ _('document {id}', id=doc.supersedes_id) }}</span></span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=doc.supersedes_id) }}">{{ _("Open") }}<span class="visually-hidden">{{ _(': document {id}', id=doc.supersedes_id) }}</span></a></span></li>{% endif %}
   </ul>
-  <a href="{{ url_for('documents.original', cf=cf, did=doc.id) }}">Download the original</a>
+  <a href="{{ url_for('documents.original', cf=cf, did=doc.id) }}">{{ _("Download the original") }}</a>
   </div>
 </section>
 
 <section class="card dash-card mb-3" aria-labelledby="file-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="file-title">{{ 'In the record' if doc.status == 'confirmed' else 'Not in the record' }}</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="file-title">{{ _('In the record') if doc.status == 'confirmed' else _('Not in the record') }}</h2></div>
   <div class="dash-card-body">
     {% if doc.status == 'quarantined' %}
-    <div class="ds-alert ds-alert-warning mb-3" role="note"><strong>Quarantined:</strong> {{ doc.reason or 'refused before reading' }}.
-      Kept exactly as uploaded and never read further - it is not part of the record, not searchable and has no preview.</div>
+    <div class="ds-alert ds-alert-warning mb-3" role="note"><strong>{{ _('Quarantined:') }}</strong> {{ _('{reason}. Kept exactly as uploaded and never read further - it is not part of the record, not searchable and has no preview.', reason=_(doc.reason) if doc.reason else _('refused before reading')) }}</div>
     {% elif doc.status != 'confirmed' %}
-    <p class="ds-row-sub">Not part of the record until a dentist confirms it.</p>
+    <p class="ds-row-sub">{{ _("Not part of the record until a dentist confirms it.") }}</p>
     {% endif %}
     {% if previewable %}
     <figure class="file-preview mb-3" id="preview">
-      <img class="file-view" src="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" alt="{{ doc.display_name }} - image preview for orientation only, not for diagnosis">
-      <figcaption class="ds-row-sub">Fitted to the screen, for orientation only - not suitable for diagnosis.
-        <a href="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" target="_blank" rel="noopener">Open full size<span class="visually-hidden"> (opens {{ doc.display_name }} in a new tab)</span></a>
-        or download the original.</figcaption>
+      <img class="file-view" src="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" alt="{{ _('{name} - image preview for orientation only, not for diagnosis', name=doc.display_name) }}">
+      <figcaption class="ds-row-sub">{{ _("Fitted to the screen, for orientation only - not suitable for diagnosis.") }}
+        <a href="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" target="_blank" rel="noopener">{{ _("Open full size") }}<span class="visually-hidden">{{ _(' (opens {name} in a new tab)', name=doc.display_name) }}</span></a>
+        {{ _("or download the original.") }}</figcaption>
     </figure>
     {% elif doc.kind == 'pdf' or doc.kind == 'text' %}
-    <p class="ds-row-sub">No preview for this type. Download the original to open it.</p>
+    <p class="ds-row-sub">{{ _("No preview for this type. Download the original to open it.") }}</p>
     {% endif %}
     <ul class="ds-rows">
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Category</span><span class="ds-row-title">{{ label }}</span></span></li>
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Date</span><span class="ds-row-title">{{ date[0] }} · {{ date[1] }}</span></span></li>
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Visit</span><span class="ds-row-title">{{ visit.visit_date if visit else 'no visit linked' }}</span></span></li>
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Came from</span><span class="ds-row-title">{{ 'legacy import (item ' ~ doc.import_item_id ~ ')' if doc.source == 'legacy_import' else 'uploaded here' }}</span></span></li>
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Patient portal</span><span class="ds-row-title">{% if published %}<span class="ds-badge ds-badge-success">Shown to patient</span>{% else %}<span class="ds-badge ds-badge-warning">Not shown to patient</span>{% endif %}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Category") }}</span><span class="ds-row-title">{{ label }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Date") }}</span><span class="ds-row-title">{{ date[0] }} · {{ date[1] }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Visit") }}</span><span class="ds-row-title">{{ visit.visit_date if visit else _('no visit linked') }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Came from") }}</span><span class="ds-row-title">{{ _('legacy import (item {n})', n=doc.import_item_id) if doc.source == 'legacy_import' else _('uploaded here') }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Patient portal") }}</span><span class="ds-row-title">{% if published %}<span class="ds-badge ds-badge-success">{{ _("Shown to patient") }}</span>{% else %}<span class="ds-badge ds-badge-warning">{{ _("Not shown to patient") }}</span>{% endif %}</span></span></li>
     </ul>
     {% if doc.status == 'confirmed' %}
     <div class="d-flex flex-wrap gap-2 align-items-end mt-2">
       {% if published %}
       <form method="post" action="{{ url_for('documents.withdraw', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label for="wreason" class="form-label">Why withdraw it (optional)</label>
+        <div><label for="wreason" class="form-label">{{ _("Why withdraw it (optional)") }}</label>
         <textarea id="wreason" name="reason" class="form-control form-control-sm" maxlength="300" rows="1" data-grow></textarea></div>
-        <button class="btn btn-outline-danger btn-sm" type="submit">Withdraw from the portal</button>
+        <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Withdraw from the portal") }}</button>
       </form>
       {% else %}
       <form method="post" action="{{ url_for('documents.publish', cf=cf, did=doc.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-outline-primary btn-sm" type="submit">Show to patient</button>
+        <button class="btn btn-outline-primary btn-sm" type="submit">{{ _("Show to patient") }}</button>
       </form>
       {% endif %}
     </div>
@@ -117,16 +114,16 @@
 
 {% if doc.status in ('confirmed', 'pending_review') %}
 <section class="card dash-card mb-3" aria-labelledby="move-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="move-title">Wrong patient?</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="move-title">{{ _("Wrong patient?") }}</h2></div>
   <div class="dash-card-body">
-    <p class="ds-row-sub">Moves this file to the right record and stops showing it in anyone's portal at once. The file itself is not changed. Recorded with your reason.</p>
+    <p class="ds-row-sub">{{ _("Moves this file to the right record and stops showing it in anyone's portal at once. The file itself is not changed. Recorded with your reason.") }}</p>
     <form method="post" action="{{ url_for('documents.correct', cf=cf, did=doc.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="to_cf" class="form-label">Right patient's codice fiscale</label>
+      <div><label for="to_cf" class="form-label">{{ _("Right patient's codice fiscale") }}</label>
       <input id="to_cf" name="to_cf" class="form-control form-control-sm" maxlength="40" required autocomplete="off"></div>
-      <div><label for="creason" class="form-label">Why it belongs to that patient</label>
+      <div><label for="creason" class="form-label">{{ _("Why it belongs to that patient") }}</label>
       <textarea id="creason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
-      <button class="btn btn-outline-danger btn-sm" type="submit">Move to that record</button>
+      <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Move to that record") }}</button>
     </form>
   </div>
 </section>
@@ -134,10 +131,10 @@
 
 {% if history %}
 <section class="card dash-card mb-3" aria-labelledby="hist-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">Who decided what</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">{{ _("Who decided what") }}</h2></div>
   <div class="dash-card-body"><ol class="ds-rows">
     {% for h in history %}
-    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ h.action }} by {{ h.actor }}</span>
+    <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ {'attached': _('attached by {who}', who=h.actor), 'corrected': _('corrected by {who}', who=h.actor), 'published': _('published by {who}', who=h.actor), 'withdrawn': _('withdrawn by {who}', who=h.actor)}[h.action] }}</span>
       <span class="ds-row-sub">{{ h.at | appt_date }} {{ h.at | appt_time }}{% if h.reason %} · {{ h.reason }}{% endif %}</span></span></li>
     {% endfor %}
   </ol></div>
@@ -146,11 +143,11 @@
 
 {% if pages %}
 <section class="card dash-card mb-3" aria-labelledby="text-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="text-title">Text as read</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="text-title">{{ _("Text as read") }}</h2></div>
   <div class="dash-card-body"><ul class="ds-rows">
     {% for p in pages %}
     <li class="ds-row"><span class="ds-row-main">
-      <span class="ds-row-sub">Page {{ p.page }}{% if p.confidence < uncertain_below %} · <strong>uncertain reading ({{ p.confidence }}%)</strong>{% endif %}</span>
+      <span class="ds-row-sub">{{ _('Page {page}', page=p.page) }}{% if p.confidence < uncertain_below %} · <strong>{{ _('uncertain reading ({n}%)', n=p.confidence) }}</strong>{% endif %}</span>
       <span class="ds-row-title text-break" style="white-space: pre-wrap">{{ p.text or '(no text found)' }}</span>
     </span></li>
     {% endfor %}
@@ -160,34 +157,34 @@
 
 {% if doc.status in ('pending_review', 'quarantined', 'extraction_failed', 'confirmed') %}
 <section class="card dash-card mb-3" aria-labelledby="act-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="act-title">Review</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="act-title">{{ _("Review") }}</h2></div>
   <div class="dash-card-body d-flex flex-wrap gap-2 align-items-end">
     {% if doc.status == 'pending_review' %}
     <form method="post" action="{{ url_for('documents.confirm', cf=cf, did=doc.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-primary btn-sm" type="submit">Confirm</button>
+      <button class="btn btn-primary btn-sm" type="submit">{{ _("Confirm") }}</button>
     </form>
     {% endif %}
     {% if doc.status == 'extraction_failed' %}
     <form method="post" action="{{ url_for('documents.retry', cf=cf, did=doc.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-outline-primary btn-sm" type="submit">Try reading again</button>
+      <button class="btn btn-outline-primary btn-sm" type="submit">{{ _("Try reading again") }}</button>
     </form>
     {% endif %}
     {% if doc.status != 'confirmed' %}
     <form method="post" action="{{ url_for('documents.reject', cf=cf, did=doc.id) }}" class="d-flex gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="reason" class="form-label">Reason</label>
+      <div><label for="reason" class="form-label">{{ _("Reason") }}</label>
       <textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="300" rows="1" data-grow></textarea></div>
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Reject") }}</button>
     </form>
     {% endif %}
     {% if doc.status in ('pending_review', 'confirmed') %}
     <form method="post" action="{{ url_for('documents.replace', cf=cf, did=doc.id) }}" enctype="multipart/form-data" class="d-flex gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="file" class="form-label">Replace with a corrected file</label>
+      <div><label for="file" class="form-label">{{ _("Replace with a corrected file") }}</label>
       <input id="file" name="file" type="file" accept=".pdf,.png,.jpg,.jpeg,.txt" class="form-control form-control-sm"></div>
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Replace</button>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Replace") }}</button>
     </form>
     {% endif %}
   </div>

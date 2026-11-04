@@ -1,14 +1,14 @@
-<h2 class="section-title">Edit the recall</h2>
+<h2 class="section-title">{{ _("Edit the recall") }}</h2>
 {% if error %}
 <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% endif %}
-<p class="text-secondary">Visit of {{ visit_date or "no date" }}</p>
+<p class="text-secondary">{{ _('Visit of {date}', date=visit_date) if visit_date else _('Visit with no date') }}</p>
 <form hx-post="{{ url_for('patients.visit_edit_submit', cf=cf, visit_id=visit_id) }}" hx-target="#modal-body-target" hx-swap="innerHTML">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3">
-    <label for="value" class="form-label">Recall, as written in the note</label>
+    <label for="value" class="form-label">{{ _("Recall, as written in the note") }}</label>
     <input type="text" id="value" name="value" value="{{ value or '' }}" class="form-control" autofocus>
-    <div class="form-text">Free text, not a booking - leave empty to clear it.</div>
+    <div class="form-text">{{ _("Free text, not a booking - leave empty to clear it.") }}</div>
   </div>
-  <button type="submit" class="btn btn-primary">Save changes</button>
+  <button type="submit" class="btn btn-primary">{{ _("Save changes") }}</button>
 </form>

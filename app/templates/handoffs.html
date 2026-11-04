@@ -2,8 +2,8 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Patients</p>
-    <h1 class="ds-page-title">Call-backs</h1>
+    <p class="ds-page-eyebrow">{{ _("Patients") }}</p>
+    <h1 class="ds-page-title">{{ _("Call-backs") }}</h1>
     <p class="ds-page-meta">
       {%- if open_now %}Clinic open now{% elif next_opening %}Clinic closed · opens {{ next_opening.strftime('%Y-%m-%d %H:%M') }}{% else %}Clinic closed{% endif -%}
     </p>
@@ -15,33 +15,28 @@
 {% set why_words = {'patient_asked': 'asked for a person', 'payment_unknown': 'asked whether an invoice is paid - not recorded here',
                     'no_content': "asked something the clinic's content does not cover", 'symptom': 'described a symptom',
                     'treatment': 'asked about medication or treatment', 'advice': 'asked for an opinion'} %}
-<section class="ds-alert ds-alert-info mb-4" role="note" data-ux="callback-purpose" aria-label="What a call-back is">
-  <div><strong class="ds-alert-title">What a call-back is</strong>
-  A patient asked the assistant for a person, or asked something it must not answer - a symptom, a treatment, an
-  opinion, whether an invoice is paid, or something the clinic's content does not cover. Someone here calls the
-  patient back: take it, call, then mark it done.
-  {% if phone_line %}They come from the portal's assistant and the phone line's assistant.{% else %}The phone line is
-  not switched on, so every call-back here was asked for in the patient portal.{% endif %}
-  A missed call to the clinic's phone is never in this list.
-  <br><strong>Nothing was sent to the patient</strong>: they see the call-back waiting in the portal, and no message
-  goes out. The list keeps <strong>why</strong> and <strong>what about</strong> - never what the patient typed.</div>
+<section class="ds-alert ds-alert-info mb-4" role="note" data-ux="callback-purpose" aria-label="{{ _('What a call-back is') }}">
+  <div><strong class="ds-alert-title">{{ _("What a call-back is") }}</strong>
+  {{ _("A patient asked the assistant for a person, or asked something it must not answer - a symptom, a treatment, an opinion, whether an invoice is paid, or something the clinic's content does not cover. Someone here calls the patient back: take it, call, then mark it done.") }}
+  {% if phone_line %}{{ _("They come from the portal's assistant and the phone line's assistant.") }}{% else %}{{ _("The phone line is not switched on, so every call-back here was asked for in the patient portal.") }}{% endif %}
+  {{ _html("A missed call to the clinic's phone is never in this list. <br><strong>Nothing was sent to the patient</strong>: they see the call-back waiting in the portal, and no message goes out. The list keeps <strong>why</strong> and <strong>what about</strong> - never what the patient typed.") }}</div>
 </section>
 
 <div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Waiting</span>
-    <span class="ux-kpi-value">{{ counts.get('open', 0) }}</span><span class="ux-kpi-sub">nobody has taken it yet</span></div>
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Taken</span>
-    <span class="ux-kpi-value">{{ counts.get('claimed', 0) }}</span><span class="ux-kpi-sub">someone is calling the patient</span></div>
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Done</span>
-    <span class="ux-kpi-value">{{ counts.get('resolved', 0) }}</span><span class="ux-kpi-sub">called back and marked done</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Waiting") }}</span>
+    <span class="ux-kpi-value">{{ counts.get('open', 0) }}</span><span class="ux-kpi-sub">{{ _("nobody has taken it yet") }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Taken") }}</span>
+    <span class="ux-kpi-value">{{ counts.get('claimed', 0) }}</span><span class="ux-kpi-sub">{{ _("someone is calling the patient") }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Done") }}</span>
+    <span class="ux-kpi-value">{{ counts.get('resolved', 0) }}</span><span class="ux-kpi-sub">{{ _("called back and marked done") }}</span></div>
 <!--/page-tiles--></div>
 
 <section class="card dash-card" aria-labelledby="queue-title">
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="queue-title">{{ (state_words[status] ~ ' call-backs') if status else 'The queue' }}</h2>
     {# P29 redesign: the states are a tab control - the count on each, the current one marked #}
-    <nav class="sx-tabs sx-tabs-sm" aria-label="Show">
-      <a href="{{ url_for('handoff.index') }}"{% if not status %} aria-current="page"{% endif %}>All</a>
+    <nav class="sx-tabs sx-tabs-sm" aria-label="{{ _('Show') }}">
+      <a href="{{ url_for('handoff.index') }}"{% if not status %} aria-current="page"{% endif %}>{{ _("All") }}</a>
       {% for state, n in counts.items() %}
       <a href="{{ url_for('handoff.index', status=state) }}"{% if status == state %} aria-current="page"{% endif %}>{{ state_words[state] }} <span class="sx-count">{{ n }}</span></a>
       {% endfor %}
@@ -49,7 +44,7 @@
   </div>
   {# P30: Sort and Filter on the rows loaded here (the tabs above choose a state on the server) #}
   {% if rows %}
-  <div class="sx-tools sx-tools-row" data-list-tools data-for="handoff-rows" data-noun="call-back|call-backs"
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="handoff-rows" data-noun="{{ _('call-back|call-backs') }}"
        data-sorts='{{ [['raised', 'text', 1, 'Oldest first'], ['raised', 'text', -1, 'Newest first'], ['state', 'num', 1, 'Waiting first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
        data-filters='{{ [['about', 'About', [['appointment', 'Appointment'], ['billing', 'Billing'], ['clinical', 'Clinical'], ['records', 'Records'], ['other', 'Other']]],
                          ['why', 'Why', [['patient_asked', 'Asked for a person'], ['payment_unknown', 'Payment unknown'], ['no_content', 'Not covered'], ['symptom', 'Symptom'], ['treatment', 'Treatment'], ['advice', 'Advice']]]] | tojson }}'></div>
@@ -67,8 +62,8 @@
             · the patient {{ why_words.get(r.reason, r.reason) }} · raised <span class="ux-nowrap">{{ r.created_at | appt_date }} {{ r.created_at | appt_time }}</span>
           </span>
           <span class="ds-row-sub">
-            {%- if r.phone %}<span class="ux-nowrap"><i class="bi bi-telephone" aria-hidden="true"></i> {{ r.phone }}</span>{% else %}No phone on file{% endif %}
-            {%- if r.codice_fiscale %} · <a class="ux-nowrap" href="{{ url_for('patients.detail_view', cf=r.codice_fiscale) }}" tabindex="0">Open record</a>{% endif %}
+            {%- if r.phone %}<span class="ux-nowrap"><i class="bi bi-telephone" aria-hidden="true"></i> {{ r.phone }}</span>{% else %}{{ _("No phone on file") }}{% endif %}
+            {%- if r.codice_fiscale %} · <a class="ux-nowrap" href="{{ url_for('patients.detail_view', cf=r.codice_fiscale) }}" tabindex="0">{{ _("Open record") }}</a>{% endif %}
           </span>
           <span class="ds-row-sub" data-next>
             {%- if r.status == 'open' %}Next: take it, then call the patient back.
@@ -81,13 +76,13 @@
         <form method="post" action="{{ url_for('handoff.claim', handoff_id=r.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
-          <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">Take it</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">{{ _("Take it") }}</button>
         </form>
         {% elif r.status == 'claimed' and (r.claimed_by == me or g.user.role == 'dentist') %}
         <form method="post" action="{{ url_for('handoff.resolve', handoff_id=r.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
-          <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">Mark done</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit" tabindex="0">{{ _("Mark done") }}</button>
         </form>
         {% endif %}
       </li>
@@ -95,7 +90,7 @@
     </ul>
     {% else %}
     {# P29 U-006: an empty list says what puts something in it #}
-    <p class="dash-empty-line">{% if status %}Nothing in that state. <a href="{{ url_for('handoff.index') }}">Show all call-backs</a>{% else %}Nobody is waiting. A call-back appears here when a patient asks the portal's assistant for a person, or asks something it must not answer.{% endif %}</p>
+    <p class="dash-empty-line">{% if status %}{{ _("Nothing in that state.") }} <a href="{{ url_for('handoff.index') }}">{{ _("Show all call-backs") }}</a>{% else %}{{ _("Nobody is waiting. A call-back appears here when a patient asks the portal's assistant for a person, or asks something it must not answer.") }}{% endif %}</p>
     {% endif %}
   </div>
 </section>

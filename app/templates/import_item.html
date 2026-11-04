@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
-    <li><a href="{{ url_for('imports.index') }}">Legacy import</a></li>
+    <li><a href="{{ url_for('imports.index') }}">{{ _("Legacy import") }}</a></li>
     <li aria-current="page">Item {{ item.id }}</li>
   </ol>
 </nav>
@@ -16,15 +16,13 @@
 
 {% if item.state in open_states %}
 <div class="ds-alert ds-alert-warning mb-3" role="note">
-  <div><strong class="ds-alert-title">Nothing is attached until you confirm</strong>
-  Check the original and every clue below, including the ones against. A name, a date, a folder or a
-  camera time alone never proves whose a file is. Confirming adds the file to that patient's record only;
-  showing it to the patient is a separate choice on their Files page.</div>
+  <div><strong class="ds-alert-title">{{ _("Nothing is attached until you confirm") }}</strong>
+  {{ _("Check the original and every clue below, including the ones against. A name, a date, a folder or a camera time alone never proves whose a file is. Confirming adds the file to that patient's record only; showing it to the patient is a separate choice on their Files page.") }}</div>
 </div>
 {% endif %}
 
 <section class="card dash-card mb-3" aria-labelledby="orig-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="orig-title">The original</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="orig-title">{{ _("The original") }}</h2></div>
   <div class="dash-card-body">
     <p class="ds-row-sub text-break">Path in the old folder: {{ item.rel_path }} · {{ item.kind }} · {{ item.size }} bytes · sha256 {{ (item.sha256 or '')[:16] }}…</p>
     {% if item.state == 'refused' %}
@@ -33,31 +31,31 @@
     {% if previewable %}
     <figure class="file-preview mb-2">
       <img class="import-preview" src="{{ url_for('imports.original', import_id=item.id) }}" alt="Preview of {{ name }}">
-      <figcaption class="ds-row-sub">Preview for orientation only - not suitable for diagnosis.</figcaption>
+      <figcaption class="ds-row-sub">{{ _("Preview for orientation only - not suitable for diagnosis.") }}</figcaption>
     </figure>
     {% else %}
-    <p class="ds-row-sub">No preview for this type.</p>
+    <p class="ds-row-sub">{{ _("No preview for this type.") }}</p>
     {% endif %}
-    <a href="{{ url_for('imports.original', import_id=item.id, download=1) }}">Download the original</a>
+    <a href="{{ url_for('imports.original', import_id=item.id, download=1) }}">{{ _("Download the original") }}</a>
     {% endif %}
   </div>
 </section>
 
 <section class="card dash-card mb-3" aria-labelledby="clue-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="clue-title">Evidence found in the file</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="clue-title">{{ _("Evidence found in the file") }}</h2></div>
   <div class="dash-card-body">
     {% if ev.clues %}
     
     <table class="ux-table ux-table-page import-evidence">
-      <caption class="visually-hidden">Each clue, where it came from, and whose it points to</caption>
-      <thead><tr><th scope="col">Clue</th><th scope="col">Value</th><th scope="col">Where</th><th scope="col">Points to</th></tr></thead>
+      <caption class="visually-hidden">{{ _("Each clue, where it came from, and whose it points to") }}</caption>
+      <thead><tr><th scope="col">{{ _("Clue") }}</th><th scope="col">{{ _("Value") }}</th><th scope="col">{{ _("Where") }}</th><th scope="col">{{ _("Points to") }}</th></tr></thead>
       <tbody>
       {% for c in ev.clues %}
       <tr>
-        <th scope="row" data-label="Clue">{{ {'cf': 'Codice fiscale', 'clinic_id': 'Clinic patient id', 'name': 'Name', 'birth_date': 'Birth date', 'doc_date': 'Date on the document'}[c.type] }}{% if c.labelled %} (labelled){% endif %}</th>
-        <td data-label="Value" class="text-break font-monospace">{{ c.value }}{% if c.time %} {{ c.time }}{% endif %}</td>
-        <td data-label="Where">{{ c.where }}{% if c.source == 'path' %} - a file or folder name can be wrong{% elif c.source == 'ocr' %} - OCR can misread{% endif %}</td>
-        <td data-label="Points to">
+        <th scope="row" data-label="{{ _('Clue') }}">{{ {'cf': 'Codice fiscale', 'clinic_id': 'Clinic patient id', 'name': 'Name', 'birth_date': 'Birth date', 'doc_date': 'Date on the document'}[c.type] }}{% if c.labelled %} (labelled){% endif %}</th>
+        <td data-label="{{ _('Value') }}" class="text-break font-monospace">{{ c.value }}{% if c.time %} {{ c.time }}{% endif %}</td>
+        <td data-label="{{ _('Where') }}">{{ c.where }}{% if c.source == 'path' %} - a file or folder name can be wrong{% elif c.source == 'ocr' %} - OCR can misread{% endif %}</td>
+        <td data-label="{{ _('Points to') }}">
           {% if c.type in ('cf', 'clinic_id') %}
             {% if not c.valid %}not used: fails the check{% elif c.patient and people.get(c.patient) %}{{ people[c.patient].patient_name }}{% else %}no patient of this clinic{% endif %}
           {% elif c.type == 'name' %}
@@ -69,25 +67,25 @@
       </tbody>
     </table>
     {% else %}
-    <p class="dash-empty-line">No identifying clue was found in this file.</p>
+    <p class="dash-empty-line">{{ _("No identifying clue was found in this file.") }}</p>
     {% endif %}
     {% if ev.conflicts %}
-    <h3 class="ds-card-title mt-3">Against</h3>
+    <h3 class="ds-card-title mt-3">{{ _("Against") }}</h3>
     <ul>{% for c in ev.conflicts %}<li>{{ c }}</li>{% endfor %}</ul>
     {% endif %}
     {% if ev.leads %}
-    <h3 class="ds-card-title mt-3">Weak leads (never enough on their own)</h3>
+    <h3 class="ds-card-title mt-3">{{ _("Weak leads (never enough on their own)") }}</h3>
     <ul>{% for c in ev.leads %}<li>{{ c }}</li>{% endfor %}</ul>
     {% endif %}
     {% if ev.duplicates %}
-    <h3 class="ds-card-title mt-3">The same bytes are also at</h3>
+    <h3 class="ds-card-title mt-3">{{ _("The same bytes are also at") }}</h3>
     <ul>{% for d in ev.duplicates %}<li class="text-break">{{ d }}</li>{% endfor %}</ul>
     {% endif %}
   </div>
 </section>
 
 <section class="card dash-card mb-3" aria-labelledby="time-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="time-title">Times</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="time-title">{{ _("Times") }}</h2></div>
   <div class="dash-card-body">
     <ul class="ds-rows">
       {% for t in ev.times %}
@@ -102,13 +100,13 @@
 
 {% if people %}
 <section class="card dash-card mb-3" aria-labelledby="cand-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="cand-title">Patients the evidence touches</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="cand-title">{{ _("Patients the evidence touches") }}</h2></div>
   <div class="dash-card-body"><ul class="ds-rows">
     {% for pid, p in people.items() %}
     <li class="ds-row"><span class="ds-row-main">
       <span class="ds-row-title">{{ p.patient_name }}</span>
       <span class="ds-row-sub font-monospace">{{ p.codice_fiscale }}{% if pid == item.patient_id %} · proposed{% endif %}</span>
-    </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}">Open record<span class="visually-hidden">: {{ p.patient_name }}</span></a></span></li>
+    </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}">{{ _("Open record") }}<span class="visually-hidden">: {{ p.patient_name }}</span></a></span></li>
     {% endfor %}
   </ul></div>
 </section>
@@ -116,46 +114,46 @@
 
 {% if item.state in open_states %}
 <section class="card dash-card mb-3" aria-labelledby="decide-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="decide-title">Decide</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="decide-title">{{ _("Decide") }}</h2></div>
   <div class="dash-card-body">
     <form method="post" action="{{ url_for('imports.confirm', import_id=item.id) }}" class="mb-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="expected_sha" value="{{ item.sha256 }}">
       <div class="row g-2">
-        <div class="col-sm-6"><label for="patient_cf" class="form-label">Patient's codice fiscale</label>
+        <div class="col-sm-6"><label for="patient_cf" class="form-label">{{ _("Patient's codice fiscale") }}</label>
           <input id="patient_cf" name="patient_cf" class="form-control form-control-sm font-monospace" maxlength="40" required autocomplete="off"
                  value="{{ people[item.patient_id].codice_fiscale if item.patient_id and people.get(item.patient_id) else '' }}"
                  aria-describedby="patient_cf_help">
-          <span id="patient_cf_help" class="ds-row-sub">{% if item.patient_id %}Filled with the proposal. Change it to choose another patient (a reason is then required).{% else %}No proposal: type the code of the patient you have established it belongs to, and give the reason.{% endif %}</span></div>
-        <div class="col-sm-6"><label for="category" class="form-label">Category (a label, not a finding)</label>
+          <span id="patient_cf_help" class="ds-row-sub">{% if item.patient_id %}{{ _("Filled with the proposal. Change it to choose another patient (a reason is then required).") }}{% else %}{{ _("No proposal: type the code of the patient you have established it belongs to, and give the reason.") }}{% endif %}</span></div>
+        <div class="col-sm-6"><label for="category" class="form-label">{{ _("Category (a label, not a finding)") }}</label>
           <select id="category" name="category" class="form-select form-select-sm">
-            <option value="">Not set</option>
+            <option value="">{{ _("Not set") }}</option>
             {% for k, v in categories.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
           </select></div>
         {% if visits %}
-        <div class="col-sm-6"><label for="visit_id" class="form-label">Visit (optional)</label>
+        <div class="col-sm-6"><label for="visit_id" class="form-label">{{ _("Visit (optional)") }}</label>
           <select id="visit_id" name="visit_id" class="form-select form-select-sm">
-            <option value="">No visit</option>
+            <option value="">{{ _("No visit") }}</option>
             {% for v in visits %}<option value="{{ v.id }}">{{ v.visit_date }}{% if v.id in suggested %} - same date as the file{% endif %}</option>{% endfor %}
           </select></div>
         {% endif %}
-        <div class="col-sm-6"><label for="reason" class="form-label">Reason{% if item.state != 'proposed' %} (required){% endif %}</label>
+        <div class="col-sm-6"><label for="reason" class="form-label">{{ _("Reason") }}{% if item.state != 'proposed' %} {{ _("(required)") }}{% endif %}</label>
           <textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="300" {% if item.state != 'proposed' %}required{% endif %} rows="1" data-grow></textarea></div>
       </div>
-      <button class="btn btn-primary btn-sm mt-2" type="submit">Confirm: this file is this patient's</button>
+      <button class="btn btn-primary btn-sm mt-2" type="submit">{{ _("Confirm: this file is this patient's") }}</button>
     </form>
     <div class="d-flex flex-wrap gap-3">
       <form method="post" action="{{ url_for('imports.hold', import_id=item.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label for="hreason" class="form-label">Why hold it</label>
+        <div><label for="hreason" class="form-label">{{ _("Why hold it") }}</label>
         <textarea id="hreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Hold for investigation</button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Hold for investigation") }}</button>
       </form>
       <form method="post" action="{{ url_for('imports.reject', import_id=item.id) }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label for="rreason" class="form-label">Why reject it</label>
+        <div><label for="rreason" class="form-label">{{ _("Why reject it") }}</label>
         <textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="300" required rows="1" data-grow></textarea></div>
-        <button class="btn btn-outline-danger btn-sm" type="submit">Reject</button>
+        <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Reject") }}</button>
       </form>
     </div>
   </div>

@@ -7,49 +7,49 @@
 {% macro sort_th(key, label) %}
 {% set on = sort == key %}
 {% set flip = ('asc' if direction == 'desc' else 'desc') if on else ('desc' if key == 'last' else 'asc') %}
-<th scope="col"{% if on %} aria-sort="{{ 'descending' if direction == 'desc' else 'ascending' }}"{% endif %}><a href="{{ url_for('patients.list_view', sort=key, dir=flip, q=q or None, **keep) }}">{{ label }} <i class="bi bi-{{ ('caret-down-fill' if direction == 'desc' else 'caret-up-fill') if on else 'chevron-expand' }}" aria-hidden="true"></i><span class="visually-hidden">{{ (', sorted ' ~ ('newest first' if key == 'last' and direction == 'desc' else 'descending' if direction == 'desc' else 'ascending') ~ ', select to reverse') if on else ', select to sort' }}</span></a></th>
+<th scope="col"{% if on %} aria-sort="{{ 'descending' if direction == 'desc' else 'ascending' }}"{% endif %}><a href="{{ url_for('patients.list_view', sort=key, dir=flip, q=q or None, **keep) }}">{{ label }} <i class="bi bi-{{ ('caret-down-fill' if direction == 'desc' else 'caret-up-fill') if on else 'chevron-expand' }}" aria-hidden="true"></i><span class="visually-hidden">{% if not on %}{{ _(', select to sort') }}{% elif key == 'last' and direction == 'desc' %}{{ _(', sorted newest first, select to reverse') }}{% elif direction == 'desc' %}{{ _(', sorted descending, select to reverse') }}{% else %}{{ _(', sorted ascending, select to reverse') }}{% endif %}</span></a></th>
 {% endmacro %}
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Records</p>
-    <h1 class="ds-page-title">Patients</h1>
-    <p class="ds-page-meta">{{ total }} on record{% if q %} · {{ searched }} matching "{{ q }}"{% endif %}</p>
+    <p class="ds-page-eyebrow">{{ _("Records") }}</p>
+    <h1 class="ds-page-title">{{ _("Patients") }}</h1>
+    <p class="ds-page-meta">{{ _('{n} on record', n=total) }}{% if q %} · {{ _('{n} matching "{q}"', n=searched, q=q) }}{% endif %}</p>
   </div>
   {# P29 E-001: the one page action - someone arriving without a record #}
-  {% if authorize(g.user.role, 'append_note') %}<a class="btn btn-primary app-primary" href="{{ url_for('patients.new_patient') }}" tabindex="0">New patient</a>{% endif %}
+  {% if authorize(g.user.role, 'append_note') %}<a class="btn btn-primary app-primary" href="{{ url_for('patients.new_patient') }}" tabindex="0">{{ _("New patient") }}</a>{% endif %}
 <!--/page-head--></div>
 
 <div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">On record</span>
-    <span class="ux-kpi-value">{{ total }}</span><span class="ux-kpi-sub">active patients</span></div>
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Booked</span>
-    <span class="ux-kpi-value">{{ figures.booked }}</span><span class="ux-kpi-sub">with a confirmed time</span></div>
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">No phone on file</span>
-    <span class="ux-kpi-value">{{ figures.no_phone }}</span><span class="ux-kpi-sub">ask at the next visit</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("On record") }}</span>
+    <span class="ux-kpi-value">{{ total }}</span><span class="ux-kpi-sub">{{ _("active patients") }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Booked") }}</span>
+    <span class="ux-kpi-value">{{ figures.booked }}</span><span class="ux-kpi-sub">{{ _("with a confirmed time") }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("No phone on file") }}</span>
+    <span class="ux-kpi-value">{{ figures.no_phone }}</span><span class="ux-kpi-sub">{{ _("ask at the next visit") }}</span></div>
 <!--/page-tiles--></div>
 
 <section class="card ux-card">
-  <form class="ux-search-form" method="get" action="{{ url_for('patients.list_view') }}" aria-label="Filter this list">
-    <label class="form-label ux-filter-label" for="patients-q">Filter this list</label>
-    <input type="search" id="patients-q" name="q" value="{{ q }}" class="form-control" placeholder="Name or codice fiscale" aria-describedby="patients-q-help">
+  <form class="ux-search-form" method="get" action="{{ url_for('patients.list_view') }}" aria-label="{{ _('Filter this list') }}">
+    <label class="form-label ux-filter-label" for="patients-q">{{ _("Filter this list") }}</label>
+    <input type="search" id="patients-q" name="q" value="{{ q }}" class="form-control" placeholder="{{ _('Name or codice fiscale') }}" aria-describedby="patients-q-help">
     <input type="hidden" name="sort" value="{{ sort }}">
     <input type="hidden" name="dir" value="{{ direction }}">
     {% for key, picked in keep.items() %}{% for v in picked %}<input type="hidden" name="{{ key }}" value="{{ v }}">{% endfor %}{% endfor %}
-    <button type="submit" class="btn btn-primary">Search</button>
-    <span class="ux-muted" id="patients-q-help">Matches part of a name or a whole codice fiscale.</span>
-    {% if q %}<a class="ux-link" href="{{ url_for('patients.list_view', sort=sort) }}">Clear</a>{% endif %}
+    <button type="submit" class="btn btn-primary">{{ _("Search") }}</button>
+    <span class="ux-muted" id="patients-q-help">{{ _("Matches part of a name or a whole codice fiscale.") }}</span>
+    {% if q %}<a class="ux-link" href="{{ url_for('patients.list_view', sort=sort) }}">{{ _("Clear") }}</a>{% endif %}
   </form>
   {# P30 Filter and Sort; P29 U-004: on this page they ask the server (data-server), which filters, sorts and pages
      every patient - the counts and the choices come back with the page #}
   {% if searched %}
-  {% set sorts = [['name', 'text', 1, 'Name (A-Z)'], ['name', 'text', -1, 'Name (Z-A)'], ['next', 'text', 1, 'Next appointment (soonest)'],
-                  ['last', 'text', -1, 'Last visit (newest)'], ['last', 'text', 1, 'Last visit (oldest)'],
-                  ['next', 'text', -1, 'Next appointment (latest)']] %}
-  {% set filters = [['phone', 'Phone', [['yes', 'Has a phone'], ['no', 'No phone']]],
-                    ['booking', 'Next appointment', [['booked', 'Booked'], ['requested', 'Requested, not booked'], ['none', 'None']]],
-                    ['visit', 'Last visit', [['recent', 'In the last 30 days'], ['mid', '31 to 60 days ago'], ['old', 'Over 60 days ago'], ['none', 'No visit yet']]]] %}
-  <div class="sx-tools" data-list-tools data-server data-for="patients-rows" data-noun="patient|patients"
+  {% set sorts = [['name', 'text', 1, _('Name (A-Z)')], ['name', 'text', -1, _('Name (Z-A)')], ['next', 'text', 1, _('Next appointment (soonest)')],
+                  ['last', 'text', -1, _('Last visit (newest)')], ['last', 'text', 1, _('Last visit (oldest)')],
+                  ['next', 'text', -1, _('Next appointment (latest)')]] %}
+  {% set filters = [['phone', _('Phone'), [['yes', _('Has a phone')], ['no', _('No phone')]]],
+                    ['booking', _('Next appointment'), [['booked', _('Booked')], ['requested', _('Requested, not booked')], ['none', _('None')]]],
+                    ['visit', _('Last visit'), [['recent', _('In the last 30 days')], ['mid', _('31 to 60 days ago')], ['old', _('Over 60 days ago')], ['none', _('No visit yet')]]]] %}
+  <div class="sx-tools" data-list-tools data-server data-for="patients-rows" data-noun="{{ _('patient|patients') }}"
        data-shown="{{ matching }}" data-total="{{ searched }}" data-chosen='{{ chosen | tojson }}' data-counts='{{ counts | tojson }}'
        data-sorts='{{ sorts | tojson }}' data-filters='{{ filters | tojson }}'
        data-sort-initial="{{ {'name-asc': 0, 'name-desc': 1, 'next-asc': 2, 'last-desc': 3, 'last-asc': 4, 'next-desc': 5}[sort ~ '-' ~ direction] }}"></div>
@@ -58,15 +58,15 @@
   {% if patients %}
   <div class="sx-box sx-box-table">
   <table class="ux-table ux-table-page ux-table-patients">
-    <caption class="visually-hidden">Patients, sorted by {{ {'name': 'name', 'next': 'next appointment', 'last': 'last visit'}[sort] }}</caption>
+    <caption class="visually-hidden">{{ {'name': _('Patients, sorted by name'), 'next': _('Patients, sorted by next appointment'), 'last': _('Patients, sorted by last visit')}[sort] }}</caption>
     <thead><tr>
       <th scope="col" class="ux-rownum">#</th>
-      {{ sort_th('name', 'Patient') }}
-      <th scope="col">Codice fiscale</th>
-      <th scope="col">Phone</th>
-      {{ sort_th('next', 'Next appointment') }}
-      {{ sort_th('last', 'Last visit') }}
-      <th scope="col"><span class="visually-hidden">Open</span></th>
+      {{ sort_th('name', _('Patient')) }}
+      <th scope="col">{{ _("Codice fiscale") }}</th>
+      <th scope="col">{{ _("Phone") }}</th>
+      {{ sort_th('next', _('Next appointment')) }}
+      {{ sort_th('last', _('Last visit')) }}
+      <th scope="col"><span class="visually-hidden">{{ _("Open") }}</span></th>
     </tr></thead>
     <tbody id="patients-rows">
     {% for p in patients %}
@@ -74,34 +74,34 @@
         data-last="{{ p.last_visit or '0000-00-00' }}" data-phone="{{ 'yes' if p.phone else 'no' }}"
         data-booking="{{ p.booking }}" data-visit="{{ p.visit_band }}">
       <td data-label="#" class="ux-rownum">{{ start + loop.index }}</td>
-      <td data-label="Patient"><span class="ds-avatar ds-avatar-sm {{ p.patient_name | tint }}" aria-hidden="true">{{ p.patient_name | initials }}</span>
+      <td data-label="{{ _('Patient') }}" data-col="name"><span class="ds-avatar ds-avatar-sm {{ p.patient_name | tint }}" aria-hidden="true">{{ p.patient_name | initials }}</span>
         <strong>{{ p.patient_name }}</strong>
-        {% if p.possible_duplicate %}<span class="ux-badge ux-badge-requested" title="The duplicate review lists this record; an admin merges or dismisses it">Possible duplicate</span>{% endif %}</td>
-      <td data-label="Codice fiscale"><span class="font-monospace" title="Shortened; the record shows it in full">{{ p.codice_fiscale | cf_short }}</span></td>
-      <td data-label="Phone">{% if p.phone %}<span class="ux-nowrap">{{ p.phone | phone }}</span>{% else %}<span class="ux-muted">No phone</span>{% endif %}</td>
-      <td data-label="Next appointment">
-        {% if p.next_appointment %}<span class="ux-badge ux-badge-booked">Booked</span> <span class="ux-nowrap">{{ p.next_appointment }}</span>
-        {% elif p.request %}<span class="ux-badge ux-badge-requested">Requested {{ p.request }}</span>
-        {% else %}<span class="ux-muted">No booking</span>{% endif %}</td>
-      <td data-label="Last visit">{% if p.last_visit %}<span class="ux-nowrap">{{ p.last_visit }}</span>{% endif %}{% if not p.last_visit %}<span class="ux-muted">No visit yet</span>{% endif %}</td>
-      <td data-label="Record"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}" aria-label="Open {{ p.patient_name }}'s record">Open</a></td>
+        {% if p.possible_duplicate %}<span class="ux-badge ux-badge-requested" title="{{ _('The duplicate review lists this record; an admin merges or dismisses it') }}">{{ _("Possible duplicate") }}</span>{% endif %}</td>
+      <td data-label="{{ _('Codice fiscale') }}" data-col="cf"><span class="font-monospace" title="{{ _('Shortened; the record shows it in full') }}">{{ p.codice_fiscale | cf_short }}</span></td>
+      <td data-label="{{ _('Phone') }}" data-col="phone">{% if p.phone %}<span class="ux-nowrap">{{ p.phone | phone }}</span>{% else %}<span class="ux-muted">{{ _("No phone") }}</span>{% endif %}</td>
+      <td data-label="{{ _('Next appointment') }}" data-col="next">
+        {% if p.next_appointment %}<span class="ux-badge ux-badge-booked">{{ _("Booked") }}</span> <span class="ux-nowrap">{{ p.next_appointment }}</span>
+        {% elif p.request %}<span class="ux-badge ux-badge-requested">{{ _('Requested {when}', when=p.request) }}</span>
+        {% else %}<span class="ux-muted">{{ _("No booking") }}</span>{% endif %}</td>
+      <td data-label="{{ _('Last visit') }}" data-col="last">{% if p.last_visit %}<span class="ux-nowrap">{{ p.last_visit }}</span>{% endif %}{% if not p.last_visit %}<span class="ux-muted">{{ _("No visit yet") }}</span>{% endif %}</td>
+      <td data-label="{{ _('Record') }}" data-col="open"><a class="btn btn-sm btn-outline-secondary" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}" aria-label="{{ _("Open {name}'s record", name=p.patient_name) }}">{{ _("Open") }}</a></td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
   </div>
-  <nav class="ux-pager" aria-label="Pages of patients">
-    <span>Showing {{ start + 1 }}-{{ start + patients | length }} of {{ matching }}</span>
-    {% if page > 1 %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.list_view', page=page - 1, sort=sort, dir=direction, q=q or None, **keep) }}" tabindex="0">Previous</a>{% endif %}
-    <span>Page {{ page }} of {{ pages }}</span>
-    {% if page < pages %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.list_view', page=page + 1, sort=sort, dir=direction, q=q or None, **keep) }}" tabindex="0">Next</a>{% endif %}
+  <nav class="ux-pager" aria-label="{{ _('Pages of patients') }}">
+    <span>{{ _('Showing {first}-{last} of {n}', first=start + 1, last=start + patients | length, n=matching) }}</span>
+    {% if page > 1 %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.list_view', page=page - 1, sort=sort, dir=direction, q=q or None, **keep) }}" tabindex="0">{{ _("Previous") }}</a>{% endif %}
+    <span>{{ _('Page {page} of {pages}', page=page, pages=pages) }}</span>
+    {% if page < pages %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.list_view', page=page + 1, sort=sort, dir=direction, q=q or None, **keep) }}" tabindex="0">{{ _("Next") }}</a>{% endif %}
   </nav>
   {% elif keep %}
-  <p class="ux-empty">No patient matches these filters{{ ' and "' ~ q ~ '"' if q else '' }}. <a href="{{ url_for('patients.list_view', sort=sort, dir=direction, q=q or None) }}">Clear the filters</a></p>
+  <p class="ux-empty">{{ _('No patient matches these filters and "{q}".', q=q) if q else _('No patient matches these filters.') }} <a href="{{ url_for('patients.list_view', sort=sort, dir=direction, q=q or None) }}">{{ _("Clear the filters") }}</a></p>
   {% elif q %}
-  <p class="ux-empty">No patient matches "{{ q }}".</p>
+  <p class="ux-empty">{{ _('No patient matches "{q}".', q=q) }}</p>
   {% else %}
-  <p class="ux-empty">No patients on record yet. Filing a note creates one.</p>
+  <p class="ux-empty">{{ _("No patients on record yet. Filing a note creates one.") }}</p>
   {% endif %}
   <!--/patient-rows--></div>
 </section>

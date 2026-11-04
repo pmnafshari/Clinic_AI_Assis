@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}#imaging">{{ patient.patient_name }}</a></li>
     <li aria-current="page">Imaging request {{ r.id }}</li>
@@ -8,7 +8,7 @@
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
-    <p class="ds-page-eyebrow">Demo imaging request · synthetic, not a real order</p>
+    <p class="ds-page-eyebrow">{{ _("Demo imaging request · synthetic, not a real order") }}</p>
     <h1 class="ds-page-title">{{ r.exam_label }}</h1>
     <p class="ds-page-meta">For <strong>{{ patient.patient_name }}</strong> · <span class="font-monospace">{{ cf }}</span> · request {{ r.id }}, version {{ r.version }}</p>
   </div>
@@ -26,17 +26,17 @@
 
 {% if h.current %}
 <section class="card dash-card mb-3" aria-labelledby="handoff-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="handoff-title">For reception</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="handoff-title">{{ _("For reception") }}</h2></div>
   <div class="dash-card-body">
     <ul class="ds-rows">
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Requested by the dentist</span><span class="ds-row-title">{{ r.activated_by }}</span></span></li>
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Active since (clinic time, Europe/Rome)</span><span class="ds-row-title">{{ r.activated_at | appt_date }} {{ r.activated_at | appt_time }}</span></span></li>
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Type, exactly as the dentist chose it</span><span class="ds-row-title">{{ r.exam_label }}</span></span></li>
-      {% if r.note %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Dentist's administrative note</span><span class="ds-row-title text-break">{{ r.note }}</span></span></li>{% endif %}
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">Seen by reception (clinic time)</span><span class="ds-row-title">
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Requested by the dentist") }}</span><span class="ds-row-title">{{ r.activated_by }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Active since (clinic time, Europe/Rome)") }}</span><span class="ds-row-title">{{ r.activated_at | appt_date }} {{ r.activated_at | appt_time }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Type, exactly as the dentist chose it") }}</span><span class="ds-row-title">{{ r.exam_label }}</span></span></li>
+      {% if r.note %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Dentist's administrative note") }}</span><span class="ds-row-title text-break">{{ r.note }}</span></span></li>{% endif %}
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Seen by reception (clinic time)") }}</span><span class="ds-row-title">
         {% for e in seen %}Seen by {{ e.actor }} on {{ e.at | clinic_when }}{{ '; ' if not loop.last else '' }}{% else %}Not marked as seen yet{% endfor %}</span></span></li>
     </ul>
-    <h3 class="ds-card-title mt-3">Next step</h3>
+    <h3 class="ds-card-title mt-3">{{ _("Next step") }}</h3>
     {% if guide and guide.citation %}
     {% set c = guide.citation %}
     <p class="ds-row-sub mb-1">From the approved procedure {{ c.title }}, version {{ c.version }}, page {{ c.page }} (checked against the page):</p>
@@ -49,11 +49,11 @@
     <div class="d-flex flex-wrap gap-2 mt-3">
       <form method="post" action="{{ url_for('imaging.acknowledge', cf=cf, rid=r.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
-        <button class="btn btn-outline-primary btn-sm" type="submit">Mark as seen</button>
+        <button class="btn btn-outline-primary btn-sm" type="submit">{{ _("Mark as seen") }}</button>
       </form>
       <form method="post" action="{{ url_for('imaging.ask', cf=cf, rid=r.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Ask the dentist about it</button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Ask the dentist about it") }}</button>
       </form>
     </div>
   </div>
@@ -61,13 +61,13 @@
 {% else %}
 <div class="ds-alert ds-alert-warning mb-3" role="status">
   <div><strong class="ds-alert-title">Nothing to act on</strong> {{ h.message }}
-  {% if h.replaced_by %} <a href="{{ url_for('imaging.view', cf=cf, rid=h.replaced_by) }}">Open the current version</a>.{% endif %}</div>
+  {% if h.replaced_by %} <a href="{{ url_for('imaging.view', cf=cf, rid=h.replaced_by) }}">{{ _("Open the current version") }}</a>.{% endif %}</div>
 </div>
 {% endif %}
 
 {% if status or booking or (h.current and can_book) %}
 <section class="card dash-card mb-3" aria-labelledby="booking-title" id="booking">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="booking-title">Appointment and status</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="booking-title">{{ _("Appointment and status") }}</h2></div>
   <div class="dash-card-body">
     {% if status %}<p class="mb-2"><strong>{{ status }}</strong></p>{% endif %}
     {% if booking %}<p class="mb-2">Appointment {{ booking.start_end }} with {{ booking.dentist }}<br>
@@ -78,28 +78,28 @@
     {% if can_book %}
     <form method="post" action="{{ url_for('imaging.resolve', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="resolution" class="form-label">What reception did</label><select id="resolution" name="resolution" class="form-select form-select-sm">{% for k, v in booking.choices %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
-      <div><label for="rnote-b" class="form-label">Why, in a few words</label><textarea id="rnote-b" name="note" class="form-control form-control-sm" rows="1" maxlength="200" data-grow></textarea></div>
-      <button class="btn btn-primary btn-sm" type="submit">Record resolution</button>
+      <div><label for="resolution" class="form-label">{{ _("What reception did") }}</label><select id="resolution" name="resolution" class="form-select form-select-sm">{% for k, v in booking.choices %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div><label for="rnote-b" class="form-label">{{ _("Why, in a few words") }}</label><textarea id="rnote-b" name="note" class="form-control form-control-sm" rows="1" maxlength="200" data-grow></textarea></div>
+      <button class="btn btn-primary btn-sm" type="submit">{{ _("Record resolution") }}</button>
     </form>
     {% endif %}
     {% elif booking and can_book %}
     <p class="ds-row-sub mb-1">{{ booking.minutes }} minutes. The patient sees an ordinary appointment.</p>
     <form method="post" action="{{ url_for('imaging.move', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="mday" class="form-label">New day</label><input id="mday" type="date" name="day" class="form-control form-control-sm" required></div>
-      <div><label for="mtime" class="form-label">New time</label><input id="mtime" type="time" name="time" class="form-control form-control-sm" required></div>
-      <div><label for="mminutes" class="form-label">Minutes</label><input id="mminutes" type="number" name="minutes" value="{{ booking.minutes }}" min="5" max="480" class="form-control form-control-sm" required></div>
-      <button class="btn btn-outline-secondary btn-sm" type="submit">Move appointment</button>
+      <div><label for="mday" class="form-label">{{ _("New day") }}</label><input id="mday" type="date" name="day" class="form-control form-control-sm" required></div>
+      <div><label for="mtime" class="form-label">{{ _("New time") }}</label><input id="mtime" type="time" name="time" class="form-control form-control-sm" required></div>
+      <div><label for="mminutes" class="form-label">{{ _("Minutes") }}</label><input id="mminutes" type="number" name="minutes" value="{{ booking.minutes }}" min="5" max="480" class="form-control form-control-sm" required></div>
+      <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Move appointment") }}</button>
     </form>
     {% elif h.current and can_book and not completion %}
-    <h3 class="ds-card-title">Book an appointment for this request</h3>
+    <h3 class="ds-card-title">{{ _("Book an appointment for this request") }}</h3>
     <form method="post" action="{{ url_for('imaging.book', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}"><input type="hidden" name="booking_token" value="{{ booking_token }}">
-      <div><label for="bdentist" class="form-label">Dentist</label><select id="bdentist" name="dentist" class="form-select form-select-sm">{% for d in dentists %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select></div>
-      <div><label for="bday" class="form-label">Day</label><input id="bday" type="date" name="day" class="form-control form-control-sm" required></div>
-      <div><label for="btime" class="form-label">Time (clinic time)</label><input id="btime" type="time" name="time" class="form-control form-control-sm" required></div>
-      <div><label for="bminutes" class="form-label">Minutes</label><input id="bminutes" type="number" name="minutes" value="20" min="5" max="480" class="form-control form-control-sm" required></div>
+      <div><label for="bdentist" class="form-label">{{ _("Dentist") }}</label><select id="bdentist" name="dentist" class="form-select form-select-sm">{% for d in dentists %}<option value="{{ d }}">{{ d }}</option>{% endfor %}</select></div>
+      <div><label for="bday" class="form-label">{{ _("Day") }}</label><input id="bday" type="date" name="day" class="form-control form-control-sm" required></div>
+      <div><label for="btime" class="form-label">{{ _("Time (clinic time)") }}</label><input id="btime" type="time" name="time" class="form-control form-control-sm" required></div>
+      <div><label for="bminutes" class="form-label">{{ _("Minutes") }}</label><input id="bminutes" type="number" name="minutes" value="20" min="5" max="480" class="form-control form-control-sm" required></div>
       <button class="btn btn-primary btn-sm" type="submit">Book for {{ patient.patient_name }}</button>
     </form>
     <p class="ds-row-sub mt-1">For version {{ r.version }} only. The patient's portal and reminders show an ordinary appointment.</p>
@@ -110,62 +110,62 @@
 
 {% if manage %}
 <section class="card dash-card mb-3" aria-labelledby="dentist-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="dentist-title">Dentist</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="dentist-title">{{ _("Dentist") }}</h2></div>
   <div class="dash-card-body">
     {% if r.state == 'draft' %}
     <p>Activate this request for <strong>{{ patient.patient_name }}</strong> (<span class="font-monospace">{{ cf }}</span>): <strong>{{ r.exam_label }}</strong>, version {{ r.version }}{% if r.supersedes_id %}, replacing request {{ r.supersedes_id }}{% endif %}. Reception will see it as current.</p>
     <form method="post" action="{{ url_for('imaging.activate', cf=cf, rid=r.id) }}" class="d-inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
-      <button class="btn btn-primary btn-sm" type="submit">Activate</button>
+      <button class="btn btn-primary btn-sm" type="submit">{{ _("Activate") }}</button>
     </form>
     {% endif %}
     {% if r.state in ('draft', 'active') %}
     <form method="post" action="{{ url_for('imaging.cancel', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
-      <div><label for="reason" class="form-label">Why cancel it</label><textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
-      <button class="btn btn-outline-danger btn-sm" type="submit">Cancel request</button>
+      <div><label for="reason" class="form-label">{{ _("Why cancel it") }}</label><textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
+      <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Cancel request") }}</button>
     </form>
     {% endif %}
     {% if r.state == 'active' %}
     <form method="post" action="{{ url_for('imaging.revise', cf=cf, rid=r.id) }}" class="row g-2 align-items-end mt-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="submit_token" value="{{ token }}">
-      <div class="col-sm-4"><label for="rexam" class="form-label">Corrected type</label><select id="rexam" name="exam" class="form-select form-select-sm">{% for k, v in exams.items() %}<option value="{{ k }}" {% if k == r.exam %}selected{% endif %}>{{ v or 'Other (write it)' }}</option>{% endfor %}</select></div>
-      <div class="col-sm-4"><label for="rlabel" class="form-label">If other: the type</label><input id="rlabel" name="label" class="form-control form-control-sm" maxlength="80"></div>
-      <div class="col-sm-4"><label for="rnote" class="form-label">Administrative note (optional)</label><input id="rnote" name="note" class="form-control form-control-sm" maxlength="300"></div>
-      <div class="col-12"><button class="btn btn-outline-secondary btn-sm" type="submit">Revise (new version, draft)</button></div>
+      <div class="col-sm-4"><label for="rexam" class="form-label">{{ _("Corrected type") }}</label><select id="rexam" name="exam" class="form-select form-select-sm">{% for k, v in exams.items() %}<option value="{{ k }}" {% if k == r.exam %}selected{% endif %}>{{ v or 'Other (write it)' }}</option>{% endfor %}</select></div>
+      <div class="col-sm-4"><label for="rlabel" class="form-label">{{ _("If other: the type") }}</label><input id="rlabel" name="label" class="form-control form-control-sm" maxlength="80"></div>
+      <div class="col-sm-4"><label for="rnote" class="form-label">{{ _("Administrative note (optional)") }}</label><input id="rnote" name="note" class="form-control form-control-sm" maxlength="300"></div>
+      <div class="col-12"><button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Revise (new version, draft)") }}</button></div>
     </form>
     <section id="files" class="mt-3" aria-labelledby="files-link-title">
-      <h3 class="ds-card-title" id="files-link-title">Files linked to this request</h3>
-      {% if files %}<ul>{% for f in files %}<li>{{ f.display_name }} <span class="ds-row-sub">linked by {{ f.linked_by }}</span></li>{% endfor %}</ul>{% else %}<p class="ds-row-sub">None linked.</p>{% endif %}
+      <h3 class="ds-card-title" id="files-link-title">{{ _("Files linked to this request") }}</h3>
+      {% if files %}<ul>{% for f in files %}<li>{{ f.display_name }} <span class="ds-row-sub">linked by {{ f.linked_by }}</span></li>{% endfor %}</ul>{% else %}<p class="ds-row-sub">{{ _("None linked.") }}</p>{% endif %}
       {% if linkable %}
       <form method="post" action="{{ url_for('imaging.link', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label for="document_id" class="form-label">A file already confirmed for this patient</label><select id="document_id" name="document_id" class="form-select form-select-sm">{% for d in linkable %}<option value="{{ d.id }}">{{ d.display_name }}</option>{% endfor %}</select></div>
-        <div class="form-check"><input class="form-check-input" type="checkbox" name="verified" value="1" id="verified" required><label class="form-check-label" for="verified">I checked the patient, this request and the file</label></div>
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Link file</button>
+        <div><label for="document_id" class="form-label">{{ _("A file already confirmed for this patient") }}</label><select id="document_id" name="document_id" class="form-select form-select-sm">{% for d in linkable %}<option value="{{ d.id }}">{{ d.display_name }}</option>{% endfor %}</select></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="verified" value="1" id="verified" required><label class="form-check-label" for="verified">{{ _("I checked the patient, this request and the file") }}</label></div>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Link file") }}</button>
       </form>
-      <p class="ds-row-sub mt-1">Linking does not publish the file, mark it as read or mark the examination as done.</p>
-      {% else %}<p class="ds-row-sub">No confirmed file of this patient to link.</p>{% endif %}
+      <p class="ds-row-sub mt-1">{{ _("Linking does not publish the file, mark it as read or mark the examination as done.") }}</p>
+      {% else %}<p class="ds-row-sub">{{ _("No confirmed file of this patient to link.") }}</p>{% endif %}
     </section>
     <section id="completion" class="mt-3" aria-labelledby="completion-title">
-      <h3 class="ds-card-title" id="completion-title">Completion</h3>
+      <h3 class="ds-card-title" id="completion-title">{{ _("Completion") }}</h3>
       {% if completion %}
       {% set done_file = files | selectattr('document_id', 'equalto', completion.document_id) | first %}
       <p>Recorded as done by {{ completion.recorded_by }} on {{ completion.recorded_at | clinic_when }}{% if done_file %}, with the image {{ done_file.display_name }}{% endif %}.</p>
       <form method="post" action="{{ url_for('imaging.reverse', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label for="rreason" class="form-label">Why reverse it</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
-        <button class="btn btn-outline-danger btn-sm" type="submit">Reverse completion</button>
+        <div><label for="rreason" class="form-label">{{ _("Why reverse it") }}</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
+        <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Reverse completion") }}</button>
       </form>
       {% elif files %}
       <form method="post" action="{{ url_for('imaging.complete', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
-        <div><label for="cdoc" class="form-label">The linked image</label><select id="cdoc" name="document_id" class="form-select form-select-sm">{% for f in files %}<option value="{{ f.document_id }}">{{ f.display_name }}</option>{% endfor %}</select></div>
-        <div class="form-check"><input class="form-check-input" type="checkbox" name="verified" value="1" id="cverified" required><label class="form-check-label" for="cverified">I checked this image belongs to this patient and this request</label></div>
-        <button class="btn btn-outline-primary btn-sm" type="submit">Record completion</button>
+        <div><label for="cdoc" class="form-label">{{ _("The linked image") }}</label><select id="cdoc" name="document_id" class="form-select form-select-sm">{% for f in files %}<option value="{{ f.document_id }}">{{ f.display_name }}</option>{% endfor %}</select></div>
+        <div class="form-check"><input class="form-check-input" type="checkbox" name="verified" value="1" id="cverified" required><label class="form-check-label" for="cverified">{{ _("I checked this image belongs to this patient and this request") }}</label></div>
+        <button class="btn btn-outline-primary btn-sm" type="submit">{{ _("Record completion") }}</button>
       </form>
-      <p class="ds-row-sub mt-1">Records the request as done only. It does not publish the file, read it or report on it.</p>
-      {% else %}<p class="ds-row-sub">Link a confirmed image of this patient first; only a linked image can complete the request.</p>{% endif %}
+      <p class="ds-row-sub mt-1">{{ _("Records the request as done only. It does not publish the file, read it or report on it.") }}</p>
+      {% else %}<p class="ds-row-sub">{{ _("Link a confirmed image of this patient first; only a linked image can complete the request.") }}</p>{% endif %}
     </section>
     {% endif %}
   </div>
@@ -173,12 +173,12 @@
 {% endif %}
 
 <section class="card dash-card" aria-labelledby="hist-title">
-  <div class="dash-card-head"><div><h2 class="ds-card-title" id="hist-title">History</h2><p class="ds-card-sub">Every version of this request, newest first (clinic time)</p></div></div>
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="hist-title">{{ _("History") }}</h2><p class="ds-card-sub">{{ _("Every version of this request, newest first (clinic time)") }}</p></div></div>
   <div class="dash-card-body">
     <table class="ux-table ux-table-page">
       <caption class="visually-hidden">History of request {{ r.id }}, newest first</caption>
-      <thead><tr><th scope="col">When</th><th scope="col">Version</th><th scope="col">What happened</th><th scope="col">Who</th></tr></thead>
-      <tbody>{% for e in history %}<tr data-hist-id="{{ e.id }}"><td data-label="When"><span class="ux-nowrap">{{ e.at | clinic_when }}</span></td><td data-label="Version">{{ e.version }}</td><td data-label="What happened">{{ e.what }}</td><td data-label="Who">{{ e.actor }}</td></tr>{% endfor %}</tbody>
+      <thead><tr><th scope="col">{{ _("When") }}</th><th scope="col">{{ _("Version") }}</th><th scope="col">{{ _("What happened") }}</th><th scope="col">{{ _("Who") }}</th></tr></thead>
+      <tbody>{% for e in history %}<tr data-hist-id="{{ e.id }}"><td data-label="{{ _('When') }}"><span class="ux-nowrap">{{ e.at | clinic_when }}</span></td><td data-label="{{ _('Version') }}">{{ e.version }}</td><td data-label="{{ _('What happened') }}">{{ e.what }}</td><td data-label="{{ _('Who') }}">{{ e.actor }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 </section>

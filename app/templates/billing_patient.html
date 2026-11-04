@@ -1,23 +1,22 @@
 {% extends "base.html" %}
 {% from "_reason.html" import reason_box %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
-    <li aria-current="page">Billing</li>
+    <li aria-current="page">{{ _("Billing") }}</li>
   </ol>
 </nav>
 <div class="ds-page-head">
   <div>
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
-    <h1 class="ds-page-title">Billing</h1>
+    <h1 class="ds-page-title">{{ _("Billing") }}</h1>
     <p class="ds-page-meta">Still to pay {{ fmt(summary.outstanding_cents, 'en') }}{% if summary.unknown %} · {{ summary.unknown }} invoice(s) of unknown status, not counted{% endif %}{% if summary.next_due %} · next installment {{ summary.next_due }}{% endif %}</p>
   </div>
 </div>
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
-  <div>Payments are recorded by hand after money changed hands elsewhere. No money moves through
-  this system and no fiscal invoice is issued.{% if can_pay and not can_change %} You can record a payment received; refunds, corrections and reconciliation are for a dentist.{% elif not can_pay %} You can see billing but not change it.{% endif %}</div>
+  <div>{{ _("Payments are recorded by hand after money changed hands elsewhere. No money moves through this system and no fiscal invoice is issued.") }}{% if can_pay and not can_change %} {{ _("You can record a payment received; refunds, corrections and reconciliation are for a dentist.") }}{% elif not can_pay %} {{ _("You can see billing but not change it.") }}{% endif %}</div>
 </div>
 
 {% for inv in summary.invoices %}
@@ -27,7 +26,7 @@
       <h2 class="ds-card-title" id="inv-{{ loop.index }}">Visit {{ inv.visit_date or 'undated' }} · {{ inv.state | replace('_', ' ') }}</h2>
       <p class="ds-card-sub">billed {{ fmt(inv.total_cents, 'en') }} · paid {{ fmt(inv.paid_cents, 'en') }} · still to pay {{ fmt(inv.outstanding_cents, 'en') }}{% if inv.due_date %} · due {{ inv.due_date }}{% endif %}{% if inv.void_reason %} · void: {{ inv.void_reason }}{% endif %}</p>
     </div>
-    {% if inv.id %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('billing.preview', invoice_id=inv.id) }}">Preview</a>{% endif %}
+    {% if inv.id %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('billing.preview', invoice_id=inv.id) }}">{{ _("Preview") }}</a>{% endif %}
   </div>
   <div class="dash-card-body">
     <ul class="ds-rows">
@@ -49,24 +48,24 @@
       {% if can_change and inv.state == 'draft' %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='issue') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label class="form-label small" for="due-{{ inv.id }}">Due date</label>
+        <div><label class="form-label small" for="due-{{ inv.id }}">{{ _("Due date") }}</label>
         <input class="form-control form-control-sm" type="date" id="due-{{ inv.id }}" name="due_date"></div>
-        <button class="btn btn-primary btn-sm" type="submit">Issue</button>
+        <button class="btn btn-primary btn-sm" type="submit">{{ _("Issue") }}</button>
       </form>
       {% endif %}
       {% if can_change and inv.state == 'unknown' %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='reconcile') }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="key" value="{{ key() }}">
-        <div><label class="form-label small" for="out-{{ inv.id }}">What the records show</label>
+        <div><label class="form-label small" for="out-{{ inv.id }}">{{ _("What the records show") }}</label>
         <select class="form-select form-select-sm" id="out-{{ inv.id }}" name="outcome">
-          <option value="unpaid">Not paid</option><option value="paid">Paid in full</option><option value="partial">Partly paid</option>
+          <option value="unpaid">{{ _("Not paid") }}</option><option value="paid">{{ _("Paid in full") }}</option><option value="partial">{{ _("Partly paid") }}</option>
         </select></div>
-        <div><label class="form-label small" for="ramt-{{ inv.id }}">Amount if partly paid</label>
+        <div><label class="form-label small" for="ramt-{{ inv.id }}">{{ _("Amount if partly paid") }}</label>
         <input class="form-control form-control-sm" id="ramt-{{ inv.id }}" name="amount" inputmode="decimal" placeholder="0,00"></div>
-        <div><label class="form-label small" for="rmeth-{{ inv.id }}">Method</label>
+        <div><label class="form-label small" for="rmeth-{{ inv.id }}">{{ _("Method") }}</label>
         <select class="form-select form-select-sm" id="rmeth-{{ inv.id }}" name="method">{% for m in methods %}<option value="{{ m }}">{{ m | replace('_', ' ') }}</option>{% endfor %}</select></div>
-        <button class="btn btn-primary btn-sm" type="submit">Reconcile</button>
+        <button class="btn btn-primary btn-sm" type="submit">{{ _("Reconcile") }}</button>
       </form>
       {# P29 R-022: what each choice records and what it does to the amount owed #}
       <div class="small w-100" id="rhelp-{{ inv.id }}">
@@ -79,24 +78,24 @@
       </div>
       {% endif %}
       {% if can_pay and inv.state in ('issued', 'partially_paid') %}
-      <a class="btn btn-primary btn-sm" href="{{ url_for('billing.new_payment', invoice_id=inv.id) }}">Start payment</a>
+      <a class="btn btn-primary btn-sm" href="{{ url_for('billing.new_payment', invoice_id=inv.id) }}">{{ _("Start payment") }}</a>
       {% endif %}
       {% if can_change and inv.state in ('issued', 'partially_paid') and not inv.installments %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='plan') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label class="form-label small" for="cnt-{{ inv.id }}">Installments</label>
+        <div><label class="form-label small" for="cnt-{{ inv.id }}">{{ _("Installments") }}</label>
         <input class="form-control form-control-sm" type="number" min="2" max="24" id="cnt-{{ inv.id }}" name="count" value="3"></div>
-        <div><label class="form-label small" for="first-{{ inv.id }}">First due</label>
+        <div><label class="form-label small" for="first-{{ inv.id }}">{{ _("First due") }}</label>
         <input class="form-control form-control-sm" type="date" id="first-{{ inv.id }}" name="first_due" required></div>
-        <button class="btn btn-outline-primary btn-sm" type="submit">Split</button>
+        <button class="btn btn-outline-primary btn-sm" type="submit">{{ _("Split") }}</button>
       </form>
       {% endif %}
       {% if can_change and inv.state in ('draft', 'issued') and inv.paid_cents == 0 %}
       <form method="post" action="{{ url_for('billing.invoice_action', invoice_id=inv.id, action='void') }}" class="d-flex gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div><label class="form-label small" for="vr-{{ inv.id }}">Reason to void</label>
+        <div><label class="form-label small" for="vr-{{ inv.id }}">{{ _("Reason to void") }}</label>
         <textarea class="form-control form-control-sm" id="vr-{{ inv.id }}" name="reason" maxlength="300" required rows="1" data-grow></textarea></div>
-        <button class="btn btn-outline-danger btn-sm" type="submit">Void</button>
+        <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Void") }}</button>
       </form>
       {% endif %}
     </div>
@@ -104,12 +103,12 @@
   </div>
 </section>
 {% else %}
-<p class="dash-empty-line">No invoices on record. One is drafted when a visit with prices is filed for this patient.</p>
+<p class="dash-empty-line">{{ _("No invoices on record. One is drafted when a visit with prices is filed for this patient.") }}</p>
 {% endfor %}
 
 <section class="card dash-card" aria-labelledby="pay-title">
-  <div class="dash-card-head"><div><h2 class="ds-card-title" id="pay-title">Payment history</h2>
-    <p class="ds-card-sub">Newest first. Money received is +, money handed back is −. Open a row for its details.</p></div></div>
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="pay-title">{{ _("Payment history") }}</h2>
+    <p class="ds-card-sub">{{ _("Newest first. Money received is +, money handed back is −. Open a row for its details.") }}</p></div></div>
   <div class="dash-card-body">
     {# P29 R-013: signed rows, what is left of each payment and what gave money back, links both ways, details per
        row, and Refund / Reverse only while something of the payment is left #}
@@ -125,12 +124,12 @@
             {%- if p.reverses_payment_id %} · Against payment <a href="#pay-{{ p.reverses_payment_id }}">#{{ p.reverses_payment_id }}</a>{% endif %}
             {%- for a in p.answers %} · {{ 'Refunded' if a.kind == 'refund' else 'Reversed' }} by <a href="#pay-{{ a.id }}">#{{ a.id }}</a>{% endfor %}</span>
           <details class="pay-detail">
-            <summary>Details<span class="visually-hidden"> of #{{ p.id }}</span></summary>
+            <summary>{{ _("Details") }}<span class="visually-hidden"> of #{{ p.id }}</span></summary>
             <dl class="confirm-rows">
-              <dt>Recorded</dt><dd>recorded by {{ p.recorded_by }} ({{ p.recorded_role }}), {{ p.source | replace('_', ' ') }}</dd>
-              {% if p.reference %}<dt>Receipt</dt><dd>{{ p.reference }}</dd>{% endif %}
+              <dt>{{ _("Recorded") }}</dt><dd>recorded by {{ p.recorded_by }} ({{ p.recorded_role }}), {{ p.source | replace('_', ' ') }}</dd>
+              {% if p.reference %}<dt>{{ _("Receipt") }}</dt><dd>{{ p.reference }}</dd>{% endif %}
               {% if p.note %}<dt>{{ 'Note' if p.kind == 'payment' else 'Reason' }}</dt><dd>{{ p.note }}</dd>{% endif %}
-              <dt>Set against</dt><dd>{% for a in p.allocations %}invoice #{{ a.invoice_id }} {{ fmt(a.c, 'en') }}{{ ', ' if not loop.last else '' }}{% else %}no invoice{% endfor %}</dd>
+              <dt>{{ _("Set against") }}</dt><dd>{% for a in p.allocations %}invoice #{{ a.invoice_id }} {{ fmt(a.c, 'en') }}{{ ', ' if not loop.last else '' }}{% else %}no invoice{% endfor %}</dd>
             </dl>
             {% if can_change and p.kind == 'payment' and p.left > 0 %}
             <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='refund') }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
@@ -138,12 +137,12 @@
               <div><label class="form-label small" for="ra-{{ p.id }}">Refund amount (at most {{ fmt(p.left, 'en') }})</label>
                 <input class="form-control form-control-sm" id="ra-{{ p.id }}" name="amount" inputmode="decimal" required></div>
               <div>{{ reason_box('rr-' ~ p.id, reasons.REFUND, 'Reason for the refund') }}</div>
-              <button class="btn btn-outline-secondary btn-sm" type="submit">Refund</button>
+              <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Refund") }}</button>
             </form>
             <form method="post" action="{{ url_for('billing.payment_action', payment_id=p.id, action='reverse') }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ key() }}">
               <div>{{ reason_box('rv-' ~ p.id, reasons.REVERSE, 'Reason to reverse it (takes out ' ~ fmt(p.left, 'en') ~ ')') }}</div>
-              <button class="btn btn-outline-danger btn-sm" type="submit">Reverse (entered by mistake)</button>
+              <button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Reverse (entered by mistake)") }}</button>
             </form>
             {% endif %}
           </details>
@@ -152,7 +151,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No payments recorded. Record one on an issued invoice above.</p>
+    <p class="dash-empty-line">{{ _("No payments recorded. Record one on an issued invoice above.") }}</p>
     {% endif %}
   </div>
 </section>

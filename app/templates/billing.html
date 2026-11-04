@@ -4,40 +4,38 @@
    its own gate live; a role that may not change an invoice is offered View, never a control that would refuse.
    what counts as owed is unchanged: issued invoices with money outstanding. drafts and unknown are never owed. #}
 {% macro state_badge(s) %}
-  {% if s.state == 'draft' %}<span class="ux-badge ux-badge-draft">Draft</span>
-  {% elif s.state == 'unknown' %}<span class="ux-badge ux-badge-none">Unknown</span>
-  {% elif s.state == 'partially_paid' %}<span class="ux-badge ux-badge-requested">Part paid</span>
-  {% else %}<span class="ux-badge ux-badge-booked">Issued</span>{% endif %}
+  {% if s.state == 'draft' %}<span class="ux-badge ux-badge-draft">{{ _("Draft") }}</span>
+  {% elif s.state == 'unknown' %}<span class="ux-badge ux-badge-none">{{ _("Unknown") }}</span>
+  {% elif s.state == 'partially_paid' %}<span class="ux-badge ux-badge-requested">{{ _("Part paid") }}</span>
+  {% else %}<span class="ux-badge ux-badge-booked">{{ _("Issued") }}</span>{% endif %}
 {% endmacro %}
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Billing</p>
-    <h1 class="ds-page-title">Invoices and payments</h1>
-    <p class="ds-page-meta">Payments recorded by staff · no money moves through this system</p>
+    <p class="ds-page-eyebrow">{{ _("Billing") }}</p>
+    <h1 class="ds-page-title">{{ _("Invoices and payments") }}</h1>
+    <p class="ds-page-meta">{{ _("Payments recorded by staff · no money moves through this system") }}</p>
   </div>
 <!--/page-head--></div>
 
 <p class="ux-note" role="note"><i class="bi bi-info-circle" aria-hidden="true"></i>
-  <span><strong>Demo clinic, synthetic data.</strong> Payments are typed in after money changed hands elsewhere - there
-  is no payment provider and no fiscal invoice is issued. Invoices from before the ledger stay <strong>unknown</strong>,
-  never counted as owed, until someone reconciles them.</span></p>
+  <span>{{ _html("<strong>Demo clinic, synthetic data.</strong> Payments are typed in after money changed hands elsewhere - there is no payment provider and no fiscal invoice is issued. Invoices from before the ledger stay <strong>unknown</strong>, never counted as owed, until someone reconciles them.") }}</span></p>
 
 <div class="ux-kpis ux-kpis-3" data-ux="billing-totals">
   <div class="ux-kpi ux-kpi-static">
-    <span class="ux-kpi-label">Still to pay (issued invoices)</span>
+    <span class="ux-kpi-label">{{ _("Still to pay (issued invoices)") }}</span>
     <span class="ux-kpi-value">{{ fmt(owed, 'en') }}</span>
     <span class="ux-kpi-sub">{{ work.owed | length }} invoice{{ 's' if work.owed | length != 1 else '' }}</span>
   </div>
   <div class="ux-kpi ux-kpi-static">
-    <span class="ux-kpi-label">Recorded payments, net of refunds</span>
+    <span class="ux-kpi-label">{{ _("Recorded payments, net of refunds") }}</span>
     <span class="ux-kpi-value">{{ fmt(recorded, 'en') }}</span>
-    <span class="ux-kpi-sub">entered by staff</span>
+    <span class="ux-kpi-sub">{{ _("entered by staff") }}</span>
   </div>
   <div class="ux-kpi ux-kpi-static">
-    <span class="ux-kpi-label">Unknown status, to reconcile</span>
+    <span class="ux-kpi-label">{{ _("Unknown status, to reconcile") }}</span>
     <span class="ux-kpi-value">{{ work.unknown | length }}</span>
-    <span class="ux-kpi-sub">not counted as owed</span>
+    <span class="ux-kpi-sub">{{ _("not counted as owed") }}</span>
   </div>
 <!--/billing-totals--></div>
 
@@ -46,14 +44,14 @@
 <section class="card ux-card sx-bill sx-h-l" aria-labelledby="bill-title">
   <div class="ux-card-head">
     <div>
-      <h2 class="ux-card-title" id="bill-title">Invoices</h2>
-      <p class="ux-card-meta">Only issued invoices with money outstanding are counted as owed</p>
+      <h2 class="ux-card-title" id="bill-title">{{ _("Invoices") }}</h2>
+      <p class="ux-card-meta">{{ _("Only issued invoices with money outstanding are counted as owed") }}</p>
     </div>
-    <div class="sx-tabs sx-tabs-sm" role="group" aria-label="Show" data-bill-show hidden>
-      <button type="button" data-show="all" aria-pressed="true">All <span class="sx-count">{{ work.owed | length + work.unknown | length + work.draft | length }}</span></button>
-      <button type="button" data-show="owed" aria-pressed="false">Outstanding <span class="sx-count">{{ work.owed | length }}</span></button>
-      <button type="button" data-show="unknown" aria-pressed="false">To reconcile <span class="sx-count">{{ work.unknown | length }}</span></button>
-      <button type="button" data-show="draft" aria-pressed="false">Drafts <span class="sx-count">{{ work.draft | length }}</span></button>
+    <div class="sx-tabs sx-tabs-sm" role="group" aria-label="{{ _('Show') }}" data-bill-show hidden>
+      <button type="button" data-show="all" aria-pressed="true">{{ _("All") }} <span class="sx-count">{{ work.owed | length + work.unknown | length + work.draft | length }}</span></button>
+      <button type="button" data-show="owed" aria-pressed="false">{{ _("Outstanding") }} <span class="sx-count">{{ work.owed | length }}</span></button>
+      <button type="button" data-show="unknown" aria-pressed="false">{{ _("To reconcile") }} <span class="sx-count">{{ work.unknown | length }}</span></button>
+      <button type="button" data-show="draft" aria-pressed="false">{{ _("Drafts") }} <span class="sx-count">{{ work.draft | length }}</span></button>
     </div>
   </div>
   <div class="sx-card-body">
@@ -69,7 +67,7 @@
     </div>
     {# P30: Sort and Filter on this section's rows #}
     {% if work[key] %}
-    <div class="sx-tools" data-list-tools data-for="bill-rows-{{ key }}" data-noun="invoice|invoices"
+    <div class="sx-tools" data-list-tools data-for="bill-rows-{{ key }}" data-noun="{{ _('invoice|invoices') }}"
          data-sorts='{{ [['no', 'num', -1, 'Invoice number (newest)'], ['no', 'num', 1, 'Invoice number (oldest)'], ['amount', 'num', -1, 'Amount (highest first)'],
                          ['amount', 'num', 1, 'Amount (lowest first)'], ['due', 'text', 1, 'Due date (soonest)'], ['visit', 'text', -1, 'Visit date (newest)'],
                          ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
@@ -83,8 +81,8 @@
   <table class="ux-table ux-table-page ux-bill">
     <caption class="visually-hidden">{{ title }}</caption>
     <thead><tr>
-      <th scope="col" data-sort="name">Patient</th><th scope="col" data-sort="no">Invoice</th><th scope="col" data-sort="due">Due</th>
-      <th scope="col" class="ux-num" data-sort="amount">Amount</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">Action</span></th>
+      <th scope="col" data-sort="name">{{ _("Patient") }}</th><th scope="col" data-sort="no">{{ _("Invoice") }}</th><th scope="col" data-sort="due">{{ _("Due") }}</th>
+      <th scope="col" class="ux-num" data-sort="amount">{{ _("Amount") }}</th><th scope="col">{{ _("Status") }}</th><th scope="col"><span class="visually-hidden">{{ _("Action") }}</span></th>
     </tr></thead>
     <tbody id="bill-rows-{{ key }}">
     {% for s in work[key] %}
@@ -93,18 +91,18 @@
     <tr data-name="{{ s.patient_name }}" data-no="{{ s.id }}" data-amount="{{ cents }}" data-due="{{ (s.due_date if key == 'owed' and s.due_date else '9999') }}"
         data-visit="{{ s.visit_date or '' }}" data-band="{{ 'u100' if cents < 10000 else 'm' if cents <= 20000 else 'o200' }}"
         data-state="{{ s.state if s.state in ('draft', 'unknown', 'partially_paid') else 'issued' }}">
-      <td data-label="Patient"><strong>{{ s.patient_name }}</strong></td>
-      <td data-label="Invoice">#{{ s.id }} <span class="ux-muted ux-sub">visit {{ s.visit_date or 'undated' }}</span></td>
-      <td data-label="Due">{% if key == 'owed' and s.due_date %}<span class="ux-nowrap">{{ s.due_date }}</span>{% else %}<span class="ux-muted">-</span>{% endif %}</td>
-      <td data-label="Amount" class="ux-num">
+      <td data-label="{{ _('Patient') }}"><strong>{{ s.patient_name }}</strong></td>
+      <td data-label="{{ _('Invoice') }}">#{{ s.id }} <span class="ux-muted ux-sub">visit {{ s.visit_date or 'undated' }}</span></td>
+      <td data-label="{{ _('Due') }}">{% if key == 'owed' and s.due_date %}<span class="ux-nowrap">{{ s.due_date }}</span>{% else %}<span class="ux-muted">-</span>{% endif %}</td>
+      <td data-label="{{ _('Amount') }}" class="ux-num">
         {% if key == 'owed' %}<strong class="ux-nowrap">{{ fmt(s.outstanding_cents, 'en') }}</strong> <span class="ux-muted ux-sub">of {{ fmt(s.total_cents, 'en') }}</span>
         {% else %}{{ fmt(s.total_cents, 'en') }}{% endif %}</td>
-      <td data-label="Status">{{ state_badge(s) }}</td>
-      <td data-label="Action">
-        {% if key == 'owed' and can_record %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Record payment for {{ s.patient_name }}, invoice #{{ s.id }}">Record payment</a>
-        {% elif key == 'unknown' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Reconcile {{ s.patient_name }}'s invoice #{{ s.id }}">Reconcile</a>
-        {% elif key == 'draft' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Issue {{ s.patient_name }}'s invoice #{{ s.id }}">Issue</a>
-        {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ href }}" aria-label="View {{ s.patient_name }}'s invoice #{{ s.id }}">View</a>{% endif %}
+      <td data-label="{{ _('Status') }}">{{ state_badge(s) }}</td>
+      <td data-label="{{ _('Action') }}">
+        {% if key == 'owed' and can_record %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Record payment for {{ s.patient_name }}, invoice #{{ s.id }}">{{ _("Record payment") }}</a>
+        {% elif key == 'unknown' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Reconcile {{ s.patient_name }}'s invoice #{{ s.id }}">{{ _("Reconcile") }}</a>
+        {% elif key == 'draft' and can_change %}<a class="btn btn-sm btn-outline-primary" href="{{ href }}" aria-label="Issue {{ s.patient_name }}'s invoice #{{ s.id }}">{{ _("Issue") }}</a>
+        {% else %}<a class="btn btn-sm btn-outline-secondary" href="{{ href }}" aria-label="View {{ s.patient_name }}'s invoice #{{ s.id }}">{{ _("View") }}</a>{% endif %}
       </td>
     </tr>
     {% endfor %}

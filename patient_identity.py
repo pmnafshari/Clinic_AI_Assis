@@ -765,6 +765,8 @@ def timeline(conn, key, show_clinical=True):
             "title": ", ".join(procedures) if procedures else "Visit",
             "detail": (v["clinical_notes"] or "") if show_clinical else "",
             "source": "from a filed note",
+            # P29 E-001: our own words as a key and values, so the staff page can say them in Italian
+            "title_key": None if procedures else "Visit", "title_values": {},
         })
 
     for a in conn.execute(
@@ -792,6 +794,10 @@ def timeline(conn, key, show_clinical=True):
                       "declined": "Request declined"}.get(a["status"], a["status"]),
             "detail": "" if requested else f"with {a['dentist']}",
             "source": "scheduling",
+            "title_key": {"booked": "Appointment booked", "requested": "Requested an appointment",
+                          "cancelled": "Appointment cancelled", "declined": "Request declined"}.get(a["status"]),
+            "title_values": {}, "detail_key": None if requested else "with {dentist}",
+            "detail_values": {"dentist": a["dentist"]},
         })
 
     # P29 F-030 / F-032: each line carries its invoice's state from the ledger,
@@ -813,6 +819,8 @@ def timeline(conn, key, show_clinical=True):
             # said on every single line, not once at the bottom, because the
             # line is what gets read aloud to a patient over the phone
             "source": BILL_STATE_WORDS.get(state, BILL_STATE_WORDS["unknown"]),
+            "title_key": "Draft invoice {amount} EUR" if state == "draft" else "Billed {amount} EUR",
+            "title_values": {"amount": f"{inv['amount']:.2f}"},
         })
 
     for mrg in conn.execute(
@@ -829,6 +837,9 @@ def timeline(conn, key, show_clinical=True):
             # merge that is only visible in an audit log is a merge nobody
             # reading the record will ever know happened.
             "source": "record merge",
+            "title_key": "Absorbed the record of {who}",
+            "title_values": {"who": was.get("patient_name") or mrg["source_cf"]},
+            "detail_key": "{cf}, merged by {who}", "detail_values": {"cf": mrg["source_cf"], "who": mrg["merged_by"]},
         })
 
     # undated rows sort last rather than crashing the sort or claiming a date

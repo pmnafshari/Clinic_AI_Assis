@@ -2,26 +2,26 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Records</p>
-    <h1 class="ds-page-title">Confirm change</h1>
-    <p class="ds-page-meta">Check it once more - this writes to a patient record</p>
+    <p class="ds-page-eyebrow">{{ _("Records") }}</p>
+    <h1 class="ds-page-title">{{ _("Confirm change") }}</h1>
+    <p class="ds-page-meta">{{ _("Check it once more - this writes to a patient record") }}</p>
   </div>
 </div>
 <div class="card dash-card confirm-card">
   <div class="ds-card-body">
     {% if error %}
     <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
-    <p><a href="{{ url_for('dashboard.index') }}">Back to dashboard</a></p>
+    <p><a href="{{ url_for('dashboard.index') }}">{{ _("Back to dashboard") }}</a></p>
     {% else %}
     {# the frozen diff. it is the whole point of this screen, so it gets the
        weight - and the two actions are visually distinct, because "write
        this to a patient record" and "throw it away" must never look alike. #}
 {% if change %}
 <dl class="confirm-rows">
-  <div><dt>Patient</dt><dd>{{ change.patient }}</dd></div>
-  <div><dt>Field</dt><dd>{{ change.field | capitalize }}</dd></div>
-  <div><dt>Now</dt><dd>{{ change.before or 'empty' }}</dd></div>
-  <div><dt>After</dt><dd><strong>{{ change.after or 'empty' }}</strong></dd></div>
+  <div><dt>{{ _("Patient") }}</dt><dd>{{ change.patient }}</dd></div>
+  <div><dt>{{ _("Field") }}</dt><dd>{{ change.field | capitalize }}</dd></div>
+  <div><dt>{{ _("Now") }}</dt><dd>{{ change.before or 'empty' }}</dd></div>
+  <div><dt>{{ _("After") }}</dt><dd><strong>{{ change.after or 'empty' }}</strong></dd></div>
 </dl>
 {% else %}
     <p class="confirm-diff">{{ diff_line }}</p>
@@ -30,9 +30,9 @@
       <form method="post" action="{{ url_for('agent.confirm_change') }}" class="d-inline">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="token" value="{{ token }}">
-        <button type="submit" class="ds-btn ds-btn-primary">Confirm change</button>
+        <button type="submit" class="ds-btn ds-btn-primary">{{ _("Confirm change") }}</button>
       </form>
-      <a href="{{ url_for('dashboard.index') }}" class="ds-btn ds-btn-ghost">Discard change</a>
+      <a href="{{ url_for('dashboard.index') }}" class="ds-btn ds-btn-ghost">{{ _("Discard change") }}</a>
     </div>
     {% endif %}
   </div>

@@ -2,17 +2,17 @@
 {% set kind_names = {'fact': 'From the record', 'quote': 'Quoted from a note', 'gap': 'Missing', 'conflict': 'Possible contradiction'} %}
 {% set flag_names = {'unsupported': 'not found in the cited notes', 'misquote': 'quote does not match the note', 'unknown_source': 'cites a note that is not this patient\'s', 'no_source': 'cites no note', 'recommendation': 'reads as advice or a prescription', 'negation': 'a negation differs from the note'} %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}">{{ patient.patient_name }}</a></li>
-    <li aria-current="page">Next-visit summary</li>
+    <li aria-current="page">{{ _("Next-visit summary") }}</li>
   </ol>
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
-    <h1 class="ds-page-title">Next-visit summary</h1>
-    <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span> · dentist only</p>
+    <h1 class="ds-page-title">{{ _("Next-visit summary") }}</h1>
+    <p class="ds-page-meta"><span class="font-monospace">{{ cf }}</span> {{ _("· dentist only") }}</p>
   </div>
 </div>
 
@@ -34,16 +34,16 @@
   {% endif %}
   {% if view.stale %}
   <div class="ds-alert ds-alert-warning mb-3" role="alert">
-    <div><strong class="ds-alert-title">The notes have changed since this was made</strong>
-    A visit was added, edited or moved after this summary was built.
-    {% if s.status == 'draft' %}Regenerate it before approving.{% else %}Make a new one before relying on it.{% endif %}</div>
+    <div><strong class="ds-alert-title">{{ _("The notes have changed since this was made") }}</strong>
+    {{ _("A visit was added, edited or moved after this summary was built.") }}
+    {% if s.status == 'draft' %}{{ _("Regenerate it before approving.") }}{% else %}{{ _("Make a new one before relying on it.") }}{% endif %}</div>
   </div>
   {% endif %}
 
   <section class="card dash-card mb-3" aria-labelledby="lines-title">
     <div class="dash-card-head">
       <div>
-        <h2 class="ds-card-title" id="lines-title">Summary</h2>
+        <h2 class="ds-card-title" id="lines-title">{{ _("Summary") }}</h2>
         <p class="ds-card-sub">Version {{ latest.version }} · {{ 'generated' if latest.kind == 'generated' else 'edited by ' ~ latest.created_by }} · every line names its notes as [#visit]</p>
       </div>
     </div>
@@ -66,19 +66,19 @@
 
   {% if s.status == 'approved' and not view.stale %}
   <section class="card dash-card mb-3" aria-labelledby="read-title">
-    <div class="dash-card-head"><h2 class="ds-card-title" id="read-title">Read aloud</h2></div>
+    <div class="dash-card-head"><h2 class="ds-card-title" id="read-title">{{ _("Read aloud") }}</h2></div>
     <div class="dash-card-body">
       {% if read_audio %}
-      <audio controls preload="none" src="data:audio/mpeg;base64,{{ read_audio }}">Your browser cannot play this.</audio>
-      <p class="dash-empty-line">Press play when ready; nothing plays by itself.</p>
+      <audio controls preload="none" src="data:audio/mpeg;base64,{{ read_audio }}">{{ _("Your browser cannot play this.") }}</audio>
+      <p class="dash-empty-line">{{ _("Press play when ready; nothing plays by itself.") }}</p>
       {% elif tts_ok %}
       <form method="post" action="{{ url_for('summary.read_aloud', cf=cf) }}" class="d-flex flex-wrap gap-2 align-items-center">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="form-check">
           <input class="form-check-input" type="checkbox" name="private" value="yes" id="private">
-          <label class="form-check-label" for="private">I am somewhere private</label>
+          <label class="form-check-label" for="private">{{ _("I am somewhere private") }}</label>
         </div>
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Prepare to read aloud</button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Prepare to read aloud") }}</button>
       </form>
       {% else %}
       <p class="dash-empty-line">{{ tts_why }}</p>
@@ -90,8 +90,8 @@
   <section class="card dash-card mb-3" aria-labelledby="sources-title">
     <div class="dash-card-head">
       <div>
-        <h2 class="ds-card-title" id="sources-title">Source notes</h2>
-        <p class="ds-card-sub">Clinical author not recorded: the record keeps who filed a note, not who wrote it</p>
+        <h2 class="ds-card-title" id="sources-title">{{ _("Source notes") }}</h2>
+        <p class="ds-card-sub">{{ _("Clinical author not recorded: the record keeps who filed a note, not who wrote it") }}</p>
       </div>
     </div>
     <div class="dash-card-body">
@@ -117,37 +117,37 @@
 
   {% if s.status == 'draft' %}
   <section class="card dash-card mb-3" aria-labelledby="review-title">
-    <div class="dash-card-head"><h2 class="ds-card-title" id="review-title">Review</h2></div>
+    <div class="dash-card-head"><h2 class="ds-card-title" id="review-title">{{ _("Review") }}</h2></div>
     <div class="dash-card-body">
       <form method="post" action="{{ url_for('summary.edit', cf=cf, sid=s.id) }}" class="mb-3">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label for="body" class="form-label">Edit the lines. Keep a [#visit] on each line you want checked against the notes.</label>
+        <label for="body" class="form-label">{{ _("Edit the lines. Keep a [#visit] on each line you want checked against the notes.") }}</label>
         <textarea id="body" name="body" rows="10" class="ds-textarea">{{ edit_text }}</textarea>
-        <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">Save as a new version</button>
-        <p class="sx-help">Changes the lines of this draft as a new version; the earlier ones stay under Versions.</p>
+        <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">{{ _("Save as a new version") }}</button>
+        <p class="sx-help">{{ _("Changes the lines of this draft as a new version; the earlier ones stay under Versions.") }}</p>
       </form>
       {# P29 U-002: each decision says what it changes #}
       <ul class="sx-acts">
-        <li><b>Approve</b> marks this version as reviewed by you. The notes stay the record.</li>
-        <li><b>Regenerate</b> builds a new draft from the notes as they are now; this draft is kept in History as replaced.</li>
-        <li><b>Reject</b> closes this draft with your reason. Nothing is deleted.</li>
+        <li>{{ _html("<b>Approve</b> marks this version as reviewed by you. The notes stay the record.") }}</li>
+        <li>{{ _html("<b>Regenerate</b> builds a new draft from the notes as they are now; this draft is kept in History as replaced.") }}</li>
+        <li>{{ _html("<b>Reject</b> closes this draft with your reason. Nothing is deleted.") }}</li>
       </ul>
       <div class="d-flex flex-wrap gap-2 align-items-end">
         <form method="post" action="{{ url_for('summary.approve', cf=cf, sid=s.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-primary btn-sm" type="submit">Approve</button>
+          <button class="btn btn-primary btn-sm" type="submit">{{ _("Approve") }}</button>
         </form>
         <form method="post" action="{{ url_for('summary.regenerate', cf=cf, sid=s.id) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="btn btn-outline-secondary btn-sm" type="submit">Regenerate</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Regenerate") }}</button>
         </form>
         <form method="post" action="{{ url_for('summary.reject', cf=cf, sid=s.id) }}" class="d-flex gap-2 align-items-end">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div>
-            <label for="reason" class="form-label">Reason</label>
+            <label for="reason" class="form-label">{{ _("Reason") }}</label>
             <textarea id="reason" name="reason" class="form-control form-control-sm" maxlength="500" rows="1" data-grow></textarea>
           </div>
-          <button class="btn btn-outline-secondary btn-sm" type="submit">Reject</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Reject") }}</button>
         </form>
       </div>
     </div>
@@ -155,8 +155,8 @@
   {% endif %}
 
   <section class="card dash-card mb-3" aria-labelledby="versions-title">
-    <div class="dash-card-head"><div><h2 class="ds-card-title" id="versions-title">Versions</h2>
-      <p class="ds-card-sub">This summary's versions, newest first. The Summary above shows the newest.</p></div></div>
+    <div class="dash-card-head"><div><h2 class="ds-card-title" id="versions-title">{{ _("Versions") }}</h2>
+      <p class="ds-card-sub">{{ _("This summary's versions, newest first. The Summary above shows the newest.") }}</p></div></div>
     <div class="dash-card-body"><ul class="ds-rows">
       {% for v in view.versions | reverse %}
       <li class="ds-row"><span class="ds-row-main">
@@ -172,10 +172,10 @@
 <section class="card dash-card mb-3" aria-labelledby="make-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="make-title">{{ 'Make a new draft' if view else 'No summary yet' }}</h2></div>
   <div class="dash-card-body">
-    <p class="dash-empty-line">Builds a draft from this patient's own notes, on this machine. Nothing is sent anywhere and the notes are not changed.{% if view %} The approved summary stays in History.{% endif %}</p>
+    <p class="dash-empty-line">{{ _("Builds a draft from this patient's own notes, on this machine. Nothing is sent anywhere and the notes are not changed.") }}{% if view %} {{ _("The approved summary stays in History.") }}{% endif %}</p>
     <form method="post" action="{{ url_for('summary.generate', cf=cf) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <button class="btn btn-primary btn-sm" type="submit">Make a draft</button>
+      <button class="btn btn-primary btn-sm" type="submit">{{ _("Make a draft") }}</button>
     </form>
   </div>
 </section>
@@ -183,8 +183,8 @@
 
 {% if history %}
 <section class="card dash-card" aria-labelledby="history-title">
-  <div class="dash-card-head"><div><h2 class="ds-card-title" id="history-title">History</h2>
-    <p class="ds-card-sub">Every summary made for this patient, newest first. Nothing here is deleted.</p></div></div>
+  <div class="dash-card-head"><div><h2 class="ds-card-title" id="history-title">{{ _("History") }}</h2>
+    <p class="ds-card-sub">{{ _("Every summary made for this patient, newest first. Nothing here is deleted.") }}</p></div></div>
   <div class="dash-card-body"><ul class="ds-rows">
     {% for h in history %}
     <li class="ds-row"><span class="ds-row-main">

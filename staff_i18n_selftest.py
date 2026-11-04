@@ -20,12 +20,17 @@ ROOT = Path(__file__).parent
 TEMPLATES = ROOT / "app" / "templates"
 
 # the pages converted so far; the last stage makes this every template
-CONVERTED = ["base.html", "_sidebar.html", "_topbar.html", "patients_new.html"]
-# modules whose every flash is translated
-CONVERTED_PY = []
+CONVERTED = ["base.html", "_sidebar.html", "_topbar.html", "patients_new.html",
+             "patients_list.html", "patients_detail.html", "documents.html", "document_detail.html", "_patient_candidates.html",
+             "_visit_edit_form.html", "_patient_files.html", "_patient_pin.html", "_patient_pin_revoked.html",
+             "_confirm_diff.html", "_edit_form.html"]
+# modules that say nothing to a person outside _()
+CONVERTED_PY = ["patients_routes.py", "document_routes.py"]
 # words that stay as they are in both languages
 ALLOW = {"Dental AI", "English", "Italiano", "OK"}
-READ_ATTRS = ("aria-label", "placeholder", "title", "alt")
+# technical terms that are the same in both languages
+TERMS = re.compile(r"\b(?:sha256|EUR|PDF|PNG|JPEG|OPG|EXIF|CSV|JSON|PIN|ID)\b")
+READ_ATTRS = ("aria-label", "placeholder", "title", "alt", "data-noun", "data-search", "data-label")
 
 
 def _literals_in(text):
@@ -36,9 +41,47 @@ def _literals_in(text):
     return out
 
 
+def _errors_in(path, names=("DocumentError",)):
+    """the message of every raise SomeError("code", "message") in a module"""
+    out = []
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) in names:
+            if len(node.args) > 1 and isinstance(node.args[1], ast.Constant):
+                out.append(node.args[1].value)
+    return out
+
+
+def _returns_of(path, function):
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.FunctionDef) and node.name == function:
+            return [r.value.value for r in ast.walk(node) if isinstance(r, ast.Return) and isinstance(r.value, ast.Constant)
+                    and isinstance(r.value.value, str)]
+    return []
+
+
+def harvest():
+    """words other modules hand to the converted pages, shown through _(value)"""
+    import patient_files
+    import patient_identity
+    found = set(patient_files.CATEGORIES.values()) | set(patient_files.FILE_TYPES.values()) | set(patient_files.DATE_BASIS.values())
+    found |= {"Image", "PDF document", "Text document", "File", "acquired", "imported", "uploaded", "visit date", "Visit note",
+              "Note", "legacy import, batch {v}", "uploaded by {v}", "confirmed by {v}", "someone not recorded"}
+    found |= set(_errors_in(ROOT / "documents.py")) | set(_errors_in(ROOT / "patient_files.py"))
+    found |= set(_returns_of(ROOT / "documents.py", "_refusal"))
+    found |= {"pending review", "quarantined", "extraction failed", "confirmed", "rejected", "superseded"}
+    found |= {"Visit", "Appointment", "Billing", "Record", "Filed", "Booked", "Requested", "Cancelled", "Declined", "Merged",
+              "from a filed note", "scheduling", "record merge", "Appointment booked", "Requested an appointment",
+              "Appointment cancelled", "Request declined", "with {dentist}", "Draft invoice {amount} EUR", "Billed {amount} EUR",
+              "Absorbed the record of {who}", "{cf}, merged by {who}"}
+    found |= set(patient_identity.BILL_STATE_WORDS.values()) | set(patient_identity.BILL_STATE_SHORT.values())
+    found |= {"draft", "active", "cancelled", "superseded", "patient"}
+    return found
+
+
 def all_texts():
     found = set()
-    for f in list(TEMPLATES.glob("*.html")) + [p for p in (ROOT / "app").glob("*.py") if p.name != "i18n.py"] + [ROOT / "patient_identity.py"]:
+    files = [TEMPLATES / name for name in CONVERTED] + [ROOT / "app" / name for name in CONVERTED_PY + ["nav.py", "patients_routes.py"]]
+    for f in files + [ROOT / "patient_identity.py"]:
         found.update(_literals_in(f.read_text(encoding="utf-8")))
     import app.nav as nav
     for group, label, *_rest in nav.ITEMS:
@@ -49,6 +92,7 @@ def all_texts():
         found.update((f"{{n}} {one}", f"{{n}} {many}", detail))
     import patient_identity
     found.update(patient_identity.DOCUMENTS)
+    found.update(harvest())
     import app.i18n as i18n
     found.update(k[3] for k in list(i18n.FLASH_KINDS.values()) + [i18n.FLASH_NOTE])
     found.update(i18n.ROLES)
@@ -78,7 +122,7 @@ class _Loose(HTMLParser):
             self.skip -= 1
 
     def handle_data(self, data):
-        words = " ".join(data.split())
+        words = " ".join(TERMS.sub("", data).split())
         # a macro that writes attributes leaves name="value" fragments: markup, not words a person reads
         if not self.skip and re.search(r"[A-Za-z]{2,}", words) and words not in ALLOW and '="' not in words:
             self.loose.append(repr(words))
@@ -92,16 +136,38 @@ def loose_text(src):
     prose = []
     for e in exprs:
         e = re.sub(r"\b_(?:html)?\(\s*(\"(?:[^\"\\\\]|\\\\.)*\"|'(?:[^'\\\\]|\\\\.)*')", "_()", e)
-        for lit in re.findall(r"\"([^\"]*)\"|'([^']*)'", e):
-            lit = lit[0] or lit[1]
+        for m in re.finditer(r"\"([^\"]*)\"|'([^']*)'", e):
+            lit = m.group(1) or m.group(2) or ""
+            # words joined to an expression with ~ are a sentence in pieces, whatever they look like
+            joined = re.search(r"~\s*$", e[:m.start()]) or re.match(r"\s*~", e[m.end():])
+            if joined and re.search(r"[A-Za-z]{2,}", lit) and lit.strip() not in ALLOW and not re.match(r"^[#/?&]", lit):
+                prose.append(lit)
+                continue
             tokens = lit.split()
-            if lit in ALLOW or not tokens or any(re.search(r"[-_./:%#=<>{}()]", t) for t in tokens):
+            if lit in ALLOW or not tokens:
+                continue
+            if any(re.search(r"[-_./:%#=<>{}()]", t) for t in tokens) and not re.match(r"^[A-Z][a-z]+ ", lit):
                 continue
             if (len(tokens) > 1 and re.search(r"[A-Za-z]{3}", lit)) or re.match(r"^[A-Z][a-z]{2,}", lit):
                 prose.append(lit)
     parser = _Loose()
     parser.feed(re.sub(r"\{\{.*?\}\}|\{%.*?%\}", " ", src, flags=re.S))
     return parser.loose + [f"expr {p!r}" for p in prose]
+
+
+def loose_python(src):
+    import io
+    import tokenize
+    out, prev = [], []
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.STRING and not tok.string.lstrip("rbfRBF").startswith(('"""', "'''")):
+            text = ast.literal_eval(tok.string) if not tok.string.lstrip("rbRB").startswith(("f", "F")) else tok.string
+            called = [p.string for p in prev[-2:]] == ["_", "("]
+            if not called and re.match(r"^f?[\"']?[A-Z][a-z]+[^\n]* [^\n]*[.!?:]$", str(text).strip("\"'")):
+                out.append(str(text)[:70])
+        if tok.type not in (tokenize.NL, tokenize.COMMENT):
+            prev.append(tok)
+    return out
 
 
 def selftest():
@@ -120,11 +186,11 @@ def selftest():
         left = loose_text((TEMPLATES / name).read_text(encoding="utf-8"))
         assert not left, f"2: {name} has text outside _(): {left[:6]}"
 
-    # 3. a converted module flashes only through _()
+    # 3. a converted module says nothing to a person outside _(): no message-like string literal (a capital, a space,
+    # ending in . ! ? or :) that is not the argument of _()
     for name in CONVERTED_PY:
-        src = (ROOT / "app" / name).read_text(encoding="utf-8")
-        raw = [m.group(0) for m in re.finditer(r"flash\(\s*(?!_\()[^\n]{0,60}", src)]
-        assert not raw, f"3: {name} flashes untranslated text: {raw[:3]}"
+        left = loose_python((ROOT / "app" / name).read_text(encoding="utf-8"))
+        assert not left, f"3: {name} has messages outside _(): {left[:4]}"
 
     # 4. the switch keeps the page, never leaves the app, and the pages answer in Italian
     with tempfile.TemporaryDirectory() as tmp:
@@ -161,6 +227,17 @@ def selftest():
         done = c.post("/patients/new", data={"patient_name": "Nuova Persona", "codice_fiscale": "ZZNP800101010102",
                                              "phone": "3401112222", "document": "health card"}, follow_redirects=True)
         assert "Registrazione completata" in done.get_data(as_text=True), "4: the result says it in English"
+        # stage 2: the patients list, a record and its files, in Italian
+        c.get("/lang/it?next=/")
+        d = app.test_client()
+        assert d.post("/login", data={"username": "dentist", "password": "dentist-pw-123"}).status_code in (302, 303)
+        d.get("/lang/it?next=/")
+        for who, path, words in ((c, "/patients", ("Filtra questo elenco", "Nuovo paziente", "Prossimo appuntamento")),
+                                 (c, "/patients/ZZIT800101010101", ("Panoramica", "Dati anagrafici", "Cronologia della cartella")),
+                                 (d, "/patients/ZZIT800101010101/documents", ("Cronologia dei file", "Due decisioni separate", "Carica"))):
+            page = who.get(path).get_data(as_text=True)
+            for word in words:
+                assert word in page, f"4: {word!r} is not on the Italian {path}"
         c.get("/lang/en?next=/")
         assert '<html lang="en">' in c.get("/patients/new").get_data(as_text=True), "4: English does not come back"
         login = app.test_client().get("/login").get_data(as_text=True)

@@ -4,16 +4,16 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Workspace</p>
-    <h1 class="ds-page-title">Requests</h1>
-    <p class="ds-page-meta">What patients asked and what waits on the clinic, one kind under another. Each is done on its own page; this one only shows them.</p>
+    <p class="ds-page-eyebrow">{{ _("Workspace") }}</p>
+    <h1 class="ds-page-title">{{ _("Requests") }}</h1>
+    <p class="ds-page-meta">{{ _("What patients asked and what waits on the clinic, one kind under another. Each is done on its own page; this one only shows them.") }}</p>
   </div>
 </div>
 
 <section class="card dash-card mb-3" data-kind="appointment" aria-labelledby="kind-appointment-title">
   <div class="dash-card-head"><div>
-    <h2 class="ds-card-title" id="kind-appointment-title">Appointment requests <span class="ux-count">{{ asked | length }}</span></h2>
-    <p class="ds-card-sub">A patient asked for a day in the portal. Not a booking until someone books a time.</p></div></div>
+    <h2 class="ds-card-title" id="kind-appointment-title">{{ _("Appointment requests") }} <span class="ux-count">{{ asked | length }}</span></h2>
+    <p class="ds-card-sub">{{ _("A patient asked for a day in the portal. Not a booking until someone books a time.") }}</p></div></div>
   <div class="dash-card-body">
     {% if asked %}
     <ul class="ds-rows sx-box">
@@ -23,11 +23,11 @@
         <span class="ds-row-sub"><b>{{ 'Day passed - not booked' if r.passed else 'Waiting to be booked' }}</b> · Reception or a dentist
           · Asked <span class="ux-nowrap">{{ r.created_at | appt_date }} {{ r.created_at | appt_time }}</span>{% if r.note %} · "{{ r.note }}"{% endif %}</span>
         <span class="ds-row-sub">Next: book a time or decline it{{ ', and tell the patient - the day has passed' if r.passed else ' on that day' }}.</span>
-      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests" tabindex="0">Open day<span class="visually-hidden">: {{ r.patient_name }}'s request for {{ r.day }}</span></a></span></li>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('appointments.index', view='day', day=r.day) }}#requests" tabindex="0">{{ _("Open day") }}<span class="visually-hidden">: {{ r.patient_name }}'s request for {{ r.day }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No appointment request is waiting. One appears when a patient asks for a day in the portal.</p>
+    <p class="dash-empty-line">{{ _("No appointment request is waiting. One appears when a patient asks for a day in the portal.") }}</p>
     {% endif %}
   </div>
 </section>
@@ -35,8 +35,8 @@
 {% if imaging is not none %}
 <section class="card dash-card mb-3" data-kind="imaging" aria-labelledby="kind-imaging-title">
   <div class="dash-card-head"><div>
-    <h2 class="ds-card-title" id="kind-imaging-title">Imaging work <span class="ux-count">{{ imaging | length }}</span></h2>
-    <p class="ds-card-sub">Demo imaging requests whose appointment changed. Reception records what it did.</p></div></div>
+    <h2 class="ds-card-title" id="kind-imaging-title">{{ _("Imaging work") }} <span class="ux-count">{{ imaging | length }}</span></h2>
+    <p class="ds-card-sub">{{ _("Demo imaging requests whose appointment changed. Reception records what it did.") }}</p></div></div>
   <div class="dash-card-body">
     {% if imaging %}
     <ul class="ds-rows sx-box">
@@ -45,12 +45,12 @@
         <span class="ds-row-title">{{ t.patient_name }} · appointment <span class="ux-nowrap">{{ t.when }}</span></span>
         <span class="ds-row-sub"><b>Needs reception action</b>: {{ t.reason }} · Reception
           · Flagged <span class="ux-nowrap">{{ t.flagged_at | appt_date }} {{ t.flagged_at | appt_time }}</span></span>
-        <span class="ds-row-sub">Next: record what reception did with the appointment.</span>
-      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking" tabindex="0">Open<span class="visually-hidden">: {{ t.patient_name }}, appointment {{ t.when }}</span></a></span></li>
+        <span class="ds-row-sub">{{ _("Next: record what reception did with the appointment.") }}</span>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking" tabindex="0">{{ _("Open") }}<span class="visually-hidden">: {{ t.patient_name }}, appointment {{ t.when }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No imaging appointment needs reception action.</p>
+    <p class="dash-empty-line">{{ _("No imaging appointment needs reception action.") }}</p>
     {% endif %}
   </div>
 </section>
@@ -59,28 +59,27 @@
 {% if data is not none %}
 <section class="card dash-card mb-3" data-kind="data" aria-labelledby="kind-data-title">
   <div class="dash-card-head"><div>
-    <h2 class="ds-card-title" id="kind-data-title">Data requests <span class="ux-count">{{ data | length }}</span></h2>
-    <p class="ds-card-sub">Access, a copy, a correction or erasure of a patient's data. A dentist reviews each one.</p></div></div>
+    <h2 class="ds-card-title" id="kind-data-title">{{ _("Data requests") }} <span class="ux-count">{{ data | length }}</span></h2>
+    <p class="ds-card-sub">{{ _("Access, a copy, a correction or erasure of a patient's data. A dentist reviews each one.") }}</p></div></div>
   <div class="dash-card-body">
     {% if data %}
     <ul class="ds-rows sx-box">
       {% for r in data %}
       <li class="ds-row"><span class="ds-row-main">
         <span class="ds-row-title">{{ data_kinds.get(r.kind, r.kind) }} · {{ r.patient_name or 'Erased patient' }}</span>
-        <span class="ds-row-sub"><b>Waiting for review</b> · A dentist
-          · Filed <span class="ux-nowrap">{{ r.requested_at | appt_date }}</span> by {{ r.requested_role }}{% if r.detail %} · "{{ r.detail }}"{% endif %}</span>
-        <span class="ds-row-sub">Next: review it - approve or reject, with a reason.</span>
-      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}" tabindex="0">Open<span class="visually-hidden">: data request {{ r.id }}</span></a></span></li>
+        <span class="ds-row-sub">{{ _html("<b>Waiting for review</b> · A dentist · Filed") }} <span class="ux-nowrap">{{ r.requested_at | appt_date }}</span> by {{ r.requested_role }}{% if r.detail %} · "{{ r.detail }}"{% endif %}</span>
+        <span class="ds-row-sub">{{ _("Next: review it - approve or reject, with a reason.") }}</span>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}" tabindex="0">{{ _("Open") }}<span class="visually-hidden">: data request {{ r.id }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No data request is waiting. One is filed from a patient's record when the patient asks.</p>
+    <p class="dash-empty-line">{{ _("No data request is waiting. One is filed from a patient's record when the patient asks.") }}</p>
     {% endif %}
   </div>
 </section>
 {% endif %}
 
 {% if authorize(g.user.role, 'handle_handoff') %}
-<p class="ux-muted">A patient who asked the assistant for a person is a call-back, not a request: see <a href="{{ url_for('handoff.index') }}">Call-backs</a>.</p>
+<p class="ux-muted">{{ _html('A patient who asked the assistant for a person is a call-back, not a request: see <a href="{href}">Call-backs</a>.', href=url_for('handoff.index')) }}</p>
 {% endif %}
 {% endblock %}

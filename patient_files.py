@@ -252,13 +252,15 @@ def timeline(conn, pid, actor, role, limit=200):
             " AND p.withdrawn_at IS NULL"
             " WHERE d.patient_id = ? AND d.status = 'confirmed' ORDER BY d.id DESC LIMIT ?", (pid, limit)):
         date, basis = dated(r)
+        # P29 E-001: the source also in parts, so the staff page can say it in Italian
         if r["source"] == "legacy_import":
-            source = f"legacy import, batch {_batch_of(conn, r['import_item_id'])}"
+            source_key, source_value = "legacy import, batch {v}", _batch_of(conn, r["import_item_id"])
         else:
-            source = f"uploaded by {r['uploaded_by'] or 'someone not recorded'}"
+            source_key, source_value = "uploaded by {v}", r["uploaded_by"]
+        source = source_key.format(v=source_value or "someone not recorded")
         out.append({"kind": "file", "doc_id": r["id"], "date": date, "date_basis": basis,
                     "category": label(r), "file_type": FILE_TYPES.get(r["kind"], "File"),
-                    "display_name": r["display_name"], "source": source,
+                    "display_name": r["display_name"], "source": source, "source_key": source_key, "source_value": source_value,
                     "confirmed_by": r["decided_by"], "visit_id": r["visit_id"], "visit_date": r["visit_date"],
                     "published": r["publication"] is not None, "preview": r["kind"] in PREVIEWABLE,
                     "doc_kind": r["kind"]})
@@ -269,6 +271,7 @@ def timeline(conn, pid, actor, role, limit=200):
         out.append({"kind": "note", "visit_id": v["id"], "date": v["visit_date"] or "",
                     "date_basis": "visit date", "category": "Visit note", "file_type": "Note",
                     "display_name": _procedures(v["procedures"]), "source": f"confirmed by {v['reviewed_by'] or 'someone not recorded'}",
+                    "source_key": "confirmed by {v}", "source_value": v["reviewed_by"],
                     "visit_date": v["visit_date"], "published": False, "preview": False})
     out.sort(key=lambda e: (e["date"] or "", e.get("doc_id") or 0), reverse=True)
     return out

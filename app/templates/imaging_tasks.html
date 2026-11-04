@@ -2,13 +2,13 @@
 {% block content %}
 <div class="ds-page-head">
   <div class="min-w-0">
-    <p class="ds-page-eyebrow">Demo imaging requests · synthetic</p>
-    <h1 class="ds-page-title">Imaging tasks</h1>
-    <p class="ds-page-meta">Appointments linked to an imaging request that changed. Each stays here until reception records what it did.</p>
+    <p class="ds-page-eyebrow">{{ _("Demo imaging requests · synthetic") }}</p>
+    <h1 class="ds-page-title">{{ _("Imaging tasks") }}</h1>
+    <p class="ds-page-meta">{{ _("Appointments linked to an imaging request that changed. Each stays here until reception records what it did.") }}</p>
   </div>
 </div>
 <section class="card dash-card" aria-labelledby="tasks-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="tasks-title">Needs reception action</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="tasks-title">{{ _("Needs reception action") }}</h2></div>
   <div class="dash-card-body">
     {% if tasks %}
     <ul class="ds-rows">
@@ -16,11 +16,11 @@
       <li class="ds-row"><span class="ds-row-main">
         <span class="ds-row-title">{{ t.patient_name }} · appointment {{ t.when }}</span>
         <span class="ds-row-sub">Needs reception action: {{ t.reason }}. The appointment was left as it is.</span>
-      </span><span class="sx-row-acts"><span class="ds-badge ds-badge-warning">needs action</span><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking">Open<span class="visually-hidden">: {{ t.patient_name }}, appointment {{ t.when }}</span></a></span></li>
+      </span><span class="sx-row-acts"><span class="ds-badge ds-badge-warning">{{ _("needs action") }}</span><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imaging.view', cf=t.codice_fiscale, rid=t.request_id) }}#booking">{{ _("Open") }}<span class="visually-hidden">: {{ t.patient_name }}, appointment {{ t.when }}</span></a></span></li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">No imaging appointment needs reception action.</p>
+    <p class="dash-empty-line">{{ _("No imaging appointment needs reception action.") }}</p>
     {% endif %}
   </div>
 </section>

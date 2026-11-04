@@ -2,17 +2,15 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">System</p>
-    <h1 class="ds-page-title">Outside connections</h1>
-    <p class="ds-page-meta">Messaging, payments and phone — all off</p>
+    <p class="ds-page-eyebrow">{{ _("System") }}</p>
+    <h1 class="ds-page-title">{{ _("Outside connections") }}</h1>
+    <p class="ds-page-meta">{{ _("Messaging, payments and phone — all off") }}</p>
   </div>
 </div>
 
 <div class="ds-alert ds-alert-info mb-4" role="note">
-  <div><strong class="ds-alert-title">Nothing can reach the outside world</strong>
-  No messaging, payment or phone provider has been chosen, and no live connector exists in this
-  build — it is not switched off, it is absent. Real sending, real payments and real calls stay
-  <strong>blocked</strong> until a provider, its cost and a data agreement are approved.</div>
+  <div><strong class="ds-alert-title">{{ _("Nothing can reach the outside world") }}</strong>
+  {{ _html("No messaging, payment or phone provider has been chosen, and no live connector exists in this build — it is not switched off, it is absent. Real sending, real payments and real calls stay <strong>blocked</strong> until a provider, its cost and a data agreement are approved.") }}</div>
 </div>
 
 {# P29 U-001: one tile per connection - can it send, and if not why - then the parts side by side #}
@@ -26,7 +24,7 @@
 <div class="sx-panel sx-panel-2 sx-free" data-ux="connections">
 <div class="ux-stack">
 <section class="card dash-card" aria-labelledby="switches-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="switches-title">Switches</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="switches-title">{{ _("Switches") }}</h2></div>
   <div class="dash-card-body"><ul class="ds-rows">
     {% for r in rows %}
     <li class="ds-row">
@@ -43,12 +41,12 @@
       {% if not r.killed %}
       <form method="post" action="{{ url_for('providers.kill', kind=r.kind) }}" class="ms-auto">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Stop everything</button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Stop everything") }}</button>
       </form>
       {% elif can_rearm %}
       <form method="post" action="{{ url_for('providers.rearm', kind=r.kind) }}" class="ms-auto">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button class="btn btn-outline-secondary btn-sm" type="submit">Clear the stop</button>
+        <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Clear the stop") }}</button>
       </form>
       {% endif %}
     </li>
@@ -57,7 +55,7 @@
 </section>
 
 <section class="card dash-card" aria-labelledby="line-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="line-title">Phone line</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="line-title">{{ _("Phone line") }}</h2></div>
   <div class="dash-card-body">
     <ul class="ds-rows">
       <li class="ds-row">
@@ -70,13 +68,13 @@
         </span>
       </li>
       <li class="ds-row">
-        <span class="ds-row-main"><span class="ds-row-title">Calls in progress</span></span>
+        <span class="ds-row-main"><span class="ds-row-title">{{ _("Calls in progress") }}</span></span>
         <span class="ds-numeral ms-auto">{{ line.live_calls }}</span>
       </li>
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">Gone quiet</span>
-          <span class="ds-row-sub">no word from the line in two minutes; no sweep is scheduled, it runs by hand</span>
+          <span class="ds-row-title">{{ _("Gone quiet") }}</span>
+          <span class="ds-row-sub">{{ _("no word from the line in two minutes; no sweep is scheduled, it runs by hand") }}</span>
         </span>
         <span class="ds-numeral ms-auto">{{ line.stale_calls }}</span>
       </li>
@@ -87,15 +85,15 @@
 </div>
 <div class="ux-stack">
 <section class="card dash-card" aria-labelledby="receipts-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="receipts-title">Delivery</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="receipts-title">{{ _("Delivery") }}</h2></div>
   <div class="dash-card-body">
     <ul class="ds-rows">
       {% for state, n in receipts.items() %}
       <li class="ds-row">
         <span class="ds-row-main">
           <span class="ds-row-title">{{ state | capitalize }}</span>
-          {% if state == 'accepted' %}<span class="ds-row-sub">taken by a provider — not the same as arrived</span>{% endif %}
-          {% if state == 'unknown' %}<span class="ds-row-sub">outcome genuinely unknown; nothing is re-sent on its own</span>{% endif %}
+          {% if state == 'accepted' %}<span class="ds-row-sub">{{ _("taken by a provider — not the same as arrived") }}</span>{% endif %}
+          {% if state == 'unknown' %}<span class="ds-row-sub">{{ _("outcome genuinely unknown; nothing is re-sent on its own") }}</span>{% endif %}
         </span>
         <span class="ds-numeral ms-auto">{{ n }}</span>
       </li>
@@ -108,7 +106,7 @@
 </section>
 
 <section class="card dash-card" aria-labelledby="events-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="events-title">Recent</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="events-title">{{ _("Recent") }}</h2></div>
   <div class="dash-card-body">
     {% if events %}
     <ul class="ds-rows">
@@ -126,7 +124,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">Nothing has been attempted.</p>
+    <p class="dash-empty-line">{{ _("Nothing has been attempted.") }}</p>
     {% endif %}
   </div>
 </section>

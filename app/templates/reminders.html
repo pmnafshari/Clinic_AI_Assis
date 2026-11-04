@@ -2,8 +2,8 @@
 {% block content %}
 <div class="ds-page-head">
   <div>
-    <p class="ds-page-eyebrow">Reminders</p>
-    <h1 class="ds-page-title">Send queue</h1>
+    <p class="ds-page-eyebrow">{{ _("Reminders") }}</p>
+    <h1 class="ds-page-title">{{ _("Send queue") }}</h1>
     <p class="ds-page-meta">Last run {{ last_run.started_at | appt_date ~ ' ' ~ (last_run.started_at | appt_time) if last_run else 'never' }}{% if last_run and last_run.status != 'ok' %} ({{ last_run.status }}){% endif %} · schedule: {{ schedule }}</p>
   </div>
 </div>
@@ -19,8 +19,8 @@
   <div class="dash-card-head">
     <h2 class="ds-card-title" id="queue-title">{{ (status | capitalize ~ ' reminders') if status else 'Latest reminders' }}</h2>
     {# P29 redesign: the states are a tab control - the count on each, the current one marked #}
-    <nav class="sx-tabs sx-tabs-sm" aria-label="Show">
-      <a href="{{ url_for('reminders.index') }}"{% if not status %} aria-current="page"{% endif %}>All</a>
+    <nav class="sx-tabs sx-tabs-sm" aria-label="{{ _('Show') }}">
+      <a href="{{ url_for('reminders.index') }}"{% if not status %} aria-current="page"{% endif %}>{{ _("All") }}</a>
       {% for state, n in counts.items() %}
       <a href="{{ url_for('reminders.index', status=state) }}"{% if status == state %} aria-current="page"{% endif %}>{{ state | capitalize }} <span class="sx-count">{{ n }}</span></a>
       {% endfor %}
@@ -28,7 +28,7 @@
   </div>
   {# P30: Sort and Filter on the rows loaded here (the tabs above choose a state on the server) #}
   {% if jobs %}
-  <div class="sx-tools sx-tools-row" data-list-tools data-for="reminder-rows" data-noun="reminder|reminders"
+  <div class="sx-tools sx-tools-row" data-list-tools data-for="reminder-rows" data-noun="{{ _('reminder|reminders') }}"
        data-sorts='{{ [['send', 'text', 1, 'Due soonest'], ['send', 'text', -1, 'Due latest'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
        data-filters='{{ [['kind', 'About', [['appointment', 'Appointment'], ['invoice', 'Invoice'], ['installment', 'Installment']]]] | tojson }}'></div>
   {% endif %}
@@ -50,7 +50,7 @@
         <form method="post" action="{{ url_for('reminders.retry', job_id=j.id) }}" class="sx-row-acts">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="status" value="{{ status or '' }}">
-          <button class="btn btn-outline-secondary btn-sm" type="submit">Try again</button>
+          <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Try again") }}</button>
         </form>
         {% endif %}
       </li>
@@ -58,9 +58,9 @@
     </ul>
     {% else %}
     {# P29 U-006: an empty list says what puts something in it #}
-    <p class="dash-empty-line">{% if status %}Nothing in that state. <a href="{{ url_for('reminders.index') }}">Show all reminders</a>{% else %}Nothing is queued. The reminder check queues one for each booked appointment, issued invoice and installment that comes due; while sending is off they wait here.{% endif %}</p>
+    <p class="dash-empty-line">{% if status %}{{ _("Nothing in that state.") }} <a href="{{ url_for('reminders.index') }}">{{ _("Show all reminders") }}</a>{% else %}{{ _("Nothing is queued. The reminder check queues one for each booked appointment, issued invoice and installment that comes due; while sending is off they wait here.") }}{% endif %}</p>
     {% endif %}
   </div>
 </section>
-{% if counts.get('delivered') is not none %}<p class="sx-scroll-foot"><span>Delivered: no channel reports delivery yet.</span></p>
+{% if counts.get('delivered') is not none %}<p class="sx-scroll-foot"><span>{{ _("Delivered: no channel reports delivery yet.") }}</span></p>
 {% endif %}{% endblock %}

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<nav aria-label="Breadcrumb" class="mb-3">
+<nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
-    <li><a href="/patients">Patients</a></li>
+    <li><a href="/patients">{{ _("Patients") }}</a></li>
     <li aria-current="page">{{ patient.patient_name }}</li>
   </ol>
 </nav>
@@ -11,21 +11,21 @@
 <div class="sx-rec-head" data-ux="record-head">
   <span class="ds-avatar ds-avatar-lg {{ patient.patient_name | tint }}" aria-hidden="true">{{ patient.patient_name | initials }}</span>
   <div class="sx-rec-text">
-    <p class="sx-rec-k">Patient record</p>
+    <p class="sx-rec-k">{{ _("Patient record") }}</p>
     <h1 class="sx-rec-name text-break">{{ patient.patient_name }}</h1>
-    <p class="sx-rec-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %}<span>{{ patient.phone|phone }}</span>{% endif %}<span>{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></p>
+    <p class="sx-rec-meta"><span class="font-monospace">{{ cf }}</span>{% if patient.phone %}<span>{{ patient.phone|phone }}</span>{% endif %}<span>{{ _('{n} visit on record', n=1) if patient.visit_dates | length == 1 else _('{n} visits on record', n=patient.visit_dates | length) }}</span></p>
   </div>
-  <p class="sx-rec-next"><span>Next appointment</span><strong>{{ next_booked or 'No booking' }}</strong></p>
+  <p class="sx-rec-next"><span>{{ _("Next appointment") }}</span><strong>{{ next_booked or _('No booking') }}</strong></p>
   {% if authorize(g.user.role, 'append_note') or authorize(g.user.role, 'review_summary') or authorize(g.user.role, 'read_clinical') %}
   <div class="sx-rec-acts">
     {% if authorize(g.user.role, 'review_summary') %}
-    <a href="{{ url_for('summary.page', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-card-checklist" aria-hidden="true"></i> Next-visit summary</a>
+    <a href="{{ url_for('summary.page', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-card-checklist" aria-hidden="true"></i> {{ _("Next-visit summary") }}</a>
     {% endif %}
     {% if authorize(g.user.role, 'read_clinical') %}
-    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-folder2-open" aria-hidden="true"></i> Documents</a>
+    <a href="{{ url_for('documents.index', cf=cf) }}" class="btn sx-btn-ghost"><i class="bi bi-folder2-open" aria-hidden="true"></i> {{ _("Documents") }}</a>
     {% endif %}
     {% if authorize(g.user.role, 'append_note') %}
-    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-light"><i class="bi bi-journal-plus" aria-hidden="true"></i> Add note</a>
+    <a href="{{ url_for('notes.new_note', cf=cf) }}" class="btn btn-light"><i class="bi bi-journal-plus" aria-hidden="true"></i> {{ _("Add note") }}</a>
     {% endif %}
   </div>
   {% endif %}
@@ -35,13 +35,13 @@
 {# P29 redesign: the record grouped into tabs, like the patient portal's pages. every section is the same markup it
    was before, moved into the tab it belongs to; a role only gets the tabs it may open. without script the tab bar
    stays hidden and every section is on the page in order. app.js opens the tab holding a linked #id (e.g. #imaging). #}
-{% set tabs = [('overview', 'Overview', 'bi-person-lines-fill', none)] %}
-{% if show_clinical %}{% set tabs = tabs + [('clinical', 'Clinical', 'bi-heart-pulse', clinical | length)] %}{% endif %}
-{% if show_clinical or authorize(g.user.role, 'upload_file') %}{% set tabs = tabs + [('files', 'Files', 'bi-folder2-open', file_timeline | length if show_clinical else none)] %}{% endif %}
-{% set tabs = tabs + [('billing', 'Billing', 'bi-receipt', patient.invoices | length)] %}
-{% set tabs = tabs + [('portal', 'Portal & consent', 'bi-shield-check', none)] %}
-{% if authorize(g.user.role, 'view_imaging_requests') %}{% set tabs = tabs + [('imaging', 'Imaging', 'bi-camera', imaging | length)] %}{% endif %}
-<div class="sx-tabs" role="tablist" aria-label="Sections of this record" data-record-tabs hidden>
+{% set tabs = [('overview', _('Overview'), 'bi-person-lines-fill', none)] %}
+{% if show_clinical %}{% set tabs = tabs + [('clinical', _('Clinical'), 'bi-heart-pulse', clinical | length)] %}{% endif %}
+{% if show_clinical or authorize(g.user.role, 'upload_file') %}{% set tabs = tabs + [('files', _('Files'), 'bi-folder2-open', file_timeline | length if show_clinical else none)] %}{% endif %}
+{% set tabs = tabs + [('billing', _('Billing'), 'bi-receipt', patient.invoices | length)] %}
+{% set tabs = tabs + [('portal', _('Portal & consent'), 'bi-shield-check', none)] %}
+{% if authorize(g.user.role, 'view_imaging_requests') %}{% set tabs = tabs + [('imaging', _('Imaging'), 'bi-camera', imaging | length)] %}{% endif %}
+<div class="sx-tabs" role="tablist" aria-label="{{ _('Sections of this record') }}" data-record-tabs hidden>
   {% for key, label, icon, n in tabs %}
   <button type="button" role="tab" id="tabbtn-{{ key }}" aria-controls="tab-{{ key }}" aria-selected="{{ 'true' if loop.first else 'false' }}"{% if not loop.first %} tabindex="-1"{% endif %}><i class="bi {{ icon }}" aria-hidden="true"></i> {{ label }}{% if n %} <span class="sx-count">{{ n }}</span>{% endif %}</button>
   {% endfor %}
@@ -52,40 +52,40 @@
   {# a visit filed without a date still counts as a visit; only dated ones say when #}
   {% set dated = patient.visit_dates | reject('none') | sort | list %}
   <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="overview-tiles">
-    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Next appointment</span>
-      <span class="ux-kpi-value">{{ next_booked[:10] if next_booked else 'No booking' }}</span>
-      <span class="ux-kpi-sub">{{ ('at ' ~ next_booked[11:]) if next_booked else 'nothing booked yet' }}</span></div>
-    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Last visit</span>
-      <span class="ux-kpi-value">{{ dated | last if dated else ('Date unknown' if patient.visit_dates else 'No visit yet') }}</span>
-      <span class="ux-kpi-sub">{{ patient.visit_dates | length }} visit{{ 's' if patient.visit_dates | length != 1 }} on record</span></div>
-    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed</span>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Next appointment") }}</span>
+      <span class="ux-kpi-value">{{ next_booked[:10] if next_booked else _('No booking') }}</span>
+      <span class="ux-kpi-sub">{{ _('at {time}', time=next_booked[11:]) if next_booked else _('nothing booked yet') }}</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Last visit") }}</span>
+      <span class="ux-kpi-value">{{ dated | last if dated else (_('Date unknown') if patient.visit_dates else _('No visit yet')) }}</span>
+      <span class="ux-kpi-sub">{{ _('{n} visit on record', n=1) if patient.visit_dates | length == 1 else _('{n} visits on record', n=patient.visit_dates | length) }}</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Billed") }}</span>
       <span class="ux-kpi-value">€ {{ "%.2f" | format(billed) }}</span>
-      <span class="ux-kpi-sub">{{ patient.invoices | length }} line{{ 's' if patient.invoices | length != 1 }}{% if ledger %} · € {{ "%.2f" | format(ledger.outstanding_cents / 100) }} owed{% endif %}</span></div>
+      <span class="ux-kpi-sub">{{ _('{n} line', n=1) if patient.invoices | length == 1 else _('{n} lines', n=patient.invoices | length) }}{% if ledger %} · {{ _('€ {amount} owed', amount="%.2f" | format(ledger.outstanding_cents / 100)) }}{% endif %}</span></div>
   <!--/tiles--></div>
   <div class="sx-panel-col">
     <section class="card dash-card sx-h-s" aria-labelledby="profile-title">
       <div class="dash-card-head">
-        <h2 class="ds-card-title" id="profile-title">Demographics</h2>
+        <h2 class="ds-card-title" id="profile-title">{{ _("Demographics") }}</h2>
         {% if authorize(g.user.role, 'update_field') %}
         <button type="button" class="btn btn-outline-secondary btn-sm"
           data-bs-toggle="modal" data-bs-target="#editModal"
           hx-get="{{ url_for('patients.edit_form_fragment', cf=cf, field='phone') }}"
-          hx-target="#modal-body-target" hx-swap="innerHTML"><i class="bi bi-pencil"></i> Edit</button>
+          hx-target="#modal-body-target" hx-swap="innerHTML"><i class="bi bi-pencil"></i> {{ _("Edit") }}</button>
         {% else %}
-        <span class="ds-row-sub">Changes are made by a dentist</span>
+        <span class="ds-row-sub">{{ _("Changes are made by a dentist") }}</span>
         {% endif %}
       </div>
       <div class="dash-card-body">
         <dl class="detail-list">
-          <div><dt>Codice Fiscale</dt><dd class="font-monospace">{{ cf }}</dd></div>
-          <div><dt>Phone</dt><dd>{{ patient.phone|phone or ("No phone on file - add one" if authorize(g.user.role, 'update_field') else "No phone on file") }}</dd></div>
+          <div><dt>{{ _("Codice Fiscale") }}</dt><dd class="font-monospace">{{ cf }}</dd></div>
+          <div><dt>{{ _("Phone") }}</dt><dd>{{ patient.phone|phone or (_("No phone on file - add one") if authorize(g.user.role, 'update_field') else _("No phone on file")) }}</dd></div>
         </dl>
       </div>
     </section>
 
     <section class="card dash-card sx-h-s" aria-labelledby="visits-title">
       <div class="dash-card-head">
-        <h2 class="ds-card-title" id="visits-title">Visit dates</h2>
+        <h2 class="ds-card-title" id="visits-title">{{ _("Visit dates") }}</h2>
       </div>
       <div class="dash-card-body">
         {% if patient.visit_dates %}
@@ -93,12 +93,12 @@
           {% for d in patient.visit_dates %}
           <li class="ds-row">
             <span class="ds-kpi-icon ds-row-lead" aria-hidden="true"><i class="bi bi-calendar3"></i></span>
-            <span class="ds-row-main"><span class="ds-row-title">{{ d or 'Date not recorded' }}</span></span>
+            <span class="ds-row-main"><span class="ds-row-title">{{ d or _('Date not recorded') }}</span></span>
           </li>
           {% endfor %}
         </ul>
         {% else %}
-        <p class="dash-empty-line">No visits on record. Filing a note for this patient adds one.</p>
+        <p class="dash-empty-line">{{ _("No visits on record. Filing a note for this patient adds one.") }}</p>
         {% endif %}
       </div>
     </section>
@@ -111,8 +111,8 @@
     <section class="card dash-card sx-h-m sx-wide" aria-labelledby="timeline-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="timeline-title">Record timeline</h2>
-          <p class="ds-card-sub">Visits, appointments and billing: what is coming up, then what happened, newest first</p>
+          <h2 class="ds-card-title" id="timeline-title">{{ _("Record timeline") }}</h2>
+          <p class="ds-card-sub">{{ _("Visits, appointments and billing: what is coming up, then what happened, newest first") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -120,32 +120,32 @@
            latest eight and keeps the rest behind View all #}
         {% macro tl_row(e) %}
           <li class="tl-item tl-{{ e.kind }}">
-            <span class="tl-when"><span class="tl-type">{{ e.type }}</span><span class="tl-date">{{ e.date or 'Date not recorded' }}</span>{% if e.time %}<span class="tl-time">{{ e.time }}</span>{% endif %}</span>
+            <span class="tl-when"><span class="tl-type">{{ _(e.type) }}</span><span class="tl-date">{{ e.date or _('Date not recorded') }}</span>{% if e.time %}<span class="tl-time">{{ e.time }}</span>{% endif %}</span>
             <span class="tl-main">
-              <span class="ds-row-title">{{ e.title }} <span class="tl-status">{{ e.status }}</span></span>
-              {% if e.detail %}<span class="ds-row-sub">{{ e.detail }}</span>{% endif %}
-              <span class="tl-source">{{ e.source }}</span>
+              <span class="ds-row-title">{{ _(e.title_key, **e.title_values) if e.title_key else e.title }} <span class="tl-status">{{ _(e.status) }}</span></span>
+              {% if e.detail %}<span class="ds-row-sub">{{ _(e.detail_key, **e.detail_values) if e.get('detail_key') else e.detail }}</span>{% endif %}
+              <span class="tl-source">{{ _(e.source) }}</span>
             </span>
           </li>
         {% endmacro %}
         {% if timeline.upcoming or timeline.history or timeline.undated %}
-        <h3 class="tl-part" data-tl="upcoming">Coming up <span class="tl-part-note">nearest first</span></h3>
+        <h3 class="tl-part" data-tl="upcoming">{{ _("Coming up") }} <span class="tl-part-note">{{ _("nearest first") }}</span></h3>
         {% if timeline.upcoming %}<ol class="tl">{% for e in timeline.upcoming %}{{ tl_row(e) }}{% endfor %}</ol>
-        {% else %}<p class="text-secondary small">Nothing booked or requested ahead.</p>{% endif %}
-        <h3 class="tl-part" data-tl="history">History <span class="tl-part-note">newest first</span></h3>
+        {% else %}<p class="text-secondary small">{{ _("Nothing booked or requested ahead.") }}</p>{% endif %}
+        <h3 class="tl-part" data-tl="history">{{ _("History") }} <span class="tl-part-note">{{ _("newest first") }}</span></h3>
         {% if timeline.history %}
         <ol class="tl">{% for e in timeline.history[:8] %}{{ tl_row(e) }}{% endfor %}</ol>
         {% if timeline.history | length > 8 %}
-        <details class="tl-more"><summary>View all {{ timeline.history | length }} events</summary>
+        <details class="tl-more"><summary>{{ _('View all {n} events', n=timeline.history | length) }}</summary>
           <ol class="tl" start="9">{% for e in timeline.history[8:] %}{{ tl_row(e) }}{% endfor %}</ol>
         </details>
         {% endif %}
-        {% else %}<p class="text-secondary small">Nothing has happened yet.</p>{% endif %}
-        <h3 class="tl-part" data-tl="undated">Not dated</h3>
+        {% else %}<p class="text-secondary small">{{ _("Nothing has happened yet.") }}</p>{% endif %}
+        <h3 class="tl-part" data-tl="undated">{{ _("Not dated") }}</h3>
         {% if timeline.undated %}<ol class="tl">{% for e in timeline.undated %}{{ tl_row(e) }}{% endfor %}</ol>
-        {% else %}<p class="text-secondary small mb-0">Every event has a date.</p>{% endif %}
+        {% else %}<p class="text-secondary small mb-0">{{ _("Every event has a date.") }}</p>{% endif %}
         {% else %}
-        <p class="text-secondary mb-0">Nothing recorded for this patient yet.</p>
+        <p class="text-secondary mb-0">{{ _("Nothing recorded for this patient yet.") }}</p>
         {% endif %}
       </div>
     </section>
@@ -157,8 +157,8 @@
     <section class="card dash-card sx-h-l" aria-labelledby="clinical-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="clinical-title">Clinical history</h2>
-          <p class="ds-card-sub">Dentist only</p>
+          <h2 class="ds-card-title" id="clinical-title">{{ _("Clinical history") }}</h2>
+          <p class="ds-card-sub">{{ _("Dentist only") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -167,23 +167,23 @@
           {% for visit in clinical %}
           <li class="timeline-item">
             <div class="timeline-head">
-              <span class="timeline-date">{{ visit.visit_date or "Date not recorded" }}</span>
+              <span class="timeline-date">{{ visit.visit_date or _("Date not recorded") }}</span>
               <button type="button" class="btn btn-outline-secondary btn-sm"
                 data-bs-toggle="modal" data-bs-target="#editModal"
                 hx-get="{{ url_for('patients.visit_edit_form_fragment', cf=cf, visit_id=visit.id) }}"
-                hx-target="#modal-body-target" hx-swap="innerHTML" aria-label="Edit visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Edit</button>
-              {% if similar_cases_enabled() %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}" aria-label="Similar cases for visit {{ visit.id }}, {{ visit.visit_date or 'no date' }}">Similar cases</a>{% endif %}
+                hx-target="#modal-body-target" hx-swap="innerHTML" aria-label="{{ _('Edit visit {id}, {date}', id=visit.id, date=visit.visit_date or _('no date')) }}">{{ _("Edit") }}</button>
+              {% if similar_cases_enabled() %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}" aria-label="{{ _('Similar cases for visit {id}, {date}', id=visit.id, date=visit.visit_date or _('no date')) }}">{{ _("Similar cases") }}</a>{% endif %}
             </div>
             <p class="timeline-note">{{ visit.clinical_notes }}</p>
             {% if visit.procedures %}
-            <p class="timeline-procs"><span class="visually-hidden">Procedures: </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>
+            <p class="timeline-procs"><span class="visually-hidden">{{ _("Procedures:") }} </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>
             {% endif %}
-            <p class="timeline-next">Recall written in the note: {{ visit.next_appointment or "none" }}</p>
+            <p class="timeline-next">{{ _('Recall written in the note: {recall}', recall=visit.next_appointment or _('none')) }}</p>
           </li>
           {% endfor %}
         </ol>
         {% else %}
-        <p class="dash-empty-line">No clinical visits on record. Filing a note for this patient adds one.</p>
+        <p class="dash-empty-line">{{ _("No clinical visits on record. Filing a note for this patient adds one.") }}</p>
         {% endif %}
       </div>
     </section>
@@ -197,25 +197,25 @@
     <section class="card dash-card sx-h-m" aria-labelledby="timeline-files-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="timeline-files-title">File timeline</h2>
-          <p class="ds-card-sub">Confirmed files and notes, newest first</p>
+          <h2 class="ds-card-title" id="timeline-files-title">{{ _("File timeline") }}</h2>
+          <p class="ds-card-sub">{{ _("Confirmed files and notes, newest first") }}</p>
         </div>
-        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.index', cf=cf) }}#timeline">All files</a>
+        <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.index', cf=cf) }}#timeline">{{ _("All files") }}</a>
       </div>
       <div class="dash-card-body">
         {% if file_timeline %}
-        <ol class="ds-rows" aria-label="Most recent confirmed files and notes">
+        <ol class="ds-rows" aria-label="{{ _('Most recent confirmed files and notes') }}">
           {% for e in file_timeline[:8] %}
           <li class="ds-row"><span class="ds-row-main">
-            <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or 'date unknown' }}</time> · {{ e.date_basis }}</span>
+            <span class="ds-row-sub"><time datetime="{{ e.date }}">{{ e.date or _('date unknown') }}</time> · {{ _(e.date_basis) }}</span>
             <span class="ds-row-title text-break">{{ e.category }} · {{ e.display_name }}</span>
-            <span class="ds-row-sub">{{ e.file_type }} · {{ e.source }}{% if e.visit_date %} · visit of {{ e.visit_date }}{% endif %}{% if e.kind == 'file' %} · {{ 'shown to patient' if e.published else 'not shown to patient' }}{% endif %}</span>
-          </span>{% if e.kind == 'file' %}<span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">Open<span class="visually-hidden">: {{ e.category }} · {{ e.display_name }}</span></a></span>{% endif %}</li>
+            <span class="ds-row-sub">{{ _(e.file_type) }} · {{ _(e.source_key, v=e.source_value or _('someone not recorded')) }}{% if e.visit_date %} · {{ _('visit of {date}', date=e.visit_date) }}{% endif %}{% if e.kind == 'file' %} · {{ _('shown to patient') if e.published else _('not shown to patient') }}{% endif %}</span>
+          </span>{% if e.kind == 'file' %}<span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">{{ _("Open") }}<span class="visually-hidden">: {{ e.category }} · {{ e.display_name }}</span></a></span>{% endif %}</li>
           {% endfor %}
         </ol>
-        {% if file_timeline | length > 8 %}<p class="ds-row-sub mb-0">{{ file_timeline | length - 8 }} more on the <a href="{{ url_for('documents.index', cf=cf) }}#timeline">Files page</a>.</p>{% endif %}
+        {% if file_timeline | length > 8 %}<p class="ds-row-sub mb-0">{{ _html('{n} more on the <a href="{href}">Files page</a>.', n=file_timeline | length - 8, href=url_for('documents.index', cf=cf) ~ '#timeline') }}</p>{% endif %}
         {% else %}
-        <p class="dash-empty-line">No confirmed files or notes yet.</p>
+        <p class="dash-empty-line">{{ _("No confirmed files or notes yet.") }}</p>
         {% endif %}
       </div>
     </section>
@@ -226,8 +226,8 @@
     <section class="card dash-card sx-h-m" aria-labelledby="files-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="files-title">Files</h2>
-          <p class="ds-card-sub">The intake folder as filed - not all reviewed</p>
+          <h2 class="ds-card-title" id="files-title">{{ _("Files") }}</h2>
+          <p class="ds-card-sub">{{ _("The intake folder as filed - not all reviewed") }}</p>
         </div>
       </div>
       <div class="dash-card-body patient-files">
@@ -239,8 +239,8 @@
     <section class="card dash-card {{ 'sx-h-s sx-wide' if show_clinical else 'sx-h-m' }}" aria-labelledby="upload-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="upload-title">Upload files</h2>
-          <p class="ds-card-sub">Filed straight to this patient</p>
+          <h2 class="ds-card-title" id="upload-title">{{ _("Upload files") }}</h2>
+          <p class="ds-card-sub">{{ _("Filed straight to this patient") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -253,15 +253,15 @@
     <section class="card dash-card sx-h-m" aria-labelledby="next-steps-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="next-steps-title">What happens next</h2>
-          <p class="ds-card-sub">Your part ends at the upload</p>
+          <h2 class="ds-card-title" id="next-steps-title">{{ _("What happens next") }}</h2>
+          <p class="ds-card-sub">{{ _("Your part ends at the upload") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
         <ol class="sx-steps">
-          <li><span class="sx-step-n" aria-hidden="true">1</span><span><strong>You upload</strong><small>The file is stored for this patient, on this machine.</small></span></li>
-          <li><span class="sx-step-n" aria-hidden="true">2</span><span><strong>It is read and sorted</strong><small>A note waits for a dentist's review; a file that cannot be read is marked as needing review. Your Home shows each upload's state.</small></span></li>
-          <li><span class="sx-step-n" aria-hidden="true">3</span><span><strong>The patient sees nothing yet</strong><small>A file reaches the patient's portal only when a dentist chooses Show to patient.</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">1</span><span><strong>{{ _('You upload') }}</strong><small>{{ _("The file is stored for this patient, on this machine.") }}</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">2</span><span><strong>{{ _('It is read and sorted') }}</strong><small>{{ _("A note waits for a dentist's review; a file that cannot be read is marked as needing review. Your Home shows each upload's state.") }}</small></span></li>
+          <li><span class="sx-step-n" aria-hidden="true">3</span><span><strong>{{ _('The patient sees nothing yet') }}</strong><small>{{ _("A file reaches the patient's portal only when a dentist chooses Show to patient.") }}</small></span></li>
         </ol>
       </div>
     </section>
@@ -273,50 +273,50 @@
 
 <div class="sx-panel" id="tab-billing" role="tabpanel" aria-labelledby="tabbtn-billing" tabindex="0">
   <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="billing-tiles">
-    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed in total</span>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Billed in total") }}</span>
       <span class="ux-kpi-value">€ {{ "%.2f" | format(patient.invoices | sum(attribute='amount')) }}</span>
-      <span class="ux-kpi-sub">{% if ledger %}€ {{ "%.2f" | format(ledger.outstanding_cents / 100) }} still owed, from the ledger{% else %}paid status is on the billing page{% endif %}</span></div>
-    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Billed lines</span>
-      <span class="ux-kpi-value">{{ patient.invoices | length }}</span><span class="ux-kpi-sub">from the filed notes</span></div>
-    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Visits on record</span>
-      <span class="ux-kpi-value">{{ patient.visit_dates | length }}</span><span class="ux-kpi-sub">{% set dated_b = patient.visit_dates | reject('none') | sort | list %}{{ ('last ' ~ (dated_b | last)) if dated_b else ('no date filed' if patient.visit_dates else 'none yet') }}</span></div>
+      <span class="ux-kpi-sub">{% if ledger %}{{ _('€ {amount} still owed, from the ledger', amount="%.2f" | format(ledger.outstanding_cents / 100)) }}{% else %}{{ _('paid status is on the billing page') }}{% endif %}</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Billed lines") }}</span>
+      <span class="ux-kpi-value">{{ patient.invoices | length }}</span><span class="ux-kpi-sub">{{ _("from the filed notes") }}</span></div>
+    <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Visits on record") }}</span>
+      <span class="ux-kpi-value">{{ patient.visit_dates | length }}</span><span class="ux-kpi-sub">{% set dated_b = patient.visit_dates | reject('none') | sort | list %}{{ _('last {date}', date=dated_b | last) if dated_b else (_('no date filed') if patient.visit_dates else _('none yet')) }}</span></div>
   <!--/tiles--></div>
     <section class="card dash-card sx-h-m" aria-labelledby="invoices-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="invoices-title">Invoices{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">billing</a>{% endif %}</h2>
-          <p class="ds-card-sub">Billed lines, and each invoice's state from the ledger</p>
+          <h2 class="ds-card-title" id="invoices-title">{{ _("Invoices") }}{% if authorize(g.user.role, 'view_billing') %} · <a href="{{ url_for('billing.patient', cf=cf) }}">{{ _("billing") }}</a>{% endif %}</h2>
+          <p class="ds-card-sub">{{ _("Billed lines, and each invoice's state from the ledger") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
         {% if patient.invoices %}
         <table class="ux-table sx-lines">
-          <caption class="visually-hidden">Billed lines</caption>
-          <thead><tr><th scope="col">#</th><th scope="col">Description</th><th scope="col" class="ux-num">Amount</th></tr></thead>
+          <caption class="visually-hidden">{{ _("Billed lines") }}</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">{{ _("Description") }}</th><th scope="col" class="ux-num">{{ _("Amount") }}</th></tr></thead>
           <tbody>
           {% for inv in patient.invoices %}
-          <tr data-line><td data-label="#" class="ux-muted">{{ loop.index }}</td><td data-label="Description"><strong>{{ inv.description }}</strong></td>
-            <td data-label="Amount" class="ux-num"><span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span></td></tr>
+          <tr data-line><td data-label="#" class="ux-muted">{{ loop.index }}</td><td data-label="{{ _('Description') }}"><strong>{{ inv.description }}</strong></td>
+            <td data-label="{{ _('Amount') }}" class="ux-num"><span class="ds-numeral invoice-amount">€ {{ "%.2f" | format(inv.amount) }}</span></td></tr>
           {% endfor %}
           </tbody>
         </table>
         {% if ledger and ledger.invoices %}
         <table class="ux-table sx-lines mt-3" data-ux="record-ledger">
-          <caption class="visually-hidden">Invoices and what is paid, from the ledger</caption>
-          <thead><tr><th scope="col">Visit</th><th scope="col">State</th><th scope="col" class="ux-num">Total</th><th scope="col" class="ux-num">Paid</th><th scope="col" class="ux-num">Owed</th></tr></thead>
+          <caption class="visually-hidden">{{ _("Invoices and what is paid, from the ledger") }}</caption>
+          <thead><tr><th scope="col">{{ _("Visit") }}</th><th scope="col">{{ _("State") }}</th><th scope="col" class="ux-num">{{ _("Total") }}</th><th scope="col" class="ux-num">{{ _("Paid") }}</th><th scope="col" class="ux-num">{{ _("Owed") }}</th></tr></thead>
           <tbody>
           {% for i in ledger.invoices %}
-          <tr><td data-label="Visit">{{ i.visit_date or 'Date not recorded' }}</td>
-            <td data-label="State">{{ {'unknown': 'Unknown', 'draft': 'Draft', 'issued': 'Issued', 'partially_paid': 'Part paid', 'paid': 'Paid', 'void': 'Cancelled'}[i.state] }}</td>
-            <td data-label="Total" class="ux-num">€ {{ "%.2f" | format(i.total_cents / 100) }}</td>
-            <td data-label="Paid" class="ux-num">{% if i.state == 'unknown' %}unknown{% else %}€ {{ "%.2f" | format(i.paid_cents / 100) }}{% endif %}</td>
-            <td data-label="Owed" class="ux-num">{% if i.state == 'unknown' %}unknown{% else %}€ {{ "%.2f" | format(i.outstanding_cents / 100) }}{% endif %}</td></tr>
+          <tr><td data-label="{{ _('Visit') }}">{{ i.visit_date or _('Date not recorded') }}</td>
+            <td data-label="{{ _('State') }}">{{ {'unknown': _('Unknown'), 'draft': _('Draft'), 'issued': _('Issued'), 'partially_paid': _('Part paid'), 'paid': _('Paid'), 'void': _('Cancelled')}[i.state] }}</td>
+            <td data-label="{{ _('Total') }}" class="ux-num">€ {{ "%.2f" | format(i.total_cents / 100) }}</td>
+            <td data-label="{{ _('Paid') }}" class="ux-num">{% if i.state == 'unknown' %}{{ _('unknown') }}{% else %}€ {{ "%.2f" | format(i.paid_cents / 100) }}{% endif %}</td>
+            <td data-label="{{ _('Owed') }}" class="ux-num">{% if i.state == 'unknown' %}{{ _('unknown') }}{% else %}€ {{ "%.2f" | format(i.outstanding_cents / 100) }}{% endif %}</td></tr>
           {% endfor %}
           </tbody>
         </table>
         {% endif %}
         {% else %}
-        <p class="dash-empty-line">No invoices on record. One is drafted when a visit with prices is filed for this patient.</p>
+        <p class="dash-empty-line">{{ _("No invoices on record. One is drafted when a visit with prices is filed for this patient.") }}</p>
         {% endif %}
       </div>
     </section>
@@ -328,8 +328,8 @@
     <section class="card dash-card sx-h-s" aria-labelledby="access-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="access-title">Patient portal access</h2>
-          <p class="ds-card-sub">A PIN lets the patient sign in to the portal</p>
+          <h2 class="ds-card-title" id="access-title">{{ _("Patient portal access") }}</h2>
+          <p class="ds-card-sub">{{ _("A PIN lets the patient sign in to the portal") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -339,7 +339,7 @@
             hx-post="{{ url_for('patients.issue_pin_submit', cf=cf) }}"
             hx-target="#patient-pin-target" hx-swap="innerHTML"
             hx-confirm="Issue a new PIN? Any PIN this patient already has will stop working.">
-            <i class="bi bi-key"></i> Issue patient PIN
+            <i class="bi bi-key"></i> {{ _("Issue patient PIN") }}
           </button>
           <div id="patient-pin-target"></div>
         </div>
@@ -351,7 +351,7 @@
             hx-post="{{ url_for('patients.revoke_pin_submit', cf=cf) }}"
             hx-target="#patient-pin-revoke-target" hx-swap="innerHTML"
             hx-confirm="Revoke this patient's PIN? They will be signed out immediately and their PIN will stop working until a new one is issued.">
-            <i class="bi bi-key"></i> Revoke patient PIN
+            <i class="bi bi-key"></i> {{ _("Revoke patient PIN") }}
           </button>
           <div id="patient-pin-revoke-target"></div>
         </div>
@@ -365,8 +365,8 @@
     <section class="card dash-card sx-h-s" aria-labelledby="rights-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="rights-title">Data requests</h2>
-          <p class="ds-card-sub">Access, copy, correction or erasure - reviewed by a dentist · Demo template wording, not a real clinic's procedure</p>
+          <h2 class="ds-card-title" id="rights-title">{{ _("Data requests") }}</h2>
+          <p class="ds-card-sub">{{ _("Access, copy, correction or erasure - reviewed by a dentist · Demo template wording, not a real clinic's procedure") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -375,26 +375,26 @@
           {% for r in requests %}
           <li class="ds-row"><span class="ds-row-main">
             <span class="ds-row-title">#{{ r.id }} · {{ r.kind }} · {{ r.status }}</span>
-            <span class="ds-row-sub">filed {{ r.requested_at | appt_date }} by {{ r.requested_role }}{% if r.reason %} · {{ r.reason }}{% endif %}{% if not authorize(g.user.role, 'manage_data_requests') %} · reviewed by a dentist in Data requests{% endif %}</span>
-          </span>{% if authorize(g.user.role, 'manage_data_requests') %}<span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}">Open<span class="visually-hidden">: data request {{ r.id }}</span></a></span>{% endif %}</li>
+            <span class="ds-row-sub">{{ _('filed {date} by {role}', date=r.requested_at | appt_date, role=_(r.requested_role)) }}{% if r.reason %} · {{ r.reason }}{% endif %}{% if not authorize(g.user.role, 'manage_data_requests') %} · {{ _('reviewed by a dentist in Data requests') }}{% endif %}</span>
+          </span>{% if authorize(g.user.role, 'manage_data_requests') %}<span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('data_requests.index') }}#req-{{ r.id }}">{{ _("Open") }}<span class="visually-hidden">{{ _(': data request {id}', id=r.id) }}</span></a></span>{% endif %}</li>
           {% endfor %}
         </ul>
         {% else %}
-        <p class="dash-empty-line">No data requests.{% if authorize(g.user.role, 'file_data_request') %} File one below when the patient asks for access, a copy, a correction or erasure.{% endif %}</p>
+        <p class="dash-empty-line">{{ _("No data requests.") }}{% if authorize(g.user.role, 'file_data_request') %} {{ _("File one below when the patient asks for access, a copy, a correction or erasure.") }}{% endif %}</p>
         {% endif %}
         {% if authorize(g.user.role, 'file_data_request') %}
         <form method="post" action="{{ url_for('data_requests.file_for_patient', cf=cf) }}" class="d-flex gap-2 flex-wrap mt-3">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <label class="ds-sr-only" for="rights-kind">Request</label>
+          <label class="ds-sr-only" for="rights-kind">{{ _("Request") }}</label>
           <select class="form-select form-select-sm w-auto" id="rights-kind" name="kind">
-            <option value="access">Access</option>
-            <option value="export">Copy of data</option>
-            <option value="amend">Correction</option>
-            <option value="erasure">Erasure</option>
+            <option value="access">{{ _("Access") }}</option>
+            <option value="export">{{ _("Copy of data") }}</option>
+            <option value="amend">{{ _("Correction") }}</option>
+            <option value="erasure">{{ _("Erasure") }}</option>
           </select>
-          <label class="ds-sr-only" for="rights-detail">Details</label>
-          <input type="text" class="form-control form-control-sm w-auto flex-grow-1" id="rights-detail" name="detail" placeholder="What the patient asked for" maxlength="1000">
-          <button type="submit" class="btn btn-outline-primary btn-sm">File request</button>
+          <label class="ds-sr-only" for="rights-detail">{{ _("Details") }}</label>
+          <input type="text" class="form-control form-control-sm w-auto flex-grow-1" id="rights-detail" name="detail" placeholder="{{ _('What the patient asked for') }}" maxlength="1000">
+          <button type="submit" class="btn btn-outline-primary btn-sm">{{ _("File request") }}</button>
         </form>
         {% endif %}
       </div>
@@ -403,44 +403,44 @@
     <section class="card dash-card sx-h-m sx-wide" aria-labelledby="consent-title">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="consent-title">Consent</h2>
-          <p class="ds-card-sub">Demo template wording - not a real clinic's consent text</p>
+          <h2 class="ds-card-title" id="consent-title">{{ _("Consent") }}</h2>
+          <p class="ds-card-sub">{{ _("Demo template wording - not a real clinic's consent text") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
         {# P30: a table. every consent's wording shows under its row; app.js folds it behind a Read out button #}
         <table class="ux-table sx-consent">
-          <caption class="visually-hidden">Consent recorded for this patient</caption>
-          <thead><tr><th scope="col">Consent</th><th scope="col">Status</th><th scope="col">Last change</th><th scope="col">Wording</th><th scope="col"><span class="visually-hidden">Action</span></th></tr></thead>
+          <caption class="visually-hidden">{{ _("Consent recorded for this patient") }}</caption>
+          <thead><tr><th scope="col">{{ _("Consent") }}</th><th scope="col">{{ _("Status") }}</th><th scope="col">{{ _("Last change") }}</th><th scope="col">{{ _("Wording") }}</th><th scope="col"><span class="visually-hidden">{{ _("Action") }}</span></th></tr></thead>
           <tbody>
           {% for c in consents %}
-          {% set label = {'ai_assistant': 'Portal assistant', 'messaging': 'Messages and reminders', 'recording': 'Call recording'}[c.purpose] %}
+          {% set label = {'ai_assistant': _('Portal assistant'), 'messaging': _('Messages and reminders'), 'recording': _('Call recording')}[c.purpose] %}
           <tr data-consent="{{ c.purpose }}">
-            <td data-label="Consent"><strong>{{ label }}</strong></td>
-            <td data-label="Status">
-              {% if c.granted and not c.outdated %}<span class="ds-badge ds-badge-success">Given</span>
-              {% elif c.outdated %}<span class="ds-badge ds-badge-warning">Ask again</span> <span class="ux-muted">given to older wording</span>
-              {% elif c.recorded %}<span class="ds-badge ds-badge-danger">Withdrawn</span>
-              {% else %}<span class="ds-badge ds-badge-neutral">Not asked</span>{% endif %}</td>
-            <td data-label="Last change">{% if c.ts %}{{ c.ts | appt_date }} · by {{ c.actor_role }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>
-            <td data-label="Wording"><button type="button" class="btn btn-outline-secondary btn-sm" data-read-out aria-expanded="true" aria-controls="wording-{{ c.purpose }}" hidden>Read out<span class="visually-hidden">: {{ label }}</span></button></td>
-            <td data-label="Action">
+            <td data-label="{{ _('Consent') }}"><strong>{{ label }}</strong></td>
+            <td data-label="{{ _('Status') }}">
+              {% if c.granted and not c.outdated %}<span class="ds-badge ds-badge-success">{{ _("Given") }}</span>
+              {% elif c.outdated %}<span class="ds-badge ds-badge-warning">{{ _("Ask again") }}</span> <span class="ux-muted">{{ _("given to older wording") }}</span>
+              {% elif c.recorded %}<span class="ds-badge ds-badge-danger">{{ _("Withdrawn") }}</span>
+              {% else %}<span class="ds-badge ds-badge-neutral">{{ _("Not asked") }}</span>{% endif %}</td>
+            <td data-label="{{ _('Last change') }}">{% if c.ts %}{{ c.ts | appt_date }} · {{ _('by {who}', who=_(c.actor_role)) }}{% else %}<span class="ux-muted">-</span>{% endif %}</td>
+            <td data-label="{{ _('Wording') }}"><button type="button" class="btn btn-outline-secondary btn-sm" data-read-out aria-expanded="true" aria-controls="wording-{{ c.purpose }}" hidden>{{ _("Read out") }}<span class="visually-hidden">: {{ label }}</span></button></td>
+            <td data-label="{{ _('Action') }}">
               {% if authorize(g.user.role, 'record_consent') %}
               <form method="post" action="{{ url_for('patients.consent_submit', cf=cf) }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="purpose" value="{{ c.purpose }}">
                 {% if c.granted and not c.outdated %}
                 <input type="hidden" name="granted" value="0">
-                <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="Record withdrawal: {{ label }}">Record withdrawal</button>
+                <button type="submit" class="btn btn-outline-secondary btn-sm" aria-label="{{ _('Record withdrawal: {what}', what=label) }}">{{ _("Record withdrawal") }}</button>
                 {% else %}
                 <input type="hidden" name="granted" value="1">
-                <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="Record consent: {{ label }}">Record consent</button>
+                <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="{{ _('Record consent: {what}', what=label) }}">{{ _("Record consent") }}</button>
                 {% endif %}
               </form>
               {% endif %}
             </td>
           </tr>
-          <tr id="wording-{{ c.purpose }}" class="sx-wording"><td colspan="5"><strong>Wording to read out ({{ c.version }}):</strong> {{ c.text }}</td></tr>
+          <tr id="wording-{{ c.purpose }}" class="sx-wording"><td colspan="5"><strong>{{ _('Wording to read out ({version}):', version=c.version) }}</strong> {{ c.text }}</td></tr>
           {% endfor %}
           </tbody>
         </table>
@@ -452,18 +452,18 @@
     {% if authorize(g.user.role, 'view_imaging_requests') %}
     <div class="sx-panel" id="tab-imaging" role="tabpanel" aria-labelledby="tabbtn-imaging" tabindex="0">
     <div class="ux-kpis ux-kpis-3 sx-wide" data-ux="imaging-tiles">
-      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Active requests</span>
-        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'active') | list | length }}</span><span class="ux-kpi-sub">ready to book</span></div>
-      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Drafts</span>
-        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'draft') | list | length }}</span><span class="ux-kpi-sub">not active yet</span></div>
-      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">Earlier versions</span>
-        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'in', ['superseded', 'cancelled']) | list | length }}</span><span class="ux-kpi-sub">superseded or cancelled</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Active requests") }}</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'active') | list | length }}</span><span class="ux-kpi-sub">{{ _("ready to book") }}</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Drafts") }}</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'equalto', 'draft') | list | length }}</span><span class="ux-kpi-sub">{{ _("not active yet") }}</span></div>
+      <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _("Earlier versions") }}</span>
+        <span class="ux-kpi-value">{{ imaging | selectattr('state', 'in', ['superseded', 'cancelled']) | list | length }}</span><span class="ux-kpi-sub">{{ _("superseded or cancelled") }}</span></div>
     <!--/tiles--></div>
     <section class="card dash-card sx-h-m" aria-labelledby="imaging-title" id="imaging">
       <div class="dash-card-head">
         <div>
-          <h2 class="ds-card-title" id="imaging-title">Imaging requests (demo)</h2>
-          <p class="ds-card-sub">Synthetic demo: only what a dentist recorded and activated counts</p>
+          <h2 class="ds-card-title" id="imaging-title">{{ _("Imaging requests (demo)") }}</h2>
+          <p class="ds-card-sub">{{ _("Synthetic demo: only what a dentist recorded and activated counts") }}</p>
         </div>
       </div>
       <div class="dash-card-body">
@@ -471,24 +471,24 @@
         <ul class="ds-rows">
           {% for r in imaging %}
           <li class="ds-row"><span class="ds-row-main">
-            <span class="ds-row-title">{{ r.exam_label }}, request {{ r.id }} v{{ r.version }}</span>
-            <span class="ds-row-sub">{{ r.state }}{% if r.activated_at %} · active since {{ r.activated_at | appt_date }}{% endif %} · by {{ r.activated_by or r.created_by }}</span>
+            <span class="ds-row-title">{{ _('{exam}, request {id} v{version}', exam=r.exam_label, id=r.id, version=r.version) }}</span>
+            <span class="ds-row-sub">{{ _(r.state) }}{% if r.activated_at %} · {{ _('active since {date}', date=r.activated_at | appt_date) }}{% endif %} · {{ _('by {who}', who=r.activated_by or r.created_by) }}</span>
           </span>
-          <span class="sx-row-acts"><span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ r.state }}</span><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imaging.view', cf=cf, rid=r.id) }}">Open<span class="visually-hidden">: {{ r.exam_label }}, request {{ r.id }}</span></a></span></li>
+          <span class="sx-row-acts"><span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ _(r.state) }}</span><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imaging.view', cf=cf, rid=r.id) }}">{{ _("Open") }}<span class="visually-hidden">{{ _(': {exam}, request {id}', exam=r.exam_label, id=r.id) }}</span></a></span></li>
           {% endfor %}
         </ul>
         {% elif not authorize(g.user.role, 'manage_imaging_requests') %}
         <p class="dash-empty-line">{{ imaging_empty }}</p>
         {% else %}
-        <p class="dash-empty-line">No imaging request for this patient.</p>
+        <p class="dash-empty-line">{{ _("No imaging request for this patient.") }}</p>
         {% endif %}
         {% if authorize(g.user.role, 'manage_imaging_requests') %}
         <form method="post" action="{{ url_for('imaging.create', cf=cf) }}" class="row g-2 align-items-end mt-2">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="submit_token" value="{{ imaging_token }}">
-          <div class="col-sm-4"><label for="exam" class="form-label">Type (demo list)</label><select id="exam" name="exam" class="form-select form-select-sm">{% for k, v in imaging_exams.items() %}<option value="{{ k }}">{{ v or 'Other (write it)' }}</option>{% endfor %}</select></div>
-          <div class="col-sm-4"><label for="exam_label" class="form-label">If other: the type</label><input id="exam_label" name="label" class="form-control form-control-sm" maxlength="80"></div>
-          <div class="col-sm-4"><label for="exam_note" class="form-label">Administrative note (optional)</label><input id="exam_note" name="note" class="form-control form-control-sm" maxlength="300"></div>
-          <div class="col-12"><button class="btn btn-outline-primary btn-sm" type="submit">New demo imaging request</button> <span class="ds-row-sub">saved as a draft for {{ patient.patient_name }}; you activate it separately</span></div>
+          <div class="col-sm-4"><label for="exam" class="form-label">{{ _("Type (demo list)") }}</label><select id="exam" name="exam" class="form-select form-select-sm">{% for k, v in imaging_exams.items() %}<option value="{{ k }}">{{ v or _('Other (write it)') }}</option>{% endfor %}</select></div>
+          <div class="col-sm-4"><label for="exam_label" class="form-label">{{ _("If other: the type") }}</label><input id="exam_label" name="label" class="form-control form-control-sm" maxlength="80"></div>
+          <div class="col-sm-4"><label for="exam_note" class="form-label">{{ _("Administrative note (optional)") }}</label><input id="exam_note" name="note" class="form-control form-control-sm" maxlength="300"></div>
+          <div class="col-12"><button class="btn btn-outline-primary btn-sm" type="submit">{{ _("New demo imaging request") }}</button> <span class="ds-row-sub">{{ _('saved as a draft for {name}; you activate it separately', name=patient.patient_name) }}</span></div>
         </form>
         {% endif %}
       </div>
@@ -501,7 +501,7 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
       <div class="modal-header">
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
       </div>
       <div class="modal-body" id="modal-body-target"></div>
     </div>

@@ -1,13 +1,13 @@
-<h2 class="section-title">Confirm change</h2>
+<h2 class="section-title">{{ _("Confirm change") }}</h2>
 {% if error %}
 <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
 {% else %}
 {% if change %}
 <dl class="confirm-rows">
-  <div><dt>Patient</dt><dd>{{ change.patient }}</dd></div>
-  <div><dt>Field</dt><dd>{{ change.field | capitalize }}</dd></div>
-  <div><dt>Now</dt><dd>{{ change.before or 'empty' }}</dd></div>
-  <div><dt>After</dt><dd><strong>{{ change.after or 'empty' }}</strong></dd></div>
+  <div><dt>{{ _("Patient") }}</dt><dd>{{ change.patient }}</dd></div>
+  <div><dt>{{ _("Field") }}</dt><dd>{{ change.field | capitalize }}</dd></div>
+  <div><dt>{{ _("Now") }}</dt><dd>{{ change.before or 'empty' }}</dd></div>
+  <div><dt>{{ _("After") }}</dt><dd><strong>{{ change.after or 'empty' }}</strong></dd></div>
 </dl>
 {% else %}
 <p class="fs-5 mb-3">{{ diff_line }}</p>
@@ -15,7 +15,7 @@
 <form hx-post="{{ url_for('agent.confirm_change') }}" hx-target="#modal-body-target" hx-swap="innerHTML" class="d-inline">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="token" value="{{ token }}">
-  <button type="submit" class="btn btn-primary">Confirm change</button>
+  <button type="submit" class="btn btn-primary">{{ _("Confirm change") }}</button>
 </form>
 {% endif %}
-<button type="button" class="btn btn-link text-secondary" data-bs-dismiss="modal">Discard change</button>
+<button type="button" class="btn btn-link text-secondary" data-bs-dismiss="modal">{{ _("Discard change") }}</button>
