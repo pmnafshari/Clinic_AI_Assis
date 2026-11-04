@@ -41,6 +41,13 @@ def _(text, **values):
     return text.format(**values) if values else text
 
 
+def template_text(text, **values):
+    """_() in a template: the words were written as page text, so they go out as page text did - &, < and > made
+    safe, an apostrophe left as it is - while every value, which may be a patient's, is escaped in full."""
+    words = Markup(_(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+    return words.format(**values) if values else words
+
+
 def markup(text, **values):
     # the few strings that carry their own <strong> or link: the words are ours, every value is escaped
     return Markup(_(text, **{k: escape(v) for k, v in values.items()}))

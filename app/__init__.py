@@ -81,7 +81,7 @@ def create_app():
     app.jinja_env.globals["authorize"] = authorize
     # P29 E-001: English and Italian (i18n.py)
     from . import i18n
-    app.jinja_env.globals["_"] = i18n._
+    app.jinja_env.globals["_"] = i18n.template_text
     app.jinja_env.globals["_html"] = i18n.markup
     app.jinja_env.globals["lang"] = i18n.current
     app.jinja_env.globals["flash_kind"] = lambda category: i18n.FLASH_KINDS.get(category, i18n.FLASH_NOTE)
