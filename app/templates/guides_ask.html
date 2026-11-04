@@ -38,7 +38,7 @@
     </form>
     {% if not result %}
     <p class="ds-row-sub mt-3 mb-1">{{ _("For example:") }}</p>
-    <ul class="mb-0">{% for e in examples %}<li class="ds-row-sub">{{ e }}</li>{% endfor %}</ul>
+    <ul class="mb-0">{% for e in examples %}<li class="ds-row-sub">{{ _(e) }}</li>{% endfor %}</ul>
     {% if not devices %}<p class="dash-empty-line mt-2">{{ _("No device is registered yet. A dentist adds devices and documents in the guides library.") }}</p>{% endif %}
     {% endif %}
   </div>
@@ -49,40 +49,40 @@
   {% if result.outcome == 'answer' %}
   {% set c = result.citations[0] %}
   {% set t = titles[c.source_id] %}
-  <div class="dash-card-head"><h2 class="ds-card-title" id="answer-title">From {{ c.title }}</h2>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="answer-title">{{ _('From {title}', title=c.title) }}</h2>
     <span class="ds-badge ds-badge-success">{{ _("Checked against the page") }}</span></div>
   <div class="dash-card-body">
     <p class="ds-row-sub mb-1">
-      {% if t.make %}{{ t.make }} {{ t.model }}{% if t.room %} ({{ t.room }}){% endif %} · {% endif %}{{ c.edition or ('version ' ~ c.version) }} · page {{ c.page }} · {{ 'Italian' if c.language == 'it' else 'English' }}
+      {% if t.make %}{{ t.make }} {{ t.model }}{% if t.room %} ({{ t.room }}){% endif %} · {% endif %}{{ c.edition or _('version {n}', n=c.version) }} · {{ _('page {n}', n=c.page) }} · {{ _('Italian') if c.language == 'it' else 'English' }}
     </p>
     <blockquote class="guide-passage" lang="{{ c.language }}">{{ c.passage }}</blockquote>
-    {% if c.from_figure %}<p class="ds-row-sub">Read from a picture on the page by OCR ({{ c.confidence|round|int }}% confidence) - check it on the page image.</p>{% endif %}
-    {% if result.explanation %}<p class="mb-2"><strong>In plain words:</strong> {{ result.explanation }}</p>{% endif %}
+    {% if c.from_figure %}<p class="ds-row-sub">{{ _('Read from a picture on the page by OCR ({n}% confidence) - check it on the page image.', n=c.confidence|round|int) }}</p>{% endif %}
+    {% if result.explanation %}<p class="mb-2"><strong>{{ _("In plain words:") }}</strong> {{ result.explanation }}</p>{% endif %}
     {% if result.warnings %}
     <div class="ds-alert ds-alert-warning mb-2" role="note">
       <div><strong class="ds-alert-title">{{ _("Warnings in this document") }}</strong>
-        <ul class="mb-0">{% for w in result.warnings %}<li lang="{{ c.language }}">{{ w.text }} <span class="ds-row-sub">(page {{ w.page }})</span></li>{% endfor %}</ul>
+        <ul class="mb-0">{% for w in result.warnings %}<li lang="{{ c.language }}">{{ w.text }} <span class="ds-row-sub">{{ _('(page {page})', page=w.page) }}</span></li>{% endfor %}</ul>
       </div>
     </div>
     {% endif %}
     <figure class="file-preview mb-2">
-      <img src="{{ url_for('guides.page_image', guide_id=c.source_id, page=c.page) }}" alt="Page {{ c.page }} of {{ c.title }}">
-      <figcaption class="ds-row-sub">Page {{ c.page }} as approved. Figures are shown as they are in the document.</figcaption>
+      <img src="{{ url_for('guides.page_image', guide_id=c.source_id, page=c.page) }}" alt="{{ _('Page {n} of {title}', n=c.page, title=c.title) }}">
+      <figcaption class="ds-row-sub">{{ _('Page {n} as approved. Figures are shown as they are in the document.', n=c.page) }}</figcaption>
     </figure>
-    <a href="{{ url_for('guides.source_view', guide_id=c.source_id, page=c.page) }}#page-{{ c.page }}">Open the document at page {{ c.page }}</a>
+    <a href="{{ url_for('guides.source_view', guide_id=c.source_id, page=c.page) }}#page-{{ c.page }}">{{ _('Open the document at page {n}', n=c.page) }}</a>
   </div>
   {% else %}
-  <div class="dash-card-head"><h2 class="ds-card-title" id="answer-title">{{ reason_titles[result.reason] }}</h2>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="answer-title">{{ _(reason_titles[result.reason]) }}</h2>
     <span class="ds-badge ds-badge-warning">{{ _("No answer given") }}</span></div>
   <div class="dash-card-body">
-    <p class="mb-1">{{ result.message }}</p>
-    <p class="mb-2"><strong>What to do:</strong> {{ result.escalation }}</p>
-    {% if result.reason == 'ask_device' %}<p class="ds-row-sub mb-0">{{ _("Choose it in") }} <label for="device_id" class="d-inline">{{ _("Device") }}</label> {{ _("above and ask again.") }}</p>{% endif %}
+    <p class="mb-1">{{ _msg(result.message) }}</p>
+    <p class="mb-2"><strong>{{ _("What to do:") }}</strong> {{ _msg(result.escalation) }}</p>
+    {% if result.reason == 'ask_device' %}{% set device_label %}<label for="device_id" class="d-inline">{{ _("Device") }}</label>{% endset %}<p class="ds-row-sub mb-0">{{ _html('Choose it in {label} above and ask again.', label=device_label) }}</p>{% endif %}
     {% if result.see and result.reason == 'unreadable' %}
-    <a href="{{ url_for('guides.source_view', guide_id=result.see.source_id, page=result.see.page) }}#page-{{ result.see.page }}">Open page {{ result.see.page }} of the document</a>
+    <a href="{{ url_for('guides.source_view', guide_id=result.see.source_id, page=result.see.page) }}#page-{{ result.see.page }}">{{ _('Open page {n} of the document', n=result.see.page) }}</a>
     {% endif %}
     {% if result.reason == 'conflict' and result.conflicting %}
-    <ul class="mb-0">{% for x in result.conflicting %}<li><a href="{{ url_for('guides.source_view', guide_id=x.source_id, page=x.page) }}#page-{{ x.page }}">{{ titles[x.source_id].title }}, page {{ x.page }}</a></li>{% endfor %}</ul>
+    <ul class="mb-0">{% for x in result.conflicting %}<li><a href="{{ url_for('guides.source_view', guide_id=x.source_id, page=x.page) }}#page-{{ x.page }}">{{ _('{title}, page {n}', title=titles[x.source_id].title, n=x.page) }}</a></li>{% endfor %}</ul>
     {% endif %}
   </div>
   {% endif %}

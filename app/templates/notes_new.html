@@ -5,8 +5,8 @@
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">
   <div>
-    <p class="ds-page-eyebrow">Intake{% if locked %} · {{ locked.patient_name }}{% endif %}</p>
-    <h1 class="ds-page-title">{% if locked %}Add note for {{ locked.patient_name }}{% else %}Add note{% endif %}</h1>
+    <p class="ds-page-eyebrow">{{ _("Intake") }}{% if locked %} · {{ locked.patient_name }}{% endif %}</p>
+    <h1 class="ds-page-title">{{ _('Add note for {name}', name=locked.patient_name) if locked else _('Add note') }}</h1>
     <p class="ds-page-meta">{{ _("The notes model reads the note; you check it before it is saved") }}</p>
   </div>
 <!--/page-head--></div>
@@ -19,7 +19,7 @@
 <div class="col-12 col-xl-8">
 <div class="card dash-card p-4">
   {% if error %}
-  <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+  <div class="ds-alert ds-alert-danger" role="alert">{{ _msg(error) }}</div>
   {% endif %}
   {# P04.06. a prefilled field looks exactly like one somebody typed and
      checked. saying where it came from, and how old that is, is what turns it
@@ -27,9 +27,7 @@
      onward, not only on the confirm step. #}
   {% if locked %}
   <p class="prefill-note">
-    Patient details come from {{ locked.source }}{% if locked.as_of %}, last updated
-    {{ locked.as_of }}{% else %} (no visit recorded yet){% endif %}. Nothing is saved until you
-    confirm.
+    {{ _('Patient details come from {source}, last updated {when}. Nothing is saved until you confirm.', source=_(locked.source), when=locked.as_of) if locked.as_of else _('Patient details come from {source} (no visit recorded yet). Nothing is saved until you confirm.', source=_(locked.source)) }}
   </p>
   {% endif %}
   <form method="post" action="{{ url_for('notes.new_note') }}" data-unsaved-guard>
@@ -44,7 +42,7 @@
       <textarea id="raw_note" name="raw_note" rows="6" class="form-control" required aria-describedby="raw-help"{% if not preview %} autofocus{% endif %}>{{ dictated or '' }}</textarea>
       <p class="ux-muted" id="raw-help">{{ _("Shorthand and Italian are fine. Nothing is saved at this step.") }}</p>
     </div>
-    <button type="submit" class="btn {{ 'btn-outline-primary' if preview else 'btn-primary' }}">{{ 'Read it again' if preview else 'Extract the draft' }}</button>
+    <button type="submit" class="btn {{ 'btn-outline-primary' if preview else 'btn-primary' }}">{{ _('Read it again') if preview else _('Extract the draft') }}</button>
   </form>
 
   {% if not preview %}
@@ -57,7 +55,7 @@
     <button type="submit" class="btn btn-outline-secondary btn-sm">{{ _("Turn into text") }}</button>
   </form>
   {% else %}
-  <p class="dash-empty-line mt-3">{{ dictation_why or 'Dictation is not available.' }}</p>
+  <p class="dash-empty-line mt-3">{{ _msg(dictation_why) or _('Dictation is not available.') }}</p>
   {% endif %}
   {% endif %}
 

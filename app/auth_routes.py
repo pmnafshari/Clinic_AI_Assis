@@ -6,6 +6,7 @@ import web_session
 from auth import PERMISSIONS, log_audit
 
 from .db import get_db
+from .i18n import _
 from .login_return import local_destination
 
 auth_bp = Blueprint("auth", __name__)
@@ -37,7 +38,7 @@ def login():
 
     role = web_auth.attempt_login(username, password, get_db())
     if role is None:
-        return render_template("login.html", error="invalid username or password", return_to=target,
+        return render_template("login.html", error=_("invalid username or password"), return_to=target,
                                **_lock_hint())
 
     token = web_session.create_session(get_db(), username, role)
@@ -70,22 +71,22 @@ def change_password():
     # confirm or a short new password burns a failed attempt against the
     # lockout and staff get locked out over mistakes in unrelated fields
     if not current:
-        return refuse("Enter your current password.")
+        return refuse(_("Enter your current password."))
     if not password:
-        return refuse("Enter a new password.")
+        return refuse(_("Enter a new password."))
     if password != confirm:
-        return refuse("The two passwords don't match.")
+        return refuse(_("The two passwords don't match."))
     missing = web_auth.password_missing(password)
     if missing:
-        return refuse("New password needs " + ", ".join(missing) + ".")
+        return refuse(_("New password needs {what}.", what=", ".join(_(m) for m in missing)))
     if password == current:
-        return refuse("New password must be different from your current one.")
+        return refuse(_("New password must be different from your current one."))
 
     conn = get_db()
     # one message for a wrong password and for a locked account - telling them
     # apart would confirm to an attacker that the password itself was right
     if web_auth.verify_current_password(g.user["username"], current, conn) is None:
-        return refuse("Current password is not correct.")
+        return refuse(_("Current password is not correct."))
 
     conn.execute(
         "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE username = ?",

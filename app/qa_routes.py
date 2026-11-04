@@ -8,6 +8,7 @@ from extract_note import OllamaUnreachable
 from local_model import local_urlopen
 
 from .db import get_chroma, get_db
+from .i18n import _
 
 qa_bp = Blueprint("qa", __name__)
 
@@ -45,7 +46,7 @@ def qa_page():
     if not authorize(g.user["role"], "read_notes"):
         log_audit(get_db(), g.user["username"], g.user["role"], "read_notes", None, allowed=0)
         return render_template(
-            "qa.html", refused=True, error="You don't have permission to view clinical records."
+            "qa.html", refused=True, error=_("You don't have permission to view clinical records.")
         )
 
     if request.method == "GET":

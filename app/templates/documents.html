@@ -113,7 +113,7 @@
       <input id="q" name="q" class="form-control" value="{{ query }}" maxlength="200">
       <button class="btn btn-primary btn-sm" type="submit">{{ _("Search") }}</button>
     </form>
-    {% if error %}<p class="dash-empty-line">{{ error }}</p>{% endif %}
+    {% if error %}<p class="dash-empty-line">{{ _msg(error) }}</p>{% endif %}
     {% if query and not results and not error %}<p class="dash-empty-line">{{ _("No confirmed document of this patient matches.") }}</p>{% endif %}
     {% if results %}
     <ul class="ds-rows">

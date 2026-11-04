@@ -5,23 +5,22 @@
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
-    <p class="ds-page-eyebrow">{% if device %}{{ label(device) }}{% else %}{{ {'admin': 'Administrative procedure', 'clinical': 'Procedure with clinical content', 'device': 'Device manual'}[s.kind] }}{% endif %}</p>
+    <p class="ds-page-eyebrow">{% if device %}{{ label(device) }}{% else %}{{ {'admin': _('Administrative procedure'), 'clinical': _('Procedure with clinical content'), 'device': _('Device manual')}[s.kind] }}{% endif %}</p>
     <h1 class="ds-page-title text-break">{{ s.title }}</h1>
-    <p class="ds-page-meta">{{ s.edition or ('version ' ~ s.version) }} · {{ 'Italian' if s.language == 'it' else 'English' }} · owner {{ s.owner }} · effective {{ s.effective }} ·
-      <span class="ds-badge {{ 'ds-badge-success' if s.status == 'approved' else 'ds-badge-warning' }}">{{ s.status.replace('_', ' ') }}</span>{% if s.approved_by %} by {{ s.approved_by }}{% endif %}</p>
+    <p class="ds-page-meta">{{ s.edition or _('version {n}', n=s.version) }} · {{ _('Italian') if s.language == 'it' else 'English' }} · {{ _('owner {who}', who=s.owner) }} · {{ _('effective {date}', date=s.effective) }} ·
+      <span class="ds-badge {{ 'ds-badge-success' if s.status == 'approved' else 'ds-badge-warning' }}">{{ _(s.status.replace('_', ' ')) }}</span>{% if s.approved_by %} {{ _('by {who}', who=s.approved_by) }}{% endif %}</p>
   </div>
 </div>
 
 {% if s.status == 'pending_review' %}
 <div class="ds-alert ds-alert-warning mb-3" role="note">
-  <div><strong class="ds-alert-title">Not searchable yet</strong>
-  Check every page against its image, especially pages read by OCR and pages flagged below. Nothing in a document
-  is followed as an instruction.{% if not s.synthetic %} <strong>This is not a synthetic demo document: it cannot be approved in this build (real manuals need document-specific permission).</strong>{% endif %}{% if s.reason %} {{ s.reason }}.{% endif %}</div>
+  <div><strong class="ds-alert-title">{{ _("Not searchable yet") }}</strong>
+  {{ _("Check every page against its image, especially pages read by OCR and pages flagged below. Nothing in a document is followed as an instruction.") }}{% if not s.synthetic %} <strong>{{ _("This is not a synthetic demo document: it cannot be approved in this build (real manuals need document-specific permission).") }}</strong>{% endif %}{% if s.reason %} {{ _msg(s.reason) }}.{% endif %}</div>
 </div>
 {% elif s.status in ('superseded', 'withdrawn', 'rejected') %}
-<div class="ds-alert ds-alert-info mb-3" role="note"><div><strong class="ds-alert-title">Not used for answers</strong> {{ s.reason or '' }}</div></div>
+<div class="ds-alert ds-alert-info mb-3" role="note"><div><strong class="ds-alert-title">{{ _("Not used for answers") }}</strong> {{ _msg(s.reason or '') }}</div></div>
 {% endif %}
-{% if hidden and not reviewer %}<p class="ds-row-sub">{{ hidden }} page(s) of this document are for the dentist only.</p>{% endif %}
+{% if hidden and not reviewer %}<p class="ds-row-sub">{{ _('{n} page(s) of this document are for the dentist only.', n=hidden) }}</p>{% endif %}
 
 {% if reviewer %}
 <section class="card dash-card mb-3" aria-labelledby="decide-title">
@@ -49,7 +48,7 @@
     <form method="post" action="{{ url_for('guides.restrict', guide_id=s.id) }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <fieldset><legend class="form-label">{{ _("Pages for the dentist only (service menus, calibration)") }}</legend>
-      <div class="d-flex flex-wrap gap-3">{% for p in pages %}<div class="form-check"><input class="form-check-input" type="checkbox" name="restricted" value="{{ p.page }}" id="r{{ p.page }}" {% if p.restricted %}checked{% endif %}><label class="form-check-label" for="r{{ p.page }}">Page {{ p.page }}</label></div>{% endfor %}</div>
+      <div class="d-flex flex-wrap gap-3">{% for p in pages %}<div class="form-check"><input class="form-check-input" type="checkbox" name="restricted" value="{{ p.page }}" id="r{{ p.page }}" {% if p.restricted %}checked{% endif %}><label class="form-check-label" for="r{{ p.page }}">{{ _('Page {n}', n=p.page) }}</label></div>{% endfor %}</div>
       </fieldset>
       <button class="btn btn-outline-secondary btn-sm mt-2" type="submit">{{ _("Save restricted pages") }}</button>
     </form>
@@ -60,16 +59,16 @@
 
 {% for p in pages %}
 <section class="card dash-card mb-3{% if focus == p.page %} guide-focus{% endif %}" aria-labelledby="page-{{ p.page }}-title" id="page-{{ p.page }}">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="page-{{ p.page }}-title">Page {{ p.page }}</h2>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="page-{{ p.page }}-title">{{ _('Page {n}', n=p.page) }}</h2>
     <span>{% if p.restricted %}<span class="ds-badge ds-badge-warning">{{ _("Dentist only") }}</span>{% endif %}
-    {% if not p.readable %}<span class="ds-badge ds-badge-warning">Cannot be read reliably ({{ p.ocr_conf|round|int }}%)</span>{% endif %}</span></div>
+    {% if not p.readable %}<span class="ds-badge ds-badge-warning">{{ _('Cannot be read reliably ({n}%)', n=p.ocr_conf|round|int) }}</span>{% endif %}</span></div>
   <div class="dash-card-body">
     <div class="guide-page">
-      {% if p.image_path %}<img class="guide-page-image" src="{{ url_for('guides.page_image', guide_id=s.id, page=p.page) }}" alt="Page {{ p.page }} of {{ s.title }}" loading="lazy">{% endif %}
+      {% if p.image_path %}<img class="guide-page-image" src="{{ url_for('guides.page_image', guide_id=s.id, page=p.page) }}" alt="{{ _('Page {n} of {title}', n=p.page, title=s.title) }}" loading="lazy">{% endif %}
       <div class="min-w-0">
         {% if p.text %}<p class="ds-row-sub mb-1">{{ _("Text of the page") }}</p><div class="guide-text" lang="{{ s.language }}">{{ p.text }}</div>{% endif %}
-        {% if p.ocr_text %}<p class="ds-row-sub mb-1 mt-2">Read from pictures by OCR ({{ p.ocr_conf|round|int }}% confidence{% if p.ocr_conf < readable_at %} - not quoted{% endif %})</p><div class="guide-text" lang="{{ s.language }}">{{ p.ocr_text }}</div>{% endif %}
-        {% if reviewer and flags[p.page] %}<ul class="mt-2 mb-0">{% for f in flags[p.page] %}<li class="ds-row-sub"><strong>Check:</strong> {{ f }}</li>{% endfor %}</ul>{% endif %}
+        {% if p.ocr_text %}<p class="ds-row-sub mb-1 mt-2">{{ _('Read from pictures by OCR ({n}% confidence - not quoted)', n=p.ocr_conf|round|int) if p.ocr_conf < readable_at else _('Read from pictures by OCR ({n}% confidence)', n=p.ocr_conf|round|int) }}</p><div class="guide-text" lang="{{ s.language }}">{{ p.ocr_text }}</div>{% endif %}
+        {% if reviewer and flags[p.page] %}<ul class="mt-2 mb-0">{% for f in flags[p.page] %}<li class="ds-row-sub"><strong>{{ _("Check:") }}</strong> {{ _msg(f) }}</li>{% endfor %}</ul>{% endif %}
       </div>
     </div>
   </div>
@@ -79,7 +78,7 @@
 {% if reviewer and history %}
 <section class="card dash-card" aria-labelledby="hist-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="hist-title">{{ _("Who decided what") }}</h2></div>
-  <div class="dash-card-body"><ol class="ds-rows">{% for h in history %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ h.action.replace('_', ' ') }} by {{ h.actor }}</span><span class="ds-row-sub">{{ h.at | appt_date }} {{ h.at | appt_time }}{% if h.reason %} · {{ h.reason }}{% endif %}</span></span></li>{% endfor %}</ol></div>
+  <div class="dash-card-body"><ol class="ds-rows">{% for h in history %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ _('{action} by {who}', action=_(h.action.replace('_', ' ')), who=h.actor) }}</span><span class="ds-row-sub">{{ h.at | appt_date }} {{ h.at | appt_time }}{% if h.reason %} · {{ _msg(h.reason) }}{% endif %}</span></span></li>{% endfor %}</ol></div>
 </section>
 {% endif %}
 {% endblock %}

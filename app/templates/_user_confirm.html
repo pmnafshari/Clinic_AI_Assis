@@ -1,18 +1,18 @@
 {% if action == 'role' %}
-  {% set title = 'Change role' %}
-  {% set body = username ~ ': ' ~ old ~ ' → ' ~ new ~ '.' %}
+  {% set title = _('Change role') %}
+  {% set body = _('{who}: {old} → {new}.', who=username, old=_(old), new=_(new)) %}
   {% set confirm_class = 'btn-primary' %}
 {% elif action == 'active' and new == 'Disabled' %}
-  {% set title = 'Disable account' %}
-  {% set body = username ~ ': Active → Disabled. They will be signed out immediately.' %}
+  {% set title = _('Disable account') %}
+  {% set body = _('{who}: Active → Disabled. They will be signed out immediately.', who=username) %}
   {% set confirm_class = 'btn-outline-danger' %}
 {% elif action == 'active' %}
-  {% set title = 'Enable account' %}
-  {% set body = username ~ ': Disabled → Active. They can sign in again.' %}
+  {% set title = _('Enable account') %}
+  {% set body = _('{who}: Disabled → Active. They can sign in again.', who=username) %}
   {% set confirm_class = 'btn-primary' %}
 {% else %}
-  {% set title = 'Clear lockout' %}
-  {% set body = username ~ ': Locked → Active. Their failed sign-in count is reset.' %}
+  {% set title = _('Clear lockout') %}
+  {% set body = _('{who}: Locked → Active. Their failed sign-in count is reset.', who=username) %}
   {% set confirm_class = 'btn-primary' %}
 {% endif %}
 

@@ -1,6 +1,6 @@
 <h2 class="section-title">{{ _("Edit the recall") }}</h2>
 {% if error %}
-<div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+<div class="ds-alert ds-alert-danger" role="alert">{{ _msg(error) }}</div>
 {% endif %}
 <p class="text-secondary">{{ _('Visit of {date}', date=visit_date) if visit_date else _('Visit with no date') }}</p>
 <form hx-post="{{ url_for('patients.visit_edit_submit', cf=cf, visit_id=visit_id) }}" hx-target="#modal-body-target" hx-swap="innerHTML">

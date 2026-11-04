@@ -6,13 +6,14 @@ import providers
 from auth import authorize, log_audit
 
 from .db import get_db
+from .i18n import _
 
 providers_bp = Blueprint("providers", __name__)
 
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("You don't have permission to see the provider switches.", "danger")
+    flash(_("You don't have permission to see the provider switches."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -35,7 +36,7 @@ def kill(kind):
         return _refuse("provider_kill_on", kind)
     try:
         providers.set_kill(get_db(), kind, True, g.user["username"], g.user["role"])
-        flash("Stopped. Nothing will go out until a dentist turns it back on.", "success")
+        flash(_("Stopped. Nothing will go out until a dentist turns it back on."), "success")
     except (ValueError, PermissionError):
         return _refuse("provider_kill_on", kind)
     return redirect(url_for("providers.index"))
@@ -47,7 +48,7 @@ def rearm(kind):
         return _refuse("provider_kill_off", kind)
     try:
         providers.set_kill(get_db(), kind, False, g.user["username"], g.user["role"])
-        flash("Switch cleared. The other brakes still apply.", "success")
+        flash(_("Switch cleared. The other brakes still apply."), "success")
     except (ValueError, PermissionError):
         return _refuse("provider_kill_off", kind)
     return redirect(url_for("providers.index"))

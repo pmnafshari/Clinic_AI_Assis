@@ -1,5 +1,18 @@
 // first-party app JS - plain event listeners, no build step, no framework.
 
+// P29 E-001: what the scripts say, in the page's language. base.html carries the Italian of these sentences (empty
+// in English); the English is the key, and {name} parts are filled in. list_tools.js and look.js use it too.
+var UI_TEXT = (function () {
+  var el = document.getElementById("ui-text");
+  try { return el ? JSON.parse(el.textContent) : {}; } catch (e) { return {}; }
+})();
+
+function uiText(text, values) {
+  var said = UI_TEXT[text] || text;
+  Object.keys(values || {}).forEach(function (k) { said = said.split("{" + k + "}").join(values[k]); });
+  return said;
+}
+
 function initToasts() {
   document.querySelectorAll(".toast:not([data-init])").forEach(function (el) {
     el.setAttribute("data-init", "1");
@@ -29,7 +42,7 @@ function renderStagedFiles(zone, files) {
     var remove = document.createElement("button");
     remove.type = "button";
     remove.className = "btn btn-sm btn-link text-secondary p-0 ms-1";
-    remove.setAttribute("aria-label", "Remove " + file.name);
+    remove.setAttribute("aria-label", uiText("Remove {name}", {name: file.name}));
     remove.innerHTML = '<i class="bi bi-x-lg"></i>';
     remove.addEventListener("click", function () {
       var input = zone.querySelector("input[type=file]");
@@ -114,8 +127,9 @@ document.body.addEventListener("htmx:afterRequest", resetUploadForm);
       var shown = input.type === "text";
       input.type = shown ? "password" : "text";
       toggle.setAttribute("aria-pressed", shown ? "false" : "true");
-      var label = toggle.getAttribute("aria-label").replace(/^(Show|Hide) /, "");
-      toggle.setAttribute("aria-label", (shown ? "Show " : "Hide ") + label);
+      // the page gives both names: aria-label to show, data-label-hide to hide
+      if (!toggle.hasAttribute("data-label-show")) toggle.setAttribute("data-label-show", toggle.getAttribute("aria-label"));
+      toggle.setAttribute("aria-label", toggle.getAttribute(shown ? "data-label-show" : "data-label-hide") || toggle.getAttribute("data-label-show"));
       var icon = toggle.querySelector("i");
       if (icon) icon.className = shown ? "bi bi-eye" : "bi bi-eye-slash";
     });
@@ -207,7 +221,7 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
       var open = row.hidden;
       row.hidden = !open;
       button.setAttribute("aria-expanded", String(open));
-      word.textContent = open ? "Hide wording" : "Read out";
+      word.textContent = open ? uiText("Hide wording") : uiText("Read out");
     });
   });
 })();
@@ -228,9 +242,10 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
     counter.insertAdjacentElement("afterend", said);
     function update() {
       var full = field.value.length >= max;
-      counter.textContent = field.value.length + " / " + max + " characters" + (full ? " - limit reached, nothing more fits" : "");
+      var used = {n: field.value.length, max: max};
+      counter.textContent = full ? uiText("{n} / {max} characters - limit reached, nothing more fits", used) : uiText("{n} / {max} characters", used);
       counter.classList.toggle("is-full", full);
-      said.textContent = full ? "Limit of " + max + " characters reached" : "";
+      said.textContent = full ? uiText("Limit of {max} characters reached", used) : "";
       if (field.hasAttribute("data-grow")) {
         field.style.height = "auto";
         field.style.height = field.scrollHeight + "px";
@@ -259,7 +274,7 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
       var met = tests[li.getAttribute("data-rule")](input.value);
       li.classList.toggle("is-met", met);
       li.querySelector("i").className = met ? "bi bi-check-circle-fill" : "bi bi-circle";
-      li.querySelector("[data-rule-state]").textContent = met ? " - done" : " - not yet";
+      li.querySelector("[data-rule-state]").textContent = met ? uiText(" - done") : uiText(" - not yet");
     });
   });
 })();
@@ -273,7 +288,7 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   var yes = dialog.querySelector("[data-cancel-yes]");
   var sure = dialog.querySelector("[data-cancel-sure]");
   var form = null, timer = null, left = 0;
-  function label() { yes.textContent = left > 0 && !sure.checked ? "Yes, cancel (" + left + ")" : "Yes, cancel"; }
+  function label() { yes.textContent = left > 0 && !sure.checked ? uiText("Yes, cancel ({n})", {n: left}) : uiText("Yes, cancel"); }
   function arm() { yes.disabled = left > 0 && !sure.checked; label(); }
   document.querySelectorAll("form[data-confirm-cancel]").forEach(function (f) {
     f.addEventListener("submit", function (event) {
@@ -404,8 +419,8 @@ document.querySelectorAll("img.file-view, img.file-thumb, img.import-preview").f
     var box = document.createElement("span");
     box.className = "file-noview";
     box.setAttribute("role", "img");
-    box.setAttribute("aria-label", "No preview: this image could not be shown");
-    box.textContent = img.classList.contains("file-thumb") ? "No preview" : "This image could not be shown here. Download the original to open it.";
+    box.setAttribute("aria-label", uiText("No preview: this image could not be shown"));
+    box.textContent = img.classList.contains("file-thumb") ? uiText("No preview") : uiText("This image could not be shown here. Download the original to open it.");
     img.replaceWith(box);
   }
   if (img.complete && img.naturalWidth === 0 && img.getAttribute("src")) fail();

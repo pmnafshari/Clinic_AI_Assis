@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% set kind_names = {'fact': 'From the record', 'quote': 'Quoted from a note', 'gap': 'Missing', 'conflict': 'Possible contradiction'} %}
-{% set flag_names = {'unsupported': 'not found in the cited notes', 'misquote': 'quote does not match the note', 'unknown_source': 'cites a note that is not this patient\'s', 'no_source': 'cites no note', 'recommendation': 'reads as advice or a prescription', 'negation': 'a negation differs from the note'} %}
+{% set kind_names = {'fact': _('From the record'), 'quote': _('Quoted from a note'), 'gap': _('Missing'), 'conflict': _('Possible contradiction')} %}
+{% set flag_names = {'unsupported': _('not found in the cited notes'), 'misquote': _('quote does not match the note'), 'unknown_source': _("cites a note that is not this patient's"), 'no_source': _('cites no note'), 'recommendation': _('reads as advice or a prescription'), 'negation': _('a negation differs from the note')} %}
 {% block content %}
 <nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
@@ -20,16 +20,16 @@
   {% set s = view.summary %}
   {% set latest = view.versions[-1] %}
   {# P29 U-002: where this summary stands, and since when #}
-  <p class="sx-state" data-ux="summary-state">{{ 'Draft' if s.status == 'draft' else 'Approved' }} · version {{ latest.version }} · saved {{ latest.created_at | clinic_when }}</p>
+  <p class="sx-state" data-ux="summary-state">{{ _('Draft') if s.status == 'draft' else _('Approved') }} · {{ _('version {n}', n=latest.version) }} · {{ _('saved {when}', when=latest.created_at | clinic_when) }}</p>
   {% if s.status == 'draft' %}
   <div class="ds-alert ds-alert-warning mb-3" role="note">
-    <div><strong class="ds-alert-title">Draft</strong> {{ label }}</div>
+    <div><strong class="ds-alert-title">{{ _("Draft") }}</strong> {{ _msg(label) }}</div>
   </div>
   {% else %}
   <div class="ds-alert ds-alert-info mb-3" role="note">
-    <div><strong class="ds-alert-title">Reviewed by {{ s.decided_by }}</strong>
-    on {{ s.decided_at | appt_date }}. It is still a summary: the source notes are the record.
-    {%- if s.flags_at_approval %} Approved with {{ s.flags_at_approval }} line(s) not found in the notes.{% endif %}</div>
+    <div><strong class="ds-alert-title">{{ _('Reviewed by {who}', who=s.decided_by) }}</strong>
+    {{ _('on {date}. It is still a summary: the source notes are the record.', date=s.decided_at | appt_date) }}
+    {%- if s.flags_at_approval %} {{ _('Approved with {n} line(s) not found in the notes.', n=s.flags_at_approval) }}{% endif %}</div>
   </div>
   {% endif %}
   {% if view.stale %}
@@ -44,7 +44,7 @@
     <div class="dash-card-head">
       <div>
         <h2 class="ds-card-title" id="lines-title">{{ _("Summary") }}</h2>
-        <p class="ds-card-sub">Version {{ latest.version }} · {{ 'generated' if latest.kind == 'generated' else 'edited by ' ~ latest.created_by }} · every line names its notes as [#visit]</p>
+        <p class="ds-card-sub">{{ _('Version {n}', n=latest.version) }} · {{ _('generated') if latest.kind == 'generated' else _('edited by {who}', who=latest.created_by) }} · {{ _("every line names its notes as [#visit]") }}</p>
       </div>
     </div>
     <div class="dash-card-body"><ul class="ds-rows">
@@ -53,10 +53,10 @@
         <span class="ds-row-main">
           {# P29 F-040: a "fact" the check could not tie to this patient's notes is not from the record #}
           {% set unsourced = line.kind == 'fact' and (line.flags or []) | select('in', ['no_source', 'unknown_source', 'unsupported']) | list %}
-          <span class="ds-row-sub">{{ 'Added - not found in the record' if unsourced else kind_names.get(line.kind, line.kind) }}</span>
+          <span class="ds-row-sub">{{ _('Added - not found in the record') if unsourced else kind_names.get(line.kind, line.kind) }}</span>
           <span class="ds-row-title text-break">{{ line.text }}</span>
           {% if line.flags %}
-          <span class="ds-row-sub"><strong>Check:</strong> {% for f in line.flags %}{{ flag_names.get(f, f) }}{% if not loop.last %}; {% endif %}{% endfor %}</span>
+          <span class="ds-row-sub"><strong>{{ _("Check:") }}</strong> {% for f in line.flags %}{{ flag_names.get(f, f) }}{% if not loop.last %}; {% endif %}{% endfor %}</span>
           {% endif %}
         </span>
       </li>
@@ -81,7 +81,7 @@
         <button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Prepare to read aloud") }}</button>
       </form>
       {% else %}
-      <p class="dash-empty-line">{{ tts_why }}</p>
+      <p class="dash-empty-line">{{ _msg(tts_why) }}</p>
       {% endif %}
     </div>
   </section>
@@ -96,22 +96,22 @@
     </div>
     <div class="dash-card-body">
     <details class="sx-fold">
-    <summary>Show the {{ view.sources | length }} note{{ 's' if view.sources | length != 1 else '' }} this summary reads, newest visit first</summary>
+    <summary>{{ _('Show the {n} note this summary reads, newest visit first', n=1) if view.sources | length == 1 else _('Show the {n} notes this summary reads, newest visit first', n=view.sources | length) }}</summary>
     <ul class="ds-rows">
       {% for src in view.sources %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">[#{{ src.id }}] {{ src.visit_date or 'no date' }}</span>
-          <span class="ds-row-sub text-break">{{ src.source_path }} · filed by {{ src.filed_by or 'not recorded' }}{% if src.filed_at %} on {{ src.filed_at | appt_date }}{% endif %}</span>
+          <span class="ds-row-title">[#{{ src.id }}] {{ src.visit_date or _('no date') }}</span>
+          <span class="ds-row-sub text-break">{{ src.source_path }} · {{ _('filed by {who} on {date}', who=src.filed_by or _('not recorded'), date=src.filed_at | appt_date) if src.filed_at else _('filed by {who}', who=src.filed_by or _('not recorded')) }}</span>
         </span>
       </li>
       {% endfor %}
       {% for missing in view.missing_sources %}
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">[#{{ missing }}] no longer in this record</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ _('[#{id}] no longer in this record', id=missing) }}</span></span></li>
       {% endfor %}
     </ul>
     </details>
-    <p class="dash-empty-line">Made {{ s.created_at | appt_date }} {{ s.created_at | appt_time }} by {{ s.created_by }} · {{ s.generator }} {{ s.generator_version }}, local, no model</p>
+    <p class="dash-empty-line">{{ _('Made {when} by {who} · {tool}, local, no model', when=(s.created_at | appt_date) ~ ' ' ~ (s.created_at | appt_time), who=s.created_by, tool=s.generator ~ ' ' ~ s.generator_version) }}</p>
     </div>
   </section>
 
@@ -160,8 +160,8 @@
     <div class="dash-card-body"><ul class="ds-rows">
       {% for v in view.versions | reverse %}
       <li class="ds-row"><span class="ds-row-main">
-        <span class="ds-row-title">Version {{ v.version }} · {{ v.kind }}{% if loop.first %} · shown above{% endif %}</span>
-        <span class="ds-row-sub">{{ v.created_by }} · {{ v.created_at | appt_date }} {{ v.created_at | appt_time }} · {{ v.lines | length }} lines</span>
+        <span class="ds-row-title">{{ _('Version {n}', n=v.version) }} · {{ _(v.kind) }}{% if loop.first %} · {{ _("shown above") }}{% endif %}</span>
+        <span class="ds-row-sub">{{ v.created_by }} · {{ v.created_at | appt_date }} {{ v.created_at | appt_time }} · {{ _('{n} lines', n=v.lines | length) }}</span>
       </span></li>
       {% endfor %}
     </ul></div>
@@ -170,7 +170,7 @@
 
 {% if not view or view.summary.status == 'approved' %}
 <section class="card dash-card mb-3" aria-labelledby="make-title">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="make-title">{{ 'Make a new draft' if view else 'No summary yet' }}</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="make-title">{{ _('Make a new draft') if view else _('No summary yet') }}</h2></div>
   <div class="dash-card-body">
     <p class="dash-empty-line">{{ _("Builds a draft from this patient's own notes, on this machine. Nothing is sent anywhere and the notes are not changed.") }}{% if view %} {{ _("The approved summary stays in History.") }}{% endif %}</p>
     <form method="post" action="{{ url_for('summary.generate', cf=cf) }}">
@@ -188,8 +188,8 @@
   <div class="dash-card-body"><ul class="ds-rows">
     {% for h in history %}
     <li class="ds-row"><span class="ds-row-main">
-      <span class="ds-row-title">Summary {{ h.id }} · {{ h.status }}</span>
-      <span class="ds-row-sub">made {{ h.created_at | appt_date }} by {{ h.created_by }}{% if h.decided_by %} · {{ h.status }} by {{ h.decided_by }}{% endif %}{% if h.decision_reason %} · {{ h.decision_reason }}{% endif %}</span>
+      <span class="ds-row-title">{{ _('Summary {id}', id=h.id) }} · {{ _(h.status) }}</span>
+      <span class="ds-row-sub">{{ _('made {date} by {who}', date=h.created_at | appt_date, who=h.created_by) }}{% if h.decided_by %} · {{ _('{state} by {who}', state=_(h.status), who=h.decided_by) }}{% endif %}{% if h.decision_reason %} · {{ _msg(h.decision_reason) }}{% endif %}</span>
     </span></li>
     {% endfor %}
   </ul></div>

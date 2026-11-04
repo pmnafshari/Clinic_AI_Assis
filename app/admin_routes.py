@@ -8,6 +8,7 @@ import user_admin
 from auth import VALID_ROLES, authorize, log_audit
 
 from .db import get_db
+from .i18n import _
 
 admin_bp = Blueprint("admin", __name__)
 
@@ -22,7 +23,7 @@ def _denied(action, target=None):
 def users_view():
     if not authorize(g.user["role"], "manage_users"):
         _denied("manage_users")
-        flash("You don't have permission to manage staff accounts.", "danger")
+        flash(_("You don't have permission to manage staff accounts."), "danger")
         return redirect(url_for("dashboard.index"))
 
     rows = user_admin.list_users(get_db())
@@ -33,7 +34,7 @@ def users_view():
 def create():
     if not authorize(g.user["role"], "manage_users"):
         _denied("create_user")
-        flash("You don't have permission to manage staff accounts.", "danger")
+        flash(_("You don't have permission to manage staff accounts."), "danger")
         return redirect(url_for("dashboard.index"))
 
     ok, message = user_admin.create_user(

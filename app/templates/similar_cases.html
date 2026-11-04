@@ -15,15 +15,15 @@
   </div>
 </div>
 <div class="ds-alert ds-alert-info" role="note">
-  <div><strong class="ds-alert-title">Switched off</strong>
-  {{ off }} No other patient's record was read. The clinic can switch it on when the criteria are approved.</div>
+  <div><strong class="ds-alert-title">{{ _("Switched off") }}</strong>
+  {{ _msg(off) }} {{ _("No other patient's record was read. The clinic can switch it on when the criteria are approved.") }}</div>
 </div>
 {% else %}
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ patient.patient_name }}</p>
     <h1 class="ds-page-title">{{ _("Similar cases") }}{% if found.view == 'teaching' %} {{ _("· Teaching view") }}{% endif %}</h1>
-    <p class="ds-page-meta">This visit: {{ found.source.procedures | join(', ') or 'no procedure recorded' }} · dentist only</p>
+    <p class="ds-page-meta">{{ _('This visit: {what}', what=found.source.procedures | join(', ') or _('no procedure recorded')) }} · {{ _("dentist only") }}</p>
   </div>
   <div class="ds-page-actions">
     {% if found.view == 'teaching' %}
@@ -35,49 +35,49 @@
 </div>
 
 <div class="ds-alert ds-alert-info mb-3" role="note">
-  <div><strong class="ds-alert-title">Past records, not advice</strong>
-  {{ found.criteria_note }} Criteria version {{ found.criteria.version }}: a case must share {{ found.criteria.require }};
-  the same tooth, quadrant and note words rank it higher. Other patients are shown as case numbers, with names,
-  codici fiscali, phone numbers and e-mail addresses removed{% if found.view == 'teaching' %} and no note text{% endif %}.</div>
+  <div><strong class="ds-alert-title">{{ _("Past records, not advice") }}</strong>
+  {{ _msg(found.criteria_note) }} {{ _('Criteria version {n}: a case must share {what}; the same tooth, quadrant and note words rank it higher.', n=found.criteria.version, what=_msg(found.criteria.require)) }}
+  {{ _('Other patients are shown as case numbers, with names, codici fiscali, phone numbers and e-mail addresses removed and no note text.') if found.view == 'teaching' else _('Other patients are shown as case numbers, with names, codici fiscali, phone numbers and e-mail addresses removed.') }}</div>
 </div>
 
 <section class="card dash-card mb-3" aria-labelledby="cases-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="cases-title">{{ _("Cases from other patients") }}</h2>
-    {% if found.results %}<p class="ds-card-sub">{{ found.message }}</p>{% endif %}</div>
+    {% if found.results %}<p class="ds-card-sub">{{ _msg(found.message) }}</p>{% endif %}</div>
   <div class="dash-card-body">
     {% if found.results %}
     <ul class="ds-rows">
       {% for c in found.results %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ c.label }} · {{ c.month }} · {{ c.procedures | join(', ') }}
-            <span class="ds-badge ds-badge-{{ 'info' if c.strength == 'strong' else 'neutral' }}">{{ c.strength }} match</span></span>
-          <span class="ds-row-sub">Why: {{ c.reasons | join('; ') }}</span>
-          <span class="ds-row-sub">Outcome: {{ c.outcome }}</span>
-          {% if c.note %}<span class="ds-row-sub">Note (redacted): {{ c.note }}</span>{% endif %}
-          {% if c.your_verdict %}<span class="ds-row-sub">Your verdict: {{ c.your_verdict.replace('_', ' ') }}</span>{% endif %}
+          {% set why = [] %}{% for reason in c.reasons %}{% set _w = why.append(_msg(reason)) %}{% endfor %}
+          <span class="ds-row-title">{{ _msg(c.label) }} · {{ c.month }} · {{ c.procedures | join(', ') }}
+            <span class="ds-badge ds-badge-{{ 'info' if c.strength == 'strong' else 'neutral' }}">{{ _('{strength} match', strength=_(c.strength)) }}</span></span>
+          <span class="ds-row-sub">{{ _('Why: {reasons}', reasons=why | join('; ')) }}</span>
+          <span class="ds-row-sub">{{ _('Outcome: {what}', what=_msg(c.outcome)) }}</span>
+          {% if c.note %}<span class="ds-row-sub">{{ _('Note (redacted): {note}', note=c.note) }}</span>{% endif %}
+          {% if c.your_verdict %}<span class="ds-row-sub">{{ _('Your verdict: {what}', what=_(c.your_verdict.replace('_', ' '))) }}</span>{% endif %}
         </span>
         <span class="d-flex flex-wrap gap-2">
           <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="verdict" value="similar">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Similar: {{ c.label }}">{{ _("Similar") }}</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="{{ _('Similar: {case}', case=_msg(c.label)) }}">{{ _("Similar") }}</button>
           </form>
           <form method="post" action="{{ url_for('similar.feedback', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="verdict" value="not_similar">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Not similar: {{ c.label }}">{{ _("Not similar") }}</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="{{ _('Not similar: {case}', case=_msg(c.label)) }}">{{ _("Not similar") }}</button>
           </form>
           <form method="post" action="{{ url_for('similar.exclude', cf=cf, vid=vid, case=c.visit_id) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="Remove from similar-case search: {{ c.label }}">{{ _("Remove from similar-case search") }}</button>
+            <button class="btn btn-outline-secondary btn-sm" type="submit" aria-label="{{ _('Remove from similar-case search: {case}', case=_msg(c.label)) }}">{{ _("Remove from similar-case search") }}</button>
           </form>
         </span>
       </li>
       {% endfor %}
     </ul>
     {% else %}
-    <p class="dash-empty-line">{{ found.message }}</p>
+    <p class="dash-empty-line">{{ _msg(found.message) }}</p>
     {% endif %}
   </div>
 </section>

@@ -18,25 +18,25 @@
   {# P30: Sort and Filter on the notes waiting here #}
   {% if rows %}
   <div class="sx-tools sx-tools-row" data-list-tools data-for="review-rows" data-noun="{{ _('note|notes') }}"
-       data-sorts='{{ [['created', 'text', 1, 'Oldest first'], ['created', 'text', -1, 'Newest first'], ['name', 'text', 1, 'Patient (A-Z)']] | tojson }}'
-       data-filters='{{ [['kind', 'Kind', [['upload', 'New upload'], ['failed', 'Could not be read'], ['confirming', 'Being filed'], ['legacy', 'Earlier note']]]] | tojson }}'></div>
+       data-sorts='{{ [['created', 'text', 1, _('Oldest first')], ['created', 'text', -1, _('Newest first')], ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+       data-filters='{{ [['kind', _('Kind'), [['upload', _('New upload')], ['failed', _('Could not be read')], ['confirming', _('Being filed')], ['legacy', _('Earlier note')]]]] | tojson }}'></div>
   {% endif %}
   <div class="dash-card-body">
     {% if rows %}
     <ul class="ds-rows sx-box" id="review-rows">
       {% for r in rows %}
-      <li class="ds-row" data-name="{{ r.patient_name or 'Patient not identified' }}" data-created="{{ r.created_at }}"
+      <li class="ds-row" data-name="{{ r.patient_name or _('Patient not identified') }}" data-created="{{ r.created_at }}"
           data-kind="{{ 'legacy' if r.origin == 'legacy' else 'failed' if r.status == 'extraction_failed' else 'confirming' if r.status == 'confirming' else 'upload' }}">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ r.patient_name or 'Patient not identified' }}</span>
+          <span class="ds-row-title">{{ r.patient_name or _('Patient not identified') }}</span>
           <span class="ds-row-sub">
-            {%- if r.origin == 'legacy' %}earlier note, filed before review existed
-            {%- elif r.status == 'extraction_failed' %}could not be read{% if r.attempts %} · {{ r.attempts }} retr{{ 'y' if r.attempts == 1 else 'ies' }}{% endif %}
-            {%- elif r.status == 'confirming' %}being filed
-            {%- else %}uploaded by {{ r.created_by }}{% endif %} · {{ r.created_at | appt_date }}
+            {%- if r.origin == 'legacy' %}{{ _('earlier note, filed before review existed') }}
+            {%- elif r.status == 'extraction_failed' %}{{ _('could not be read') }}{% if r.attempts %} · {{ _('{n} retry', n=1) if r.attempts == 1 else _('{n} retries', n=r.attempts) }}{% endif %}
+            {%- elif r.status == 'confirming' %}{{ _('being filed') }}
+            {%- else %}{{ _('uploaded by {who}', who=r.created_by) }}{% endif %} · {{ r.created_at | appt_date }}
           </span>
         </span>
-        <span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.detail', review_id=r.id) }}">{{ _("Review") }}<span class="visually-hidden">: {{ r.patient_name or 'patient not identified' }}</span></a></span>
+        <span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.detail', review_id=r.id) }}">{{ _("Review") }}<span class="visually-hidden">: {{ r.patient_name or _('patient not identified') }}</span></a></span>
       </li>
       {% endfor %}
     </ul>
@@ -49,7 +49,7 @@
 <section class="card dash-card mt-4" aria-labelledby="decided-title" data-ux="recent-decisions">
   <div class="dash-card-head"><div>
     <h2 class="ds-card-title" id="decided-title">{{ _("Recently decided") }}</h2>
-    <p class="ds-card-sub">The last {{ decided | length }} notes confirmed or rejected, newest first</p>
+    <p class="ds-card-sub">{{ _("The last {n} notes confirmed or rejected, newest first", n=decided | length) }}</p>
   </div></div>
   <div class="dash-card-body">
     {% if decided %}
@@ -57,11 +57,11 @@
       {% for d in decided %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ d.patient_name or 'Patient not identified' }} · {{ 'Earlier note' if d.origin == 'legacy' else 'Upload' }}</span>
+          <span class="ds-row-title">{{ d.patient_name or _('Patient not identified') }} · {{ _('Earlier note') if d.origin == 'legacy' else _('Upload') }}</span>
           <span class="ds-row-sub"><span class="ds-badge {{ 'ds-badge-success' if d.status == 'confirmed' else 'ds-badge-danger' }}">{{ d.status | capitalize }}</span>
-            by {{ d.decided_by or 'someone not recorded' }} · {{ d.decided_at | appt_date }}{% if d.decision_reason %} · {{ d.decision_reason }}{% endif %}</span>
+            {{ _('by {who}', who=d.decided_by or _('someone not recorded')) }} · {{ d.decided_at | appt_date }}{% if d.decision_reason %} · {{ d.decision_reason }}{% endif %}</span>
         </span>
-        <span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.detail', review_id=d.id) }}">{{ _("Open") }}<span class="visually-hidden">: {{ d.patient_name or 'patient not identified' }}, {{ d.status }}</span></a></span>
+        <span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('review.detail', review_id=d.id) }}">{{ _("Open") }}<span class="visually-hidden">: {{ d.patient_name or _('patient not identified') }}, {{ d.status }}</span></a></span>
       </li>
       {% endfor %}
     </ul>

@@ -8,6 +8,7 @@ from auth import authorize, log_audit
 
 from . import reasons
 from .db import get_chroma, get_db
+from .i18n import _
 
 review_bp = Blueprint("review", __name__)
 
@@ -16,7 +17,7 @@ SORTED_ROOT = Path("sorted")
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only a dentist can review uploaded notes.", "danger")
+    flash(_("Only a dentist can review uploaded notes."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -65,10 +66,10 @@ def confirm(review_id):
     row = get_db().execute("SELECT n.origin, p.patient_name FROM note_reviews n LEFT JOIN patients p"
                            " ON p.patient_id = n.patient_id WHERE n.id = ?", (review_id,)).fetchone()
     if row is not None and row["origin"] == "legacy":
-        done = "Marked as reviewed. This earlier note was already in the record - no new visit was made."
+        done = _("Marked as reviewed. This earlier note was already in the record - no new visit was made.")
     else:
-        who = row["patient_name"] if row is not None and row["patient_name"] else "the patient"
-        done = f"Confirmed. A new visit is filed for {who}."
+        who = row["patient_name"] if row is not None and row["patient_name"] else _("the patient")
+        done = _("Confirmed. A new visit is filed for {who}.", who=who)
     return _step(review_id, nr.confirm, done, form=form)
 
 
@@ -76,7 +77,7 @@ def confirm(review_id):
 def reject(review_id):
     if not authorize(g.user["role"], nr.CAPABILITY):
         return _refuse("note_review_reject", f"review:{review_id}")
-    return _step(review_id, nr.reject, "Rejected. Nothing was filed; the upload is kept.", kind="removed",
+    return _step(review_id, nr.reject, _("Rejected. Nothing was filed; the upload is kept."), kind="removed",
                  reason=reasons.chosen(request.form, reasons.REJECT_NOTE))
 
 
@@ -84,4 +85,4 @@ def reject(review_id):
 def retry(review_id):
     if not authorize(g.user["role"], nr.CAPABILITY):
         return _refuse("note_review_retry", f"review:{review_id}")
-    return _step(review_id, nr.retry, "Read again. It is waiting for your review.")
+    return _step(review_id, nr.retry, _("Read again. It is waiting for your review."))

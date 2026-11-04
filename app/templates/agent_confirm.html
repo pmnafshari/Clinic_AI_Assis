@@ -10,7 +10,7 @@
 <div class="card dash-card confirm-card">
   <div class="ds-card-body">
     {% if error %}
-    <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+    <div class="ds-alert ds-alert-danger" role="alert">{{ _msg(error) }}</div>
     <p><a href="{{ url_for('dashboard.index') }}">{{ _("Back to dashboard") }}</a></p>
     {% else %}
     {# the frozen diff. it is the whole point of this screen, so it gets the
@@ -19,7 +19,7 @@
 {% if change %}
 <dl class="confirm-rows">
   <div><dt>{{ _("Patient") }}</dt><dd>{{ change.patient }}</dd></div>
-  <div><dt>{{ _("Field") }}</dt><dd>{{ change.field | capitalize }}</dd></div>
+  <div><dt>{{ _("Field") }}</dt><dd>{{ _(change.field) | capitalize }}</dd></div>
   <div><dt>{{ _("Now") }}</dt><dd>{{ change.before or 'empty' }}</dd></div>
   <div><dt>{{ _("After") }}</dt><dd><strong>{{ change.after or 'empty' }}</strong></dd></div>
 </dl>

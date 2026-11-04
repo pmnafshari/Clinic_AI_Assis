@@ -9,16 +9,17 @@ import clinic_guides as cg
 from auth import authorize, log_audit
 
 from .db import get_db
+from .i18n import N_, _
 
 guides_bp = Blueprint("guides", __name__)
 
-EXAMPLES = ["What does the B-PROG button do?", "Cosa significa l'errore E07?",
-            "The dentist has already ordered an OPG. What does reception do next?"]
-REASON_TITLES = {"ask_device": "Which device?", "wrong_model": "Different model", "old_edition": "Not the current edition",
-                 "conflict": "Approved documents disagree", "unreadable": "The page cannot be read reliably",
-                 "restricted": "Not for your role", "servicing": "Service work", "clinical": "A decision for the dentist",
-                 "patient_data": "No patient information here", "not_for_role": "Not for your role",
-                 "not_found": "No approved document answers this"}
+EXAMPLES = [N_("What does the B-PROG button do?"), N_("Cosa significa l'errore E07?"),
+            N_("The dentist has already ordered an OPG. What does reception do next?")]
+REASON_TITLES = {"ask_device": N_("Which device?"), "wrong_model": N_("Different model"), "old_edition": N_("Not the current edition"),
+                 "conflict": N_("Approved documents disagree"), "unreadable": N_("The page cannot be read reliably"),
+                 "restricted": N_("Not for your role"), "servicing": N_("Service work"), "clinical": N_("A decision for the dentist"),
+                 "patient_data": N_("No patient information here"), "not_for_role": N_("Not for your role"),
+                 "not_found": N_("No approved document answers this")}
 
 
 def gconn():
@@ -40,7 +41,7 @@ def _who():
 
 def _refuse(action, target="guides"):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Clinic guides are for the dentist and reception.", "danger")
+    flash(_("Clinic guides are for the dentist and reception."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -102,7 +103,7 @@ def add_device():
         flash(str(e), "danger")
         return redirect(url_for("guides.library"))
     log_audit(get_db(), *_who(), "guide_device", f"device:{did}", allowed=1)
-    flash("Device registered.", "success")
+    flash(_("Device registered."), "success")
     return redirect(url_for("guides.library"))
 
 
@@ -112,7 +113,7 @@ def upload():
         return _refuse("guide_upload")
     blob = request.files.get("file")
     if blob is None or not blob.filename:
-        flash("Choose a PDF to upload.", "danger")
+        flash(_("Choose a PDF to upload."), "danger")
         return redirect(url_for("guides.library"))
     f = request.form
     raw = f.get("device_id") or ""
@@ -126,9 +127,9 @@ def upload():
         return redirect(url_for("guides.library"))
     log_audit(get_db(), *_who(), "guide_upload", f"guide:{guide_id}", allowed=1)
     status = cg.source(gconn(), guide_id)["status"]
-    flash({"pending_review": "Read. Review every page before approving it; until then nobody can ask about it.",
-           "quarantined": "Not accepted: the file was kept but not read.",
-           "extraction_failed": "The file was kept, but it could not be read."}.get(status, "Saved."),
+    flash({"pending_review": _("Read. Review every page before approving it; until then nobody can ask about it."),
+           "quarantined": _("Not accepted: the file was kept but not read."),
+           "extraction_failed": _("The file was kept, but it could not be read.")}.get(status, _("Saved.")),
           "success" if status == "pending_review" else "danger")
     return redirect(url_for("guides.source_view", guide_id=guide_id))
 
@@ -185,7 +186,7 @@ def _decide(guide_id, fn, done, action, kind="success", **kwargs):
         abort(404)
     except PermissionError:
         log_audit(get_db(), *_who(), action, f"guide:{guide_id}", allowed=0)
-        flash("You may not make this decision.", "danger")
+        flash(_("You may not make this decision."), "danger")
         return redirect(url_for("guides.library"))
     except cg.GuideError as e:
         flash(str(e), "danger")
@@ -199,14 +200,14 @@ def _decide(guide_id, fn, done, action, kind="success", **kwargs):
 def approve(guide_id):
     if not authorize(g.user["role"], cg.ASK):
         return _refuse("guide_approve", f"guide:{guide_id}")
-    return _decide(guide_id, cg.approve, "Approved. Staff can ask about it from now on.", "guide_approve")
+    return _decide(guide_id, cg.approve, _("Approved. Staff can ask about it from now on."), "guide_approve")
 
 
 @guides_bp.route("/guides/sources/<int:guide_id>/reject", methods=["POST"])
 def reject(guide_id):
     if not authorize(g.user["role"], cg.ASK):
         return _refuse("guide_reject", f"guide:{guide_id}")
-    return _decide(guide_id, cg.reject, "Rejected. It will never be searched.", "guide_reject", kind="removed",
+    return _decide(guide_id, cg.reject, _("Rejected. It will never be searched."), "guide_reject", kind="removed",
                    args=(request.form.get("reason", ""),))
 
 
@@ -214,7 +215,7 @@ def reject(guide_id):
 def withdraw(guide_id):
     if not authorize(g.user["role"], cg.ASK):
         return _refuse("guide_withdraw", f"guide:{guide_id}")
-    return _decide(guide_id, cg.withdraw, "Withdrawn. It is out of every answer from now on.", "guide_withdraw", kind="removed",
+    return _decide(guide_id, cg.withdraw, _("Withdrawn. It is out of every answer from now on."), "guide_withdraw", kind="removed",
                    args=(request.form.get("reason", ""),))
 
 
@@ -223,7 +224,7 @@ def restrict(guide_id):
     if not authorize(g.user["role"], cg.APPROVE):
         return _refuse("guide_restrict", f"guide:{guide_id}")
     pages = [int(n) for n in request.form.getlist("restricted") if n.isdigit()]
-    return _decide(guide_id, cg.restrict_pages, "Saved. Restricted pages are for the dentist only.", "guide_restrict",
+    return _decide(guide_id, cg.restrict_pages, _("Saved. Restricted pages are for the dentist only."), "guide_restrict",
                    args=(pages,))
 
 
@@ -233,7 +234,7 @@ def supersede(guide_id):
         return _refuse("guide_supersede", f"guide:{guide_id}")
     old = request.form.get("old_id", "")
     if not old.isdigit():
-        flash("Choose the edition this one replaces.", "danger")
+        flash(_("Choose the edition this one replaces."), "danger")
         return redirect(url_for("guides.source_view", guide_id=guide_id))
     try:
         cg.supersede(gconn(), int(old), guide_id, *_who())
@@ -241,7 +242,7 @@ def supersede(guide_id):
         flash(str(e), "danger")
         return redirect(url_for("guides.source_view", guide_id=guide_id))
     log_audit(get_db(), *_who(), "guide_supersede", f"guide:{old}", allowed=1, reason=f"guide:{guide_id}")
-    flash("The earlier edition is replaced and no longer answers.", "success")
+    flash(_("The earlier edition is replaced and no longer answers."), "success")
     return redirect(url_for("guides.source_view", guide_id=guide_id))
 
 
@@ -253,7 +254,7 @@ def approvers():
     user = get_db().execute("SELECT username, role FROM users WHERE username = ? AND active = 1",
                             (username,)).fetchone()
     if user is None or user["role"] == "admin" or not authorize(user["role"], cg.ASK):
-        flash("Name an active dentist or reception account; admin accounts cannot approve documents.", "danger")
+        flash(_("Name an active dentist or reception account; admin accounts cannot approve documents."), "danger")
         return redirect(url_for("guides.library"))
     if request.form.get("action") == "revoke":
         cg.revoke_approver(gconn(), username, *_who())

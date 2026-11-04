@@ -16,8 +16,8 @@
 {# P29 U-001: one tile per connection - can it send, and if not why - then the parts side by side #}
 <div class="ux-kpis ux-kpis-3" data-ux="page-tiles">
   {% for r in rows %}
-  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ r.kind | capitalize }}</span>
-    <span class="ux-kpi-value">{{ 'On' if r.can_send else 'Off' }}</span><span class="ux-kpi-sub">{{ 'can send' if r.can_send else 'blocked: ' ~ r.reason.replace('_', ' ') }}</span></div>
+  <div class="ux-kpi ux-kpi-static"><span class="ux-kpi-label">{{ _(r.kind | capitalize) }}</span>
+    <span class="ux-kpi-value">{{ _('On') if r.can_send else _('Off') }}</span><span class="ux-kpi-sub">{{ _('can send') if r.can_send else _('blocked: {why}', why=_msg(r.reason.replace('_', ' '))) }}</span></div>
   {% endfor %}
 <!--/page-tiles--></div>
 
@@ -29,13 +29,13 @@
     {% for r in rows %}
     <li class="ds-row">
       <span class="ds-row-main">
-        <span class="ds-row-title">{{ r.kind | capitalize }}</span>
+        <span class="ds-row-title">{{ _(r.kind | capitalize) }}</span>
         <span class="ds-row-sub">
-          connector: {{ r.adapter }} · feature {{ 'on' if r.feature_enabled else 'off' }} ·
-          stop switch {{ 'ON' if r.killed else 'off' }} ·
-          spend {{ r.spent_cents }}/{{ r.spend_cap_cents }}
-          {%- if not r.can_send %} · <strong>blocked: {{ r.reason.replace('_', ' ') }}</strong>{% endif %}
-          {%- if r.updated_by %} · last changed by {{ r.updated_by }}{% endif %}
+          {{ _('connector: {adapter} · feature {feature} · stop switch {stop} · spend {spent}/{cap}', adapter=_msg(r.adapter),
+               feature=_ctx('feature', 'on') if r.feature_enabled else _ctx('feature', 'off'), stop=_('ON') if r.killed else _('off'),
+               spent=r.spent_cents, cap=r.spend_cap_cents) }}
+          {%- if not r.can_send %} · <strong>{{ _('blocked: {why}', why=_msg(r.reason.replace('_', ' '))) }}</strong>{% endif %}
+          {%- if r.updated_by %} · {{ _('last changed by {who}', who=r.updated_by) }}{% endif %}
         </span>
       </span>
       {% if not r.killed %}
@@ -60,10 +60,10 @@
     <ul class="ds-rows">
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ 'Can answer' if line.can_answer else 'Not answering' }}</span>
+          <span class="ds-row-title">{{ _('Can answer') if line.can_answer else _('Not answering') }}</span>
           <span class="ds-row-sub">
-            {%- if not line.can_answer %}blocked: {{ line.reason.replace('_', ' ') }} · {% endif -%}
-            there is no phone number; no call can reach this build
+            {%- if not line.can_answer %}{{ _('blocked: {why}', why=_msg(line.reason.replace('_', ' '))) }} · {% endif -%}
+            {{ _("there is no phone number; no call can reach this build") }}
           </span>
         </span>
       </li>
@@ -91,7 +91,7 @@
       {% for state, n in receipts.items() %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ state | capitalize }}</span>
+          <span class="ds-row-title">{{ _(state | capitalize) }}</span>
           {% if state == 'accepted' %}<span class="ds-row-sub">{{ _("taken by a provider — not the same as arrived") }}</span>{% endif %}
           {% if state == 'unknown' %}<span class="ds-row-sub">{{ _("outcome genuinely unknown; nothing is re-sent on its own") }}</span>{% endif %}
         </span>
@@ -100,7 +100,7 @@
       {% endfor %}
     </ul>
     {% if unresolved %}
-    <p class="dash-empty-line">{{ unresolved | length }} waiting to be reconciled by hand.</p>
+    <p class="dash-empty-line">{{ _('{n} waiting to be reconciled by hand.', n=unresolved | length) }}</p>
     {% endif %}
   </div>
 </section>
@@ -113,10 +113,10 @@
       {% for e in events %}
       <li class="ds-row">
         <span class="ds-row-main">
-          <span class="ds-row-title">{{ e.kind }} · {{ e.event.replace('_', ' ') }}</span>
+          <span class="ds-row-title">{{ _(e.kind) }} · {{ _msg(e.event.replace('_', ' ')) }}</span>
           <span class="ds-row-sub">
             {{ e.at | appt_date }} {{ e.at | appt_time }}
-            {%- if e.reason %} · {{ e.reason.replace('_', ' ') }}{% endif %}
+            {%- if e.reason %} · {{ _msg(e.reason.replace('_', ' ')) }}{% endif %}
             {%- if e.ref %} · {{ e.ref }}{% endif %}
           </span>
         </span>

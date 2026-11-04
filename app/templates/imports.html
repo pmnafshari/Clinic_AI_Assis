@@ -18,24 +18,22 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="drive-title">{{ _("Google Drive source") }}</h2></div>
   <div class="dash-card-body">
     {% if drive.configured %}
-    <p class="mb-2">Connected read-only to the Drive test folder <code>{{ drive.folder_id }}</code> (synthetic files only).
-    The app lists the folder, fetches new or changed files and stages them for review; it never changes Drive and
-    attaches nothing until you confirm each file.</p>
+    <p class="mb-2">{{ _html('Connected read-only to the Drive test folder <code>{folder}</code> (synthetic files only). The app lists the folder, fetches new or changed files and stages them for review; it never changes Drive and attaches nothing until you confirm each file.', folder=drive.folder_id) }}</p>
     {% else %}
-    <p class="mb-2">Not connected: {{ drive.reason }}.</p>
+    <p class="mb-2">{{ _('Not connected: {why}.', why=_msg(drive.reason)) }}</p>
     {% endif %}
     {% set last = drive['last'] %}
     <ul class="ds-rows">
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Last check") }}</span>
-        <span class="ds-row-title">{% if last %}{{ last.started_at | appt_date }} {{ last.started_at | appt_time }} · {{ drive.labels[last.status] }} · {{ last.listed }} listed, {{ last.new_files }} new{% if last.skipped %}, {{ last.skipped }} skipped{% endif %} · {{ last.trigger }}{% else %}never{% endif %}</span></span></li>
+        <span class="ds-row-title">{% if last %}{{ last.started_at | appt_date }} {{ last.started_at | appt_time }} · {{ _(drive.labels[last.status]) }} · {{ _('{n} listed, {new} new, {skipped} skipped', n=last.listed, new=last.new_files, skipped=last.skipped) if last.skipped else _('{n} listed, {new} new', n=last.listed, new=last.new_files) }} · {{ _(last.trigger) }}{% else %}{{ _("never") }}{% endif %}</span></span></li>
       {% if last and last.error_message %}
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ 'Error' if last.status == 'error' else 'Skipped' }}</span>
-        <span class="ds-row-title text-break">{{ last.error_message }}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _('Error') if last.status == 'error' else _('Skipped') }}</span>
+        <span class="ds-row-title text-break">{{ _msg(last.error_message) }}</span></span></li>
       {% endif %}
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("From Drive, waiting for your review") }}</span>
         <span class="ds-row-title">{{ drive.pending }}</span></span></li>
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Automatic check") }}</span>
-        <span class="ds-row-title">{% if drive.settings.auto_enabled %}on, every {{ drive.settings.interval_min }} min (turned on by {{ drive.settings.enabled_by }}){% else %}off{% if drive.settings.disabled_reason %} - {{ drive.settings.disabled_reason }}{% endif %}{% endif %}</span></span></li>
+        <span class="ds-row-title">{% if drive.settings.auto_enabled %}{{ _('on, every {n} min (turned on by {who})', n=drive.settings.interval_min, who=drive.settings.enabled_by) }}{% else %}{{ _("off") }}{% if drive.settings.disabled_reason %} - {{ _msg(drive.settings.disabled_reason) }}{% endif %}{% endif %}</span></span></li>
     </ul>
     {% if drive.configured %}
     <div class="d-flex flex-wrap gap-2 align-items-end mt-2">
@@ -50,7 +48,7 @@
         <button type="submit" class="btn btn-sm btn-outline-secondary">{{ _("Turn off automatic check") }}</button>
         {% else %}
         <input type="hidden" name="enabled" value="1">
-        <div><label for="drive-interval" class="form-label">Every (minutes, {{ intervals[0] }}-{{ intervals[1] }})</label>
+        <div><label for="drive-interval" class="form-label">{{ _('Every (minutes, {low}-{high})', low=intervals[0], high=intervals[1]) }}</label>
         <input id="drive-interval" type="number" name="interval" min="{{ intervals[0] }}" max="{{ intervals[1] }}" value="{{ drive.settings.interval_min }}" class="form-control form-control-sm"></div>
         <button type="submit" class="btn btn-sm btn-outline-primary">{{ _("Turn on automatic check") }}</button>
         {% endif %}
@@ -103,10 +101,9 @@
 
 {% if check %}
 <section class="card dash-card mb-3" aria-labelledby="check-title" id="check">
-  <div class="dash-card-head"><h2 class="ds-card-title" id="check-title">Check of {{ checked }}: nothing was written</h2></div>
+  <div class="dash-card-head"><h2 class="ds-card-title" id="check-title">{{ _('Check of {folder}: nothing was written', folder=checked) }}</h2></div>
   <div class="dash-card-body">
-    <p class="mb-2">{{ check.totals.files }} files. Nothing has been staged or attached; this is what
-    <strong>Stage and propose</strong> would find.</p>
+    <p class="mb-2">{{ _html('{n} files. Nothing has been staged or attached; this is what <strong>Stage and propose</strong> would find.', n=check.totals.files) }}</p>
     <table class="ux-table ux-table-page">
       <caption class="visually-hidden">{{ _("Each file in the folder and what the import would make of it") }}</caption>
       <thead><tr><th scope="col">{{ _("File") }}</th><th scope="col">{{ _("Type") }}</th><th scope="col">{{ _("Result") }}</th><th scope="col">{{ _("Proposed owner") }}</th><th scope="col">{{ _("Why") }}</th></tr></thead>
@@ -114,10 +111,10 @@
       {% for r in check["items"] %}
       <tr>
         <td data-label="{{ _('File') }}" class="text-break">{{ r.rel }}</td>
-        <td data-label="{{ _('Type') }}">{{ r.kind or 'unknown' }}</td>
-        <td data-label="{{ _('Result') }}">{{ labels.get(r.result, r.result) }}{% if r.strength %} ({{ 'strong' if r.strength == 'strong' else 'needs checking' }}){% endif %}</td>
-        <td data-label="{{ _('Proposed owner') }}">{% if r.candidate and people.get(r.candidate) %}{{ people[r.candidate].patient_name }}{% else %}none{% endif %}</td>
-        <td data-label="{{ _('Why') }}">{{ r.reason or '' }}</td>
+        <td data-label="{{ _('Type') }}">{{ _(r.kind) if r.kind else _('unknown') }}</td>
+        <td data-label="{{ _('Result') }}">{{ _(labels.get(r.result, r.result)) }}{% if r.strength %} ({{ _('strong') if r.strength == 'strong' else _('needs checking') }}){% endif %}</td>
+        <td data-label="{{ _('Proposed owner') }}">{% if r.candidate and people.get(r.candidate) %}{{ people[r.candidate].patient_name }}{% else %}{{ _("none") }}{% endif %}</td>
+        <td data-label="{{ _('Why') }}">{{ _msg(r.reason or '') }}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -139,9 +136,9 @@
       <tr>
         <td data-label="{{ _('Run') }}">{{ b.batch }}</td>
         <td data-label="{{ _('Started') }}">{{ b.started_at | appt_date }} {{ b.started_at | appt_time }}</td>
-        <td data-label="{{ _('Status') }}">{{ 'finished' if b.status == 'done' else 'interrupted or running - run it again to resume' }}</td>
-        <td data-label="{{ _('Files by state') }}">{% for s, n in b.counts | dictsort %}{{ labels.get(s, s) }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
-        <td data-label="{{ _('By type') }}">{% for k, n in b.types | dictsort %}{{ k }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+        <td data-label="{{ _('Status') }}">{{ _('finished') if b.status == 'done' else _('interrupted or running - run it again to resume') }}</td>
+        <td data-label="{{ _('Files by state') }}">{% for s, n in b.counts | dictsort %}{{ _(labels.get(s, s)) }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+        <td data-label="{{ _('By type') }}">{% for k, n in b.types | dictsort %}{{ _(k) }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -159,21 +156,21 @@
     <nav aria-label="{{ _('Filter by result') }}" class="d-flex flex-wrap gap-2 mb-2">
       <a class="btn btn-sm {{ 'btn-primary' if not state else 'btn-outline-secondary' }}" href="{{ url_for('imports.index') }}#queue" {% if not state %}aria-current="page"{% endif %}>{{ _("All") }}</a>
       {% for s in open_states %}
-      <a class="btn btn-sm {{ 'btn-primary' if state == s else 'btn-outline-secondary' }}" href="{{ url_for('imports.index', state=s) }}#queue" {% if state == s %}aria-current="page"{% endif %}>{{ labels[s] }}</a>
+      <a class="btn btn-sm {{ 'btn-primary' if state == s else 'btn-outline-secondary' }}" href="{{ url_for('imports.index', state=s) }}#queue" {% if state == s %}aria-current="page"{% endif %}>{{ _(labels[s]) }}</a>
       {% endfor %}
     </nav>
     {% if queue %}
     {# P30: Sort and Filter on the items loaded here (the buttons above choose a result on the server) #}
-    {% set kind_options = [] %}{% for k in queue | map(attribute='kind') | unique | sort %}{% set _k = kind_options.append([k, k]) %}{% endfor %}
-    {% set state_options = [] %}{% for s, label in labels.items() %}{% set _s = state_options.append([s, label]) %}{% endfor %}
+    {% set kind_options = [] %}{% for k in queue | map(attribute='kind') | unique | sort %}{% set _k = kind_options.append([k, _(k)]) %}{% endfor %}
+    {% set state_options = [] %}{% for s, label in labels.items() %}{% set _s = state_options.append([s, _(label)]) %}{% endfor %}
     <div class="sx-tools mb-2" data-list-tools data-for="import-rows" data-noun="{{ _('item|items') }}"
-         data-sorts='{{ [['no', 'num', -1, 'Newest first'], ['no', 'num', 1, 'Oldest first'], ['name', 'text', 1, 'Name (A-Z)']] | tojson }}'
-         data-filters='{{ [['state', 'Result', state_options], ['kind', 'File type', kind_options]] | tojson }}'></div>
+         data-sorts='{{ [['no', 'num', -1, _('Newest first')], ['no', 'num', 1, _('Oldest first')], ['name', 'text', 1, _('Name (A-Z)')]] | tojson }}'
+         data-filters='{{ [['state', _('Result'), state_options], ['kind', _('File type'), kind_options]] | tojson }}'></div>
     <ul class="ds-rows sx-box" id="import-rows">
       {% for r in queue %}
       <li class="ds-row" data-name="{{ name_of(r) }}" data-no="{{ r.id }}" data-state="{{ r.state }}" data-kind="{{ r.kind }}"><span class="ds-row-main">
         <span class="ds-row-title text-break">{{ name_of(r) }}</span>
-        <span class="ds-row-sub">item {{ r.id }} · {{ r.kind }} · <strong>{{ labels[r.state] }}</strong>{% if r.strength %} ({{ 'strong' if r.strength == 'strong' else 'needs checking' }}){% endif %}{% if r.patient_id and people.get(r.patient_id) %} · proposed: {{ people[r.patient_id].patient_name }}{% endif %}</span>
+        <span class="ds-row-sub">{{ _('item {id}', id=r.id) }} · {{ _(r.kind) }} · <strong>{{ _(labels[r.state]) }}</strong>{% if r.strength %} ({{ _('strong') if r.strength == 'strong' else _('needs checking') }}){% endif %}{% if r.patient_id and people.get(r.patient_id) %} · {{ _('proposed: {name}', name=people[r.patient_id].patient_name) }}{% endif %}</span>
       </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('imports.item', import_id=r.id) }}">{{ _("Decide") }}<span class="visually-hidden">: {{ name_of(r) }}</span></a></span></li>
       {% endfor %}
     </ul>

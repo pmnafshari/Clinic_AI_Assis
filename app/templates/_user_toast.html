@@ -3,10 +3,10 @@
 <div class="toast" role="status" data-bs-autohide="true" data-bs-delay="6000">
   <div class="toast-header">
     <i class="bi bi-check-circle-fill text-primary me-2"></i>
-    <strong class="me-auto">{{ username }} updated.</strong>
+    <strong class="me-auto">{{ _('{who} updated.', who=username) }}</strong>
     <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
   </div>
-  <div class="toast-body">{{ message }}</div>
+  <div class="toast-body">{{ _msg(message) }}</div>
 </div>
 {% else %}
 <div class="toast" role="alert" data-bs-autohide="false">
@@ -15,6 +15,6 @@
     <strong class="me-auto">{{ username }}</strong>
     <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
   </div>
-  <div class="toast-body">{{ message }}</div>
+  <div class="toast-body">{{ _msg(message) }}</div>
 </div>
 {% endif %}

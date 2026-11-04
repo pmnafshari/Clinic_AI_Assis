@@ -10,6 +10,7 @@ import patient_files as pf
 from auth import authorize, log_audit
 
 from .db import get_db
+from .i18n import _, message
 
 imports_bp = Blueprint("imports", __name__)
 
@@ -26,7 +27,7 @@ def _who():
 
 def _refuse(action, target="import"):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only a dentist can review imported files.", "danger")
+    flash(_("Only a dentist can review imported files."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -89,9 +90,9 @@ def drive_sync():
         return redirect(url_for("imports.index") + "#drive")
     r = ds.run(get_db(), run_id)
     if r["status"] == "error":
-        flash(f"The check failed: {r['error_message']}", "danger")
+        flash(_("The check failed: {why}", why=message(r["error_message"])), "danger")
     else:
-        flash(f"Drive checked: {r['new_files']} new file(s) staged. Nothing is attached until you confirm.", "success")
+        flash(_("Drive checked: {n} new file(s) staged. Nothing is attached until you confirm.", n=r["new_files"]), "success")
     return redirect(url_for("imports.index") + "#drive")
 
 
@@ -101,7 +102,7 @@ def drive_auto():
         return _refuse("drive_auto", "drive")
     interval = request.form.get("interval", "")
     ds.set_auto(get_db(), request.form.get("enabled") == "1", int(interval) if interval.isdigit() else 0, *_who())
-    flash("Automatic check updated.", "success")
+    flash(_("Automatic check updated."), "success")
     return redirect(url_for("imports.index") + "#drive")
 
 
@@ -115,7 +116,7 @@ def stage():
     except li.ImportProblem as e:
         flash(str(e), "danger")
         return redirect(url_for("imports.index"))
-    flash(f"Run {batch} is staged. Nothing is attached to any patient until you confirm each file.", "success")
+    flash(_("Run {batch} is staged. Nothing is attached to any patient until you confirm each file.", batch=batch), "success")
     return redirect(url_for("imports.index") + "#queue")
 
 
@@ -192,7 +193,7 @@ def confirm(import_id):
 def reject(import_id):
     if not authorize(g.user["role"], li.REVIEW):
         return _refuse("import_reject", f"item:{import_id}")
-    return _decided(import_id, li.reject, "Rejected. Nothing was attached; the old file is untouched.", kind="removed",
+    return _decided(import_id, li.reject, _("Rejected. Nothing was attached; the old file is untouched."), kind="removed",
                     reason=request.form.get("reason", ""))
 
 
@@ -200,4 +201,4 @@ def reject(import_id):
 def hold(import_id):
     if not authorize(g.user["role"], li.REVIEW):
         return _refuse("import_hold", f"item:{import_id}")
-    return _decided(import_id, li.hold, "Held for investigation.", reason=request.form.get("reason", ""))
+    return _decided(import_id, li.hold, _("Held for investigation."), reason=request.form.get("reason", ""))

@@ -4,7 +4,7 @@
   <div>
     <p class="ds-page-eyebrow">{{ _("Records") }}</p>
     <h1 class="ds-page-title">{{ _("Possible duplicates") }}</h1>
-    <p class="ds-page-meta">{{ pairs | length }} pair{{ '' if pairs | length == 1 else 's' }} to review</p>
+    <p class="ds-page-meta">{{ _('{n} pair to review', n=1) if pairs | length == 1 else _('{n} pairs to review', n=pairs | length) }}</p>
   </div>
 </div>
 
@@ -24,12 +24,12 @@
         {{ pair.a.patient_name }} &middot; {{ pair.b.patient_name }}
       </h2>
       <p class="ds-card-sub">
-        Looks alike because:
-        {% for reason in pair.reasons %}{{ reason }}{% if not loop.last %}, {% endif %}{% endfor %}.
+        {% set said = [] %}{% for reason in pair.reasons %}{% set _r = said.append(_(reason)) %}{% endfor %}
+        {{ _('Looks alike because: {reasons}.', reasons=said | join(', ')) }}
       </p>
     </div>
     <span class="badge {{ 'text-bg-dark' if pair.strength == 'strong' else 'text-bg-secondary' }}">
-      {{ 'Worth checking' if pair.strength == 'strong' else 'Possible' }}
+      {{ _('Worth checking') if pair.strength == 'strong' else _('Possible') }}
     </span>
   </div>
   <div class="dash-card-body">
@@ -39,7 +39,7 @@
         <div class="dup-side">
           <p class="ds-row-title mb-1">{{ side.patient_name }}</p>
           <p class="ds-row-sub mb-1"><code>{{ side.codice_fiscale }}</code></p>
-          <p class="ds-row-sub mb-2">{{ side.phone|phone or 'no phone on record' }}</p>
+          <p class="ds-row-sub mb-2">{{ side.phone|phone or _('no phone on record') }}</p>
           <a class="btn btn-sm btn-outline-secondary"
              href="{{ url_for('patients.detail_view', cf=side.codice_fiscale) }}">{{ _("Open record") }}</a>
         </div>
@@ -80,8 +80,7 @@
                    id="keep-{{ loop.index0 }}-{{ pair.a.codice_fiscale }}"
                    value="{{ side.codice_fiscale }}" required>
             <label class="form-check-label" for="keep-{{ loop.index0 }}-{{ pair.a.codice_fiscale }}">
-              Keep <strong>{{ side.patient_name }}</strong> ({{ side.codice_fiscale }}),
-              fold in {{ other.codice_fiscale }}
+              {{ _html('Keep <strong>{name}</strong> ({cf}), fold in {other}', name=side.patient_name, cf=side.codice_fiscale, other=other.codice_fiscale) }}
             </label>
           </div>
           {% endfor %}

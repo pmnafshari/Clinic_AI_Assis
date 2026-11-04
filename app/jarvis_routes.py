@@ -10,6 +10,7 @@ import web_session
 from auth import authorize, log_audit
 
 from .db import get_chroma, get_db
+from .i18n import _, message
 from .guides_routes import REASON_TITLES, gconn
 
 jarvis_bp = Blueprint("jarvis", __name__)
@@ -24,7 +25,7 @@ def _who():
 
 def _refuse(action, target="jarvis"):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("You do not have access to that.", "danger")
+    flash(_("You do not have access to that."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -46,7 +47,7 @@ def revoke_device(device_id):
     if not authorize(g.user["role"], "manage_users"):
         return _refuse("jarvis_device_revoke", f"jarvis_device:{device_id}")
     jl.revoke_device(get_db(), device_id, *_who())
-    flash("Device revoked: it can no longer reach the clinic app.", "removed")
+    flash(_("Device revoked: it can no longer reach the clinic app."), "removed")
     return redirect(url_for("jarvis.devices"))
 
 
@@ -65,7 +66,7 @@ def delegate(device_id):
         return _refuse("jarvis_delegate", f"jarvis_device:{device_id}")
     try:
         jl.delegate(get_db(), device_id, request.cookies.get(web_session.COOKIE_NAME), *_who())
-        flash("Jarvis on this device now acts for your session. It ends when you sign out or go idle.", "success")
+        flash(_("Jarvis on this device now acts for your session. It ends when you sign out or go idle."), "success")
     except jl.LinkError as e:
         flash(str(e), "danger")
     return redirect(url_for("jarvis.link"))
@@ -77,7 +78,7 @@ def revoke_delegation(delegation_id):
         return _refuse("jarvis_delegation_revoke", f"jarvis_delegation:{delegation_id}")
     try:
         jl.revoke_delegation(get_db(), delegation_id, *_who())
-        flash("Jarvis no longer acts for your session.", "success")
+        flash(_("Jarvis no longer acts for your session."), "success")
     except jl.LinkError as e:
         flash(str(e), "danger")
     return redirect(url_for("jarvis.link"))
@@ -320,7 +321,7 @@ def handoff(ticket):
     try:
         token, _username, _role = jl.use_handoff(conn, ticket)
     except jl.LinkError as e:
-        flash(f"{str(e).capitalize()} - sign in here.", "danger")
+        flash(_("{why} - sign in here.", why=message(str(e)).capitalize()), "danger")
         resp = redirect(url_for("auth.login"))
         resp.delete_cookie(web_session.COOKIE_NAME)
     else:

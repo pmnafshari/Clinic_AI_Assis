@@ -14,6 +14,7 @@ from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
+from .i18n import _
 
 upload_bp = Blueprint("upload", __name__)
 
@@ -40,7 +41,7 @@ def _process_uploads(files, cf, username, role, conn):
             results.append({
                 "filename": filename,
                 "status": "rejected",
-                "message": "File type not allowed. Accepted: PDF, JPG, PNG, TXT, XLSX.",
+                "message": _("File type not allowed. Accepted: PDF, JPG, PNG, TXT, XLSX."),
             })
             continue
 
@@ -76,7 +77,7 @@ def _process_uploads(files, cf, username, role, conn):
             results.append({
                 "filename": filename,
                 "status": "sorted",
-                "message": f"Filed to {dest.parent.name}.",
+                "message": _("Filed to {folder}.", folder=dest.parent.name),
             })
         else:
             # the queue is in memory and the worker is a daemon thread, so a
@@ -87,7 +88,7 @@ def _process_uploads(files, cf, username, role, conn):
             results.append({
                 "filename": filename,
                 "status": "queued",
-                "message": "Queued for processing.",
+                "message": _("Queued for processing."),
             })
     return results
 
@@ -99,7 +100,7 @@ def submit_patient(cf):
 
     if not authorize(g.user["role"], "upload_file"):
         log_audit(get_db(), g.user["username"], g.user["role"], "upload_file", cf, allowed=0)
-        flash("You don't have permission to upload files.", "danger")
+        flash(_("You don't have permission to upload files."), "danger")
         return redirect(url_for("patients.detail_view", cf=cf))
 
     # a fabricated-but-well-formed CF must 404 before any disk write, or a
@@ -119,7 +120,7 @@ def submit_patient(cf):
 def submit_dashboard():
     if not authorize(g.user["role"], "upload_file"):
         log_audit(get_db(), g.user["username"], g.user["role"], "upload_file", None, allowed=0)
-        flash("You don't have permission to upload files.", "danger")
+        flash(_("You don't have permission to upload files."), "danger")
         return redirect(url_for("dashboard.index"))
 
     files = request.files.getlist("files")

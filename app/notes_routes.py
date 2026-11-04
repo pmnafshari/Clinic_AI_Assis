@@ -12,6 +12,7 @@ from extract_note import OllamaUnreachable, call_model, local_urlopen, parse_rep
 from storage import lookup_patient, phone_needed, save_new_note
 
 from .db import get_chroma, get_db
+from .i18n import _
 
 notes_bp = Blueprint("notes", __name__)
 
@@ -70,7 +71,7 @@ def dictate():
     cf = request.form.get("cf", "")
     if not authorize(g.user["role"], "append_note"):
         log_audit(get_db(), g.user["username"], g.user["role"], "dictate", cf or None, allowed=0)
-        flash("You don't have permission to add notes.", "danger")
+        flash(_("You don't have permission to add notes."), "danger")
         return redirect(url_for("dashboard.index"))
     locked = _locked_patient(cf)
     blob = request.files.get("audio")
@@ -98,7 +99,7 @@ def new_note():
         cf = request.values.get("cf", "")
         log_audit(get_db(), g.user["username"], g.user["role"], "append_note",
                   target=cf or None, allowed=0)
-        flash("You don't have permission to add notes.", "danger")
+        flash(_("You don't have permission to add notes."), "danger")
         return redirect(url_for("dashboard.index"))
 
     if request.method == "GET" and request.args.get("preview"):
@@ -128,7 +129,7 @@ def new_note():
         except OllamaUnreachable as e:
             return render_template("notes_new.html", error=str(e), locked=locked, **_dictation())
         except ValueError as e:
-            return render_template("notes_new.html", error=f"extraction rejected: {e}", locked=locked)
+            return render_template("notes_new.html", error=_("extraction rejected: {why}", why=e), locked=locked)
 
         # D-03: extraction misreading a name shouldn't block the note - warn
         # and let the human decide, the locked identity still wins on save
@@ -144,10 +145,8 @@ def new_note():
                 # like the note agreed on the patient when it never said
                 named = f"{note.patient_name} ({note.codice_fiscale})" if cf_differs \
                     else note.patient_name
-                mismatch = (
-                    f"this note names {named} - "
-                    f"it will be filed under {locked['patient_name']} ({locked['cf']})"
-                )
+                mismatch = _("this note names {named} - it will be filed under {name} ({cf})",
+                             named=named, name=locked["patient_name"], cf=locked["cf"])
         token = note_review.issue_confirm_token(get_db(), g.user["username"])
         _previews[token] = (g.user["username"], cf, note, mismatch)
         while len(_previews) > PREVIEWS_KEPT:
@@ -185,35 +184,35 @@ def new_note():
             next_appointment=request.form.get("next_appointment") or None,
         )
     except Exception as e:
-        return render_template("notes_new.html", error=f"Check these fields: {plain_errors(e)}", locked=locked)
+        return render_template("notes_new.html", error=_("Check these fields: {fields}", fields=plain_errors(e)), locked=locked)
 
     if phone_needed(get_db(), note.codice_fiscale, note.phone):
         # the draft stays on screen with what was typed, and its token stays unused
         return render_template("notes_new.html", preview=note, locked=locked,
                                confirm_token=request.form.get("confirm_token"),
-                               error="This is a new patient - add their phone number before saving.")
+                               error=_("This is a new patient - add their phone number before saving."))
 
     # P14.T2: one save per preview. the token is claimed before anything is
     # written, so a second submit of the same preview finds it used
     claim = note_review.claim_confirm_token(get_db(), request.form.get("confirm_token"),
                                             g.user["username"])
     if claim == "used":
-        flash("This note was already saved.")
+        flash(_("This note was already saved."))
         if locked is not None:
             return redirect(url_for("patients.detail_view", cf=locked["cf"]))
         return redirect(url_for("dashboard.index"))
     if claim != "ok":
         return render_template("notes_new.html", locked=locked, **_dictation(),
-                               error="This form has expired. Extract the note again.")
+                               error=_("This form has expired. Extract the note again."))
 
     _previews.pop(request.form.get("confirm_token"), None)
     status = save_new_note(
         note, get_db(), get_chroma(), g.user["role"], g.user["username"], sorted_root=SORTED_ROOT
     )
     if status == "failed":
-        flash("Note saved to disk but it is not searchable yet - ask an admin to run a backfill.", "danger")
+        flash(_("Note saved to disk but it is not searchable yet - ask an admin to run a backfill."), "danger")
     else:
-        flash("Note saved.")
+        flash(_("Note saved."))
 
     # D-04: both outcomes return to the patient screen when scoped to one -
     # the json is already on disk, so keeping staff on the form risks a
@@ -228,10 +227,10 @@ def _show_preview(token):
     if held is None or held[0] != g.user["username"]:
         if note_review.confirm_token_used(get_db(), token, g.user["username"]):
             # Back from the saved note's page lands here - say so, never re-offer the save
-            flash("This note was already saved.")
+            flash(_("This note was already saved."))
             return redirect(url_for("dashboard.index"))
         return render_template("notes_new.html", locked=None, **_dictation(),
-                               error="This draft has expired. Extract the note again.")
+                               error=_("This draft has expired. Extract the note again."))
     _held_id, cf, note, mismatch = held
     return render_template("notes_new.html", preview=note, locked=_locked_patient(cf),
                            mismatch=mismatch, confirm_token=token)

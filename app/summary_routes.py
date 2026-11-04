@@ -10,13 +10,14 @@ from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
+from .i18n import _
 
 summary_bp = Blueprint("summary", __name__)
 
 
 def _refuse(action, target=None):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only a dentist can see or review a next-visit summary.", "danger")
+    flash(_("Only a dentist can see or review a next-visit summary."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -85,7 +86,7 @@ def read_aloud(cf):
     conn, pid, _patient_row = _patient(cf)
     text = dictation.readable_summary(conn, pid, g.user["username"], g.user["role"])
     if text is None:
-        flash("Only a current, approved summary can be read aloud.", "danger")
+        flash(_("Only a current, approved summary can be read aloud."), "danger")
         return _back(cf)
     try:
         audio = dictation.speak(text, request.form.get("private") == "yes")
@@ -122,7 +123,7 @@ def regenerate(cf, sid):
 def edit(cf, sid):
     if not authorize(g.user["role"], vs.CAPABILITY):
         return _refuse("summary_edit", f"summary:{sid}")
-    return _act(cf, sid, vs.edit, "Saved as a new version.", text=request.form.get("body", ""))
+    return _act(cf, sid, vs.edit, _("Saved as a new version."), text=request.form.get("body", ""))
 
 
 @summary_bp.route("/patients/<cf>/summary/<int:sid>/approve", methods=["POST"])
@@ -136,5 +137,5 @@ def approve(cf, sid):
 def reject(cf, sid):
     if not authorize(g.user["role"], vs.CAPABILITY):
         return _refuse("summary_reject", f"summary:{sid}")
-    return _act(cf, sid, vs.reject, "Rejected. It stays in the history.", kind="removed",
+    return _act(cf, sid, vs.reject, _("Rejected. It stays in the history."), kind="removed",
                 reason=request.form.get("reason", ""))

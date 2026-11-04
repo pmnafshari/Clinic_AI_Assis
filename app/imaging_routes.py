@@ -10,6 +10,7 @@ from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
+from .i18n import _
 
 imaging_bp = Blueprint("imaging", __name__)
 
@@ -20,7 +21,7 @@ def _who():
 
 def _refuse(action, target):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only a dentist can create or change an imaging request.", "danger")
+    flash(_("Only a dentist can create or change an imaging request."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -58,7 +59,7 @@ def _step(cf, rid, fn, done, kind="success", **kwargs):
 
 def _reception_refuse(action, target):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only reception or a dentist can book or resolve an imaging appointment.", "danger")
+    flash(_("Only reception or a dentist can book or resolve an imaging appointment."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -96,7 +97,7 @@ def create(cf):
         return _back(cf)
     for w in warnings:
         flash(w, "warning")
-    flash("Draft saved. Nothing happens until you activate it.", "success")
+    flash(_("Draft saved. Nothing happens until you activate it."), "success")
     return _back(cf, rid)
 
 
@@ -155,7 +156,7 @@ def files(cf, rid):
 def activate(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_activate", f"imaging:{rid}")
-    return _step(cf, rid, ir.activate, "Active. Reception can now see it.",
+    return _step(cf, rid, ir.activate, _("Active. Reception can now see it."),
                  expected_version=request.form.get("version", "0"))
 
 
@@ -163,7 +164,7 @@ def activate(cf, rid):
 def cancel(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_cancel", f"imaging:{rid}")
-    return _step(cf, rid, ir.cancel, "Cancelled. Reception sees that it was cancelled.", kind="removed",
+    return _step(cf, rid, ir.cancel, _("Cancelled. Reception sees that it was cancelled."), kind="removed",
                  expected_version=request.form.get("version", "0"), reason=request.form.get("reason", ""))
 
 
@@ -181,7 +182,7 @@ def revise(cf, rid):
     except ir.RequestError as e:
         flash(str(e), "danger")
         return _back(cf, rid)
-    flash("New version saved as a draft. The active version stays until you activate this one.", "success")
+    flash(_("New version saved as a draft. The active version stays until you activate this one."), "success")
     return _back(cf, new)
 
 
@@ -189,14 +190,14 @@ def revise(cf, rid):
 def acknowledge(cf, rid):
     if not authorize(g.user["role"], ir.VIEW):
         return _refuse("imaging_acknowledge", f"imaging:{rid}")
-    return _step(cf, rid, ir.acknowledge, "Noted as seen.", expected_version=request.form.get("version", "0"))
+    return _step(cf, rid, ir.acknowledge, _("Noted as seen."), expected_version=request.form.get("version", "0"))
 
 
 @imaging_bp.route("/patients/<cf>/imaging/<int:rid>/ask", methods=["POST"])
 def ask(cf, rid):
     if not authorize(g.user["role"], ir.VIEW):
         return _refuse("imaging_question", f"imaging:{rid}")
-    return _step(cf, rid, ir.ask_dentist, "The dentist will see your question on this request. No message is sent.")
+    return _step(cf, rid, ir.ask_dentist, _("The dentist will see your question on this request. No message is sent."))
 
 
 @imaging_bp.route("/patients/<cf>/imaging/<int:rid>/link", methods=["POST"])
@@ -204,7 +205,7 @@ def link(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_link", f"imaging:{rid}")
     raw = request.form.get("document_id", "")
-    return _step(cf, rid, ir.link_file, "Linked. The file is not published and is not marked as read or performed.",
+    return _step(cf, rid, ir.link_file, _("Linked. The file is not published and is not marked as read or performed."),
                  document_id=int(raw) if raw.isdigit() else 0, verified=request.form.get("verified") == "1")
 
 
@@ -226,7 +227,7 @@ def book(cf, rid):
     except ValueError as e:
         flash(str(e), "danger")
         return _back(cf, rid)
-    flash("Booked. The patient sees an ordinary appointment; nothing is sent.", "success")
+    flash(_("Booked. The patient sees an ordinary appointment; nothing is sent."), "success")
     return _back(cf, rid)
 
 
@@ -235,7 +236,7 @@ def move(cf, rid, bid):
     if not (authorize(g.user["role"], ir.VIEW) and authorize(g.user["role"], ib.BOOK)):
         return _reception_refuse("imaging_book_move", f"booking:{bid}")
     f = request.form
-    return _booking_step(cf, rid, bid, ib.move, "Moved. The booking follows the new time.",
+    return _booking_step(cf, rid, bid, ib.move, _("Moved. The booking follows the new time."),
                          starts_at=f"{f.get('day', '')}T{f.get('time', '')}", minutes=f.get("minutes", ""))
 
 
@@ -243,7 +244,7 @@ def move(cf, rid, bid):
 def resolve(cf, rid, bid):
     if not (authorize(g.user["role"], ir.VIEW) and authorize(g.user["role"], ib.BOOK)):
         return _reception_refuse("imaging_book_resolve", f"booking:{bid}")
-    return _booking_step(cf, rid, bid, ib.resolve, "Resolution recorded.",
+    return _booking_step(cf, rid, bid, ib.resolve, _("Resolution recorded."),
                          resolution=request.form.get("resolution", ""), note=request.form.get("note", ""))
 
 
@@ -252,7 +253,7 @@ def complete(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_complete", f"imaging:{rid}")
     raw = request.form.get("document_id", "")
-    return _step(cf, rid, ib.complete, "Recorded as done. The file is not published or changed.",
+    return _step(cf, rid, ib.complete, _("Recorded as done. The file is not published or changed."),
                  expected_version=request.form.get("version", "0"), document_id=int(raw) if raw.isdigit() else 0,
                  verified=request.form.get("verified") == "1")
 
@@ -261,7 +262,7 @@ def complete(cf, rid):
 def reverse(cf, rid):
     if not authorize(g.user["role"], ir.MANAGE):
         return _refuse("imaging_complete_reverse", f"imaging:{rid}")
-    return _step(cf, rid, ib.reverse, "Completion reversed. The request is open again.", kind="removed",
+    return _step(cf, rid, ib.reverse, _("Completion reversed. The request is open again."), kind="removed",
                  reason=request.form.get("reason", ""))
 
 

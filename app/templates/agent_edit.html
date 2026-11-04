@@ -11,7 +11,7 @@
 <div class="col-12 col-xl-8">
 <div class="card dash-card p-4">
   {% if error %}
-  <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+  <div class="ds-alert ds-alert-danger" role="alert">{{ _msg(error) }}</div>
   {% endif %}
   <form method="post" action="{{ url_for('agent.edit_page') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -23,7 +23,7 @@
       <label for="field" class="form-label">{{ _("Field") }}</label>
       <select id="field" name="field" class="form-select">
         {% for f in fields %}
-        <option value="{{ f }}" {% if f == field %}selected{% endif %}>{{ f }}</option>
+        <option value="{{ f }}" {% if f == field %}selected{% endif %}>{{ _(f) }}</option>
         {% endfor %}
       </select>
     </div>

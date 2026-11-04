@@ -33,7 +33,7 @@
       {% for d in devices %}
       <li class="ds-row"><span class="ds-row-main">
         <span class="ds-row-title">{{ d.name }}</span>
-        <span class="ds-row-sub">registered by {{ d.registered_by }} · {{ d.registered_at | appt_date }}{% if d.revoked_at %} · revoked{% endif %}</span>
+        <span class="ds-row-sub">{{ _('registered by {who} · {date}', who=d.registered_by, date=d.registered_at | appt_date) }}{% if d.revoked_at %} · {{ _('revoked') }}{% endif %}</span>
       </span>
       {% if not d.revoked_at %}
       <form method="post" action="{{ url_for('jarvis.revoke_device', device_id=d.id) }}">

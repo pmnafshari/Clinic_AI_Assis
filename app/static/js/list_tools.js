@@ -71,14 +71,14 @@
     if (box.hasAttribute("data-search")) {
       var form = el("form", "sx-search");
       form.setAttribute("role", "search");
-      var label = el("label", "visually-hidden", "Search this list");
+      var label = el("label", "visually-hidden", uiText("Search this list"));
       searchInput = el("input", "form-control form-control-sm");
       searchInput.type = "search";
       searchInput.autocomplete = "off";
-      searchInput.placeholder = box.getAttribute("data-search") || "Search";
+      searchInput.placeholder = box.getAttribute("data-search") || uiText("Search");
       searchInput.id = list.id + "-search";
       label.setAttribute("for", searchInput.id);
-      var go = el("button", "btn btn-primary btn-sm", "Search");
+      var go = el("button", "btn btn-primary btn-sm", uiText("Search"));
       go.type = "submit";
       form.appendChild(label);
       form.appendChild(searchInput);
@@ -116,12 +116,12 @@
         });
       });
       var foot = el("div", "sx-tool-foot");
-      var clear = el("button", "btn btn-outline-secondary btn-sm", "Clear");
+      var clear = el("button", "btn btn-outline-secondary btn-sm", uiText("Clear"));
       clear.type = "button";
       clear.addEventListener("click", clearAll);
       foot.appendChild(clear);
       panel.appendChild(foot);
-      var f = dropdown("Filter", "funnel", panel);
+      var f = dropdown(uiText("Filter"), "funnel", panel);
       filterLabel = f.label;
       filterCount = el("span", "sx-tool-count");
       filterCount.hidden = true;
@@ -131,7 +131,7 @@
 
     var menu = el("div");
     menu.setAttribute("role", "menu");
-    menu.appendChild(el("p", "sx-tool-k", "Sort by"));
+    menu.appendChild(el("p", "sx-tool-k", uiText("Sort by")));
     var items = sorts.map(function (s, i) {
       var item = el("button", "sx-menu-item");
       item.type = "button";
@@ -143,7 +143,7 @@
       return item;
     });
     var sortMenu = dropdown("", "arrow-down-up", menu);
-    sortMenu.button.setAttribute("aria-label", "Sort");
+    sortMenu.button.setAttribute("aria-label", uiText("Sort"));
     box.appendChild(sortMenu.wrap);
 
     // column headers sort too: a click picks that column, a second click flips it
@@ -152,7 +152,7 @@
       var key = th.getAttribute("data-sort");
       var button = el("button", "sx-th");
       button.type = "button";
-      button.title = "Sort by this column";
+      button.title = uiText("Sort by this column");
       while (th.firstChild) button.appendChild(th.firstChild);
       var arrow = el("span", "sx-th-arrow", "↕");
       arrow.setAttribute("aria-hidden", "true");
@@ -177,8 +177,8 @@
     root.parentNode.insertBefore(status, root.nextSibling);
     var empty = el("p", "sx-list-empty");
     empty.hidden = true;
-    empty.appendChild(document.createTextNode("No " + noun[1] + " match. "));
-    var emptyClear = el("button", "btn btn-link btn-sm p-0 align-baseline", "Clear search and filters");
+    empty.appendChild(document.createTextNode(uiText("No {nouns} match. ", {nouns: noun[1]})));
+    var emptyClear = el("button", "btn btn-link btn-sm p-0 align-baseline", uiText("Clear search and filters"));
     emptyClear.type = "button";
     emptyClear.addEventListener("click", clearAll);
     empty.appendChild(emptyClear);
@@ -205,7 +205,7 @@
     function chip(text, onRemove) {
       var b = el("button", "sx-chip");
       b.type = "button";
-      b.setAttribute("aria-label", "Remove " + text);
+      b.setAttribute("aria-label", uiText("Remove {name}", {name: text}));
       b.appendChild(el("span", null, text));
       var x = el("span", "sx-chip-x", "×");
       x.setAttribute("aria-hidden", "true");
@@ -265,7 +265,7 @@
         item.setAttribute("aria-checked", String(i === state.sort));
         item.classList.toggle("is-on", i === state.sort);
       });
-      sortMenu.label.textContent = s ? s[3] : "Sort";
+      sortMenu.label.textContent = s ? s[3] : uiText("Sort");
       headers.forEach(function (th) {
         var on = s && th.getAttribute("data-sort") === s[0];
         if (on) th.setAttribute("aria-sort", s[2] > 0 ? "ascending" : "descending"); else th.removeAttribute("aria-sort");
@@ -275,14 +275,14 @@
       if (filterLabel) filterLabel.parentNode.classList.toggle("is-on", active > 0);
 
       while (chips.firstChild) chips.removeChild(chips.firstChild);
-      if (state.q) chips.appendChild(chip("Search: " + state.q, function () { state.q = ""; if (searchInput) searchInput.value = ""; apply(); }));
+      if (state.q) chips.appendChild(chip(uiText("Search: {q}", {q: state.q}), function () { state.q = ""; if (searchInput) searchInput.value = ""; apply(); }));
       filters.forEach(function (g) {
         state.chosen[g[0]].slice().forEach(function (v) {
           chips.appendChild(chip(labelOf(g[0], v), function () { boxes[g[0]][v].checked = false; state.chosen[g[0]].splice(state.chosen[g[0]].indexOf(v), 1); apply(); }));
         });
       });
       if (chips.firstChild) {
-        var all = el("button", "btn btn-link btn-sm p-0", "Clear all");
+        var all = el("button", "btn btn-link btn-sm p-0", uiText("Clear all"));
         all.type = "button";
         all.addEventListener("click", clearAll);
         chips.appendChild(all);
@@ -294,8 +294,9 @@
         shown = parseInt(box.getAttribute("data-shown") || "0", 10);
         whole = parseInt(box.getAttribute("data-total") || "0", 10);
       }
-      status.textContent = (shown === whole ? whole : shown + " of " + whole) + " " +
-        noun[whole === 1 ? 0 : 1] + (shown === whole ? "" : " shown") + (s ? " · " + s[3].toLowerCase() : "");
+      var count = {shown: shown, whole: whole, noun: noun[whole === 1 ? 0 : 1]};
+      status.textContent = (shown === whole ? uiText("{whole} {noun}", count) : uiText("{shown} of {whole} {noun} shown", count)) +
+        (s ? " · " + s[3].toLowerCase() : "");
     }
 
     apply();

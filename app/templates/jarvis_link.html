@@ -4,9 +4,7 @@
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ _("Jarvis · local voice companion (J00)") }}</p>
     <h1 class="ds-page-title">{{ _("Use Jarvis on this device") }}</h1>
-    <p class="ds-page-meta">Jarvis can answer approved clinic-guide questions for anyone nearby. For anything about a patient
-    or an action it needs your signed-in session: delegate it here. It ends when you sign out, after {{ hours }} hours, when
-    your session goes idle, or when you stop it. Your voice, a name or a spoken "yes" never proves who you are.</p>
+    <p class="ds-page-meta">{{ _('Jarvis can answer approved clinic-guide questions for anyone nearby. For anything about a patient or an action it needs your signed-in session: delegate it here. It ends when you sign out, after {hours} hours, when your session goes idle, or when you stop it. Your voice, a name or a spoken "yes" never proves who you are.', hours=hours) }}</p>
   </div>
 </div>
 <section class="card dash-card mb-3" aria-labelledby="mine-title">
@@ -17,11 +15,11 @@
       {% for m in mine %}
       <li class="ds-row"><span class="ds-row-main">
         <span class="ds-row-title">{{ m.name }}</span>
-        <span class="ds-row-sub">since {{ m.created_at | appt_date }} {{ m.created_at | appt_time }} · ends at the latest {{ m.expires_at | appt_date }} {{ m.expires_at | appt_time }}</span>
+        <span class="ds-row-sub">{{ _('since {start} · ends at the latest {end}', start=(m.created_at | appt_date) ~ ' ' ~ (m.created_at | appt_time), end=(m.expires_at | appt_date) ~ ' ' ~ (m.expires_at | appt_time)) }}</span>
       </span>
       <form method="post" action="{{ url_for('jarvis.revoke_delegation', delegation_id=m.id) }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <button type="submit" class="btn btn-outline-danger btn-sm">{{ _("Stop") }}<span class="visually-hidden"> Jarvis acting for you on {{ m.name }}</span></button>
+        <button type="submit" class="btn btn-outline-danger btn-sm">{{ _("Stop") }}<span class="visually-hidden">{{ _(' Jarvis acting for you on {name}', name=m.name) }}</span></button>
       </form></li>
       {% endfor %}
     </ul>

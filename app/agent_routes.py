@@ -11,6 +11,7 @@ from extract_note import OllamaUnreachable
 from local_model import local_urlopen
 
 from .db import get_chroma, get_db
+from .i18n import _, message
 
 agent_bp = Blueprint("agent", __name__)
 
@@ -56,7 +57,7 @@ def _build_and_render(call, template, **template_args):
 @agent_bp.route("/agent/command", methods=["GET", "POST"])
 def command_page():
     if not authorize(g.user["role"], "update_field"):
-        return _deny_page("You don't have permission to edit records.")
+        return _deny_page(_("You don't have permission to edit records."))
 
     if request.method == "GET":
         return render_template("agent_command.html", **_dictation())
@@ -72,7 +73,7 @@ def command_page():
     except ValueError as e:
         return render_template(
             "agent_command.html", command=command,
-            error=f"couldn't understand that command: {e}",
+            error=_("couldn't understand that command: {why}", why=message(str(e))),
         )
 
     return _build_and_render(call, "agent_command.html", command=command)
@@ -83,7 +84,7 @@ def dictate_command():
     """P14.04: a spoken command only fills the command box. It is not run - the
     allowlist, the clarification and the confirm step all still apply."""
     if not authorize(g.user["role"], "update_field"):
-        return _deny_page("You don't have permission to edit records.")
+        return _deny_page(_("You don't have permission to edit records."))
     blob = request.files.get("audio")
     audio = blob.read(dictation.MAX_AUDIO_BYTES + 1) if blob else b""
     try:
@@ -102,13 +103,14 @@ def dictate_command():
 
 def _dictation():
     ok, why = dictation.stt_status()
-    return {"dictation_ok": ok, "dictation_why": why}
+    # the voice help says "type the note" for the note form; this page takes a command
+    return {"dictation_ok": ok, "dictation_why": why, "command_why": (why or "").replace("type the note", "type the command")}
 
 
 @agent_bp.route("/agent/edit", methods=["GET", "POST"])
 def edit_page():
     if not authorize(g.user["role"], "update_field"):
-        return _deny_page("You don't have permission to edit records.")
+        return _deny_page(_("You don't have permission to edit records."))
 
     fields = sorted(agent.EDITABLE_FIELDS)
     if request.method == "GET":
@@ -124,7 +126,7 @@ def edit_page():
     except Exception as e:
         return render_template(
             "agent_edit.html", fields=fields, patient=patient, field=field, value=value,
-            error=f"Check these fields: {plain_errors(e)}",
+            error=_("Check these fields: {fields}", fields=plain_errors(e)),
         )
 
     return _build_and_render(call, "agent_edit.html", fields=fields, patient=patient, field=field, value=value)
@@ -135,13 +137,13 @@ def confirm_change():
     token = request.form.get("token", "")
     pending = pending_actions.load_pending_action(get_db(), token, g.user["username"])
     if pending is None:
-        return _confirm_error("This change has expired. Review and confirm again.")
+        return _confirm_error(_("This change has expired. Review and confirm again."))
 
     # burn the token before applying - the atomic delete makes the token
     # single-use even for concurrent double-submits, and a denied apply
     # below still leaves it consumed
     if not pending_actions.consume_pending_action(get_db(), token, g.user["username"]):
-        return _confirm_error("This change has expired. Review and confirm again.")
+        return _confirm_error(_("This change has expired. Review and confirm again."))
 
     # peek at authorize() here only to pick the right response - the actual
     # security boundary is the independent check inside apply_pending_action
@@ -154,17 +156,18 @@ def confirm_change():
         )
     except (OSError, ValueError):
         # e.g. the note file vanished during the confirm window
-        return _confirm_error("This change can no longer be applied. Review and rebuild it.")
+        return _confirm_error(_("This change can no longer be applied. Review and rebuild it."))
 
     if not allowed:
-        return _confirm_error("You don't have permission to make this change.")
+        return _confirm_error(_("You don't have permission to make this change."))
 
     change = pending.get("change")
     if change:
         # P29 R-026: the result names what changed
-        flash(f"Saved: {change['patient']}'s {change['field']} is now {change['after'] or 'empty'}.", "success")
+        flash(_("Saved: {name}'s {field} is now {value}.", name=change["patient"], field=_(change["field"]),
+                value=change["after"] or _("empty")), "success")
     else:
-        flash("Change saved.", "success")
+        flash(_("Change saved."), "success")
     if request.headers.get("HX-Request"):
         # htmx's xhr follows a 302 transparently and would swap the redirect
         # target's whole document into the modal - hand it a client-side

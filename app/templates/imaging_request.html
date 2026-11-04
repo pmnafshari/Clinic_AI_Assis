@@ -3,25 +3,25 @@
 <nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('patients.detail_view', cf=cf) }}#imaging">{{ patient.patient_name }}</a></li>
-    <li aria-current="page">Imaging request {{ r.id }}</li>
+    <li aria-current="page">{{ _('Imaging request {id}', id=r.id) }}</li>
   </ol>
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
     <p class="ds-page-eyebrow">{{ _("Demo imaging request · synthetic, not a real order") }}</p>
     <h1 class="ds-page-title">{{ r.exam_label }}</h1>
-    <p class="ds-page-meta">For <strong>{{ patient.patient_name }}</strong> · <span class="font-monospace">{{ cf }}</span> · request {{ r.id }}, version {{ r.version }}</p>
+    <p class="ds-page-meta">{{ _html('For <strong>{name}</strong>', name=patient.patient_name) }} · <span class="font-monospace">{{ cf }}</span> · {{ _('request {id}, version {n}', id=r.id, n=r.version) }}</p>
   </div>
-  <span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ r.state }}</span>
+  <span class="ds-badge {{ {'active': 'ds-badge-success', 'draft': 'ds-badge-warning', 'cancelled': 'ds-badge-danger', 'superseded': 'ds-badge-warning'}[r.state] }}">{{ _(r.state) }}</span>
 </div>
 {# P29 U-011: which version is active and which is a draft, said in words #}
 {% if r.state == 'draft' %}
-<p class="ds-alert ds-alert-warning mb-3" role="status">This version is a draft, not active.
-  {% if active_version %}Version {{ active_version.version }} is the active one - reception works from it until this one is activated.
-  {% else %}Nothing is active yet - reception sees nothing until it is activated.{% endif %}</p>
+<p class="ds-alert ds-alert-warning mb-3" role="status">{{ _("This version is a draft, not active.") }}
+  {% if active_version %}{{ _('Version {n} is the active one - reception works from it until this one is activated.', n=active_version.version) }}
+  {% else %}{{ _("Nothing is active yet - reception sees nothing until it is activated.") }}{% endif %}</p>
 {% elif r.state == 'active' and newer_draft %}
-<p class="ds-alert ds-alert-info mb-3" role="status">Version {{ newer_draft.version }} is a draft, not active yet (by {{ newer_draft.created_by }}, {{ newer_draft.created_at | appt_date }}).
-  Reception works from version {{ r.version }} until it is activated. <a href="{{ url_for('imaging.view', cf=cf, rid=newer_draft.id) }}">Open version {{ newer_draft.version }}</a></p>
+<p class="ds-alert ds-alert-info mb-3" role="status">{{ _('Version {n} is a draft, not active yet (by {who}, {date}).', n=newer_draft.version, who=newer_draft.created_by, date=newer_draft.created_at | appt_date) }}
+  {{ _('Reception works from version {n} until it is activated.', n=r.version) }} <a href="{{ url_for('imaging.view', cf=cf, rid=newer_draft.id) }}">{{ _('Open version {n}', n=newer_draft.version) }}</a></p>
 {% endif %}
 
 {% if h.current %}
@@ -34,17 +34,17 @@
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Type, exactly as the dentist chose it") }}</span><span class="ds-row-title">{{ r.exam_label }}</span></span></li>
       {% if r.note %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Dentist's administrative note") }}</span><span class="ds-row-title text-break">{{ r.note }}</span></span></li>{% endif %}
       <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Seen by reception (clinic time)") }}</span><span class="ds-row-title">
-        {% for e in seen %}Seen by {{ e.actor }} on {{ e.at | clinic_when }}{{ '; ' if not loop.last else '' }}{% else %}Not marked as seen yet{% endfor %}</span></span></li>
+        {% for e in seen %}{{ _('Seen by {who} on {when}', who=e.actor, when=e.at | clinic_when) }}{{ '; ' if not loop.last else '' }}{% else %}{{ _("Not marked as seen yet") }}{% endfor %}</span></span></li>
     </ul>
     <h3 class="ds-card-title mt-3">{{ _("Next step") }}</h3>
     {% if guide and guide.citation %}
     {% set c = guide.citation %}
-    <p class="ds-row-sub mb-1">From the approved procedure {{ c.title }}, version {{ c.version }}, page {{ c.page }} (checked against the page):</p>
+    <p class="ds-row-sub mb-1">{{ _('From the approved procedure {title}, version {n}, page {page} (checked against the page):', title=c.title, n=c.version, page=c.page) }}</p>
     <blockquote class="guide-passage" lang="{{ c.language }}">{{ c.passage }}</blockquote>
-    {% for w in guide.warnings %}<p class="ds-row-sub"><strong>{{ w.text }}</strong> (page {{ w.page }})</p>{% endfor %}
-    <a href="{{ url_for('guides.source_view', guide_id=c.source_id, page=c.page) }}#page-{{ c.page }}">Open the procedure at page {{ c.page }}</a>
+    {% for w in guide.warnings %}<p class="ds-row-sub"><strong>{{ w.text }}</strong> {{ _('(page {page})', page=w.page) }}</p>{% endfor %}
+    <a href="{{ url_for('guides.source_view', guide_id=c.source_id, page=c.page) }}#page-{{ c.page }}">{{ _('Open the procedure at page {page}', page=c.page) }}</a>
     {% else %}
-    <p class="dash-empty-line">No approved procedure gives the steps for this request{% if guide and guide.why %} ({{ guide.why }}){% endif %}. Ask the dentist what to do.</p>
+    <p class="dash-empty-line">{{ _('No approved procedure gives the steps for this request ({why}). Ask the dentist what to do.', why=_msg(guide.why)) if guide and guide.why else _('No approved procedure gives the steps for this request. Ask the dentist what to do.') }}</p>
     {% endif %}
     <div class="d-flex flex-wrap gap-2 mt-3">
       <form method="post" action="{{ url_for('imaging.acknowledge', cf=cf, rid=r.id) }}">
@@ -60,7 +60,7 @@
 </section>
 {% else %}
 <div class="ds-alert ds-alert-warning mb-3" role="status">
-  <div><strong class="ds-alert-title">Nothing to act on</strong> {{ h.message }}
+  <div><strong class="ds-alert-title">{{ _("Nothing to act on") }}</strong> {{ _msg(h.message) }}
   {% if h.replaced_by %} <a href="{{ url_for('imaging.view', cf=cf, rid=h.replaced_by) }}">{{ _("Open the current version") }}</a>.{% endif %}</div>
 </div>
 {% endif %}
@@ -69,22 +69,22 @@
 <section class="card dash-card mb-3" aria-labelledby="booking-title" id="booking">
   <div class="dash-card-head"><h2 class="ds-card-title" id="booking-title">{{ _("Appointment and status") }}</h2></div>
   <div class="dash-card-body">
-    {% if status %}<p class="mb-2"><strong>{{ status }}</strong></p>{% endif %}
-    {% if booking %}<p class="mb-2">Appointment {{ booking.start_end }} with {{ booking.dentist }}<br>
-      <span class="ds-row-sub">Booked by {{ booking.booked_by }} on {{ booking.booked_when }} (clinic time)</span></p>{% endif %}
+    {% if status %}<p class="mb-2"><strong>{{ _msg(status) }}</strong></p>{% endif %}
+    {% if booking %}<p class="mb-2">{{ _('Appointment {when} with {dentist}', when=booking.start_end, dentist=booking.dentist) }}<br>
+      <span class="ds-row-sub">{{ _('Booked by {who} on {when} (clinic time)', who=booking.booked_by, when=booking.booked_when) }}</span></p>{% endif %}
     {% if booking and booking.state == 'needs_action' %}
-    <div class="ds-alert ds-alert-warning mb-2" role="status"><div><strong class="ds-alert-title">Needs reception action</strong>
-      The appointment on {{ booking.when }} with {{ booking.dentist }} was left as it is because {{ booking.reason }}. Do not treat it as a booking for this request until a resolution is recorded. Nobody has been contacted.</div></div>
+    <div class="ds-alert ds-alert-warning mb-2" role="status"><div><strong class="ds-alert-title">{{ _("Needs reception action") }}</strong>
+      {{ _('The appointment on {when} with {dentist} was left as it is because {why}. Do not treat it as a booking for this request until a resolution is recorded. Nobody has been contacted.', when=booking.when, dentist=booking.dentist, why=_(booking.reason)) }}</div></div>
     {% if can_book %}
     <form method="post" action="{{ url_for('imaging.resolve', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div><label for="resolution" class="form-label">{{ _("What reception did") }}</label><select id="resolution" name="resolution" class="form-select form-select-sm">{% for k, v in booking.choices %}<option value="{{ k }}">{{ v }}</option>{% endfor %}</select></div>
+      <div><label for="resolution" class="form-label">{{ _("What reception did") }}</label><select id="resolution" name="resolution" class="form-select form-select-sm">{% for k, v in booking.choices %}<option value="{{ k }}">{{ _(v) }}</option>{% endfor %}</select></div>
       <div><label for="rnote-b" class="form-label">{{ _("Why, in a few words") }}</label><textarea id="rnote-b" name="note" class="form-control form-control-sm" rows="1" maxlength="200" data-grow></textarea></div>
       <button class="btn btn-primary btn-sm" type="submit">{{ _("Record resolution") }}</button>
     </form>
     {% endif %}
     {% elif booking and can_book %}
-    <p class="ds-row-sub mb-1">{{ booking.minutes }} minutes. The patient sees an ordinary appointment.</p>
+    <p class="ds-row-sub mb-1">{{ _('{n} minutes. The patient sees an ordinary appointment.', n=booking.minutes) }}</p>
     <form method="post" action="{{ url_for('imaging.move', cf=cf, rid=r.id, bid=booking.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div><label for="mday" class="form-label">{{ _("New day") }}</label><input id="mday" type="date" name="day" class="form-control form-control-sm" required></div>
@@ -100,9 +100,9 @@
       <div><label for="bday" class="form-label">{{ _("Day") }}</label><input id="bday" type="date" name="day" class="form-control form-control-sm" required></div>
       <div><label for="btime" class="form-label">{{ _("Time (clinic time)") }}</label><input id="btime" type="time" name="time" class="form-control form-control-sm" required></div>
       <div><label for="bminutes" class="form-label">{{ _("Minutes") }}</label><input id="bminutes" type="number" name="minutes" value="20" min="5" max="480" class="form-control form-control-sm" required></div>
-      <button class="btn btn-primary btn-sm" type="submit">Book for {{ patient.patient_name }}</button>
+      <button class="btn btn-primary btn-sm" type="submit">{{ _('Book for {name}', name=patient.patient_name) }}</button>
     </form>
-    <p class="ds-row-sub mt-1">For version {{ r.version }} only. The patient's portal and reminders show an ordinary appointment.</p>
+    <p class="ds-row-sub mt-1">{{ _("For version {n} only. The patient's portal and reminders show an ordinary appointment.", n=r.version) }}</p>
     {% endif %}
   </div>
 </section>
@@ -113,7 +113,7 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="dentist-title">{{ _("Dentist") }}</h2></div>
   <div class="dash-card-body">
     {% if r.state == 'draft' %}
-    <p>Activate this request for <strong>{{ patient.patient_name }}</strong> (<span class="font-monospace">{{ cf }}</span>): <strong>{{ r.exam_label }}</strong>, version {{ r.version }}{% if r.supersedes_id %}, replacing request {{ r.supersedes_id }}{% endif %}. Reception will see it as current.</p>
+    <p>{{ _html('Activate this request for <strong>{name}</strong> (<span class="font-monospace">{cf}</span>): <strong>{exam}</strong>, version {n}, replacing request {old}. Reception will see it as current.', name=patient.patient_name, cf=cf, exam=r.exam_label, n=r.version, old=r.supersedes_id) if r.supersedes_id else _html('Activate this request for <strong>{name}</strong> (<span class="font-monospace">{cf}</span>): <strong>{exam}</strong>, version {n}. Reception will see it as current.', name=patient.patient_name, cf=cf, exam=r.exam_label, n=r.version) }}</p>
     <form method="post" action="{{ url_for('imaging.activate', cf=cf, rid=r.id) }}" class="d-inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="version" value="{{ r.version }}">
       <button class="btn btn-primary btn-sm" type="submit">{{ _("Activate") }}</button>
@@ -129,14 +129,14 @@
     {% if r.state == 'active' %}
     <form method="post" action="{{ url_for('imaging.revise', cf=cf, rid=r.id) }}" class="row g-2 align-items-end mt-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="submit_token" value="{{ token }}">
-      <div class="col-sm-4"><label for="rexam" class="form-label">{{ _("Corrected type") }}</label><select id="rexam" name="exam" class="form-select form-select-sm">{% for k, v in exams.items() %}<option value="{{ k }}" {% if k == r.exam %}selected{% endif %}>{{ v or 'Other (write it)' }}</option>{% endfor %}</select></div>
+      <div class="col-sm-4"><label for="rexam" class="form-label">{{ _("Corrected type") }}</label><select id="rexam" name="exam" class="form-select form-select-sm">{% for k, v in exams.items() %}<option value="{{ k }}" {% if k == r.exam %}selected{% endif %}>{{ _(v) if v else _('Other (write it)') }}</option>{% endfor %}</select></div>
       <div class="col-sm-4"><label for="rlabel" class="form-label">{{ _("If other: the type") }}</label><input id="rlabel" name="label" class="form-control form-control-sm" maxlength="80"></div>
       <div class="col-sm-4"><label for="rnote" class="form-label">{{ _("Administrative note (optional)") }}</label><input id="rnote" name="note" class="form-control form-control-sm" maxlength="300"></div>
       <div class="col-12"><button class="btn btn-outline-secondary btn-sm" type="submit">{{ _("Revise (new version, draft)") }}</button></div>
     </form>
     <section id="files" class="mt-3" aria-labelledby="files-link-title">
       <h3 class="ds-card-title" id="files-link-title">{{ _("Files linked to this request") }}</h3>
-      {% if files %}<ul>{% for f in files %}<li>{{ f.display_name }} <span class="ds-row-sub">linked by {{ f.linked_by }}</span></li>{% endfor %}</ul>{% else %}<p class="ds-row-sub">{{ _("None linked.") }}</p>{% endif %}
+      {% if files %}<ul>{% for f in files %}<li>{{ f.display_name }} <span class="ds-row-sub">{{ _('linked by {who}', who=f.linked_by) }}</span></li>{% endfor %}</ul>{% else %}<p class="ds-row-sub">{{ _("None linked.") }}</p>{% endif %}
       {% if linkable %}
       <form method="post" action="{{ url_for('imaging.link', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -151,7 +151,7 @@
       <h3 class="ds-card-title" id="completion-title">{{ _("Completion") }}</h3>
       {% if completion %}
       {% set done_file = files | selectattr('document_id', 'equalto', completion.document_id) | first %}
-      <p>Recorded as done by {{ completion.recorded_by }} on {{ completion.recorded_at | clinic_when }}{% if done_file %}, with the image {{ done_file.display_name }}{% endif %}.</p>
+      <p>{{ _('Recorded as done by {who} on {when}, with the image {file}.', who=completion.recorded_by, when=completion.recorded_at | clinic_when, file=done_file.display_name) if done_file else _('Recorded as done by {who} on {when}.', who=completion.recorded_by, when=completion.recorded_at | clinic_when) }}</p>
       <form method="post" action="{{ url_for('imaging.reverse', cf=cf, rid=r.id) }}" class="d-flex flex-wrap gap-2 align-items-end">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div><label for="rreason" class="form-label">{{ _("Why reverse it") }}</label><textarea id="rreason" name="reason" class="form-control form-control-sm" maxlength="200" required rows="1" data-grow></textarea></div>
@@ -176,9 +176,9 @@
   <div class="dash-card-head"><div><h2 class="ds-card-title" id="hist-title">{{ _("History") }}</h2><p class="ds-card-sub">{{ _("Every version of this request, newest first (clinic time)") }}</p></div></div>
   <div class="dash-card-body">
     <table class="ux-table ux-table-page">
-      <caption class="visually-hidden">History of request {{ r.id }}, newest first</caption>
+      <caption class="visually-hidden">{{ _('History of request {id}, newest first', id=r.id) }}</caption>
       <thead><tr><th scope="col">{{ _("When") }}</th><th scope="col">{{ _("Version") }}</th><th scope="col">{{ _("What happened") }}</th><th scope="col">{{ _("Who") }}</th></tr></thead>
-      <tbody>{% for e in history %}<tr data-hist-id="{{ e.id }}"><td data-label="{{ _('When') }}"><span class="ux-nowrap">{{ e.at | clinic_when }}</span></td><td data-label="{{ _('Version') }}">{{ e.version }}</td><td data-label="{{ _('What happened') }}">{{ e.what }}</td><td data-label="{{ _('Who') }}">{{ e.actor }}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for e in history %}<tr data-hist-id="{{ e.id }}"><td data-label="{{ _('When') }}"><span class="ux-nowrap">{{ e.at | clinic_when }}</span></td><td data-label="{{ _('Version') }}">{{ e.version }}</td><td data-label="{{ _('What happened') }}">{{ _msg(e.what) }}</td><td data-label="{{ _('Who') }}">{{ e.actor }}</td></tr>{% endfor %}</tbody>
     </table>
   </div>
 </section>

@@ -86,6 +86,7 @@ def create_app():
     app.jinja_env.globals["_msg"] = i18n.message
     app.jinja_env.globals["_ctx"] = i18n.in_context
     app.jinja_env.globals["lang"] = i18n.current
+    app.jinja_env.globals["js_text"] = i18n.js_text
     app.jinja_env.globals["flash_kind"] = lambda category: i18n.FLASH_KINDS.get(category, i18n.FLASH_NOTE)
 
     @app.route("/lang/<code>")
@@ -202,7 +203,7 @@ def create_app():
         # a plain 302 (no explicit 413 status) so the browser follows the
         # redirect and renders the flashed banner instead of Werkzeug's raw
         # error stub (D-12)
-        flash("One or more files exceed the 25MB limit. Try uploading fewer or smaller files at once.", "danger")
+        flash(i18n._("One or more files exceed the 25MB limit. Try uploading fewer or smaller files at once."), "danger")
         if request.headers.get("HX-Request"):
             # the upload form swaps into the toast container, so a redirect
             # here lands a whole page inside the toast stack. ask htmx for a

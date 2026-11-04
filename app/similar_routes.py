@@ -7,13 +7,14 @@ from codice_fiscale import is_valid as is_valid_cf
 from storage import lookup_patient
 
 from .db import get_db
+from .i18n import _
 
 similar_bp = Blueprint("similar", __name__)
 
 
 def _refuse(action, target):
     log_audit(get_db(), g.user["username"], g.user["role"], action, target, allowed=0)
-    flash("Only a dentist can look at similar cases.", "danger")
+    flash(_("Only a dentist can look at similar cases."), "danger")
     return redirect(url_for("dashboard.index"))
 
 
@@ -60,7 +61,7 @@ def feedback(cf, vid, case):
     except ValueError as e:
         flash(str(e), "danger")
         return redirect(url_for("similar.page", cf=cf, vid=vid))
-    flash("Recorded. Your verdict does not change any record or the list.", "success")
+    flash(_("Recorded. Your verdict does not change any record or the list."), "success")
     return redirect(url_for("similar.page", cf=cf, vid=vid))
 
 
@@ -78,5 +79,5 @@ def exclude(cf, vid, case):
     except sc.Disabled as e:
         flash(str(e), "danger")
         return redirect(url_for("similar.page", cf=cf, vid=vid))
-    flash("Removed from similar-case search. The visit itself is unchanged.", "removed")
+    flash(_("Removed from similar-case search. The visit itself is unchanged."), "removed")
     return redirect(url_for("similar.page", cf=cf, vid=vid))

@@ -28,7 +28,7 @@ if (dialog && buttons.length && typeof dialog.showModal === "function") {
     at = i;
     const button = buttons[i], mine = ++ticket, kind = button.dataset.look, src = button.dataset.lookSrc;
     title.textContent = button.dataset.lookName;
-    pos.textContent = `${i + 1} of ${buttons.length}`;
+    pos.textContent = uiText("{i} of {n}", {i: i + 1, n: buttons.length});
     const lost = document.activeElement;
     prev.disabled = i === 0;
     next.disabled = i === buttons.length - 1;
@@ -38,13 +38,13 @@ if (dialog && buttons.length && typeof dialog.showModal === "function") {
     pages.hidden = true;
     turn = null;
     dialog.dataset.kind = kind;
-    say("Loading...");
-    const failed = () => { if (mine === ticket) say("This file could not be shown here. Download the original to open it."); };
+    say(uiText("Loading..."));
+    const failed = () => { if (mine === ticket) say(uiText("This file could not be shown here. Download the original to open it.")); };
     try {
       if (kind === "image") {
         const img = new Image();
         img.className = "look-image";
-        img.alt = `Preview of ${button.dataset.lookName} (for orientation only)`;
+        img.alt = uiText("Preview of {name} (for orientation only)", {name: button.dataset.lookName});
         img.addEventListener("error", failed);
         img.src = src;
         body.replaceChildren(img);
@@ -75,7 +75,7 @@ if (dialog && buttons.length && typeof dialog.showModal === "function") {
           canvas.style.width = `${view.width / ratio}px`;
           await sheet.render({ canvasContext: canvas.getContext("2d"), viewport: view }).promise;
           if (mine !== ticket) return;
-          pageLabel.textContent = `Page ${page} of ${doc.numPages}`;
+          pageLabel.textContent = uiText("Page {page} of {n}", {page: page, n: doc.numPages});
           // a button that turns off would drop the cursor out of the viewer, so it moves to the other one
           const lost = document.activeElement;
           pagePrev.disabled = page <= 1;
@@ -87,7 +87,7 @@ if (dialog && buttons.length && typeof dialog.showModal === "function") {
         pages.hidden = doc.numPages < 2;
         await draw();
       } else {
-        say("No preview for this kind of file. Download the original to open it.");
+        say(uiText("No preview for this kind of file. Download the original to open it."));
       }
     } catch (error) {
       failed();

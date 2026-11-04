@@ -37,6 +37,30 @@ def current():
     return lang if lang in LANGUAGES else "en"
 
 
+# the sentences the page scripts say (app.js, list_tools.js, look.js call uiText with these); base.html hands them over
+# in the page's language. staff_i18n_selftest keeps this list and the scripts in step.
+JS_TEXT = (
+    "Remove {name}", "Hide wording", "Read out", "{n} / {max} characters", "Limit of {max} characters reached",
+    "{n} / {max} characters - limit reached, nothing more fits", " - done", " - not yet", "Yes, cancel ({n})",
+    "Yes, cancel", "No preview: this image could not be shown", "No preview",
+    "This image could not be shown here. Download the original to open it.",
+    "Search this list", "Search", "Clear", "Filter", "Sort by", "Sort", "Sort by this column", "No {nouns} match. ",
+    "Clear search and filters", "Search: {q}", "Clear all", "{whole} {noun}", "{shown} of {whole} {noun} shown",
+    "{i} of {n}", "Loading...", "This file could not be shown here. Download the original to open it.",
+    "Preview of {name} (for orientation only)", "Page {page} of {n}",
+    "No preview for this kind of file. Download the original to open it.",
+)
+
+
+def js_text():
+    return {text: IT[text] for text in JS_TEXT if text in IT} if current() == "it" else {}
+
+
+def N_(text):
+    # a sentence in a module constant: marked for the catalog here, translated where a page shows it
+    return text
+
+
 def _(text, **values):
     if current() == "it":
         text = IT.get(text, text)
@@ -58,12 +82,16 @@ def message(text):
             if "{" in en:
                 rx = "^" + re.sub(r"\\\{(\w+)\\\}", lambda m: f"(?P<{m.group(1)}>.+?)", re.escape(en)) + "$"
                 try:
-                    _PATTERNS.append((re.compile(rx), it))
+                    _PATTERNS.append((re.compile(rx), it, len(re.sub(r"\{\w+\}", "", en))))
                 except re.error:
                     continue
-    for rx, it in _PATTERNS:
+        # the sentence with the most fixed words wins: "{a}: {b}" must not take a line a longer pattern was written for
+        _PATTERNS.sort(key=lambda p: -p[2])
+    for rx, it, size in _PATTERNS:
         found = rx.match(text)
-        if found:
+        # a short frame ("{a} is {b} on {c}") takes only short values or catalog ones - not a whole sentence it happens
+        # to fit, which would come out half translated
+        if found and (size >= 12 or all(len(v.split()) <= 3 or v in IT for v in found.groupdict().values())):
             return it.format(**{k: IT.get(v, v) for k, v in found.groupdict().items()})
     return text
 

@@ -13,7 +13,7 @@
 <div class="card dash-card">
   <div class="ds-card-body">
     {% if error %}
-    <div class="ds-alert ds-alert-danger" role="alert">{{ error }}</div>
+    <div class="ds-alert ds-alert-danger" role="alert">{{ _msg(error) }}</div>
     {% endif %}
     <form method="post" action="{{ url_for('agent.command_page') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -33,7 +33,7 @@
       <button type="submit" class="ds-btn ds-btn-secondary">{{ _("Turn into text") }}</button>
     </form>
     {% elif dictation_why %}
-    <p class="ds-help mt-3">{{ dictation_why | replace('type the note', 'type the command') }}</p>
+    <p class="ds-help mt-3">{{ _msg(command_why) }}</p>
     {% endif %}
   </div>
 </div>

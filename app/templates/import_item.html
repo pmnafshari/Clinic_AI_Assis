@@ -3,14 +3,14 @@
 <nav aria-label="{{ _('Breadcrumb') }}" class="mb-3">
   <ol class="ds-breadcrumb">
     <li><a href="{{ url_for('imports.index') }}">{{ _("Legacy import") }}</a></li>
-    <li aria-current="page">Item {{ item.id }}</li>
+    <li aria-current="page">{{ _('Item {id}', id=item.id) }}</li>
   </ol>
 </nav>
 <div class="ds-page-head">
   <div class="min-w-0">
-    <p class="ds-page-eyebrow">Item {{ item.id }} · run {{ item.batch_id }}</p>
+    <p class="ds-page-eyebrow">{{ _('Item {id} · run {run}', id=item.id, run=item.batch_id) }}</p>
     <h1 class="ds-page-title text-break">{{ name }}</h1>
-    <p class="ds-page-meta"><strong>{{ labels[item.state] }}</strong>{% if item.strength %} · {{ strength[item.strength] }}{% endif %}</p>
+    <p class="ds-page-meta"><strong>{{ _(labels[item.state]) }}</strong>{% if item.strength %} · {{ _(strength[item.strength]) }}{% endif %}</p>
   </div>
 </div>
 
@@ -24,13 +24,13 @@
 <section class="card dash-card mb-3" aria-labelledby="orig-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="orig-title">{{ _("The original") }}</h2></div>
   <div class="dash-card-body">
-    <p class="ds-row-sub text-break">Path in the old folder: {{ item.rel_path }} · {{ item.kind }} · {{ item.size }} bytes · sha256 {{ (item.sha256 or '')[:16] }}…</p>
+    <p class="ds-row-sub text-break">{{ _('Path in the old folder: {path}', path=item.rel_path) }} · {{ _(item.kind) }} · {{ _('{n} bytes', n=item.size) }} · sha256 {{ (item.sha256 or '')[:16] }}…</p>
     {% if item.state == 'refused' %}
-    <p class="dash-empty-line">{{ item.reason }}</p>
+    <p class="dash-empty-line">{{ _msg(item.reason) }}</p>
     {% else %}
     {% if previewable %}
     <figure class="file-preview mb-2">
-      <img class="import-preview" src="{{ url_for('imports.original', import_id=item.id) }}" alt="Preview of {{ name }}">
+      <img class="import-preview" src="{{ url_for('imports.original', import_id=item.id) }}" alt="{{ _('Preview of {name}', name=name) }}">
       <figcaption class="ds-row-sub">{{ _("Preview for orientation only - not suitable for diagnosis.") }}</figcaption>
     </figure>
     {% else %}
@@ -52,14 +52,14 @@
       <tbody>
       {% for c in ev.clues %}
       <tr>
-        <th scope="row" data-label="{{ _('Clue') }}">{{ {'cf': 'Codice fiscale', 'clinic_id': 'Clinic patient id', 'name': 'Name', 'birth_date': 'Birth date', 'doc_date': 'Date on the document'}[c.type] }}{% if c.labelled %} (labelled){% endif %}</th>
+        <th scope="row" data-label="{{ _('Clue') }}">{{ {'cf': _('Codice fiscale'), 'clinic_id': _('Clinic patient id'), 'name': _('Name'), 'birth_date': _('Birth date'), 'doc_date': _('Date on the document')}[c.type] }}{% if c.labelled %} {{ _("(labelled)") }}{% endif %}</th>
         <td data-label="{{ _('Value') }}" class="text-break font-monospace">{{ c.value }}{% if c.time %} {{ c.time }}{% endif %}</td>
-        <td data-label="{{ _('Where') }}">{{ c.where }}{% if c.source == 'path' %} - a file or folder name can be wrong{% elif c.source == 'ocr' %} - OCR can misread{% endif %}</td>
+        <td data-label="{{ _('Where') }}">{{ _msg(c.where) }}{% if c.source == 'path' %} {{ _("- a file or folder name can be wrong") }}{% elif c.source == 'ocr' %} {{ _("- OCR can misread") }}{% endif %}</td>
         <td data-label="{{ _('Points to') }}">
           {% if c.type in ('cf', 'clinic_id') %}
-            {% if not c.valid %}not used: fails the check{% elif c.patient and people.get(c.patient) %}{{ people[c.patient].patient_name }}{% else %}no patient of this clinic{% endif %}
+            {% if not c.valid %}{{ _("not used: fails the check") }}{% elif c.patient and people.get(c.patient) %}{{ people[c.patient].patient_name }}{% else %}{{ _("no patient of this clinic") }}{% endif %}
           {% elif c.type == 'name' %}
-            {% if c.patients %}{% for p in c.patients %}{{ people[p].patient_name if people.get(p) else p }} ({{ people[p].codice_fiscale if people.get(p) else '' }}){% if not loop.last %}; {% endif %}{% endfor %}{% else %}nobody with this name{% endif %}
+            {% if c.patients %}{% for p in c.patients %}{{ people[p].patient_name if people.get(p) else p }} ({{ people[p].codice_fiscale if people.get(p) else '' }}){% if not loop.last %}; {% endif %}{% endfor %}{% else %}{{ _("nobody with this name") }}{% endif %}
           {% else %}-{% endif %}
         </td>
       </tr>
@@ -71,11 +71,11 @@
     {% endif %}
     {% if ev.conflicts %}
     <h3 class="ds-card-title mt-3">{{ _("Against") }}</h3>
-    <ul>{% for c in ev.conflicts %}<li>{{ c }}</li>{% endfor %}</ul>
+    <ul>{% for c in ev.conflicts %}<li>{{ _msg(c) }}</li>{% endfor %}</ul>
     {% endif %}
     {% if ev.leads %}
     <h3 class="ds-card-title mt-3">{{ _("Weak leads (never enough on their own)") }}</h3>
-    <ul>{% for c in ev.leads %}<li>{{ c }}</li>{% endfor %}</ul>
+    <ul>{% for c in ev.leads %}<li>{{ _msg(c) }}</li>{% endfor %}</ul>
     {% endif %}
     {% if ev.duplicates %}
     <h3 class="ds-card-title mt-3">{{ _("The same bytes are also at") }}</h3>
@@ -89,12 +89,13 @@
   <div class="dash-card-body">
     <ul class="ds-rows">
       {% for t in ev.times %}
-      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ t.what }}</span>
-        <span class="ds-row-title">{{ t.value }}{% if t.where %} · {{ t.where }}{% endif %}</span></span></li>
+      <li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _msg(t.what) }}</span>
+        <span class="ds-row-title">{{ t.value }}{% if t.where %} · {{ _msg(t.where) }}{% endif %}</span></span></li>
       {% endfor %}
     </ul>
-    {% for f in ev.flags %}<p class="ds-row-sub"><strong>{{ f }}</strong></p>{% endfor %}
-    <p class="ds-row-sub">Date used for the timeline: {{ ev.acquired_at | appt_date if ev.acquired_at else 'not established' }}{% if ev.acquired_basis %} ({{ ev.acquired_basis.replace('_', ' ') }}){% endif %}. A time never decides whose a file is.</p>
+    {% for f in ev.flags %}<p class="ds-row-sub"><strong>{{ _msg(f) }}</strong></p>{% endfor %}
+    {% set used = ev.acquired_at | appt_date if ev.acquired_at else _('not established') %}
+    <p class="ds-row-sub">{{ _('Date used for the timeline: {date} ({basis}). A time never decides whose a file is.', date=used, basis=_(ev.acquired_basis.replace('_', ' '))) if ev.acquired_basis else _('Date used for the timeline: {date}. A time never decides whose a file is.', date=used) }}</p>
   </div>
 </section>
 
@@ -105,7 +106,7 @@
     {% for pid, p in people.items() %}
     <li class="ds-row"><span class="ds-row-main">
       <span class="ds-row-title">{{ p.patient_name }}</span>
-      <span class="ds-row-sub font-monospace">{{ p.codice_fiscale }}{% if pid == item.patient_id %} · proposed{% endif %}</span>
+      <span class="ds-row-sub font-monospace">{{ p.codice_fiscale }}{% if pid == item.patient_id %} · {{ _("proposed") }}{% endif %}</span>
     </span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=p.codice_fiscale) }}">{{ _("Open record") }}<span class="visually-hidden">: {{ p.patient_name }}</span></a></span></li>
     {% endfor %}
   </ul></div>
@@ -128,13 +129,13 @@
         <div class="col-sm-6"><label for="category" class="form-label">{{ _("Category (a label, not a finding)") }}</label>
           <select id="category" name="category" class="form-select form-select-sm">
             <option value="">{{ _("Not set") }}</option>
-            {% for k, v in categories.items() %}<option value="{{ k }}">{{ v }}</option>{% endfor %}
+            {% for k, v in categories.items() %}<option value="{{ k }}">{{ _(v) }}</option>{% endfor %}
           </select></div>
         {% if visits %}
         <div class="col-sm-6"><label for="visit_id" class="form-label">{{ _("Visit (optional)") }}</label>
           <select id="visit_id" name="visit_id" class="form-select form-select-sm">
             <option value="">{{ _("No visit") }}</option>
-            {% for v in visits %}<option value="{{ v.id }}">{{ v.visit_date }}{% if v.id in suggested %} - same date as the file{% endif %}</option>{% endfor %}
+            {% for v in visits %}<option value="{{ v.id }}">{{ v.visit_date }}{% if v.id in suggested %} {{ _("- same date as the file") }}{% endif %}</option>{% endfor %}
           </select></div>
         {% endif %}
         <div class="col-sm-6"><label for="reason" class="form-label">{{ _("Reason") }}{% if item.state != 'proposed' %} {{ _("(required)") }}{% endif %}</label>
@@ -159,8 +160,8 @@
   </div>
 </section>
 {% elif item.state == 'confirmed' %}
-<p class="dash-empty-line">Confirmed by {{ item.decided_by }}{% if item.decision_reason %} · {{ item.decision_reason }}{% endif %}.</p>
+<p class="dash-empty-line">{{ _('Confirmed by {who}', who=item.decided_by) }}{% if item.decision_reason %} · {{ _msg(item.decision_reason) }}{% endif %}.</p>
 {% elif item.decided_by %}
-<p class="dash-empty-line">{{ labels[item.state] }} by {{ item.decided_by }}{% if item.decision_reason %} · {{ item.decision_reason }}{% endif %}.</p>
+<p class="dash-empty-line">{{ _('{state} by {who}', state=_(labels[item.state]), who=item.decided_by) }}{% if item.decision_reason %} · {{ _msg(item.decision_reason) }}{% endif %}.</p>
 {% endif %}
 {% endblock %}

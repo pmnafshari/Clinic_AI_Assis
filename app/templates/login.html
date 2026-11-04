@@ -23,8 +23,8 @@
         {% if error %}
         {# an alert, not a bare red paragraph: it is announced, and it looks
            like every other error in the product #}
-        <div class="ds-alert ds-alert-danger" role="alert">{{ error }}
-          <p class="mb-0 mt-1 small">After {{ lock_tries }} wrong tries an account is locked for {{ lock_minutes }} minutes; the admin can unlock it.</p></div>
+        <div class="ds-alert ds-alert-danger" role="alert">{{ _msg(error) }}
+          <p class="mb-0 mt-1 small">{{ _('After {n} wrong tries an account is locked for {m} minutes; the admin can unlock it.', n=lock_tries, m=lock_minutes) }}</p></div>
         {% endif %}
 
         <form method="post" action="{{ url_for('auth.login') }}" data-login-return>
@@ -43,7 +43,7 @@
                  input - the state has to be announced, and the value must
                  never exist twice in the dom #}
               <button type="button" class="auth-pw-toggle" data-pw-toggle
-                      aria-pressed="false" aria-label="{{ _('Show password') }}">
+                      aria-pressed="false" aria-label="{{ _('Show password') }}" data-label-hide="{{ _('Hide password') }}">
                 <i class="bi bi-eye" aria-hidden="true"></i>
               </button>
             </div>

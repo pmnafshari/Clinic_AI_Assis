@@ -22,7 +22,7 @@
       {% set kind = flash_kind(category) %}
       <div class="alert alert-{{ kind[0] }} app-flash" data-flash="{{ kind[2] }}"
            role="{{ 'alert' if kind[0] in ('danger', 'warning') else 'status' }}">
-        <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ _(kind[3]) }}:</strong> {{ message }}
+        <i class="bi bi-{{ kind[1] }}" aria-hidden="true"></i> <strong>{{ _(kind[3]) }}:</strong> {{ _msg(message) }}
       </div>
     {% endfor %}
     <div class="app-result-actions"><button type="button" class="btn btn-primary btn-sm" data-result-ok tabindex="0">{{ _('OK') }}</button></div>
@@ -58,6 +58,8 @@
       <button type="button" class="btn btn-danger" data-leave-go>{{ _('Leave without saving') }}</button>
     </div>
   </dialog>
+  {# P29 E-001: the sentences app.js, list_tools.js and look.js say, in the page's language (empty in English) #}
+  <script type="application/json" id="ui-text">{{ js_text() | tojson }}</script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script src="{{ url_for('static', filename='js/list_tools.js') }}"></script>
 </body>

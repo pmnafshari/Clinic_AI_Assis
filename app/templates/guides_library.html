@@ -32,9 +32,9 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="docs-title">{{ _("Documents") }}</h2></div>
   {% if rows %}
   <div class="sx-tools sx-tools-row" data-list-tools data-for="guide-rows" data-noun="{{ _('document|documents') }}" data-search="{{ _('Find a document') }}" data-find="name device"
-       data-sorts='{{ [['rank', 'num', 1, 'Searchable first'], ['name', 'text', 1, 'Title (A-Z)'], ['effective', 'text', -1, 'Newest in effect first']] | tojson }}'
-       data-filters='{{ [['status', 'Status', [['searchable', 'Searchable now'], ['waiting', 'Waiting for review'], ['out', 'Not searchable']]],
-                         ['kind', 'Kind', [['device', 'Device manual'], ['admin', 'Administrative procedure'], ['clinical', 'Procedure with clinical content']]]] | tojson }}'></div>
+       data-sorts='{{ [['rank', 'num', 1, _('Searchable first')], ['name', 'text', 1, _('Title (A-Z)')], ['effective', 'text', -1, _('Newest in effect first')]] | tojson }}'
+       data-filters='{{ [['status', _('Status'), [['searchable', _('Searchable now')], ['waiting', _('Waiting for review')], ['out', _('Not searchable')]]],
+                         ['kind', _('Kind'), [['device', _('Device manual')], ['admin', _('Administrative procedure')], ['clinical', _('Procedure with clinical content')]]]] | tojson }}'></div>
   {% endif %}
   <div class="dash-card-body">
     {% if rows %}
@@ -47,12 +47,12 @@
       {% set g = group.get(r.status, 'out') %}
       <tr data-name="{{ r.title }}" data-status="{{ g }}" data-rank="{{ {'searchable': 0, 'waiting': 1, 'out': 2}[g] }}" data-kind="{{ r.kind }}"
           data-device="{{ (r.make ~ ' ' ~ r.model) if r.make else '' }}" data-effective="{{ r.effective }}">
-        <td data-label="{{ _('Document') }}"><a href="{{ url_for('guides.source_view', guide_id=r.id) }}">{{ r.title }}, {{ r.edition or ('version ' ~ r.version) }}</a> <span class="ds-row-sub">({{ 'Italian' if r.language == 'it' else 'English' }})</span></td>
+        <td data-label="{{ _('Document') }}"><a href="{{ url_for('guides.source_view', guide_id=r.id) }}">{{ r.title }}, {{ r.edition or _('version {n}', n=r.version) }}</a> <span class="ds-row-sub">({{ _('Italian') if r.language == 'it' else 'English' }})</span></td>
         <td data-label="{{ _('Device') }}">{% if r.make %}{{ r.make }} {{ r.model }}{% if r.room %} ({{ r.room }}){% endif %}{% else %}-{% endif %}</td>
-        <td data-label="{{ _('Edition / version') }}">{{ r.edition or ('version ' ~ r.version) }}</td>
-        <td data-label="{{ _('Kind') }}">{{ {'device': 'Device manual', 'admin': 'Administrative procedure', 'clinical': 'Procedure with clinical content'}[r.kind] }}{% if r.audience == 'dentist' %} · dentist only{% endif %}</td>
-        <td data-label="{{ _('Status') }}"><span class="ds-badge {{ 'ds-badge-success' if r.status == 'approved' else 'ds-badge-warning' }}">{{ r.status.replace('_', ' ') }}</span>{% if r.approved_by %} <span class="ds-row-sub">by {{ r.approved_by }}</span>{% endif %}</td>
-        <td data-label="{{ _('Owner') }}">{{ r.owner }} · from {{ r.effective }}</td>
+        <td data-label="{{ _('Edition / version') }}">{{ r.edition or _('version {n}', n=r.version) }}</td>
+        <td data-label="{{ _('Kind') }}">{{ {'device': _('Device manual'), 'admin': _('Administrative procedure'), 'clinical': _('Procedure with clinical content')}[r.kind] }}{% if r.audience == 'dentist' %} · {{ _("dentist only") }}{% endif %}</td>
+        <td data-label="{{ _('Status') }}"><span class="ds-badge {{ 'ds-badge-success' if r.status == 'approved' else 'ds-badge-warning' }}">{{ _(r.status.replace('_', ' ')) }}</span>{% if r.approved_by %} <span class="ds-row-sub">{{ _('by {who}', who=r.approved_by) }}</span>{% endif %}</td>
+        <td data-label="{{ _('Owner') }}">{{ r.owner }} · {{ _('from {date}', date=r.effective) }}</td>
       </tr>
       {% endfor %}
       </tbody>
@@ -92,7 +92,7 @@
 <section class="card dash-card" aria-labelledby="dev-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="dev-title">{{ _("Devices") }}</h2></div>
   <div class="dash-card-body">
-    {% if devices %}<ul class="ds-rows mb-2">{% for d in devices %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ label(d) }}</span><span class="ds-row-sub">{{ d.type or 'no type words' }}</span></span></li>{% endfor %}</ul>
+    {% if devices %}<ul class="ds-rows mb-2">{% for d in devices %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ label(d) }}</span><span class="ds-row-sub">{{ d.type or _('no type words') }}</span></span></li>{% endfor %}</ul>
     {% else %}<p class="dash-empty-line">{{ _("No device registered.") }}</p>{% endif %}
     <form method="post" action="{{ url_for('guides.add_device') }}" class="row g-2 align-items-end">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -112,7 +112,7 @@
   <div class="dash-card-head"><h2 class="ds-card-title" id="appr-title">{{ _("Administrative approvers") }}</h2></div>
   <div class="dash-card-body">
     <p class="ds-row-sub">{{ _("A named approver (the owner or practice manager, on a reception account) may approve administrative procedures only. It gives no clinical permission; admin accounts cannot be named.") }}</p>
-    {% if approvers %}<ul class="ds-rows mb-2">{% for a in approvers %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ a.username }}</span><span class="ds-row-sub">named by {{ a.designated_by }}</span></span>
+    {% if approvers %}<ul class="ds-rows mb-2">{% for a in approvers %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-title">{{ a.username }}</span><span class="ds-row-sub">{{ _('named by {who}', who=a.designated_by) }}</span></span>
       <form method="post" action="{{ url_for('guides.approvers') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="username" value="{{ a.username }}"><input type="hidden" name="action" value="revoke"><button class="btn btn-outline-danger btn-sm" type="submit">{{ _("Remove") }}<span class="visually-hidden"> {{ a.username }}</span></button></form></li>{% endfor %}</ul>
     {% else %}<p class="dash-empty-line">{{ _("No administrative approver named.") }}</p>{% endif %}
     <form method="post" action="{{ url_for('guides.approvers') }}" class="d-flex gap-2 align-items-end">
