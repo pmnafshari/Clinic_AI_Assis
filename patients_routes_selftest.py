@@ -1260,6 +1260,60 @@ def selftest():
         assert "not permitted" in refused49.text and _phone(db_path, cf) == phone49, \
             "49d: a forged save is still refused by the server"
 
+        # 50. P29 E-001: a walk-in is registered from Patients. every field missing is said beside it and what was typed
+        # stays; the codice fiscale's check letter is not proof of whose it is, so the desk names the document it saw; a
+        # code already on file opens that record instead; a lookalike (the duplicate review's signals) stops it until
+        # the desk says these are different people; one row, audited, and admin cannot
+        def rows50(code):
+            c = sqlite3.connect(db_path)
+            n = c.execute("SELECT COUNT(*) FROM patients WHERE codice_fiscale = ?", (code,)).fetchone()[0]
+            c.close()
+            return n
+        plist50 = assistant_client.get("/patients").text
+        assert re.search(r'<a class="btn[^"]*" href="/patients/new"[^>]*>[^<]*New patient', plist50), "50 E-001: no New patient on Patients"
+        form50 = assistant_client.get("/patients/new").text
+        empty50 = assistant_client.post("/patients/new", data={"patient_name": "Walter Ingresso", "codice_fiscale": "",
+                                                                "phone": "", "document": "", "csrf_token": _csrf_from(form50)})
+        assert empty50.status_code == 200 and 'value="Walter Ingresso"' in empty50.text, "50: the typed name is lost"
+        for field50, words50 in (("codice_fiscale", "Type the codice fiscale"), ("phone", "a new patient needs one"),
+                                 ("document", "which document")):
+            err50 = re.search(rf'id="{field50}-error"[^>]*>([^<]+)<', empty50.text)
+            assert err50 and words50 in err50.group(1), f"50: no error beside {field50}"
+            assert re.search(rf'<(?:input|select)[^>]*id="{field50}"[^>]*aria-describedby="{field50}-error"', empty50.text), \
+                f"50: the {field50} error is not tied to its field"
+        assert "check letter" in form50 and "not who" in form50, "50: the form does not say what the code check proves"
+        new50 = "ZZWI800101010150"
+        done50 = assistant_client.post("/patients/new", data={
+            "patient_name": "walter ingresso", "codice_fiscale": new50.lower(), "phone": "333 123 4567",
+            "document": "health card", "csrf_token": _csrf_from(form50)})
+        assert done50.status_code == 302 and done50.headers["Location"].endswith(f"/patients/{new50}"), \
+            f"50: registering did not open the new record: {done50.status_code} {done50.headers.get('Location')}"
+        c50 = sqlite3.connect(db_path)
+        row50 = c50.execute("SELECT patient_name, phone FROM patients WHERE codice_fiscale = ?", (new50,)).fetchone()
+        audit50 = c50.execute("SELECT username, reason FROM audit_log WHERE action = 'patient_register' AND allowed = 1").fetchall()
+        c50.close()
+        assert row50 == ("Walter Ingresso", "+393331234567"), f"50: stored as {row50}"
+        assert audit50 and audit50[-1][0] == "aassist" and "health card" in audit50[-1][1], f"50: not audited {audit50}"
+        again50 = assistant_client.post("/patients/new", data={
+            "patient_name": "Walter Ingresso", "codice_fiscale": new50, "phone": "3331234567", "document": "health card",
+            "csrf_token": _csrf_from(form50)})
+        assert "already registered" in again50.text and f'href="/patients/{new50}"' in again50.text and rows50(new50) == 1, \
+            "50: a code already on file is registered twice"
+        twin50 = "ZZWJ800101010151"
+        alike50 = assistant_client.post("/patients/new", data={
+            "patient_name": "Walter Ingresso", "codice_fiscale": twin50, "phone": "3471112222", "document": "identity card",
+            "csrf_token": _csrf_from(form50)})
+        assert rows50(twin50) == 0 and "the same name" in alike50.text and f'href="/patients/{new50}"' in alike50.text \
+            and 'name="different"' in alike50.text, "50: a lookalike is created without asking"
+        made50 = assistant_client.post("/patients/new", data={
+            "patient_name": "Walter Ingresso", "codice_fiscale": twin50, "phone": "3471112222", "document": "identity card",
+            "different": "1", "csrf_token": _csrf_from(alike50.text)})
+        assert made50.status_code == 302 and rows50(twin50) == 1, "50: different people could not be registered"
+        assert admin_client.post("/patients/new", data={
+            "patient_name": "Ada Admin", "codice_fiscale": "ZZWK800101010152", "phone": "3330001111", "document": "passport",
+            "csrf_token": _csrf_from(admin_client.get("/admin/users").text)}).status_code in (302, 403) \
+            and rows50("ZZWK800101010152") == 0, "50: admin registered a patient"
+
     print("selftest ok")
 
 

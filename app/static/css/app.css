@@ -1750,3 +1750,6 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .sx-panel.sx-free .dash-card { height: auto; }
 .sx-panel.sx-free .dash-card > .dash-card-body { overflow: visible; }
 .ux-stack { display: grid; gap: 1rem; align-content: start; min-width: 0; }
+
+/* P29 E-001: a field's own problem, under it */
+.ux-field-error { margin: 0.25rem 0 0; font-size: 0.875rem; font-weight: 600; color: #842029; }

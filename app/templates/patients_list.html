@@ -16,6 +16,8 @@
     <h1 class="ds-page-title">Patients</h1>
     <p class="ds-page-meta">{{ total }} on record{% if q %} · {{ searched }} matching "{{ q }}"{% endif %}</p>
   </div>
+  {# P29 E-001: the one page action - someone arriving without a record #}
+  {% if authorize(g.user.role, 'append_note') %}<a class="btn btn-primary app-primary" href="{{ url_for('patients.new_patient') }}" tabindex="0">New patient</a>{% endif %}
 <!--/page-head--></div>
 
 <div class="ux-kpis ux-kpis-3" data-ux="page-tiles">

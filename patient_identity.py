@@ -294,6 +294,73 @@ def candidates(conn, limit=50):
     return found[:limit]
 
 
+# P29 E-001: what the front desk may name as the document it checked a walk-in's codice fiscale against
+DOCUMENTS = ("health card", "identity card", "passport", "other photo document")
+
+
+def register(conn, codice_fiscale, patient_name, phone, document, actor, role, different=False):
+    """A walk-in registered at the front desk. -> (patient_id or None, problems, lookalikes, existing).
+
+    THE CHECK LETTER IS NOT PROOF OF WHOSE CODE IT IS. it only says the code
+    was typed without a slip, so the desk names the document it saw, and that
+    goes into the audit row. a code already on file is not registered again:
+    `existing` is that patient. a new row that looks like one on file - the
+    duplicate review's own signals - is held back until the desk says these
+    are different people (`different`), because undoing a wrong new record
+    later is a merge. one insert, in one transaction, guarded by the unique
+    codice fiscale even when two desks type the same person at once.
+    """
+    import phones
+    from codice_fiscale import is_valid, normalize
+    from shared.names import person
+    if not authorize(role, "append_note"):
+        log_audit(conn, actor, role, "patient_register", None, allowed=0)
+        raise PermissionError(f"{role} may not register a patient")
+    code = normalize(codice_fiscale)
+    name = person((patient_name or "").strip())
+    number = phones.canonical(phone)
+    problems = {}
+    if not name:
+        problems["patient_name"] = "Type the patient's full name."
+    if not code:
+        problems["codice_fiscale"] = "Type the codice fiscale from the patient's card."
+    elif not is_valid(code):
+        problems["codice_fiscale"] = "This is not a valid codice fiscale - check each character against the card."
+    if not (phone or "").strip():
+        problems["phone"] = "Type a phone number - a new patient needs one."
+    elif not number:
+        problems["phone"] = "This is not a phone number the clinic can call - check it."
+    if document not in DOCUMENTS:
+        problems["document"] = "Say which document you checked the codice fiscale against."
+    if problems:
+        return None, problems, [], None
+    existing = _pidmod.resolve(conn, code)
+    if existing:
+        return None, {"codice_fiscale": "This codice fiscale is already registered."}, [], existing
+    new = {"patient_id": "", "codice_fiscale": code, "patient_name": name, "phone": number}
+    alike = []
+    for row in conn.execute("SELECT patient_id, codice_fiscale, patient_name, phone FROM patients ORDER BY patient_name"):
+        sig = signals(new, row)
+        if strength(sig) != WEAK:
+            alike.append({"codice_fiscale": row["codice_fiscale"], "patient_name": row["patient_name"],
+                          "strength": strength(sig), "reasons": _reasons(sig)})
+    if alike and not different:
+        return None, {}, alike, None
+    pid = _pidmod.new_id()
+    conn.commit()
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.execute("INSERT INTO patients (patient_id, codice_fiscale, patient_name, phone) VALUES (?, ?, ?, ?)",
+                     (pid, code, name, number))
+        log_audit(conn, actor, role, "patient_register", pid, allowed=1, commit=False,
+                  reason=f"document seen: {document}" + (f"; told apart from {len(alike)} lookalike(s)" if alike else ""))
+        conn.execute("COMMIT")
+    except sqlite3.IntegrityError:
+        conn.execute("ROLLBACK")
+        return None, {"codice_fiscale": "This codice fiscale is already registered."}, [], _pidmod.resolve(conn, code)
+    return pid, {}, alike, None
+
+
 def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
     """Record that a human looked at a pair and said they are different people.
 

@@ -93,6 +93,7 @@ ROUTE_POLICY = {
     "agent.dictate_command": "update_field",
     "summary.read_aloud": "review_summary",
     "patients.list_view": "read_notes",
+    "patients.new_patient": "append_note",
     "patients.search_fragment": "read_notes",
     "patients.detail_view": "read_notes",
     "patients.edit_form_fragment": "update_field",

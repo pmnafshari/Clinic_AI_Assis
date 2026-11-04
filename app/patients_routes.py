@@ -183,6 +183,34 @@ def duplicates_view():
     return render_template("patients_duplicates.html", pairs=pairs)
 
 
+@patients_bp.route("/patients/new", methods=["GET", "POST"])
+def new_patient():
+    # P29 E-001: someone arriving without a record, registered at the desk (patient_identity.register)
+    if not authorize(g.user["role"], "append_note"):
+        log_audit(get_db(), g.user["username"], g.user["role"], "patient_register", None, allowed=0)
+        flash("You don't have permission to register a patient.", "danger")
+        return redirect(url_for("dashboard.index"))
+    conn = get_db()
+    form = {k: request.form.get(k, "") for k in ("patient_name", "codice_fiscale", "phone", "document")}
+    problems, alike, existing = {}, [], None
+    if request.method == "POST":
+        try:
+            pid, problems, alike, found = patient_identity.register(
+                conn, form["codice_fiscale"], form["patient_name"], form["phone"], form["document"],
+                g.user["username"], g.user["role"], different=request.form.get("different") == "1")
+        except PermissionError:
+            return redirect(url_for("dashboard.index"))
+        if pid:
+            row = conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE patient_id = ?", (pid,)).fetchone()
+            flash(f"Registered {row['patient_name']}. This is their record.", "success")
+            return redirect(url_for("patients.detail_view", cf=row["codice_fiscale"]))
+        if found:
+            existing = conn.execute("SELECT codice_fiscale, patient_name FROM patients WHERE patient_id = ?",
+                                    (found,)).fetchone()
+    return render_template("patients_new.html", form=form, problems=problems, alike=alike, existing=existing,
+                           documents=patient_identity.DOCUMENTS)
+
+
 @patients_bp.route("/patients/duplicates/dismiss", methods=["POST"])
 def duplicates_dismiss():
     # the gate lives in patient_identity.dismiss() as well as here. the module

@@ -365,7 +365,9 @@ def selftest():
         # the owner now wants every table and box a fixed size that scrolls inside - 15c asserts the box);
         # the codice fiscale shortened in the list and still searchable in full
         pl = dentist.get("/patients").get_data(as_text=True)
-        assert len(re.findall(r'class="[^"]*\bapp-primary\b', _section(pl, "page-head"))) == 0, "10c: page-level Add note"
+        # P29 E-001: the one page action is New patient, for walk-ins; Add note stays on the record
+        heads10 = re.findall(r'<a class="[^"]*\bapp-primary\b[^"]*" href="([^"]+)"[^>]*>([^<]+)<', _section(pl, "page-head"))
+        assert heads10 == [("/patients/new", "New patient")], f"10c: page actions {heads10}"
         assert "Filter this list" in pl and 'aria-label="Go to a patient record"' in pl, "10c: two searches, one name"
         assert "table-responsive" not in pl and "ux-scroll" not in pl, "10c: the table scrolls inside the page"
         rows = _section(pl, "patient-rows")

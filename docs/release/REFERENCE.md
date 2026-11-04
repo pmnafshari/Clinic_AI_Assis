@@ -136,6 +136,7 @@ this file is stale.
 | GET | `/patients/duplicates` | `patients.duplicates_view` |
 | POST | `/patients/duplicates/dismiss` | `patients.duplicates_dismiss` |
 | POST | `/patients/duplicates/merge` | `patients.duplicates_merge` |
+| GET,POST | `/patients/new` | `patients.new_patient` |
 | GET | `/patients/search` | `patients.search_fragment` |
 | GET | `/providers` | `providers.index` |
 | POST | `/providers/<kind>/kill` | `providers.kill` |
