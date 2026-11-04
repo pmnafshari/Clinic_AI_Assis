@@ -835,6 +835,37 @@ def routes(tmp):
         "csrf_token": re.search(r'name="csrf_token" value="([^"]+)"', wpage).group(1), "reason": "test"}).text
     assert docs.row(conn, waiting)["status"] == "rejected" and 'data-flash="removed"' in gone16, \
         "16c R-008: a document rejection reads as a success"
+    # 16d. P29 R-005: the file list scrolls in its own box and each file has Preview, which opens it over the list -
+    # an image, a PDF drawn by pdf.js, a text as text - with previous and next. the PDF and the text come from routes
+    # that serve only that kind, are audited like any read, and still download if opened directly
+    txt = docs.ingest(conn, a, "nota di testo zz16d\nseconda riga".encode(), "nota.txt", *D)
+    docs.confirm(conn, txt, a, *D)
+    index16d = dentist.get(f"/patients/{cf_a}/documents").text
+    assert re.search(r'<ol class="[^"]*\bsx-box\b[^"]*"[^>]*aria-label="Confirmed files and notes', index16d), \
+        "16d R-005: the file list is not a bounded box"
+
+    def look(doc):
+        m = re.search(r'<button type="button"[^>]*data-look="(\w+)"[^>]*data-look-src="([^"]+)"[^>]*data-look-id="' + str(doc) + r'"', index16d)
+        return (m.group(1), m.group(2)) if m else (None, None)
+    assert look(did) == ("pdf", f"/patients/{cf_a}/documents/{did}/raw"), f"16d: the PDF has no Preview {look(did)}"
+    assert look(txt) == ("text", f"/patients/{cf_a}/documents/{txt}/text"), f"16d: the text has no Preview {look(txt)}"
+    assert 'id="look-dialog"' in index16d and "js/look.js" in index16d, "16d: no viewer on the page"
+    reads = conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'document_read'").fetchone()[0]
+    raw = dentist.get(f"/patients/{cf_a}/documents/{did}/raw")
+    assert raw.status_code == 200 and raw.mimetype == "application/pdf" and raw.data.startswith(b"%PDF"), "16d: the PDF bytes"
+    assert "attachment" in raw.headers.get("Content-Disposition", "") and "sandbox" in raw.headers["Content-Security-Policy"], \
+        "16d: opened directly, the PDF would render instead of downloading"
+    text = dentist.get(f"/patients/{cf_a}/documents/{txt}/text")
+    assert text.status_code == 200 and text.mimetype == "text/plain" and b"nota di testo zz16d" in text.data, "16d: the text"
+    assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'document_read'").fetchone()[0] == reads + 2, \
+        "16d: a preview is not audited as a read"
+    assert dentist.get(f"/patients/{cf_a}/documents/{txt}/raw").status_code == 404, "16d: raw serves a file that is not a PDF"
+    assert dentist.get(f"/patients/{cf_a}/documents/{did}/text").status_code == 404, "16d: text serves a PDF"
+    assert dentist.get(f"/patients/{cf_b}/documents/{did}/raw").status_code == 404, "16d: another patient's URL"
+    assert reception.get(f"/patients/{cf_a}/documents/{did}/raw").status_code == 302, "16d: reception reads a file"
+    js16d = (Path(__file__).parent / "app" / "static" / "js" / "look.js").read_text()
+    assert "isEvalSupported: false" in js16d and "textContent" in js16d and "innerHTML" not in js16d, \
+        "16d: the viewer builds code or markup from a file"
     # 17. dentist sees and searches; reception is refused
     page = dentist.get(f"/patients/{cf_a}/documents?q=otturazione").text
     assert "r.pdf" in page and "otturazione" in page, "17: search page"

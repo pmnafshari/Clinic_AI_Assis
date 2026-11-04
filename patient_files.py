@@ -260,7 +260,8 @@ def timeline(conn, pid, actor, role, limit=200):
                     "category": label(r), "file_type": FILE_TYPES.get(r["kind"], "File"),
                     "display_name": r["display_name"], "source": source,
                     "confirmed_by": r["decided_by"], "visit_id": r["visit_id"], "visit_date": r["visit_date"],
-                    "published": r["publication"] is not None, "preview": r["kind"] in PREVIEWABLE})
+                    "published": r["publication"] is not None, "preview": r["kind"] in PREVIEWABLE,
+                    "doc_kind": r["kind"]})
     for v in conn.execute(
             "SELECT v.id, v.visit_date, v.procedures, r.reviewed_by FROM visits v"
             " JOIN visit_reviews r ON r.visit_id = v.id WHERE v.patient_id = ?"

@@ -167,6 +167,40 @@ def original(cf, did):
     return _serve(data, docs.MIMETYPES.get(r["kind"], "application/octet-stream"), r["display_name"])
 
 
+# P29 R-005: the Preview over the file list draws a PDF with the vendored pdf.js and shows a text as text. each
+# route serves one kind only, through the same audited read as the original, and still downloads if opened directly
+TEXT_VIEW_LIMIT = 200_000
+
+
+def _one_kind(cf, did, kind):
+    conn, pid, _patient_row = _patient(cf)
+    try:
+        r = docs.load(conn, did, pid, *_who())
+    except LookupError:
+        abort(404)
+    data = docs.verified_bytes(r) if r["kind"] == kind else None
+    if data is None:
+        abort(404)
+    return r, data
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/raw")
+def raw(cf, did):
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_read", f"document:{did}")
+    r, data = _one_kind(cf, did, "pdf")
+    return _serve(data, docs.MIMETYPES["pdf"], r["display_name"])
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/text")
+def text(cf, did):
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_read", f"document:{did}")
+    r, data = _one_kind(cf, did, "text")
+    shown = data.decode("utf-8", errors="replace")[:TEXT_VIEW_LIMIT]
+    return _serve(shown.encode("utf-8"), docs.MIMETYPES["text"], r["display_name"])
+
+
 @documents_bp.route("/patients/<cf>/documents/<int:did>/preview")
 def preview(cf, did):
     # P25: PNG and JPEG only, as an <img>, for orientation - not a diagnostic viewer

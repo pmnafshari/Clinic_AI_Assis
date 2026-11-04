@@ -35,7 +35,8 @@
     <span class="ds-row-sub">confirmed files and confirmed notes, newest first</span></div>
   <div class="dash-card-body">
     {% if timeline %}
-    <ol class="ds-rows file-timeline" aria-label="Confirmed files and notes, newest first">
+    {# P29 R-005: the list scrolls in its own box; Preview opens a file over it #}
+    <ol class="ds-rows file-timeline sx-box" aria-label="Confirmed files and notes, newest first">
       {% for e in timeline %}
       <li class="ds-row file-entry">
         {% if e.preview %}
@@ -52,7 +53,12 @@
         <span class="file-actions">
           {% if e.published %}<span class="ds-badge ds-badge-success">Shown to patient</span>{% else %}<span class="ds-badge ds-badge-warning">Not shown to patient</span>{% endif %}
           <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}">Open<span class="visually-hidden">: {{ e.category }} · {{ e.display_name }}</span></a>
-          {% if e.preview %}<a class="btn btn-outline-primary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}#preview">View image<span class="visually-hidden"> {{ e.display_name }}</span></a>{% endif %}
+          {% set look = 'image' if e.preview else e.doc_kind if e.doc_kind in ('pdf', 'text') else '' %}
+          {% if look %}<button type="button" class="btn btn-outline-primary btn-sm" data-look="{{ look }}"
+             data-look-src="{{ url_for('documents.preview' if look == 'image' else 'documents.raw' if look == 'pdf' else 'documents.text', cf=cf, did=e.doc_id) }}"
+             data-look-id="{{ e.doc_id }}" data-look-name="{{ e.display_name }}"
+             data-look-open="{{ url_for('documents.detail', cf=cf, did=e.doc_id) }}" data-look-download="{{ url_for('documents.original', cf=cf, did=e.doc_id) }}"
+             tabindex="0">Preview<span class="visually-hidden">: {{ e.display_name }}</span></button>{% endif %}
           <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.original', cf=cf, did=e.doc_id) }}" >Download<span class="visually-hidden"> the original of {{ e.display_name }}</span></a>
           {% if e.published %}
           <form method="post" action="{{ url_for('documents.withdraw', cf=cf, did=e.doc_id) }}">
@@ -75,6 +81,28 @@
     {% endif %}
   </div>
 </section>
+
+<dialog class="app-dialog look-dialog" id="look-dialog" aria-labelledby="look-title">
+  <div class="look-head">
+    <h2 class="ux-card-title text-break" id="look-title">Preview</h2>
+    <span class="look-pos" data-look-pos></span>
+    <button type="button" class="btn-close" data-look-close aria-label="Close the preview" tabindex="0"></button>
+  </div>
+  <p class="look-note">For orientation only, not for diagnosis - download the original for that. Left and right arrows move between files, Esc closes.</p>
+  <div class="look-body" data-look-body></div>
+  <div class="look-foot">
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-look-prev tabindex="0"><i class="bi bi-chevron-left" aria-hidden="true"></i> Previous file</button>
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-look-next tabindex="0">Next file <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+    <span class="look-pages" data-look-pages hidden>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-look-page-prev tabindex="0" aria-label="Previous page">&lsaquo;</button>
+      <span data-look-page aria-live="polite"></span>
+      <button type="button" class="btn btn-outline-secondary btn-sm" data-look-page-next tabindex="0" aria-label="Next page">&rsaquo;</button>
+    </span>
+    <a class="btn btn-outline-secondary btn-sm ms-auto" data-look-open href="#" tabindex="0">Details</a>
+    <a class="btn btn-primary btn-sm" data-look-download href="#" tabindex="0">Download the original</a>
+  </div>
+</dialog>
+<script type="module" src="{{ url_for('static', filename='js/look.js') }}"></script>
 
 <section class="card dash-card mb-3" aria-labelledby="search-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="search-title">Search</h2></div>

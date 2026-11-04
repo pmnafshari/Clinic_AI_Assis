@@ -95,9 +95,11 @@ this file is stale.
 | GET | `/patients/<cf>/documents/<int:did>/file` | `documents.original` |
 | GET | `/patients/<cf>/documents/<int:did>/preview` | `documents.preview` |
 | POST | `/patients/<cf>/documents/<int:did>/publish` | `documents.publish` |
+| GET | `/patients/<cf>/documents/<int:did>/raw` | `documents.raw` |
 | POST | `/patients/<cf>/documents/<int:did>/reject` | `documents.reject` |
 | POST | `/patients/<cf>/documents/<int:did>/replace` | `documents.replace` |
 | POST | `/patients/<cf>/documents/<int:did>/retry` | `documents.retry` |
+| GET | `/patients/<cf>/documents/<int:did>/text` | `documents.text` |
 | POST | `/patients/<cf>/documents/<int:did>/withdraw` | `documents.withdraw` |
 | POST | `/patients/<cf>/edit` | `patients.edit_submit` |
 | GET | `/patients/<cf>/edit-form` | `patients.edit_form_fragment` |

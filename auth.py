@@ -145,6 +145,8 @@ ROUTE_POLICY = {
     # P25: previews, portal publication and correction are the dentist's; the import
     # page shows reception progress only, every item and decision is the dentist's
     "documents.preview": "read_clinical",
+    "documents.raw": "read_clinical",
+    "documents.text": "read_clinical",
     "documents.publish": "read_clinical",
     "documents.withdraw": "read_clinical",
     "documents.correct": "read_clinical",

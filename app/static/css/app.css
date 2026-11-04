@@ -1729,3 +1729,19 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .ux-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 0.75rem; margin-top: 0.75rem; font-size: 0.875rem; color: #334155; }
 .ux-pager > span:first-child { margin-right: auto; }
 @media (max-width: 767.98px) { .ux-table.ux-table-patients td.ux-rownum { display: none; } }
+
+/* P29 R-005: Preview over the file list - wide, the file scrolls inside, the controls stay */
+.look-dialog { max-width: min(64rem, calc(100vw - 2rem)); width: calc(100vw - 2rem); max-height: calc(100vh - 2rem); padding: 1rem 1.25rem; }
+.look-dialog[open] { display: flex; flex-direction: column; gap: 0.5rem; }
+.look-head { display: flex; align-items: center; gap: 0.75rem; }
+.look-head .ux-card-title { margin: 0; flex: 1 1 auto; min-width: 0; }
+.look-pos { color: var(--ds-text-muted); font-size: 0.875rem; white-space: nowrap; }
+.look-note { margin: 0; font-size: 0.8125rem; color: #334155; }
+.look-body { flex: 1 1 auto; min-height: 12rem; overflow: auto; background: var(--ds-neutral-surface); border-radius: 10px; padding: 0.5rem;
+  display: flex; justify-content: center; align-items: flex-start; }
+.look-image { max-width: 100%; height: auto; }
+.look-canvas { max-width: 100%; background: #fff; }
+.look-text { width: 100%; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.9375rem; background: #fff; padding: 0.75rem; border-radius: 8px; }
+.look-msg { margin: 2rem 1rem; color: #3f4a5a; text-align: center; }
+.look-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.look-pages { display: inline-flex; align-items: center; gap: 0.375rem; font-size: 0.875rem; }

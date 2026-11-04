@@ -20,6 +20,7 @@ import availability
 import demo_seed
 import inventory
 import ledger
+import patient_id
 import storage
 import web_session
 from app import create_app
@@ -42,6 +43,28 @@ MENU_STATE = r"""() => {
   return {overflows: side.scrollHeight > side.clientHeight + 1, bar: side.offsetWidth - side.clientWidth,
           activeVisible: r.top >= Math.max(s.top, 0) - 1 && r.bottom <= bottom + 1};
 }"""
+
+
+def look_check(page, base, cf, label):
+    """R-005: Preview opens a file over the list - a PDF drawn page by page, the next file (a text) by the arrow key -
+    inside the screen, and Esc puts the cursor back on the button it came from."""
+    page.goto(f"{base}/patients/{cf}/documents")
+    button = page.locator("button[data-look=pdf]").first
+    button.click()
+    dialog = page.locator("#look-dialog")
+    expect(dialog).to_be_visible()
+    expect(dialog.locator("canvas[data-drawn='1']")).to_have_count(1, timeout=20000)
+    expect(dialog.locator("[data-look-page]")).to_have_text("Page 1 of 2")
+    dialog.locator("[data-look-page-next]").click()
+    expect(dialog.locator("canvas[data-drawn='2']")).to_have_count(1)
+    box, view = dialog.bounding_box(), page.viewport_size
+    assert box["x"] >= 0 and box["y"] >= 0 and box["x"] + box["width"] <= view["width"] + 1 \
+        and box["y"] + box["height"] <= view["height"] + 1, f"R-005 {label}: the preview is off screen {box}"
+    page.keyboard.press("ArrowLeft")
+    expect(dialog.locator(".look-text")).to_contain_text("p29 preview text")
+    page.keyboard.press("Escape")
+    expect(dialog).to_be_hidden()
+    expect(button).to_be_focused()
 
 
 def menu_check(page, base, label, vh):
@@ -148,6 +171,14 @@ def main():
         name = conn.execute("SELECT patient_name FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone()[0]
         appointments.book(conn, cf, "p29_dentist", f"{day}T11:00", 30)
         conn.commit()
+        # R-005: a two-page PDF and a text, confirmed, for the Preview over the file list
+        import documents
+        from documents_selftest import pdf as make_pdf
+        look_pid = patient_id.resolve(conn, cf)
+        for data, file_name in ((make_pdf(["p29 preview page one", "p29 preview page two"]), "p29-look.pdf"),
+                                ("p29 preview text\nline two".encode(), "p29-look.txt")):
+            look_doc = documents.ingest(conn, look_pid, data, file_name, "p29_dentist", "dentist")
+            documents.confirm(conn, look_doc, look_pid, "p29_dentist", "dentist")
         item_id = inventory.create_item(conn, "P29 guanti", "pz", 5, "p29_dentist", "dentist")
         # issued and part-paid invoices, so billing has due dates, "of" totals, statuses and Record payment
         due = (date.today() + timedelta(days=30)).isoformat()
@@ -312,6 +343,9 @@ def main():
                     expect(result).to_have_count(0)
                     checks.append(f"U-008 result popup {width}")
 
+                    look_check(page, base, cf, str(width))
+                    checks.append(f"R-005 preview {width}")
+
                     # F-005: clicking the active column reverses it
                     page.goto(base + "/patients?sort=name")
                     first = page.locator("#patients-rows tr").first.get_attribute("data-name")
@@ -456,8 +490,10 @@ def main():
                     page.keyboard.press("Enter")
                     expect(result).to_be_hidden()
                     menu_check(page, base, "webkit " + label, vh)
+                    if label in ("1440", "390"):
+                        look_check(page, base, cf, "webkit " + label)
                     assert not errors, errors
-                    checks.append(f"U-021 keyboard, U-008 popup, NEW-01/U-005 menu webkit {label}")
+                    checks.append(f"U-021 keyboard, U-008 popup, NEW-01/U-005 menu{', R-005 preview' if label in ('1440', '390') else ''} webkit {label}")
                     context.close()
                 webkit.close()
         finally:
