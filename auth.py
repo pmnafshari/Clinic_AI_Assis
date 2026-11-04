@@ -81,6 +81,7 @@ ROUTE_POLICY = {
     "agent.confirm_change": "update_field",
     "agent.undo_change": "update_field",
     "appointments.index": "manage_appointments",
+    "requests.index": "manage_appointments",
     "appointments.book": "manage_appointments",
     "appointments.cancel": "manage_appointments",
     "appointments.confirm": "manage_appointments",

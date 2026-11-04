@@ -14,7 +14,8 @@ ITEMS = [
     ("Workspace", "Home", "dashboard.index", "/", "bi-house", "read_notes", None, "dashboard."),
     ("Workspace", "Appointments", "appointments.index", "/appointments", "bi-calendar3", "manage_appointments", None, "appointments."),
     # the waiting requests get their own entry (P23 follow-up): a count on Appointments read as appointments
-    ("Workspace", "Requests", "appointments.index", "/appointments#requests", "bi-inbox", "manage_appointments", "requests", "-"),
+    # P29 U-010: the overview of every kind of request, apart; the count stays the patients' appointment requests
+    ("Workspace", "Requests", "requests.index", "/requests", "bi-inbox", "manage_appointments", "requests", "requests."),
     ("Workspace", "Patients", "patients.list_view", "/patients", "bi-people", "read_notes", None, "patients.list_view|patients.detail_view|patients.search|patients.edit|patients.visit|patients.files|patients.issue|patients.revoke|patients.consent|documents.|summary.|similar."),
     ("Workspace", "Notes to review", "review.queue", "/reviews", "bi-clipboard-check", "review_upload", "reviews", "review."),
     # P25: reception sees progress only; the count is of files waiting for a dentist's decision

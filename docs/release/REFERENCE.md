@@ -144,6 +144,7 @@ this file is stale.
 | GET | `/reminders` | `reminders.index` |
 | POST | `/reminders/<int:job_id>/retry` | `reminders.retry` |
 | GET | `/reports` | `reports.index` |
+| GET | `/requests` | `requests.index` |
 | GET | `/reviews` | `review.queue` |
 | GET | `/reviews/<int:review_id>` | `review.detail` |
 | POST | `/reviews/<int:review_id>/confirm` | `review.confirm` |

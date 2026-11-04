@@ -27,9 +27,9 @@ NAV = {
     # /guides/ask (P24): dentist and reception; admin never
     # /imaging/tasks (P27): dentist and reception; admin never
     # /jarvis/link (Jarvis J00): dentist and reception delegate their own session; admin registers devices instead
-    "dentist": {"/", "/appointments", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/notes/new", "/billing", "/stock",
+    "dentist": {"/", "/appointments", "/requests", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/notes/new", "/billing", "/stock",
                 "/handoffs", "/reminders", "/data-requests", "/reports", "/providers"},
-    "assistant": {"/", "/appointments", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/notes/new", "/billing", "/stock",
+    "assistant": {"/", "/appointments", "/requests", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/notes/new", "/billing", "/stock",
                   "/handoffs", "/reminders", "/providers"},
     "admin": {"/admin/users", "/patients/duplicates", "/jarvis/devices"},
 }
@@ -344,7 +344,7 @@ def selftest():
         nav = _section(dentist.get("/").get_data(as_text=True), "nav")
         appt_link = re.search(r'<a[^>]*href="/appointments"[^>]*>.*?</a>', nav, re.S).group(0)
         assert "app-side-count" not in appt_link, "10a: a count sits on Appointments, where it reads as appointments"
-        req_link = re.search(r'<a[^>]*href="/appointments#requests"[^>]*>.*?</a>', nav, re.S)
+        req_link = re.search(r'<a[^>]*href="/requests"[^>]*>.*?</a>', nav, re.S)
         assert req_link and "Requests" in req_link.group(0) and ', 1 pending request</span>' in req_link.group(0), \
             f"10a: no labelled Requests entry: {req_link and req_link.group(0)}"
         # 10b. home: every agenda row opens the patient's record; alerts sit apart; the quiet day offers the next booked day
@@ -894,6 +894,34 @@ def selftest():
             "26 NEW-01: the menu's scroll line is left to the system, which hides it on a Mac"
         assert "P29 U-005" in js25 and "show.bs.offcanvas" in js25[js25.index("P29 U-005"):], \
             "26 U-005: the menu does not open at the page you are on"
+
+        # 27. P29 U-010: one Requests page keeps the three kinds apart - patients' appointment requests, imaging work,
+        # data requests - each with its count; every row says its status, whose it is, its dates and the next step, and
+        # links straight to where that is done; a role sees only the kinds it may act on
+        req27 = dentist.get("/requests").get_data(as_text=True)
+        kinds27 = re.findall(r'<section[^>]*data-kind="(\w+)"', req27)
+        assert kinds27 == ["appointment", "imaging", "data"], f"27 U-010: the kinds are not apart: {kinds27}"
+
+        def part27(kind):
+            return re.search(r'data-kind="' + kind + r'".*?</section>', req27, re.S).group(0)
+
+        def first27(kind, who):
+            rows = re.findall(r'<li class="ds-row"[^>]*>(.*?)</li>', part27(kind), re.S)
+            texts = [" ".join(re.sub(r"<[^>]+>", " ", r).split()) for r in rows]
+            return next((t for t in texts if who in t), "")
+        for word in ("Carlo Tre", "Waiting to be booked", "Reception or a dentist", "Asked", "Next: book a time or decline it"):
+            assert word in first27("appointment", "Carlo Tre"), f"27: an appointment request does not say {word!r}"
+        assert 'href="/appointments?view=day&amp;day=2031-03-10' in part27("appointment"), "27: no link to the day it asks for"
+        for word in ("Access", "Anna Uno", "A dentist", "Filed", "Next: review it"):
+            assert word in first27("data", "Anna Uno"), f"27: a data request does not say {word!r}"
+        assert re.search(r'href="/data-requests#req-\d+"', part27("data")), "27: no link to the data request"
+        assert "No imaging appointment needs reception action." in part27("imaging"), "27: the empty imaging part"
+        n27 = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]
+        assert re.search(r'id="kind-appointment-title"[^>]*>Appointment requests <span class="ux-count">' + str(n27) + '</span>', req27), \
+            "27: a kind has no count, or the wrong one"
+        kinds27r = re.findall(r'<section[^>]*data-kind="(\w+)"', clients["assistant"].get("/requests").get_data(as_text=True))
+        assert kinds27r == ["appointment", "imaging"], f"27: reception sees {kinds27r}"
+        assert clients["admin"].get("/requests").status_code == 302, "27: admin has no requests"
 
         # 9. the demo seed's tags carry no codice fiscale
         import demo_seed
