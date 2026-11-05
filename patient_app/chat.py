@@ -507,7 +507,7 @@ def answer_question(question, cf, conn, lang, ip=None, urlopen=local_urlopen):
         # book:need_day, cancel:proposed, book:requested - and never what the
         # patient typed, the same rule the route labels already follow.
         action = "patient_agent"
-        allowed = 0 if state in ("agent_failed", "agent_stale", "agent_nothing") else 1
+        allowed = 0 if state in ("agent_failed", "agent_stale", "agent_nothing", "agent_expired") else 1
     else:
         action, allowed = "patient_query", 1 if state == "answer" else 0
     log_audit(conn, cf, "patient", action, result["target"], allowed=allowed, ip=ip)

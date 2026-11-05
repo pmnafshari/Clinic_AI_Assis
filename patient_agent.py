@@ -37,6 +37,8 @@ import handoff
 from auth import log_audit
 
 TIMEOUT = timedelta(minutes=10)
+# a yes this soon after a proposal ran out is about that proposal (P29 F-022)
+EXPIRED_NOTICE = timedelta(hours=24)
 MORNING, AFTERNOON = appointments.MORNING, appointments.AFTERNOON
 
 SCHEMA = """
@@ -231,6 +233,14 @@ def handle(conn, pid, question, lang="it", now=None):
         if open_row["kind"] == "cancel":
             return _continue_cancel(conn, pid, question, payload, now)
         return None
+
+    if intent == "confirm":
+        # P29 F-022: agreeing to a proposal that has run out says so - it is not a question about the records
+        last = conn.execute("SELECT kind, status, expires_at FROM patient_agent_actions WHERE patient_id = ?"
+                            " ORDER BY id DESC LIMIT 1", (pid,)).fetchone()
+        if last is not None and last["status"] == "expired" \
+                and now - clinic_time.read_instant(last["expires_at"]) <= EXPIRED_NOTICE:
+            return {"state": "agent_expired", "kind": last["kind"], "target": f"{last['kind']}:expired"}
 
     if intent == "book":
         return _continue_book(conn, pid, _book_payload(conn, pid, question, {}, now), now)
@@ -468,7 +478,11 @@ def selftest():
         assert conn.execute("SELECT status FROM patient_agent_actions WHERE patient_id = ?"
                             " ORDER BY id DESC LIMIT 1", (pid,)).fetchone()[0] == "expired"
         out = handle(conn, pid, "confermo", now=late)
-        assert out is None, "6: a confirmation after the timeout agrees to nothing"
+        # P29 F-022: it agrees to nothing, and says the proposal ran out - not an answer about the records
+        assert out is not None and out["state"] == "agent_expired" and out["kind"] == "book", \
+            f"6: a confirmation after the timeout must say the proposal expired: {out}"
+        assert handle(conn, pid, "confermo", now=late + timedelta(days=2)) is None, \
+            "6: days later a bare yes is no longer about that proposal"
         assert len(appointments.open_for_patient(conn, pid)[1]) == before, \
             "6: nothing new was created"
 

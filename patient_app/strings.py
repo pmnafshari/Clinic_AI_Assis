@@ -576,6 +576,10 @@ STRINGS = {
         "it": "Va bene, non ho fatto nulla.",
         "en": "All right, I haven't done anything.",
     },
+    "agent_expired": {
+        "it": "Quella proposta è scaduta dopo 10 minuti, quindi non ho fatto nulla. Se vuoi ancora, chiedimelo di nuovo.",
+        "en": "That proposal ran out after 10 minutes, so I haven't done anything. Ask me again if you still want it.",
+    },
     "agent_nothing": {
         "it": "Non risulta nessun appuntamento da annullare.",
         "en": "There is no appointment to cancel.",

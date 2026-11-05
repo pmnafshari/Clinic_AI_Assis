@@ -179,7 +179,7 @@ def agent_text(result, lang, conn=None, now=None):
 
     if state == "agent_failed":
         return t(f"agent_failed_{result['kind']}", lang)
-    if state in ("agent_cancelled", "agent_nothing", "agent_stale"):
+    if state in ("agent_cancelled", "agent_nothing", "agent_stale", "agent_expired"):
         return t(state, lang)
     return None
 

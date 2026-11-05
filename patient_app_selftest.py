@@ -2650,6 +2650,14 @@ def selftest():
                 values = [re.search(r'name="question" value="([^"]+)"', q).group(1) for q in quick]
                 assert values == [yes, no], f"35g: the {lang} quick replies send {values}"
                 assert all('name="csrf_token"' in q for q in quick), "35g: and carry the csrf token"
+            # P29 F-022: a yes after the proposal ran out is told so, in the patient's language
+            reply35.clear()
+            reply35.update({"state": "agent_expired", "kind": "book", "target": "book:expired"})
+            for lang in ("it", "en"):
+                client35.get(f"/lang/{lang}")
+                page = client35.post("/chat", data={"question": "q", "csrf_token": _csrf_from(empty_chat35)}).text
+                assert on_page(t("agent_expired", lang), page), \
+                    f"35g: an expired proposal is not said in {lang}"
             client35.get("/lang/it")
         finally:
             patient_routes.chat.answer_question = real_answer35
