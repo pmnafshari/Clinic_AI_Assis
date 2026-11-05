@@ -53,7 +53,9 @@ def main():
             p = b.new_context().new_page()
             p.goto(PATIENT + "/login")
             p.fill("#codice_fiscale", CF); p.fill("#pin", pin)
-            p.click("form[action*='login'] button[type=submit]"); p.wait_for_load_state("networkidle")
+            p.click("form[action*='login'] button[type=submit]")
+            # the portal's sign-in plays its short check before it posts (P30)
+            p.wait_for_url(lambda url: "/change-pin" in url, timeout=20000)
             p.fill("#pin", NEW_PIN); p.fill("#confirm", NEW_PIN)
             p.click("form[action*='change-pin'] button[type=submit]"); p.wait_for_load_state("networkidle")
             p.goto(PATIENT + "/appointments")
@@ -94,7 +96,9 @@ def main():
             item.locator("input[name=date]").fill(day)
             item.locator("input[name=time]").fill("16:30")
             item.locator("select[name=dentist]").select_option(USER)
-            item.locator("form[action*='confirm'] button[type=submit]").click()
+            # a staff form posts after the page checks the clinic app is answering (P29 U-020): wait for the post itself
+            with s.expect_navigation():
+                item.locator("form[action*='confirm'] button[type=submit]").click()
             s.wait_for_load_state("networkidle")
             row = conn.execute("SELECT status, dentist, starts_at FROM appointments WHERE patient_id = ?", (pid,)).fetchone()
             # asserted in CLINIC time (P52). the stored value is a UTC instant, so

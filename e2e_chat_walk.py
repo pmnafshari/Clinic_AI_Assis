@@ -222,6 +222,12 @@ def sign_in(page, cf, pin):
     page.fill("#codice_fiscale", cf)
     page.fill("#pin", pin)
     submit_form(page, "login")
+    # the portal's sign-in plays its short check before it posts (P30): wait until the page has left /login. a refused
+    # sign-in stays there, which the caller's own check reads
+    try:
+        page.wait_for_url(lambda url: "/login" not in url, timeout=20000)
+    except Exception:
+        pass
     if "/change-pin" in page.url:
         # the current-pin field is only rendered when the change is voluntary;
         # a forced change (must_change_pin=1) omits it entirely
@@ -303,7 +309,8 @@ def walk(browser, pins):
         "[name=question]", "els => els.map(e => e.tagName + '#' + e.id)"
     )
     check("03b one element named 'question' (DEF-2/DEF-3 invariant)",
-          named == ["INPUT#question"],
+          # the invariant is one element; the redesign made it a textarea (6c8f108)
+          len(named) == 1 and named[0].endswith("#question"),
           f"elements named question = {named}")
 
     # 4. DEF-2 - a chip click must actually POST, and show the pending state

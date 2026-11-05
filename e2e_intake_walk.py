@@ -470,7 +470,12 @@ def walk(browser, note_paths):
         page.goto(f"{STAFF_URL}/reviews/{rid[0]}")
         check("10b the original text is shown beside the extraction",
               "devitalizzazione dente 46" in page.content(), page.url)
-        page.locator('form[action$="/confirm"] button[type="submit"]').click()
+        # a new patient needs a phone before the note is filed (P29 R-025, owner 2026-11-03); the note has none
+        if page.locator("#phone").count():
+            page.fill("#phone", "3401234567")
+        # a staff form posts after the page checks the clinic app is answering (P29 U-020): wait for the post itself
+        with page.expect_navigation():
+            page.locator('form[action$="/confirm"] button[type="submit"]').click()
         page.wait_for_load_state("networkidle")
     check("11 one confirmed note becomes one visit", walk_visits() == 1,
           f"{walk_visits()} visit row(s) after confirming one note")

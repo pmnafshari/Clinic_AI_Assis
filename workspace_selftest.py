@@ -126,6 +126,31 @@ def guard_only_for_demo():
         "6: HARD FAIL - the clinic's own startup must keep the guard armed"
 
 
+def both_loopbacks():
+    """7. P29 U-022: the staff app answers on the IPv6 loopback too. on this Mac AirPlay Receiver holds *:5000, and a
+    browser reaching localhost over IPv6 got its blank 403 (Server: AirTunes) instead of the clinic"""
+    import socket
+    import urllib.request
+
+    import run
+    from flask import Flask
+    probe = Flask("u022")
+    probe.add_url_rule("/login", "login", lambda: "clinic")
+    with socket.socket(socket.AF_INET6) as s:
+        s.bind(("::1", 0))
+        port = s.getsockname()[1]
+    assert "serve_ipv6_loopback(app, port)" in (ROOT / "run.py").read_text(), "7: run.main does not serve [::1]"
+    server = run.serve_ipv6_loopback(probe, port)
+    try:
+        assert server is not None, "7: [::1] could not be served"
+        with urllib.request.urlopen(f"http://[::1]:{port}/login", timeout=5) as r:
+            assert r.read() == b"clinic" and "Werkzeug" in r.headers.get("Server", ""), "7: [::1] is not the clinic"
+    finally:
+        if server is not None:
+            server.shutdown()
+            server.server_close()
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         session_endpoint(tmp)
@@ -134,6 +159,7 @@ def selftest():
     follows_its_parent()
     no_host_files()
     guard_only_for_demo()
+    both_loopbacks()
     print(json.dumps({"workspace_selftest": "ok"}))
 
 

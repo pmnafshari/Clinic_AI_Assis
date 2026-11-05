@@ -112,6 +112,9 @@ def main():
 
             # the month arrows are links too - a keyboard user has to be able
             # to leave the month, not only move inside it
+            # P29 U-014 opens the day from a month day, so go back to the month the arrows belong to
+            s.go_back()
+            s.wait_for_load_state("networkidle")
             nav = s.locator('.appt-cal-nav a')
             check("9 prev/today/next are keyboard-reachable links", nav.count() == 3,
                   f"{nav.count()} nav links")

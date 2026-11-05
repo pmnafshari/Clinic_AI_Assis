@@ -1,3 +1,8 @@
+import socket
+import threading
+
+from werkzeug.serving import make_server
+
 import clinic_time
 import codice_fiscale
 import disk_guard
@@ -5,6 +10,21 @@ import documents
 import drive_source
 import upload_worker
 from app import create_app
+
+
+def serve_ipv6_loopback(app, port):
+    """P29 U-022: the clinic answers on the IPv6 loopback too. macOS AirPlay Receiver listens on *:5000, and a browser
+    that reaches localhost over IPv6 got its blank 403 (Server: AirTunes) instead of the clinic. an exact address is
+    served before a wildcard one, so localhost reaches the clinic either way; no system setting is touched."""
+    if not socket.has_ipv6:
+        return None
+    try:
+        server = make_server("::1", port, app, threaded=True)
+    except OSError as e:
+        print(f"note: the clinic app could not also listen on [::1]:{port} ({e}) - open http://127.0.0.1:{port}")
+        return None
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def main(port=5000):
@@ -31,6 +51,7 @@ def main(port=5000):
     if drive_source.FOLDER_ID:
         drive_source.start_auto_thread("db/clinic.sqlite")
     # 5000 by default - tunnel_guard.STAFF_PORT mirrors it, change both together
+    serve_ipv6_loopback(app, port)
     app.run(host="127.0.0.1", port=port, threaded=True)
 
 
