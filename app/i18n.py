@@ -49,6 +49,7 @@ JS_TEXT = (
     "{i} of {n}", "Loading...", "This file could not be shown here. Download the original to open it.",
     "Preview of {name} (for orientation only)", "Page {page} of {n}",
     "No preview for this kind of file. Download the original to open it.",
+    "The clinic app is not answering. Nothing was sent, and what you typed is still here.", "Try again", "OK",
 )
 
 

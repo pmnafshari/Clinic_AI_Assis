@@ -2328,4 +2328,5 @@ IT = {
     'Taken out of the draft - the note does not say it: {what}. Add it back only if the note means it.': 'Tolto dalla bozza - la nota non lo dice: {what}. Rimettilo solo se la nota lo intende.',
     "the note's patient's name could not be read: write it next to the codice fiscale": "non è stato possibile leggere il nome del paziente nella nota: scrivilo accanto al codice fiscale",
     'Clinical staff open the record.': 'La cartella la apre il personale clinico.',
+    'The clinic app is not answering. Nothing was sent, and what you typed is still here.': "L'app dello studio non risponde. Non è stato inviato nulla, e ciò che hai scritto è ancora qui.",
 }

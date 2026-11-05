@@ -466,3 +466,71 @@ document.querySelectorAll("img.file-view, img.file-thumb, img.import-preview").f
   reveal();
   side.addEventListener("show.bs.offcanvas", reveal);
 })();
+
+// P29 U-020: a save while the clinic app is not answering never leaves a white page. before a form posts, the page asks
+// the server if it is there (a read, nothing is sent); if not, the page stays as it is with what was typed, says that
+// nothing was sent, and offers Try again - which checks again and then posts once. htmx requests that cannot reach the
+// server say the same. nothing is ever resent on its own
+(function () {
+  function reachable() {
+    var stop = window.AbortController ? new AbortController() : null;
+    var timer = stop ? setTimeout(function () { stop.abort(); }, 5000) : null;
+    return fetch("/api/session", { cache: "no-store", credentials: "same-origin", redirect: "manual",
+                                   signal: stop ? stop.signal : undefined })
+      .then(function () { return true; }, function () { return false; })
+      .then(function (ok) { if (timer) clearTimeout(timer); return ok; });
+  }
+
+  function say(retry) {
+    var old = document.querySelector("[data-offline]");
+    if (old) old.remove();
+    var box = document.createElement("section");
+    box.className = "app-result";
+    box.setAttribute("data-offline", "");
+    box.setAttribute("role", "alert");
+    var line = document.createElement("div");
+    line.className = "alert alert-danger app-flash";
+    line.textContent = uiText("The clinic app is not answering. Nothing was sent, and what you typed is still here.");
+    box.appendChild(line);
+    var acts = document.createElement("div");
+    acts.className = "app-result-actions gap-2";
+    if (retry) {
+      var again = document.createElement("button");
+      again.type = "button";
+      again.className = "btn btn-primary btn-sm";
+      again.setAttribute("data-offline-retry", "");
+      again.textContent = uiText("Try again");
+      again.addEventListener("click", function () { box.remove(); retry(); });
+      acts.appendChild(again);
+    }
+    var ok = document.createElement("button");
+    ok.type = "button";
+    ok.className = "btn btn-outline-secondary btn-sm";
+    ok.textContent = uiText("OK");
+    ok.addEventListener("click", function () { box.remove(); });
+    acts.appendChild(ok);
+    box.appendChild(acts);
+    document.body.appendChild(box);
+    (retry ? again : ok).focus();
+  }
+
+  function post(form, submitter) {
+    reachable().then(function (ok) {
+      if (!ok) { say(function () { post(form, submitter); }); return; }
+      form.dataset.reached = "1";
+      if (form.requestSubmit) form.requestSubmit(submitter || undefined); else form.submit();
+    });
+  }
+
+  // capture: this runs before the page's own submit handlers, which then see the one real submit
+  document.addEventListener("submit", function (event) {
+    var form = event.target;
+    if ((form.getAttribute("method") || "get").toLowerCase() !== "post" || form.hasAttribute("hx-post")) return;
+    if (form.dataset.reached === "1") { delete form.dataset.reached; return; }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    post(form, event.submitter);
+  }, true);
+
+  document.body.addEventListener("htmx:sendError", function () { say(null); });
+})();
