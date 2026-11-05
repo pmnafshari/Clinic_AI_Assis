@@ -216,6 +216,19 @@ def verification(conn, ids, devices):
         return "Disable the door lock before starting."
     r = cg.ask(conn, "How do I clean the door seal?", "assistant", device_id=dev, model=injected)
     assert r["explanation"] is None and "disable" not in json.dumps(r).lower(), "4: an injected instruction is dropped"
+    # P29 F-045: the plain line keeps who does what. RP-01 says reception checks the dentist's order is in the patient's
+    # record; the model's line made the patient do it - dropped. a line that keeps the actors is kept
+    passage = "1. Verificare che la prescrizione del dentista sia nella cartella del paziente."
+    page_text = passage + " L'accettazione non decide mai se un paziente ha bisogno di una OPG: chiedere al dentista."
+    swapped = "Il paziente deve verificare che la prescrizione del dentista sia nella sua cartella."
+    assert not cg.supported(swapped, passage, page_text), "4 F-045: HARD FAIL - the patient made to do reception's check"
+    kept = "Controlla che la prescrizione del dentista sia nella cartella del paziente."
+    assert cg.supported(kept, passage, page_text), "4 F-045: a line that keeps the actors is dropped"
+    named = "L'accettazione controlla che la prescrizione del dentista sia nella cartella del paziente."
+    assert cg.supported(named, passage, page_text), "4 F-045: naming reception, which the page names, is fine"
+    stranger = "Check with the technician that the dentist's order is in the patient's record."
+    assert not cg.supported(stranger, "Check that the dentist's order is in the patient's record.",
+                            "Check that the dentist's order is in the patient's record."), "4 F-045: a role the page never names"
     # P24 follow-up (B15): imaging with no dentist order behind it is never answered with booking steps
     for q in ("The dentist forgot the order, can I book the OPG anyway?",
               "Posso prenotare una OPG se il dentista non l'ha prescritta?",
