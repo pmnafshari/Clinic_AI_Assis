@@ -464,6 +464,16 @@ def selftest():
     assert "function autostart()" in src, "20i3: opening the page must attempt voice"
     assert "function offer(" in src, "20i3: a refused auto start needs a non-error fallback"
 
+    # 20i3b. P29 F-029: with voice off the page says so - a tester looking for the microphone is told voice is off
+    # on this server and to type, instead of finding nothing
+    live_src = _code_only(src)
+    assert "if (!j.available) { voiceOff(); return; }" in live_src and ".catch(voiceOff)" in live_src, \
+        "20i3b F-029: voice off leaves the page silent about the missing microphone"
+    off_body = _fn_body(live_src, "voiceOff")
+    assert "btn.hidden = true" in off_body and "note.textContent = L.voiceOff" in off_body and "mount.hidden = false" in off_body, \
+        "20i3b F-029: voiceOff must hide the button and show the note"
+    assert cfg["assistant"]["voice_off_note"] in a_page.text.replace("&#39;", "'"), "20i3b F-029: the page carries the note"
+
     # 20i4. every fallback is real copy from clinic.yaml, not hardcoded
     # english in the script.
     for key in ("mic_denied_note", "mic_unavailable_note", "autoplay_blocked_note"):

@@ -123,7 +123,8 @@
     stop: root.dataset.voiceStopLabel || "Stop",
     micDenied: root.dataset.micDeniedNote || "Microphone access was refused. You can still type.",
     micUnavailable: root.dataset.micUnavailableNote || "No microphone was available. You can still type.",
-    autoplay: root.dataset.autoplayNote || "Your browser keeps sound off until you interact with the page. Click anywhere to turn it on."
+    autoplay: root.dataset.autoplayNote || "Your browser keeps sound off until you interact with the page. Click anywhere to turn it on.",
+    voiceOff: root.dataset.voiceOffNote || "Voice is switched off on this server. You can type your question."
   };
 
   var btn = mount.querySelector("[data-agent-mic]");
@@ -389,12 +390,21 @@
 
   // the control only appears if the server says voice is armed - never a
   // button that cannot work
+  // P29 F-029: with voice off there is no microphone button, and the page says why - a gap with no word reads as a
+  // missing control
+  function voiceOff() {
+    if (btn) btn.hidden = true;
+    note.textContent = L.voiceOff;
+    note.hidden = false;
+    mount.hidden = false;
+  }
+
   fetch("/assistant/voice/status")
     .then(function (r) { return r.json(); })
     .then(function (j) {
-      if (!j.available) { mount.hidden = true; return; }
+      if (!j.available) { voiceOff(); return; }
       mount.hidden = false;
       autostart();
     })
-    .catch(function () { mount.hidden = true; });
+    .catch(voiceOff);
 })();
