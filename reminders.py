@@ -33,7 +33,8 @@ APPOINTMENT_LEAD = timedelta(hours=24)
 INSTALLMENT_DAYS_BEFORE = 3
 INSTALLMENT_HOUR = 10
 QUIET_START, QUIET_END, QUIET_FALLBACK = 20, 9, 19
-CATCH_UP_MIN = timedelta(hours=2)
+# P29 E-007 (owner): a late reminder still goes, right up to the start - never after it (that was not approved)
+CATCH_UP_MIN = timedelta(0)
 CLAIM_TIMEOUT = timedelta(minutes=10)
 MAX_ATTEMPTS = 3
 BACKOFF = timedelta(minutes=5)
@@ -243,7 +244,7 @@ def _still_valid(conn, job, now):
             return "appointment_cancelled"
         if a["starts_at"] != job["version"]:
             return "rescheduled"
-        if clinic_time.read_instant(a["starts_at"]) - now < CATCH_UP_MIN:
+        if clinic_time.read_instant(a["starts_at"]) - now <= CATCH_UP_MIN:
             return "too_late"
     else:
         import ledger
@@ -680,16 +681,20 @@ def selftest():
                 lambda: conn.execute("UPDATE patients SET phone = NULL WHERE patient_id = ?", (pid,)),
                 lambda: conn.execute("UPDATE patients SET phone = '+39 055 000001'"
                                      " WHERE patient_id = ?", (pid,)))
-        # closer than the catch-up window: a reminder that would land after the
-        # thing it reminds about is cancelled, not sent
-        soon = _stamp(t1 + CATCH_UP_MIN - timedelta(minutes=5))
-
-        def bring_forward():
-            conn.execute("UPDATE appointments SET starts_at = ? WHERE id = ?", (soon, stale))
-            conn.execute("UPDATE reminder_jobs SET version = ? WHERE id = ?", (soon, stale_job))
+        # P29 E-007 (owner): a reminder never goes once the appointment has started - it would land after the thing it
+        # reminds about - but under two hours before, it still goes
+        def move(when):
+            conn.execute("UPDATE appointments SET starts_at = ? WHERE id = ?", (when, stale))
+            conn.execute("UPDATE reminder_jobs SET version = ? WHERE id = ?", (when, stale_job))
             conn.commit()
 
-        refuses("too_late", bring_forward, lambda: None)
+        refuses("too_late", lambda: move(_stamp(t1 - timedelta(minutes=1))), lambda: None)
+        move(_stamp(t1 + timedelta(hours=1, minutes=55)))
+        probe = TestTransport()
+        run_once(conn, probe, now=t1)
+        got = jobs(conn, id=stale_job)[0]
+        assert probe.sent and got["status"] != "cancelled", \
+            f"6 E-007: under two hours before, the reminder was not sent: {got['status']}/{got['cancel_reason']}"
         print("selftest ok")
         conn.close()
 
