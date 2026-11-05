@@ -21,6 +21,11 @@
 <p class="ux-note" role="note"><i class="bi bi-info-circle" aria-hidden="true"></i>
   <span>{{ _html("<strong>Demo clinic, synthetic data.</strong> Payments are typed in after money changed hands elsewhere - there is no payment provider and no fiscal invoice is issued. Invoices from before the ledger stay <strong>unknown</strong>, never counted as owed, until someone reconciles them.") }}</span></p>
 
+{# P29 U-013: an invoice kept after its patient was erased, and where the list goes as a file #}
+<p class="ux-note" role="note"><i class="bi bi-archive" aria-hidden="true"></i>
+  <span>{{ _("An invoice marked Kept after erasure belongs to a patient who asked to be erased: the invoice stays because the retention policy holds it (a demo template), and the rest of that patient's record is gone. Amounts shown here are billed; only recorded payments count as collected.") }}
+  <a class="ux-link" href="{{ url_for('billing.export_csv') }}" download>{{ _("Download this list (CSV)") }}</a></span></p>
+
 <div class="ux-kpis ux-kpis-3" data-ux="billing-totals">
   <div class="ux-kpi ux-kpi-static">
     <span class="ux-kpi-label">{{ _("Still to pay (issued invoices)") }}</span>
@@ -91,7 +96,8 @@
     <tr data-name="{{ s.patient_name }}" data-no="{{ s.id }}" data-amount="{{ cents }}" data-due="{{ (s.due_date if key == 'owed' and s.due_date else '9999') }}"
         data-visit="{{ s.visit_date or '' }}" data-band="{{ 'u100' if cents < 10000 else 'm' if cents <= 20000 else 'o200' }}"
         data-state="{{ s.state if s.state in ('draft', 'unknown', 'partially_paid') else 'issued' }}">
-      <td data-label="{{ _('Patient') }}"><strong>{{ s.patient_name }}</strong></td>
+      <td data-label="{{ _('Patient') }}"><strong>{{ s.patient_name }}</strong>{% if s.retained %}
+        <span class="ux-badge ux-badge-none" data-retained>{{ _("Kept after erasure") }}</span>{% endif %}</td>
       <td data-label="{{ _('Invoice') }}">#{{ s.id }} <span class="ux-muted ux-sub">{{ _('visit {date}', date=s.visit_date) if s.visit_date else _('visit undated') }}</span></td>
       <td data-label="{{ _('Due') }}">{% if key == 'owed' and s.due_date %}<span class="ux-nowrap">{{ s.due_date }}</span>{% else %}<span class="ux-muted">-</span>{% endif %}</td>
       <td data-label="{{ _('Amount') }}" class="ux-num">

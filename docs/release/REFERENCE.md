@@ -36,6 +36,7 @@ this file is stale.
 | POST | `/appointments/<int:appointment_id>/reschedule` | `appointments.reschedule` |
 | POST | `/appointments/book` | `appointments.book` |
 | GET | `/billing` | `billing.index` |
+| GET | `/billing/export.csv` | `billing.export_csv` |
 | POST | `/billing/invoices/<int:invoice_id>/<action>` | `billing.invoice_action` |
 | POST | `/billing/invoices/<int:invoice_id>/payment` | `billing.record_payment` |
 | GET | `/billing/invoices/<int:invoice_id>/payment/form` | `billing.payment_form` |
@@ -146,6 +147,7 @@ this file is stale.
 | GET | `/reminders` | `reminders.index` |
 | POST | `/reminders/<int:job_id>/retry` | `reminders.retry` |
 | GET | `/reports` | `reports.index` |
+| GET | `/reports/mine.csv` | `reports.mine_csv` |
 | GET | `/requests` | `requests.index` |
 | GET | `/reviews` | `review.queue` |
 | GET | `/reviews/<int:review_id>` | `review.detail` |

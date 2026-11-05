@@ -2,6 +2,7 @@ import secrets
 
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
+import clinic_time
 import ledger
 import patient_id
 from auth import authorize, log_audit
@@ -10,7 +11,7 @@ from storage import lookup_patient
 
 from . import reasons
 from .db import get_db
-from .i18n import _, message as said
+from .i18n import _, current, message as said
 from . import payment_intent
 
 billing_bp = Blueprint("billing", __name__)
@@ -40,18 +41,18 @@ def _patient_url(pid):
     return url_for("billing.patient", cf=row["codice_fiscale"])
 
 
-@billing_bp.route("/billing")
-def index():
-    if not authorize(g.user["role"], "view_billing"):
-        return _refuse("view_billing")
-    conn = get_db()
+def _work(conn):
+    """the three groups of the billing overview: to reconcile, drafts and owed. an invoice whose patient was erased and
+    kept under the retention policy is marked as such (P29 U-013)"""
+    held = {r[0] for r in conn.execute("SELECT patient_id FROM data_requests WHERE kind = 'erasure'"
+                                       " AND status = 'done' AND hold_reason IS NOT NULL")}
     rows = conn.execute(
         "SELECT b.id, b.patient_id, p.patient_name, p.codice_fiscale FROM billing_invoices b"
         " JOIN patients p ON p.patient_id = b.patient_id ORDER BY b.id").fetchall()
     work = {"unknown": [], "draft": [], "owed": []}
     for r in rows:
         s = ledger.summary(conn, r["id"])
-        s.update(patient_name=r["patient_name"], cf=r["codice_fiscale"])
+        s.update(patient_name=r["patient_name"], cf=r["codice_fiscale"], retained=r["patient_id"] in held)
         if s["state"] == "unknown":
             work["unknown"].append(s)
         elif s["state"] == "draft":
@@ -59,6 +60,35 @@ def index():
         elif s["outstanding_cents"] > 0:
             work["owed"].append(s)
     work["owed"].sort(key=lambda s: s["due_date"] or "")
+    return work
+
+
+@billing_bp.route("/billing/export.csv")
+def export_csv():
+    """P29 U-013: the billing overview as a file, for the roles that see it - what the page lists, audited"""
+    if not authorize(g.user["role"], "view_billing"):
+        return _refuse("billing_export")
+    conn = get_db()
+    work = _work(conn)
+    group = {"owed": _("Outstanding"), "unknown": _("Needs reconciliation"), "draft": _("Drafts")}
+    rows = [[_("Group"), _("Invoice"), _("Patient"), _("Visit date"), _("Due"), _("Total"), _("Still to pay"),
+             _("Status"), _("Kept after erasure")]]
+    for key in ("owed", "unknown", "draft"):
+        for s in work[key]:
+            rows.append([group[key], s["id"], s["patient_name"], s["visit_date"] or "", s["due_date"] or "",
+                         ledger.fmt(s["total_cents"], current()), ledger.fmt(s["outstanding_cents"], current()),
+                         _(s["state"].replace("_", " ")), _("yes") if s["retained"] else ""])
+    log_audit(conn, g.user["username"], g.user["role"], "billing_export", str(len(rows) - 1), allowed=1)
+    from .reports_routes import csv_download
+    return csv_download(rows, f"billing-{clinic_time.now().date().isoformat()}.csv")
+
+
+@billing_bp.route("/billing")
+def index():
+    if not authorize(g.user["role"], "view_billing"):
+        return _refuse("view_billing")
+    conn = get_db()
+    work = _work(conn)
     recorded = conn.execute(
         "SELECT COALESCE(SUM(CASE kind WHEN 'payment' THEN amount_cents ELSE -amount_cents END), 0)"
         " FROM payments").fetchone()[0]

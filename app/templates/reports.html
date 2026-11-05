@@ -19,6 +19,44 @@
 <p class="report-scope" data-ux="report-scope">{{ _('Whole clinic · {period}', period=_(period_label)) }}{% if since %} {{ _('(visits from {date})', date=since) }}{% endif %} · {{ _html('signed in as <strong>{who}</strong> ({role}).', who=g.user.username, role=_(g.user.role)) }}
   {{ _('Visits do not record which dentist wrote them, so every figure here is the whole clinic, not yours.') }}</p>
 
+{# P29 R-023/E-004/R-024: the signed-in dentist's own work - read only from the rows that name them, never another
+   dentist's; the export is built from the same rows on the server #}
+<section class="card dash-card mb-4" aria-labelledby="mine-title" data-my-work>
+  <div class="dash-card-head"><div>
+    <h2 class="ds-card-title" id="mine-title">{{ _('Your work · {period}', period=_(period_label)) }}</h2>
+    <p class="ds-card-sub">{{ _("Your appointments and the notes you confirmed in review. Visits do not record who wrote them, so nothing else is counted as yours.") }}</p></div>
+    <a class="btn btn-outline-primary btn-sm" href="{{ url_for('reports.mine_csv', period=period) }}" download>{{ _("Download my report (CSV)") }}</a>
+  </div>
+  <div class="dash-card-body">
+    <h3 class="ds-card-title mt-1">{{ _("Your appointments") }} <span class="ux-count">{{ my_appts | length }}</span></h3>
+    {% if my_appts %}
+    <div class="sx-tools sx-tools-row" data-list-tools data-for="my-appointments" data-noun="{{ _('appointment|appointments') }}"
+         data-sorts='{{ [['when', 'text', -1, _('Newest first')], ['when', 'text', 1, _('Oldest first')], ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+         data-filters='{{ [['status', _('Status'), [['booked', _('booked')], ['cancelled', _('cancelled')]]]] | tojson }}' data-search="{{ _('Search by patient') }}"></div>
+    <div class="sx-box sx-box-table"><table class="ux-table ux-table-page">
+      <caption class="visually-hidden">{{ _("Your appointments in the period") }}</caption>
+      <thead><tr><th scope="col" data-sort="when">{{ _("When") }}</th><th scope="col" data-sort="name">{{ _("Patient") }}</th><th scope="col">{{ _("Minutes") }}</th><th scope="col">{{ _("Status") }}</th></tr></thead>
+      <tbody id="my-appointments">{% for a in my_appts %}<tr data-when="{{ a.when }}" data-name="{{ a.patient }}" data-status="{{ a.status }}">
+        <td data-label="{{ _('When') }}" class="ux-nowrap">{{ a.when }}</td><td data-label="{{ _('Patient') }}">{{ a.patient }}</td>
+        <td data-label="{{ _('Minutes') }}">{{ a.minutes }}</td><td data-label="{{ _('Status') }}">{{ _ctx('appointment', a.status) }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="dash-empty-line">{{ _("No appointment of yours in this period.") }}</p>{% endif %}
+    <h3 class="ds-card-title mt-3">{{ _("Notes you confirmed") }} <span class="ux-count">{{ my_notes | length }}</span></h3>
+    {% if my_notes %}
+    <div class="sx-tools sx-tools-row" data-list-tools data-for="my-notes" data-noun="{{ _('note|notes') }}"
+         data-sorts='{{ [['decided', 'text', -1, _('Newest first')], ['decided', 'text', 1, _('Oldest first')], ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+         data-search="{{ _('Search by patient or procedure') }}" data-find="name procs"></div>
+    <div class="sx-box sx-box-table"><table class="ux-table ux-table-page">
+      <caption class="visually-hidden">{{ _("Notes you confirmed in the period") }}</caption>
+      <thead><tr><th scope="col" data-sort="decided">{{ _("Confirmed") }}</th><th scope="col" data-sort="name">{{ _("Patient") }}</th><th scope="col">{{ _("Visit date") }}</th><th scope="col">{{ _("Procedures, as written") }}</th></tr></thead>
+      <tbody id="my-notes">{% for n in my_notes %}<tr data-decided="{{ n.decided }}" data-name="{{ n.patient }}" data-procs="{{ n.procedures }}">
+        <td data-label="{{ _('Confirmed') }}" class="ux-nowrap">{{ n.decided }}</td><td data-label="{{ _('Patient') }}">{{ n.patient }}</td>
+        <td data-label="{{ _('Visit date') }}">{{ n.visit or '-' }}</td><td data-label="{{ _('Procedures, as written') }}">{{ n.procedures or '-' }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="dash-empty-line">{{ _("No note confirmed by you in this period.") }}</p>{% endif %}
+  </div>
+</section>
+
 <div class="ds-alert ds-alert-info mb-4" role="note">
   {# what this page deliberately does not show, said on the page rather than
      only in a plan. invoices carry no status and there is no payments table,
@@ -48,6 +86,16 @@
       <div class="dash-card-body">
       {% if proc_has_data %}
       <div class="chart-box"><canvas id="proc-chart"></canvas></div>
+      {# P29 R-024: the same figures as rows, to sort and search #}
+      <div class="sx-tools sx-tools-row mt-3" data-list-tools data-for="proc-rows" data-noun="{{ _('procedure|procedures') }}"
+           data-sorts='{{ [['count', 'num', -1, _('Most often first')], ['count', 'num', 1, _('Least often first')], ['name', 'text', 1, _('Code (A-Z)')]] | tojson }}'
+           data-search="{{ _('Search a code') }}"></div>
+      <table class="ux-table">
+        <caption class="visually-hidden">{{ _("How often each procedure code appears") }}</caption>
+        <thead><tr><th scope="col" data-sort="name">{{ _("Code") }}</th><th scope="col" class="ux-num" data-sort="count">{{ _("Visits") }}</th></tr></thead>
+        <tbody id="proc-rows">{% for label in proc_labels %}<tr data-name="{{ label }}" data-count="{{ proc_values[loop.index0] }}">
+          <td data-label="{{ _('Code') }}">{{ label }}</td><td data-label="{{ _('Visits') }}" class="ux-num">{{ proc_values[loop.index0] }}</td></tr>{% endfor %}</tbody>
+      </table>
       <p class="text-secondary small mb-0 mt-3">
         {{ _("A code the glossary does not recognise is flagged for review and still files, so it appears here as itself rather than being folded away.") }}
       </p>
