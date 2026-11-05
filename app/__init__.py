@@ -5,6 +5,7 @@ from flask_wtf import CSRFProtect
 
 import clinic_time
 import jarvis_link
+import note_dates
 import similar_cases
 import web_session
 from auth import authorize
@@ -114,6 +115,8 @@ def create_app():
     app.jinja_env.globals["clinic_clock"] = clinic_clock
     # read per render, so the switch is the environment the app was started with
     app.jinja_env.globals["similar_cases_enabled"] = similar_cases.enabled
+    # P29 U-003: what a visit's note writes as its date, when that is not the visit's own day
+    app.jinja_env.globals["note_date_differs"] = lambda day, text: note_dates.differs(str(day) if day else None, text)
     # avatars: initials on a stable tint (phase 43). presentation, not a figure
     app.jinja_env.filters["initials"] = initials
     app.jinja_env.filters["tint"] = tint

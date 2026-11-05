@@ -30,6 +30,7 @@ import re
 import sys
 
 import clinic_time
+import note_dates
 from auth import authorize, log_audit
 
 CAPABILITY = "review_summary"
@@ -229,8 +230,9 @@ def extractive(srcs):
 
     latest = next((s for s in srcs if s["next_appointment"]), None)
     if latest:
-        add("quote", f'Next appointment written as "{latest["next_appointment"]}" '
-                     f'[#{latest["id"]}]', [latest["id"]])
+        # P29 U-003: a recall written in a note is not a booking - the line says which it is
+        add("quote", f'Recall written in the note: "{latest["next_appointment"]}" [#{latest["id"]}] - not a booked'
+                     f' appointment', [latest["id"]])
 
     lines.extend(_conflicts(srcs))
     if total > len(srcs):
@@ -264,6 +266,13 @@ def _conflicts(srcs):
                                                 f" on {first['visit_date']} [#{first['id']}] but"
                                                 f" {other} on {later['visit_date']}"
                                                 f" [#{later['id']}]"})
+    # P29 U-003: a note writing another day than its visit's is a question for a person, never silently resolved
+    for s in dated:
+        said = note_dates.differs(s["visit_date"], s["clinical_notes"])
+        if said:
+            out.append({"kind": "conflict", "sources": [s["id"]],
+                        "text": f'Visit [#{s["id"]}] is dated {s["visit_date"]} but its note says "{said}": check which'
+                                f' is right'})
     by_date = {}
     for s in dated:
         by_date.setdefault(s["visit_date"], []).append(s)
@@ -297,6 +306,8 @@ TEMPLATE_WORDS = {
     "awaiting", "review", "shown", "interpreted", "await", "clinical", "approval", "codes",
     "they", "same", "older", "included", "and", "with", "for", "was", "were", "per", "del",
     "della", "dei", "con", "alla", "gap",
+    # P29 U-003: the recall line and the note-date conflict line
+    "recall", "booked", "its", "says", "which", "right", "is",
 }
 
 
@@ -376,9 +387,9 @@ def parse_edit(text):
         raw = raw.strip()[:MAX_LINE_CHARS]
         if not raw:
             continue
-        if raw.startswith("Note [#") or raw.startswith("Next appointment written as"):
+        if raw.startswith(("Note [#", "Next appointment written as", "Recall written in the note")):
             kind = "quote"
-        elif raw.startswith("Possible contradiction") or raw.startswith("Two records"):
+        elif raw.startswith(("Possible contradiction", "Two records")) or " but its note says " in raw:
             kind = "conflict"
         elif (raw.startswith("Visit [#") or "older visits are not included" in raw
               or "notes awaiting review are not included" in raw

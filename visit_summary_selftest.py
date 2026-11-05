@@ -124,6 +124,19 @@ def domain(tmp):
     assert any(a3 in l["sources"] and "no procedures" in l["text"] for l in gaps), gaps
     assert any(a3 in l["sources"] and "no note text" in l["text"] for l in gaps), gaps
 
+    # 4b. P29 U-003: a note that writes another date than its visit's is flagged, never silently resolved; the visit's
+    # own date in the note, or a recall date, is no conflict. a recall is said to be a recall, not a booking
+    def one(day, note, nxt=None):
+        return vs.extractive(([{"id": 7, "visit_date": day, "procedures": [], "clinical_notes": note,
+                                "next_appointment": nxt}], 1, 0))
+    said = one("2023-08-27", "controllo 27 lug, tutto ok")
+    assert any(l["kind"] == "conflict" and "27 lug" in l["text"] and l["sources"] == [7] for l in said), said
+    for note in ("controllo 27/08", "27 agosto: igiene, prossimo controllo 12/09", "check-up on Aug 27", "nessuna data"):
+        assert not [l for l in one("2023-08-27", note) if l["kind"] == "conflict"], f"4b: {note!r} flagged"
+    recall = [l for l in one("2023-08-27", "ok", "14d") if '"14d"' in l["text"]]
+    assert recall and "not a booked appointment" in recall[0]["text"], f"4b: the recall reads as a booking: {recall}"
+    assert vs.parse_edit(recall[0]["text"])[0]["kind"] == "quote", "4b: an edited recall line keeps its kind"
+
     # 5. POL-11: 'ext' is a pending glossary code, so nothing may read it as
     # "extracted". no contradiction is inferred from it, and the summary says
     # the codes are shown as written, uninterpreted

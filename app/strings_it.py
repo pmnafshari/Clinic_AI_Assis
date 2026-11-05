@@ -2329,4 +2329,5 @@ IT = {
     "the note's patient's name could not be read: write it next to the codice fiscale": "non è stato possibile leggere il nome del paziente nella nota: scrivilo accanto al codice fiscale",
     'Clinical staff open the record.': 'La cartella la apre il personale clinico.',
     'The clinic app is not answering. Nothing was sent, and what you typed is still here.': "L'app dello studio non risponde. Non è stato inviato nulla, e ciò che hai scritto è ancora qui.",
+    'The note says "{said}" but the visit is dated {date}: check which is right.': 'La nota dice "{said}" ma la visita è datata {date}: controlla quale è giusta.',
 }

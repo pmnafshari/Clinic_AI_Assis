@@ -174,6 +174,8 @@
                 hx-target="#modal-body-target" hx-swap="innerHTML" aria-label="{{ _('Edit visit {id}, {date}', id=visit.id, date=visit.visit_date or _('no date')) }}">{{ _("Edit") }}</button>
               {% if similar_cases_enabled() %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('similar.page', cf=cf, vid=visit.id) }}" aria-label="{{ _('Similar cases for visit {id}, {date}', id=visit.id, date=visit.visit_date or _('no date')) }}">{{ _("Similar cases") }}</a>{% endif %}
             </div>
+            {% set other_day = note_date_differs(visit.visit_date, visit.clinical_notes) %}
+            {% if other_day %}<p class="ds-row-sub mb-1" role="note" data-date-conflict><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> {{ _('The note says "{said}" but the visit is dated {date}: check which is right.', said=other_day, date=visit.visit_date) }}</p>{% endif %}
             <p class="timeline-note">{{ visit.clinical_notes }}</p>
             {% if visit.procedures %}
             <p class="timeline-procs"><span class="visually-hidden">{{ _("Procedures:") }} </span>{% for proc in visit.procedures %}<span class="ds-badge ds-badge-info">{{ proc }}</span> {% endfor %}</p>

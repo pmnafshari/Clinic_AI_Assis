@@ -683,6 +683,17 @@ def selftest():
                 assert "sx-wide" in order15[2][0] and order15[0][0].split()[0] == order15[1][0].split()[0], \
                     "15a: the two small portal boxes are not the same size, or consent is not the full-width box below them"
                 assert re.search(r'dash-card (sx-h-m sx-wide)" aria-labelledby="timeline-title"', rec15), "15a: the timeline is not full width"
+        # 15c. P29 U-003: a visit whose note writes another day says so on the record; a note that agrees says nothing
+        import sqlite3 as _sq
+        own15 = _sq.connect(str(db))
+        dino15 = patient_id.resolve(own15, "ZZUD800101010104")
+        own15.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path) VALUES"
+                      " (?, '2023-08-27', '[]', 'controllo 27 lug, tutto ok', 'sorted/ZZUD800101010104/notes/d.json')", (dino15,))
+        own15.commit()
+        own15.close()
+        dino_rec = dentist.get("/patients/ZZUD800101010104").get_data(as_text=True)
+        assert "data-date-conflict" in dino_rec and "27 lug" in dino_rec, "15c U-003: the note's other date is not flagged"
+        assert "data-date-conflict" not in rec15, "15c U-003: a note without another date is flagged"
         css15 = css12
         assert re.search(r"\.sx-panel \.dash-card\s*\{[^}]*height: var\(--sx-h", css15) and re.search(r"\.sx-panel-col\s*\{\s*display: contents", css15), \
             "15b: record boxes are not a grid of fixed-height boxes"
