@@ -40,8 +40,13 @@
           <p class="ds-row-title mb-1">{{ side.patient_name }}</p>
           <p class="ds-row-sub mb-1"><code>{{ side.codice_fiscale }}</code></p>
           <p class="ds-row-sub mb-2">{{ side.phone|phone or _('no phone on record') }}</p>
+          {# P29 F-001: a role that cannot read records is not sent to a refusal; it is told who opens the record #}
+          {% if authorize(g.user.role, 'read_notes') %}
           <a class="btn btn-sm btn-outline-secondary"
              href="{{ url_for('patients.detail_view', cf=side.codice_fiscale) }}">{{ _("Open record") }}</a>
+          {% else %}
+          <p class="ds-row-sub mb-0">{{ _("Clinical staff open the record.") }}</p>
+          {% endif %}
         </div>
       </div>
       {% endfor %}

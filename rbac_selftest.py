@@ -423,6 +423,11 @@ def selftest():
             "SELECT COUNT(*) FROM audit_log WHERE action = 'review_duplicates' AND allowed = 1"
             " AND username = 'rb_admin'").fetchone()[0]
         assert after == before + 1, "4b: every look at duplicate review is audited"
+        # P29 F-001 (owner policy: admin's audited duplicate view, no clinical access): no Open record button that
+        # only leads to a refusal - the page says who opens the record; the merge controls stay
+        assert "/patients/ZZRB" not in page and "Clinical staff open the record" in page, \
+            "4b F-001: admin is offered a record it cannot open"
+        assert "dup-merge" in page, "4b F-001: the merge controls were removed"
 
         # 5. the patient portal: every route outside its short public list
         # needs a patient session. the portal takes no patient id from the
