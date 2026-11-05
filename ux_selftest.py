@@ -305,6 +305,9 @@ def selftest():
         ans = _text(dentist.post("/qa", data={"question": "What is patient Anna Uno's next appointment?"}).get_data(as_text=True))
         assert f"{DAY} 09:30" in ans and "2031-04-01" not in ans.split("recall")[0], f"7: answered from the recall: {ans[-300:]}"
         assert "sorted/" not in ans and ".json" not in ans, "7: a raw path cited as the source"
+        # P29 F-039: the full name without "patient" is the same question
+        bare = _text(dentist.post("/qa", data={"question": "When is Anna Uno's next appointment?"}).get_data(as_text=True))
+        assert f"{DAY} 09:30" in bare, f"7: a full name without 'patient' was not recognised: {bare[-300:]}"
         none = _text(dentist.post("/qa", data={"question": "What is patient Zeno Nessuno's phone number?"}).get_data(as_text=True))
         assert "No patient" in none, "7: the no-record state"
 

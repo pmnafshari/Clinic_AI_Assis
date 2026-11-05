@@ -1,5 +1,6 @@
 import difflib
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -135,6 +136,18 @@ def extract_name(question):
             name = name[: -len(suffix)]
             break
     return name.strip(" .,!?")
+
+
+def name_in_question(question, conn):
+    """a stored patient's full name written in the question without the word "patient" (P29 F-039:
+    "When is Francesca Gallo's next appointment?"). whole words only; the longest name wins."""
+    words = " " + " ".join(re.sub(r"[^\w]+", " ", re.sub(r"['’]s\b", "", question.lower())).split()) + " "
+    found = None
+    for (name,) in conn.execute("SELECT DISTINCT lower(patient_name) FROM patients WHERE patient_name LIKE '% %'"):
+        name = " ".join(name.split())
+        if f" {name} " in words and (found is None or len(name) > len(found)):
+            found = name
+    return found
 
 
 def answer_exact(cf, field, conn):
@@ -311,6 +324,12 @@ def selftest():
         assert extract_name("what is patient Mario Rossi's next appointment?") == "Mario Rossi"
         assert extract_name("what is the phone number on file?") is None
 
+        # 2b. P29 F-039: a full name written without the word "patient" is found among the stored names
+        assert name_in_question("When is Anna Gialli's next appointment?", conn) == "anna gialli"
+        assert name_in_question("what is MARIO ROSSI's phone?", conn) == "mario rossi"
+        assert name_in_question("what is the phone number on file?", conn) is None
+        assert name_in_question("is Gialli in?", conn) is None, "a surname alone without 'patient' is not a name"
+
         # 3. resolve_cf: exact full name, surname fallback, no match, multi-match
         assert resolve_cf("mario rossi", conn) == cf
         assert resolve_cf("rossi", conn) == cf, "surname alone must resolve against a full name"
@@ -470,7 +489,7 @@ def main():
         print(answer_meaning(question, collection))
         return
 
-    name = extract_name(question)
+    name = extract_name(question) or name_in_question(question, conn)
     if name is None:
         print("couldn't identify a patient in that question")
         return

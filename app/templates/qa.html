@@ -27,7 +27,7 @@
       <label for="question" class="form-label">{{ _("Your question") }}</label>
       <input type="text" id="question" name="question" value="{{ question or '' }}" class="form-control" required
              placeholder="{{ _("e.g. What is patient Rossi's next appointment?") }}" aria-describedby="question-help">
-      <p class="ux-muted" id="question-help">{{ _("Write \"patient\" before the name, and ask about an appointment, phone, invoice or visit date. One patient per question.") }}</p>
+      <p class="ux-muted" id="question-help">{{ _("Write the patient's full name, or \"patient\" before the surname, and ask about an appointment, phone, invoice or visit date. One patient per question.") }}</p>
       {% if candidates %}
       <fieldset class="ux-candidates">
         <legend class="form-label">{{ _('More than one patient is called {name} - choose one', name=name) }}</legend>
@@ -80,7 +80,7 @@
       f.addEventListener('submit', function () {
         var b = f.querySelector('[data-busy-label]'), s = f.querySelector('[data-busy-status]');
         if (b) { b.disabled = true; b.textContent = b.getAttribute('data-busy-label'); }
-        if (s) { s.textContent = 'Reading the records. This can take up to a minute.'; }
+        if (s) { s.textContent = {{ _('Reading the records. This can take up to a minute.') | tojson }}; }
       });
     });
   })();

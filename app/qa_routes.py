@@ -30,7 +30,7 @@ def answer_question(question, conn, collection, chosen_cf=None):
         return {"answer": ask.answer_exact(chosen_cf, ask.field_for_question(question), conn),
                 "read": chosen_cf}
 
-    name = ask.extract_name(question)
+    name = ask.extract_name(question) or ask.name_in_question(question, conn)
     if name is None:
         return {"answer": "couldn't identify a patient in that question"}
     cf = ask.resolve_cf(name, conn)

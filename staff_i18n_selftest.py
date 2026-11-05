@@ -293,7 +293,11 @@ def loose_text(src):
                 prose.append(lit)
     parser = _Loose()
     parser.feed(re.sub(r"\{\{.*?\}\}|\{%.*?%\}", " ", src, flags=re.S))
-    return parser.loose + [f"expr {p!r}" for p in prose]
+    # a page's own script writes words too: a quoted sentence in it is text a person reads
+    said = []
+    for block in re.findall(r"<script\b[^>]*>(.*?)</script>", re.sub(r"\{\{.*?\}\}", " ", src, flags=re.S), flags=re.S):
+        said += [m for m in re.findall(r"'([A-Z][a-z]+ [^']*)'|\"([A-Z][a-z]+ [^\"]*)\"", block) for m in m if m]
+    return parser.loose + [f"expr {p!r}" for p in prose] + [f"script {s!r}" for s in said]
 
 
 def loose_python(src):
