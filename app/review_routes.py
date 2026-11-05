@@ -3,6 +3,7 @@ from pathlib import Path
 from flask import Blueprint, abort, flash, g, redirect, render_template, request, url_for
 
 import glossary_review
+from dental_notes_schema import unsupported_procedures
 import note_review as nr
 from auth import authorize, log_audit
 
@@ -52,7 +53,10 @@ def detail(review_id):
     except LookupError:
         abort(404)
     pending, codes = glossary_review.pending_count()
-    return render_template("review_detail.html", view=view, pending=pending, codes=codes)
+    # P29 F-018: a treatment the model wrote that the original does not say is left out of the draft, and named
+    x = view["extraction"]
+    unsaid = unsupported_procedures(x.get("procedures") or [], view["original"]) if x and view["original"] else []
+    return render_template("review_detail.html", view=view, pending=pending, codes=codes, unsaid=unsaid)
 
 
 @review_bp.route("/reviews/<int:review_id>/confirm", methods=["POST"])

@@ -25,7 +25,7 @@ _urlopen = local_urlopen
 
 
 def _extract(raw_text):
-    return parse_reply(call_model(raw_text, urlopen=_urlopen))
+    return parse_reply(call_model(raw_text, urlopen=_urlopen), source=raw_text)
 
 
 _queue = queue.Queue()

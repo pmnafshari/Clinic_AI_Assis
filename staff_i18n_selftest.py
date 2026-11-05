@@ -207,6 +207,7 @@ def harvest():
     found |= _messages_in(ROOT / "agent.py") | set(agent.EDITABLE_FIELDS) | {"empty"}
     found |= {text for _key, text in web_auth.PASSWORD_RULES}
     found |= {"no folder is configured (CLINIC_DRIVE_FOLDER_ID)", "no API key: put it in {a} (outside the repository)"}
+    found |= _messages_in(ROOT / "extract_note.py")
     # the command box says the dictation sentence with "the command" for "the note" (agent_routes._dictation)
     found |= {m.replace("type the note", "type the command") for m in _raised(ROOT / "dictation.py", ("Unavailable",))
               | {dictation.STT_UNAVAILABLE} if "type the note" in m}

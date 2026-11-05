@@ -73,6 +73,7 @@
     {% if mismatch %}
     <div class="ds-alert ds-alert-warning mb-3" role="alert">{{ mismatch }}</div>
     {% endif %}
+    {% if unsaid %}<div class="ds-alert ds-alert-warning mb-3" role="alert" data-unsaid>{{ _('Taken out of the draft - the note does not say it: {what}. Add it back only if the note means it.', what=unsaid | join(', ')) }}</div>{% endif %}
     <div class="mb-3">
       <label for="patient_name" class="form-label">{{ _("Patient name") }}</label>
       {% if locked %}

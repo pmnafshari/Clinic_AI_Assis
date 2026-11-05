@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -48,6 +49,34 @@ class DentalNote(BaseModel):
             if code and code not in KNOWN_PROCEDURES:
                 unknown.append(code)
         return unknown
+
+
+def _words(text):
+    return re.sub(r"[^\w]+", " ", (text or "").lower()).split()
+
+
+def _said(term, words):
+    # a short code must be written as it is; a longer word may be inflected (devitalizzato, devitalizzazione)
+    # a gloss counts by its first two words: "root canal" says "root canal treatment"
+    parts = ([w for w in _words(term) if len(w) >= 3] or _words(term))[:2]
+    for part in parts:
+        if not any(w == part or (len(part) >= 6 and w[:6] == part[:6]) for w in words):
+            return False
+    return bool(parts)
+
+
+def unsupported_procedures(procedures, source):
+    """P29 F-018: the procedures a draft names that its note does not say - neither the code nor its gloss nor one of
+    its synonyms is in the text. "controllo dente 46" must never become "rct 46" unseen."""
+    words = _words(source)
+    out = []
+    for entry in procedures:
+        code = entry.strip().split(" ")[0].lower()
+        known = KNOWN_PROCEDURES.get(code)
+        terms = [code] + ([known["gloss"]] + known["synonyms"] if known else [])
+        if not any(_said(term, words) for term in terms):
+            out.append(entry)
+    return out
 
 
 def plain_errors(e):

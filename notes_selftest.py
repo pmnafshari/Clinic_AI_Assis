@@ -33,6 +33,22 @@ def _csrf_from(html):
     return match.group(1)
 
 
+def f033_urlopen(req, timeout=120):
+    # P29 F-033: what the model returned - no name, the code cut short - for a note that writes both in full
+    class Reply:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc_info):
+            return False
+
+        def read(self):
+            note = {"patient_name": None, "codice_fiscale": "RSSMRA85T10", "procedures": [], "invoices": []}
+            return json.dumps({"response": json.dumps(note)}).encode()
+
+    return Reply()
+
+
 def fake_urlopen(req, timeout=120):
     _call_count["n"] += 1
 
@@ -166,6 +182,15 @@ def selftest():
         assert 'value="2026-06-01"' in paste_resp.text, "preview should show the extracted visit date"
         assert 'name="invoice_amount"' in paste_resp.text, "preview should carry the extracted invoice"
         assert "rct 26" in paste_resp.text, "preview should show the invoice description"
+        # P29 F-018: the note says "checkup", the model said "cleaning" - taken out of the draft and named, never kept unseen
+        assert 'id="procedures" name="procedures" value=""' in paste_resp.text, "F-018: an unsaid procedure stayed in the draft"
+        assert "data-unsaid" in paste_resp.text and "cleaning" in paste_resp.text, "F-018: the unsaid procedure is not named"
+        # P29 F-033: the note's own full code and the name beside it, which the code's letters confirm
+        notes_routes._urlopen = f033_urlopen
+        f033 = client.post("/notes/new", data={"raw_note": "Mario Rossi RSSMRA85T10A562S, controllo 46",
+                                               "csrf_token": _csrf_from(paste_resp.text)}, follow_redirects=True).text
+        assert 'value="RSSMRA85T10A562S"' in f033 and 'value="Mario Rossi"' in f033, "F-033: the note's code and name"
+        notes_routes._urlopen = fake_urlopen
 
         assert not (Path(tmp) / "sorted" / FAKE_CF).exists(), "no write should happen before confirm"
 

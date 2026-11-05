@@ -17,6 +17,7 @@ is not a risk, but a synthetic one is a record nobody can be.
 
 import os
 import re
+import unicodedata
 
 SYNTHETIC = re.compile(r"^[A-Z]{4}[0-9]{12}$")
 _D = "[0-9LMNPQRSTUV]"
@@ -119,6 +120,22 @@ def is_valid(value):
     if is_real(value):
         return True
     return synthetic_allowed() and bool(SYNTHETIC.match(value or ""))
+
+
+def _letters(word):
+    word = unicodedata.normalize("NFKD", word or "").encode("ascii", "ignore").decode().upper()
+    consonants = [c for c in word if c.isalpha() and c not in "AEIOU"]
+    vowels = [c for c in word if c in "AEIOU"]
+    return consonants, vowels
+
+
+def name_letters(surname, given):
+    """the six letters a real code starts with, from a surname and a given name (the official rule)"""
+    c, v = _letters(surname)
+    first = "".join((c + v + ["X"] * 3)[:3])
+    c, v = _letters(given)
+    second = c[0] + c[2] + c[3] if len(c) >= 4 else "".join((c + v + ["X"] * 3)[:3])
+    return first + second
 
 
 def selftest():

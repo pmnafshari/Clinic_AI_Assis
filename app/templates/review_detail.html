@@ -61,6 +61,7 @@
     <form method="post" action="{{ url_for('review.confirm', review_id=r.id) }}" class="mb-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       {% if r.origin == 'upload' and x %}
+      {% if unsaid %}<div class="ds-alert ds-alert-warning mb-3" role="alert" data-unsaid>{{ _('Taken out of the draft - the note does not say it: {what}. Add it back only if the note means it.', what=unsaid | join(', ')) }}</div>{% endif %}
       <div class="row g-3">
         <div class="col-12 col-md-4">
           <label for="visit_date" class="form-label">{{ _("Visit date") }}</label>
@@ -68,7 +69,7 @@
         </div>
         <div class="col-12 col-md-8">
           <label for="procedures" class="form-label">{{ _("Procedures, as extracted (not interpreted)") }}</label>
-          <input id="procedures" name="procedures" class="form-control" value="{{ (x.procedures or []) | join(', ') }}">
+          <input id="procedures" name="procedures" class="form-control" value="{{ (x.procedures or []) | reject('in', unsaid) | join(', ') }}">
         </div>
         <div class="col-12">
           <label for="clinical_notes" class="form-label">{{ _("Note") }}</label>

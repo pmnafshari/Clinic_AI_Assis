@@ -7,12 +7,12 @@ import note_review
 import patient_id
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
-from dental_notes_schema import DentalNote, plain_errors
+from dental_notes_schema import DentalNote, plain_errors, unsupported_procedures
 from extract_note import OllamaUnreachable, call_model, local_urlopen, parse_reply
 from storage import lookup_patient, phone_needed, save_new_note
 
 from .db import get_chroma, get_db
-from .i18n import _
+from .i18n import _, message
 
 notes_bp = Blueprint("notes", __name__)
 
@@ -30,7 +30,7 @@ def extract_note(raw_note, fallback_cf=None):
     # composes extract_note.py's call_model + parse_reply with the local
     # _urlopen seam (same shape as qa_routes._urlopen), since extract_note.py's
     # own extract_note() has no urlopen override point
-    return parse_reply(call_model(raw_note, urlopen=_urlopen), fallback_cf=fallback_cf)
+    return parse_reply(call_model(raw_note, urlopen=_urlopen), fallback_cf=fallback_cf, source=raw_note)
 
 
 def _locked_patient(cf):
@@ -129,7 +129,7 @@ def new_note():
         except OllamaUnreachable as e:
             return render_template("notes_new.html", error=str(e), locked=locked, **_dictation())
         except ValueError as e:
-            return render_template("notes_new.html", error=_("extraction rejected: {why}", why=e), locked=locked)
+            return render_template("notes_new.html", error=_("extraction rejected: {why}", why=message(str(e))), locked=locked)
 
         # D-03: extraction misreading a name shouldn't block the note - warn
         # and let the human decide, the locked identity still wins on save
@@ -147,8 +147,12 @@ def new_note():
                     else note.patient_name
                 mismatch = _("this note names {named} - it will be filed under {name} ({cf})",
                              named=named, name=locked["patient_name"], cf=locked["cf"])
+        # P29 F-018: a treatment the note does not say is taken out of the draft and named, never kept unseen
+        unsaid = unsupported_procedures(note.procedures, request.form["raw_note"])
+        if unsaid:
+            note = note.model_copy(update={"procedures": [p for p in note.procedures if p not in unsaid]})
         token = note_review.issue_confirm_token(get_db(), g.user["username"])
-        _previews[token] = (g.user["username"], cf, note, mismatch)
+        _previews[token] = (g.user["username"], cf, note, mismatch, unsaid)
         while len(_previews) > PREVIEWS_KEPT:
             _previews.pop(next(iter(_previews)))
         return redirect(url_for("notes.new_note", preview=token), code=303)
@@ -231,6 +235,6 @@ def _show_preview(token):
             return redirect(url_for("dashboard.index"))
         return render_template("notes_new.html", locked=None, **_dictation(),
                                error=_("This draft has expired. Extract the note again."))
-    _held_id, cf, note, mismatch = held
+    _held_id, cf, note, mismatch, unsaid = held
     return render_template("notes_new.html", preview=note, locked=_locked_patient(cf),
-                           mismatch=mismatch, confirm_token=token)
+                           mismatch=mismatch, unsaid=unsaid, confirm_token=token)

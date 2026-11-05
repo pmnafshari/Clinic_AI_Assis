@@ -2325,4 +2325,6 @@ IT = {
     'Dictation is not available: there is no approved local speech model on this machine. Please type the command.': "La dettatura non è disponibile: su questo computer non c'è un modello vocale locale approvato. Scrivi il comando.",
     'no API key: put it in {a} (outside the repository)': 'nessuna chiave API: mettila in {a} (fuori dal repository)',
     'no folder is configured (CLINIC_DRIVE_FOLDER_ID)': 'nessuna cartella configurata (CLINIC_DRIVE_FOLDER_ID)',
+    'Taken out of the draft - the note does not say it: {what}. Add it back only if the note means it.': 'Tolto dalla bozza - la nota non lo dice: {what}. Rimettilo solo se la nota lo intende.',
+    "the note's patient's name could not be read: write it next to the codice fiscale": "non è stato possibile leggere il nome del paziente nella nota: scrivilo accanto al codice fiscale",
 }

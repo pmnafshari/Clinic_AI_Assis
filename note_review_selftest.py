@@ -493,6 +493,15 @@ def routes(tmp):
     assert 'data-flash="removed"' in done20e, "20e R-008: the rejection is shown as a success"
     assert tuple(conn.execute("SELECT status, decision_reason FROM note_reviews WHERE id = ?",
                               (lid,)).fetchone()) == ("rejected", "Already filed"), "20e: the chosen reason"
+    # 20f. P29 F-018: "controllo dente 46" read as "rct 46" - the draft offers it without the unsaid treatment, and says so
+    patient_id.seed_patient(conn, OTHER, "Olga Other")
+    _txt, js = routed(sorted_root, OTHER, "f018", procedures=("rct 46",), notes="controllo dente 46",
+                      raw="controllo dente 46, nessuna novita")
+    storage.sync_note_file(js, sorted_root, conn, storage.get_collection(app_db.CHROMA_PATH), "assistant", "rv_assist")
+    fid = conn.execute("SELECT MAX(id) FROM note_reviews").fetchone()[0]
+    page = dentist.get(f"/reviews/{fid}").text
+    assert 'id="procedures" name="procedures" class="form-control" value=""' in page, "20f F-018: rct 46 stayed in the draft"
+    assert "data-unsaid" in page and "rct 46" in page, "20f F-018: the unsaid treatment is not named"
     conn.close()
 
 

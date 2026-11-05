@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from codice_fiscale import is_valid as is_valid_cf, name_letters, normalize as normalize_cf
 from dental_notes_schema import KNOWN_PROCEDURES, DentalNote, plain_errors
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
@@ -31,7 +32,29 @@ def extract_json(text):
         return None
 
 
-def parse_reply(reply, fallback_cf=None):
+CF_SHAPED = re.compile(r"\b[A-Za-z0-9]{16}\b")
+
+
+def codes_in(text):
+    """every codice fiscale written in full in a text, check letter right"""
+    return sorted({normalize_cf(m) for m in CF_SHAPED.findall(text or "") if is_valid_cf(normalize_cf(m))})
+
+
+def name_beside(text, cf):
+    """the name written just before a code in the note, when the code's own six letters confirm it (P29 F-033) -
+    "Mario Rossi RSSMRA85T10A562S" or "rossi mario rssmra85t10a562s"; never a guess"""
+    at = (text or "").upper().find(cf)
+    words = re.findall(r"[^\W\d_][^\W\d_'’]*", text[:at])[-4:] if at > 0 else []
+    for start in range(len(words) - 1):
+        cand = words[start:]
+        for k in range(1, len(cand)):
+            for surname, given in ((cand[k:], cand[:k]), (cand[:k], cand[k:])):
+                if name_letters(" ".join(surname), " ".join(given)) == cf[:6]:
+                    return " ".join(w.capitalize() for w in cand)
+    return None
+
+
+def parse_reply(reply, fallback_cf=None, source=None):
     # reply -> validated DentalNote. Raises ValueError when the output is not
     # schema-valid so a half-formed or wrong-shape record never passes silently.
     #
@@ -44,6 +67,16 @@ def parse_reply(reply, fallback_cf=None):
     obj = extract_json(reply)
     if obj is None:
         raise ValueError("model did not return valid JSON")
+    # P29 F-033: the note writes the code in full but the model cut it short - the note's own code wins, when there
+    # is exactly one; a missing name comes from beside it only when the code's letters confirm it
+    found = codes_in(source)
+    if len(found) == 1:
+        if not is_valid_cf(normalize_cf(obj.get("codice_fiscale") or "")):
+            obj["codice_fiscale"] = found[0]
+        if not str(obj.get("patient_name") or "").strip():
+            obj["patient_name"] = name_beside(source, found[0]) or obj.get("patient_name")
+    if source is not None and not fallback_cf and not str(obj.get("patient_name") or "").strip():
+        raise ValueError("the note's patient's name could not be read: write it next to the codice fiscale")
     if fallback_cf and not obj.get("codice_fiscale"):
         obj["codice_fiscale"] = fallback_cf
     try:
@@ -174,6 +207,31 @@ def selftest():
     assert note.unknown_procedures() == ["banana"], \
         f"6: expected banana flagged, got {note.unknown_procedures()}"
 
+    # 6a. P29 F-018: a procedure counts only when the note says it - its code, its gloss or a synonym, inflected or not
+    from dental_notes_schema import unsupported_procedures
+    assert unsupported_procedures(["rct 46"], "controllo dente 46, nessuna novita") == ["rct 46"], "6a: rct invented"
+    assert unsupported_procedures(["rct 46"], "46 devitalizzato oggi") == [], "6a: an inflected synonym"
+    assert unsupported_procedures(["rct 46", "x-ray"], "root canal 46, radiografia") == [], "6a: gloss and synonym"
+    assert unsupported_procedures(["prophy", "implant 36"], "igiene, impianto 36") == ["implant 36"], "6a: unknown code unsaid"
+    # 6a2. P29 F-033: the model dropped the name and cut the code short, though the note writes both in full. the
+    # note's own code (check letter right) replaces a broken one; a name is taken from beside it only when the code's
+    # own letters confirm it - never a guess
+    f033 = '{"patient_name": null, "codice_fiscale": "RSSMRA85T10", "procedures": [], "invoices": []}'
+    note = parse_reply(f033, source="Mario Rossi RSSMRA85T10A562S, controllo 46")
+    assert (note.patient_name, note.codice_fiscale) == ("Mario Rossi", "RSSMRA85T10A562S"), "6a2: F-033"
+    note = parse_reply(f033, source="paziente rossi mario rssmra85t10a562s controllo")
+    assert (note.patient_name, note.codice_fiscale) == ("Rossi Mario", "RSSMRA85T10A562S"), "6a2: surname first, lower case"
+    try:
+        parse_reply(f033, source="Luigi Bianchi RSSMRA85T10A562S, controllo 46")
+        raise AssertionError("6a2: a name the code's letters do not confirm was taken")
+    except ValueError as e:
+        assert "patient's name" in str(e), f"6a2: the refusal does not say the name is missing: {e}"
+    try:
+        parse_reply('{"patient_name": "Mario Rossi", "codice_fiscale": "RSSMRA85", "procedures": []}',
+                    source="RSSMRA85T10A562S and MRRS800010150100")
+        raise AssertionError("6a2: one of two codes in the note was picked")
+    except ValueError:
+        pass
     # 6b. every code in the glossary is recognised, tooth number or not
     known = ('{"patient_name": "anna bianchi", "codice_fiscale": "BNCA850010150300", '
              '"procedures": ["rct 26", "x-ray 16", "prophy", "seal 16"], "invoices": [], '
