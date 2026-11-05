@@ -1521,7 +1521,8 @@ def selftest():
         ).fetchone()
         assert row26d["role"] == "patient", f"26d: role was {row26d['role']}"
         assert row26d["allowed"] == 1, "26d: a served answer must be allowed=1"
-        assert row26d["target"] == "visits", f"26d: target was {row26d['target']}"
+        # the stub's sentence names no tooth, so the record's own list is what is served (P29 F-023)
+        assert row26d["target"] == "visits:listed", f"26d: target was {row26d['target']}"
 
         # a deflecting POST writes the other action, and only that one
         before_d26d = count(

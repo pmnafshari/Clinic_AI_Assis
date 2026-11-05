@@ -35,6 +35,8 @@ from .render import (
     render_invoices,
     render_next_appointment,
     render_procedure,
+    render_visits,
+    split_procedure,
 )
 from .strings import t
 
@@ -172,9 +174,13 @@ ROUTE_TRIGGERS = {
     ),
     # intervent\w*/trattament\w* cover intervento/interventi and
     # trattamento/trattamenti the same way anagrafic\w* does above.
+    # P29 F-023: the same question in either language reaches here - plurals, "what did I have done",
+    # "cosa mi hanno fatto", prestazioni and cure included
     "visits": (
         r"visita", r"visite", r"che visite", r"cosa ho fatto", r"storico", r"intervent\w*",
-        r"trattament\w*", r"visit", r"visits", r"procedure", r"treatment", r"what have i had",
+        r"trattament\w*", r"prestazion\w*", r"che cure", r"quali cure", r"mi hanno fatto", r"mi e stato fatto",
+        r"visit", r"visits", r"procedures?", r"treatments?", r"what have i had", r"what did i have",
+        r"(?:had|have|get|got) done", r"(?:was|were) done",
     ),
 }
 
@@ -250,6 +256,11 @@ def visit_context_lines(rows, lang):
     return lines
 
 
+def visits_answer(rows, lang):
+    """the visits as recorded, said in python - the same lines as the portal's visit history"""
+    return t("chat_visits_on_record", lang).format(lines="; ".join(render_visits(rows, lang)))
+
+
 def invoice_answer(summary, lang):
     """the invoice route's whole answer, built here from the ledger and never
     by the model (P02.03 containment, P07 ledger).
@@ -313,6 +324,19 @@ def parse_reply(reply):
     if not isinstance(text, str) or not text.strip():
         return "invalid", None
     return "answer", text.strip()
+
+
+PLAIN_AGAIN = "The text must be a plain sentence for the patient, not JSON and not a list."
+
+
+def _structured(text):
+    """an answer text that is itself JSON - an object or a list - rather than words for a person"""
+    if not text or text.lstrip()[:1] not in "{[":
+        return False
+    try:
+        return isinstance(json.loads(text), (dict, list))
+    except ValueError:
+        return False
 
 
 def _call_model(prompt, urlopen):
@@ -474,6 +498,25 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     # "no data" is a different event from the model drifting off the envelope,
     # and only the second one means something is wrong.
     state, text = parse_reply(reply)
+    as_data = False
+    if state == "answer" and _structured(text):
+        # P29 F-023 follow-up: the model put a JSON list in the answer text ('{"treatments": [...]}'). asked once more
+        # for a plain sentence; if it does it again the reply is invalid - JSON never reaches a patient
+        reply = _call_model(prompt + "\n" + PLAIN_AGAIN, urlopen)
+        state, text = parse_reply(reply) if reply is not None else ("invalid", None)
+        if state != "answer" or _structured(text):
+            # it meant to answer and could not say it as a sentence
+            state, as_data = "invalid", True
+    # P29 F-023: what was done is on record, so an answer given as data, or a sentence that names neither every visit
+    # date nor every tooth the record has, gives the record's own list in the patient's language (codes never
+    # interpreted). a reply off the envelope, or the model saying the records do not answer, stays a refusal
+    if route == "visits":
+        teeth = {split_procedure(p)[1] for row in data for p in row["procedures"]} - {None}
+        dates = {format_date(row["visit_date"], lang) for row in data if row["visit_date"]}
+        whole = state == "answer" and ((dates and all(d in text for d in dates))
+                                       or (teeth and all(re.search(rf"\b{n}\b", text) for n in teeth)))
+        if as_data or (state == "answer" and not whole):
+            return {"state": "answer", "body": visits_answer(data, lang), "target": "visits:listed"}
     if state == "not_in_records":
         return {"state": "refusal", "body": None, "target": f"{route}:empty"}
     if state == "invalid":
@@ -536,6 +579,18 @@ import patient_id as _pidmod
 
 
 def selftest():
+    # P29 F-023: the same question about what was done, in either language, reaches the visit history - "cosa ho
+    # fatto?" did and "what did I have done?" fell through to "not in your records"
+    for it, en in (("cosa ho fatto?", "what did I have done?"),
+                   ("quali trattamenti ho fatto?", "which treatments did I have?"),
+                   ("che prestazioni ho ricevuto?", "what procedures did I have?"),
+                   ("cosa mi hanno fatto al dente 36?", "what was done on my tooth 36?"),
+                   ("che cure ho fatto l'ultima volta?", "what treatment did I get last time?")):
+        assert route_question(it) == route_question(en) == "visits", \
+            f"F-023: {it!r} -> {route_question(it)}, {en!r} -> {route_question(en)}"
+    assert route_question("how much do I owe for the procedures?") == "invoices", "F-023: money stays with invoices"
+    assert route_question("when is my next appointment?") == "next_appointment", "F-023: the next visit stays put"
+
     with tempfile.TemporaryDirectory() as tmp:
         conn = sqlite3.connect(str(Path(tmp) / "clinic.sqlite"))
         conn.row_factory = sqlite3.Row
@@ -652,7 +707,7 @@ def selftest():
 
         def canned_urlopen(req, timeout=120):
             return _fake_response(
-                '{"status": "answer", "text": "your next visit is on record"}'
+                '{"status": "answer", "text": "you had a procedure on tooth 14"}'
             )
 
         def not_in_records_urlopen(req, timeout=120):
@@ -770,12 +825,38 @@ def selftest():
         # real model call.
         result5 = answer_question("Che visite ho fatto?", cf_a, conn, "it", urlopen=canned_urlopen)
         assert result5["state"] == "answer", f"5: state was {result5['state']}"
-        assert result5["body"] == "your next visit is on record", f"5: body was {result5['body']!r}"
+        assert result5["body"] == "you had a procedure on tooth 14", f"5: body was {result5['body']!r}"
 
         result5b = answer_question(
             "Che visite ho fatto?", cf_a, conn, "it", urlopen=not_in_records_urlopen
         )
         assert result5b["state"] == "refusal", f"5b: state was {result5b['state']}"
+
+        # 5c. P29 F-023 follow-up: the model put a JSON list in the answer text ('{"treatments": [...]}') - asked once
+        # more for a plain sentence; JSON is never shown to the patient
+        replies = ['{"status": "answer", "text": "{\\"treatments\\": [\\"a dental procedure on tooth 36\\"]}"}',
+                   '{"status": "answer", "text": "You had a dental procedure on tooth 14."}']
+
+        def json_then_sentence(req, timeout=120):
+            return _fake_response(replies.pop(0))
+        r5c = answer_question("which treatments did I have?", cf_a, conn, "en", urlopen=json_then_sentence)
+        assert (r5c["state"], r5c["body"]) == ("answer", "You had a dental procedure on tooth 14."), f"5c: {r5c}"
+
+        def always_json(req, timeout=120):
+            return _fake_response('{"status": "answer", "text": "[\\"a dental procedure on tooth 36\\"]"}')
+        r5d = answer_question("which treatments did I have?", cf_a, conn, "en", urlopen=always_json)
+        assert "[" not in (r5d["body"] or "") and r5d["target"] == "visits:listed", f"5c: JSON reached the patient: {r5d}"
+        # the visits route never leaves the patient without the record's own list: an unusable reply, or one that
+        # drops a tooth the record has, is replaced by the visits as recorded, in the patient's language
+        listed = render_visits(patient_accessor.get_visits(cf_a, conn), "en")
+        assert all(line in r5d["body"] for line in listed), f"5c: the listed answer is not the record's visits: {r5d}"
+
+        def drops_a_tooth(req, timeout=120):
+            return _fake_response('{"status": "answer", "text": "You had a check-up."}')
+        r5e = answer_question("what did I have done?", cf_a, conn, "en", urlopen=drops_a_tooth)
+        teeth = set(re.findall(r"\b[1-4][1-8]\b", " ".join(listed)))
+        if teeth:
+            assert r5e["target"] == "visits:listed", f"5c: an answer missing teeth {teeth} was shown: {r5e}"
 
         # 6. model unreachable gives the error state, not a raised exception.
         result6 = answer_question(
