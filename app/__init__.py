@@ -121,6 +121,8 @@ def create_app():
     # NEW-07: the dental chart's names for teeth, work, states and surfaces
     from . import chart_routes
     app.jinja_env.globals["dchart"] = chart_routes
+    from . import care_routes
+    app.jinja_env.globals["care"] = care_routes
     import tooth_art
     app.jinja_env.globals["art"] = tooth_art
     app.jinja_env.globals["note_date_differs"] = lambda day, text: note_dates.differs(str(day) if day else None, text)
@@ -149,6 +151,7 @@ def create_app():
     from .auth_routes import auth_bp
     from .billing_routes import billing_bp
     from .chart_routes import chart_bp
+    from .care_routes import care_bp
     from .dashboard_routes import dashboard_bp
     from .handoff_routes import handoff_bp
     from .requests_routes import requests_bp
@@ -175,6 +178,7 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(chart_bp)
+    app.register_blueprint(care_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(handoff_bp)

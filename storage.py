@@ -215,6 +215,9 @@ def init_db(db_path):
     # the dental chart (NEW-07/E-008): the dentist's marks per tooth and the proposals read from the notes
     import dental_chart
     conn.executescript(dental_chart.SCHEMA)
+    # the care plan (E-002): the services a patient should attend
+    import patient_services
+    conn.executescript(patient_services.SCHEMA)
     # DRV (P25-D4): the read-only Drive source - its checks, the files it fetched, the automatic check
     import drive_source
     conn.executescript(drive_source.SCHEMA)

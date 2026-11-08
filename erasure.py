@@ -139,6 +139,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # the dental chart, its proposals and removed marks too
             import dental_chart
             dental_chart.on_erase(conn, pid)
+        if _has(conn, "patient_services"):
+            # the care plan's referrals
+            import patient_services
+            patient_services.on_erase(conn, pid)
         if _has(conn, "document_publications"):
             # P25: what was shown to the patient, and who said whose each file is
             import patient_files
@@ -333,6 +337,9 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     if _has(conn, "tooth_marks"):
         left["tooth_marks"] = conn.execute("SELECT COUNT(*) FROM tooth_marks WHERE patient_id = ?",
                                            (pid,)).fetchone()[0]
+    if _has(conn, "patient_services"):
+        left["patient_services"] = conn.execute("SELECT COUNT(*) FROM patient_services WHERE patient_id = ?",
+                                                (pid,)).fetchone()[0]
     if _has(conn, "note_reviews"):
         left["note_reviews"] = conn.execute(
             f"SELECT COUNT(*) FROM note_reviews WHERE patient_id = ? OR codice_fiscale IN"

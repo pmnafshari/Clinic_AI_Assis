@@ -7,6 +7,7 @@ import appointments
 import clinic_time
 import data_rights
 import imaging_bookings
+import patient_services
 from auth import authorize, log_audit
 
 from .db import get_db
@@ -35,4 +36,6 @@ def index():
     data = None
     if authorize(g.user["role"], "manage_data_requests"):
         data = [r for r in data_rights.listing(conn) if r["status"] == "open"]
-    return render_template("requests.html", asked=asked, imaging=imaging, data=data, data_kinds=DATA_KINDS)
+    services = patient_services.waiting(conn) if authorize(g.user["role"], "assign_services") else None
+    return render_template("requests.html", asked=asked, imaging=imaging, data=data, data_kinds=DATA_KINDS,
+                           services=services)

@@ -79,6 +79,28 @@
 </section>
 {% endif %}
 
+{% if services is not none %}
+<section class="card dash-card mb-3" data-kind="services" aria-labelledby="kind-services-title">
+  <div class="dash-card-head"><div>
+    <h2 class="ds-card-title" id="kind-services-title">{{ _("Services to arrange") }} <span class="ux-count">{{ services | length }}</span></h2>
+    <p class="ds-card-sub">{{ _("Services a dentist or reception put on a patient's care plan. A referral: nothing is booked yet.") }}</p></div></div>
+  <div class="dash-card-body">
+    {% if services %}
+    <ul class="ds-rows sx-box">
+      {% for s in services %}
+      <li class="ds-row"><span class="ds-row-main">
+        <span class="ds-row-title">{{ _(care.SERVICE_LABELS.get(s.service, s.service)) }} · {{ s.patient_name }}</span>
+        <span class="ds-row-sub"><b>{{ _('Waiting to be arranged') }}</b> · {{ _('Assigned {when} by {who}', when=s.assigned_at | appt_date, who=s.assigned_by) }}{% if s.note %} · "{{ s.note }}"{% endif %}</span>
+      </span><span class="sx-row-acts"><a class="btn btn-outline-primary btn-sm" href="{{ url_for('patients.detail_view', cf=s.codice_fiscale) }}#services" tabindex="0">{{ _("Open record") }}<span class="visually-hidden">{{ _(': {name}', name=s.patient_name) }}</span></a></span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ _("No service is waiting to be arranged.") }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 {% if authorize(g.user.role, 'handle_handoff') %}
 <p class="ux-muted">{{ _html('A patient who asked the assistant for a person is a call-back, not a request: see <a href="{href}">Call-backs</a>.', href=url_for('handoff.index')) }}</p>
 {% endif %}

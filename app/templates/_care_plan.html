@@ -1,0 +1,43 @@
+{# P29 E-002: the care plan - the services this patient should attend, assigned by a dentist or reception. A
+   referral for the desk to arrange: it books nothing. #}
+<section class="card dash-card sx-h-m sx-wide" aria-labelledby="services-title" id="services">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="services-title">{{ _("Services to attend") }} <span class="ux-count">{{ services | selectattr('status', 'equalto', 'open') | list | length }}</span></h2>
+      <p class="ds-card-sub">{{ _("Where this patient should go next. A referral for the desk to arrange - it books nothing.") }}</p>
+    </div>
+  </div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('care.assign_service', cf=cf) }}" class="d-flex flex-wrap gap-2 align-items-end mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div><label class="form-label small" for="service">{{ _("Service") }}</label>
+        <select class="form-select form-select-sm" id="service" name="service" required>
+          <option value="">{{ _("Choose a service") }}</option>
+          {% for key, label in care.SERVICE_LABELS.items() %}<option value="{{ key }}">{{ _(label) }}</option>{% endfor %}
+        </select></div>
+      <div class="flex-grow-1"><label class="form-label small" for="service-note">{{ _("Note (optional)") }}</label>
+        <input class="form-control form-control-sm" id="service-note" name="note" maxlength="200"></div>
+      <button type="submit" class="btn btn-primary btn-sm">{{ _("Add to the care plan") }}</button>
+    </form>
+    {% if services %}
+    <ul class="ds-rows" data-services>
+      {% for s in services %}
+      <li class="ds-row" data-service="{{ s.service }}" data-status="{{ s.status }}">
+        <span class="ds-row-main">
+          <span class="ds-row-title">{{ _(care.SERVICE_LABELS.get(s.service, s.service)) }} <span class="ds-badge {{ 'ds-badge-warning' if s.status == 'open' else 'ds-badge-success' }}">{{ _('Waiting to be arranged') if s.status == 'open' else _('Done') }}</span></span>
+          <span class="ds-row-sub">{{ _('Assigned {when} by {who}', when=s.assigned_at | appt_date, who=s.assigned_by) }}{% if s.closed_at %} · {{ _('done {when} by {who}', when=s.closed_at | appt_date, who=s.closed_by) }}{% endif %}{% if s.note %} · "{{ s.note }}"{% endif %}</span>
+        </span>
+        {% if s.status == 'open' %}
+        <span class="sx-row-acts">
+          <form method="post" action="{{ url_for('care.close_service', cf=cf, sid=s.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="done"><button type="submit" class="btn btn-outline-success btn-sm">{{ _("Done") }}<span class="visually-hidden">{{ _(': {service}', service=_(care.SERVICE_LABELS.get(s.service, s.service))) }}</span></button></form>
+          <form method="post" action="{{ url_for('care.close_service', cf=cf, sid=s.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="removed"><button type="submit" class="btn btn-outline-danger btn-sm">{{ _("Remove") }}<span class="visually-hidden">{{ _(': {service}', service=_(care.SERVICE_LABELS.get(s.service, s.service))) }}</span></button></form>
+        </span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ _("No service assigned yet.") }}</p>
+    {% endif %}
+  </div>
+</section>

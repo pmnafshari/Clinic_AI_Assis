@@ -585,8 +585,8 @@ def selftest():
 
         # 12e. the patient record is grouped into tabs; every section is still on the page (no script shows them all),
         # and a role only gets the tabs it may open
-        for role12, expect12 in (("dentist", ["overview", "clinical", "chart", "files", "billing", "portal", "imaging"]),
-                                 ("assistant", ["overview", "files", "billing", "portal", "imaging"])):
+        for role12, expect12 in (("dentist", ["overview", "clinical", "chart", "care", "files", "billing", "portal", "imaging"]),
+                                 ("assistant", ["overview", "care", "files", "billing", "portal", "imaging"])):
             rec12 = clients[role12].get("/patients/ZZUA800101010101").get_data(as_text=True)
             tabs12 = re.findall(r'<button type="button" role="tab" id="tabbtn-(\w+)" aria-controls="tab-(\w+)"', rec12)
             assert [a for a, _ in tabs12] == expect12 and all(a == b for a, b in tabs12), f"12e: {role12} tabs {tabs12}"
@@ -918,7 +918,7 @@ def selftest():
         # links straight to where that is done; a role sees only the kinds it may act on
         req27 = dentist.get("/requests").get_data(as_text=True)
         kinds27 = re.findall(r'<section[^>]*data-kind="(\w+)"', req27)
-        assert kinds27 == ["appointment", "imaging", "data"], f"27 U-010: the kinds are not apart: {kinds27}"
+        assert kinds27 == ["appointment", "imaging", "data", "services"], f"27 U-010: the kinds are not apart: {kinds27}"
 
         def part27(kind):
             return re.search(r'data-kind="' + kind + r'".*?</section>', req27, re.S).group(0)
@@ -938,7 +938,7 @@ def selftest():
         assert re.search(r'id="kind-appointment-title"[^>]*>Appointment requests <span class="ux-count">' + str(n27) + '</span>', req27), \
             "27: a kind has no count, or the wrong one"
         kinds27r = re.findall(r'<section[^>]*data-kind="(\w+)"', clients["assistant"].get("/requests").get_data(as_text=True))
-        assert kinds27r == ["appointment", "imaging"], f"27: reception sees {kinds27r}"
+        assert kinds27r == ["appointment", "imaging", "services"], f"27: reception sees {kinds27r}"
         assert clients["admin"].get("/requests").status_code == 302, "27: admin has no requests"
 
         # 9. the demo seed's tags carry no codice fiscale

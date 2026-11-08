@@ -27,7 +27,7 @@ EXPORT_HOURS = 24
 KINDS = ("access", "export", "amend", "erasure")
 # P29 E-005: what a copy can hold, section by section - the requester ticks the ones they want, the reviewing dentist the
 # ones the copy will hold. each section is the export keys it covers
-SECTIONS = {"details": ("patient",), "visits": ("visits", "dental_chart"), "appointments": ("appointments",),
+SECTIONS = {"details": ("patient",), "visits": ("visits", "dental_chart"), "appointments": ("appointments", "services"),
             "billing": ("invoices", "billing", "payments"), "consent": ("consent",), "requests": ("requests",),
             "summary": ("next_visit_summary",), "files": ()}
 
@@ -215,7 +215,16 @@ def _patient_data(conn, pid):
         "next_visit_summary": visit_summary.exportable(conn, pid),
         # NEW-07: the dental chart as the dentist approved it, never a proposal
         "dental_chart": _chart(conn, pid),
+        # E-002: the services the patient was referred to
+        "services": _services(conn, pid),
     }
+
+
+def _services(conn, pid):
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'patient_services'").fetchone() is None:
+        return []
+    import patient_services
+    return patient_services.exportable(conn, pid)
 
 
 def _chart(conn, pid):

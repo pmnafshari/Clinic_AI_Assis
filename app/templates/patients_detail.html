@@ -38,6 +38,7 @@
 {% set tabs = [('overview', _('Overview'), 'bi-person-lines-fill', none)] %}
 {% if show_clinical %}{% set tabs = tabs + [('clinical', _('Clinical'), 'bi-heart-pulse', clinical | length)] %}{% endif %}
 {% if show_clinical %}{% set tabs = tabs + [('chart', _('Dental chart'), 'bi-grid-3x3-gap', chart_marks | length)] %}{% endif %}
+{% if services is not none %}{% set tabs = tabs + [('care', _('Care plan'), 'bi-clipboard2-check', services | selectattr('status', 'equalto', 'open') | list | length)] %}{% endif %}
 {% if show_clinical or authorize(g.user.role, 'upload_file') %}{% set tabs = tabs + [('files', _('Files'), 'bi-folder2-open', file_timeline | length if show_clinical else none)] %}{% endif %}
 {% set tabs = tabs + [('billing', _('Billing'), 'bi-receipt', patient.invoices | length)] %}
 {% set tabs = tabs + [('portal', _('Portal & consent'), 'bi-shield-check', none)] %}
@@ -190,6 +191,12 @@
         {% endif %}
       </div>
     </section>
+</div>
+{% endif %}
+
+{% if services is not none %}
+<div class="sx-panel sx-panel-2" id="tab-care" role="tabpanel" aria-labelledby="tabbtn-care" tabindex="0">
+  {% include "_care_plan.html" %}
 </div>
 {% endif %}
 

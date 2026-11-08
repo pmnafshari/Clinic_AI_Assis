@@ -125,6 +125,8 @@ this file is stale.
 | POST | `/patients/<cf>/imaging/<int:rid>/revise` | `imaging.revise` |
 | POST | `/patients/<cf>/issue-pin` | `patients.issue_pin_submit` |
 | POST | `/patients/<cf>/revoke-pin` | `patients.revoke_pin_submit` |
+| POST | `/patients/<cf>/services` | `care.assign_service` |
+| POST | `/patients/<cf>/services/<int:sid>/close` | `care.close_service` |
 | GET | `/patients/<cf>/summary` | `summary.page` |
 | POST | `/patients/<cf>/summary/<int:sid>/approve` | `summary.approve` |
 | POST | `/patients/<cf>/summary/<int:sid>/edit` | `summary.edit` |
@@ -260,6 +262,7 @@ this file is stale.
 | `patient_duplicate_dismissals` | id, patient_id_a, patient_id_b, cf_a, cf_b, dismissed_at, dismissed_by, reason |
 | `patient_login_attempts` | id, ip, attempted_at |
 | `patient_merges` | id, source_cf, target_cf, target_patient_id, merged_at, merged_by, source_row, moved |
+| `patient_services` | id, patient_id, service, note, status, assigned_by, assigned_role, assigned_at, closed_by, closed_at |
 | `patient_sessions` | id, token_hash, patient_id, created_at, last_seen_at |
 | `patients` | patient_id, codice_fiscale, patient_name, phone |
 | `payment_allocations` | id, payment_id, invoice_id, amount_cents |
