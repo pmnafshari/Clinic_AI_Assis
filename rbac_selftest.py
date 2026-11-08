@@ -141,6 +141,10 @@ def _seed(db_path, root):
                            " 'rb-case.json')", (other_pid,)).lastrowid
     conn.execute("INSERT INTO visit_reviews (visit_id, method, reviewed_by, reviewed_at)"
                  " VALUES (?, 'typed', 'rb_dentist', '2026-09-23T06:00:00+00:00')", (case_id,))
+    # NEW-07: a mark on the canary's dental chart, for the remove route
+    mark_id = conn.execute("INSERT INTO tooth_marks (patient_id, tooth, surfaces, kind, state, status, source,"
+                           " created_by, created_at) VALUES (?, 46, 'MO', 'filling', 'done', 'confirmed', 'dentist',"
+                           " 'rb_dentist', '2026-09-23T06:00:00+00:00')", (pid,)).lastrowid
     conn.commit()
     conn.close()
     notes = root / "sorted" / pid / "notes"
@@ -151,7 +155,7 @@ def _seed(db_path, root):
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
             "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid, "bid": bid, "device_id": 1, "delegation_id": 1,
-            "username": "rb_target", "filename": "app.css"}
+            "username": "rb_target", "filename": "app.css", "mark_id": mark_id}
 
 
 def _state(db_path, root):

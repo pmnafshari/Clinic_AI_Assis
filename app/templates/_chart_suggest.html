@@ -1,0 +1,38 @@
+{# NEW-07 / E-008: what the notes suggest for the dental chart, shown to the dentist on opening the record. nothing in
+   it is on the chart until approved here; a refused suggestion is not asked again. #}
+<div class="modal fade" id="chartSuggest" tabindex="-1" aria-labelledby="chartSuggestTitle" aria-hidden="true" data-auto-open>
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <form class="modal-content" method="post" action="{{ url_for('chart.decide', cf=cf) }}" data-chart-decide>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="modal-header">
+        <h2 class="modal-title fs-5" id="chartSuggestTitle"><i class="bi bi-lightbulb" aria-hidden="true"></i> {{ _('The notes suggest {n} mark for the dental chart', n=1) if chart_pending | length == 1 else _('The notes suggest {n} marks for the dental chart', n=chart_pending | length) }}</h2>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ _('Close') }}"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-3">{{ _("Read from this patient's visit notes. Nothing is drawn on the chart until you approve it, and a refused suggestion is not asked again.") }}</p>
+        <div class="sx-box sx-box-table"><table class="ux-table">
+          <caption class="visually-hidden">{{ _("Suggestions for the dental chart") }}</caption>
+          <thead><tr><th scope="col">{{ _("Tooth") }}</th><th scope="col">{{ _("Work") }}</th><th scope="col">{{ _("From the note") }}</th><th scope="col">{{ _("Your decision") }}</th></tr></thead>
+          <tbody>{% for m in chart_pending %}
+            <tr data-suggestion="{{ m.id }}">
+              <td data-label="{{ _('Tooth') }}"><strong>{{ m.tooth }}</strong> <span class="ds-row-sub">{{ dchart.tooth_name(m.tooth) }}</span></td>
+              <td data-label="{{ _('Work') }}"><span class="tc-swatch tc-k-{{ m.kind }}{{ ' tc-planned' if m.state == 'planned' else '' }}" aria-hidden="true">{{ m.code }}</span> {{ dchart.describe(m) }}</td>
+              <td data-label="{{ _('From the note') }}">{{ m.visit_date or _('no date') }}<br><span class="ds-row-sub">“{{ m.said }}”</span></td>
+              <td data-label="{{ _('Your decision') }}">
+                <fieldset class="tc-decide"><legend class="visually-hidden">{{ _('Tooth {n}, {work}', n=m.tooth, work=_(dchart.KIND_LABELS[m.kind])) }}</legend>
+                  <input type="radio" class="btn-check" name="decision-{{ m.id }}" value="approve" id="approve-{{ m.id }}"><label class="btn btn-outline-success btn-sm" for="approve-{{ m.id }}"><i class="bi bi-check-lg" aria-hidden="true"></i> {{ _("Approve") }}</label>
+                  <input type="radio" class="btn-check" name="decision-{{ m.id }}" value="reject" id="reject-{{ m.id }}"><label class="btn btn-outline-danger btn-sm" for="reject-{{ m.id }}"><i class="bi bi-x-lg" aria-hidden="true"></i> {{ _("Refuse") }}</label>
+                </fieldset>
+              </td>
+            </tr>{% endfor %}</tbody>
+        </table></div>
+      </div>
+      <div class="modal-footer flex-wrap">
+        <button type="button" class="btn btn-link me-auto" data-bs-dismiss="modal">{{ _("Decide later") }}</button>
+        <button type="submit" class="btn btn-outline-danger" name="all" value="reject">{{ _("Refuse all") }}</button>
+        <button type="submit" class="btn btn-outline-success" name="all" value="approve">{{ _("Approve all") }}</button>
+        <button type="submit" class="btn btn-primary">{{ _("Save my choices") }}</button>
+      </div>
+    </form>
+  </div>
+</div>

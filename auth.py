@@ -11,7 +11,7 @@ VALID_ROLES = ("dentist", "assistant", "admin")
 
 # role -> set of allowed action strings. plain dict, no policy engine.
 PERMISSIONS = {
-    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers", "review_summary", "review_upload", "review_xray_demo", "manage_xray_demo", "stop_xray_demo", "manage_support", "view_import_progress", "ask_guides", "manage_guides", "approve_guides", "manage_imaging_requests", "view_imaging_requests", "use_jarvis"},
+    "dentist": {"read_notes", "append_note", "edit_note", "update_field", "update_visit_field", "add_invoice", "read_clinical", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "manage_data_requests", "file_data_request", "view_billing", "manage_billing", "record_payment", "use_inventory", "manage_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "manage_providers", "review_summary", "review_upload", "review_xray_demo", "manage_xray_demo", "stop_xray_demo", "manage_support", "view_import_progress", "ask_guides", "manage_guides", "approve_guides", "manage_imaging_requests", "view_imaging_requests", "use_jarvis", "edit_dental_chart"},
     "assistant": {"read_notes", "append_note", "add_invoice", "upload_file", "issue_patient_pin", "revoke_patient_pin", "manage_appointments", "record_consent", "file_data_request", "view_billing", "record_payment", "use_inventory", "view_reminders", "retry_reminder", "handle_handoff", "view_providers", "stop_xray_demo", "view_import_progress", "ask_guides", "view_imaging_requests", "use_jarvis"},
     # admin deliberately excluded from issue_patient_pin, revoke_patient_pin
     # and manage_appointments: it holds only manage_users and cannot open a
@@ -216,6 +216,10 @@ ROUTE_POLICY = {
     "imaging.complete": "manage_imaging_requests",
     "imaging.reverse": "manage_imaging_requests",
     "imaging.tasks": "view_imaging_requests",
+    # NEW-07 / E-008: the dental chart is read on the record (read_clinical); every change is the dentist's
+    "chart.decide": "edit_dental_chart",
+    "chart.add": "edit_dental_chart",
+    "chart.remove": "edit_dental_chart",
     "similar.page": "read_clinical",
     "similar.feedback": "read_clinical",
     "similar.exclude": "read_clinical",

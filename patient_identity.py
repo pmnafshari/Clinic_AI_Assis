@@ -407,7 +407,7 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries",
                    "note_reviews", "patient_documents", "import_items", "imaging_requests",
                    "imaging_request_events", "imaging_request_files", "imaging_bookings",
-                   "imaging_completions")
+                   "imaging_completions", "tooth_marks")
 
 # Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
 # on `patient_merges.source_cf` because resolving an OLD one is that table's

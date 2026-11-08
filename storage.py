@@ -212,6 +212,9 @@ def init_db(db_path):
     # their bookings and completions (P27): the appointment stays an ordinary appointment
     import imaging_bookings
     conn.executescript(imaging_bookings.SCHEMA)
+    # the dental chart (NEW-07/E-008): the dentist's marks per tooth and the proposals read from the notes
+    import dental_chart
+    conn.executescript(dental_chart.SCHEMA)
     # DRV (P25-D4): the read-only Drive source - its checks, the files it fetched, the automatic check
     import drive_source
     conn.executescript(drive_source.SCHEMA)

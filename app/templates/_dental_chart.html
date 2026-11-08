@@ -1,0 +1,152 @@
+{# NEW-07 / E-008: the dental chart, FDI numbering, the dentist's view of the patient (their right on the left).
+   Only what the dentist approved or added is drawn; what the notes suggest waits in the popup. #}
+{% set can_edit = authorize(g.user.role, 'edit_dental_chart') %}
+{% macro tooth(n) %}
+{% set t = tooth_chart[n] %}{% set s = dchart.shapes(n) %}{% set label = dchart.tooth_label(t) %}
+{% set root_mark = t.whole | selectattr(2, 'equalto', 'root') | list | last %}
+{% set gone = t.whole | selectattr(2, 'equalto', 'cross') | list | last %}
+{% set implant = t.whole | selectattr(2, 'equalto', 'implant') | list | last %}
+{% macro codes() %}<span class="tc-codes">{% for m in t.marks[:3] %}<span class="tc-code tc-k-{{ m.kind }}{{ ' tc-planned' if m.state == 'planned' else '' }}">{{ m.code }}</span>{% endfor %}{% if t.marks | length > 3 %}<span class="tc-code tc-more">+{{ t.marks | length - 3 }}</span>{% endif %}</span>{% endmacro %}
+<button type="button" class="tc-tooth{{ ' tc-has' if t.marks else '' }}{{ ' tc-gone' if gone else '' }}" data-tooth="{{ n }}" aria-pressed="false" aria-label="{{ label }}" title="{{ label }}">
+  {% if s.upper %}{{ codes() }}{% else %}<span class="tc-num">{{ n }}</span>{% endif %}
+  <svg class="tc-svg" viewBox="0 0 40 76" width="40" height="76" aria-hidden="true" focusable="false">
+    {% if implant %}
+    <rect class="tc-implant tc-k-{{ implant[0] }} tc-{{ implant[1] }}" x="15" y="{{ s.implant_y }}" width="10" height="30" rx="2"/>
+    {% for y in s.threads %}<line class="tc-thread" x1="13" y1="{{ y }}" x2="27" y2="{{ y }}"/>{% endfor %}
+    {% else %}
+    <polygon class="tc-root{% if root_mark %} tc-k-{{ root_mark[0] }} tc-{{ root_mark[1] }}{% endif %}" points="{{ s.root }}"/>
+    {% endif %}
+    {% for letter, points in s.surfaces %}{% set f = t.fills.get(letter) %}
+    <polygon class="tc-s{% if f %} tc-k-{{ f[0] }} tc-{{ f[1] }}{% endif %}" data-surface="{{ letter }}" points="{{ points }}"/>
+    {% endfor %}
+    {% for kind, state, draw in t.whole %}
+      {% if draw == 'ring' %}<rect class="tc-ring tc-k-{{ kind }} tc-{{ state }}" x="1" y="{{ s.crown_y - 1 }}" width="38" height="38" rx="5"/>
+        {% if kind == 'bridge' %}<line class="tc-bar tc-k-{{ kind }} tc-{{ state }}" x1="0" y1="{{ s.edge }}" x2="40" y2="{{ s.edge }}"/>{% endif %}
+      {% elif draw == 'cross' %}<line class="tc-cross tc-k-{{ kind }} tc-{{ state }}" x1="4" y1="4" x2="36" y2="72"/><line class="tc-cross tc-k-{{ kind }} tc-{{ state }}" x1="36" y1="4" x2="4" y2="72"/>
+      {% elif draw == 'crack' %}<polyline class="tc-crack tc-k-{{ kind }} tc-{{ state }}" points="{{ s.crack }}"/>
+      {% elif draw == 'gum' %}<line class="tc-gum tc-k-{{ kind }} tc-{{ state }}" x1="0" y1="{{ s.neck }}" x2="40" y2="{{ s.neck }}"/>
+      {% elif draw == 'dashed' %}<rect class="tc-impacted tc-k-{{ kind }}" x="1" y="1" width="38" height="74" rx="6"/>
+      {% elif draw == 'fill' %}<rect class="tc-ring tc-k-{{ kind }} tc-{{ state }}" x="1" y="{{ s.crown_y - 1 }}" width="38" height="38" rx="5"/>
+      {% endif %}
+    {% endfor %}
+  </svg>
+  {% if s.upper %}<span class="tc-num">{{ n }}</span>{% else %}{{ codes() }}{% endif %}
+</button>
+{% endmacro %}
+
+<section class="card dash-card sx-h-l sx-wide" aria-labelledby="chart-title" id="chart">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="chart-title">{{ _("Dental chart") }}</h2>
+      <p class="ds-card-sub">{{ _("Dentist only · FDI numbering · seen from the front: the patient's right is on the left") }}</p>
+    </div>
+    {% if chart_pending %}<button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#chartSuggest"><i class="bi bi-lightbulb" aria-hidden="true"></i> {{ _('{n} suggestion from the notes', n=1) if chart_pending | length == 1 else _('{n} suggestions from the notes', n=chart_pending | length) }}</button>{% endif %}
+  </div>
+  <div class="dash-card-body">
+    <div class="tc-scroll" role="group" aria-label="{{ _('Teeth: choose one to mark it or see its marks') }}">
+      <div class="tc-chart" data-dental-chart>
+        <p class="tc-side tc-side-r">{{ _("Patient's right") }}</p><p class="tc-side tc-side-l">{{ _("Patient's left") }}</p>
+        <p class="tc-arch-name">{{ _("Upper") }}</p>
+        <div class="tc-row tc-row-adult">{% for n in fdi.UPPER %}{{ tooth(n) }}{% if n == 11 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+        <div class="tc-plane" aria-hidden="true"></div>
+        <div class="tc-row tc-row-adult">{% for n in fdi.LOWER %}{{ tooth(n) }}{% if n == 41 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+        <p class="tc-arch-name">{{ _("Lower") }}</p>
+      </div>
+      {% set baby_marked = chart_marks | selectattr('tooth', 'ge', 51) | list %}
+      <details class="tc-baby"{% if baby_marked %} open{% endif %}>
+        <summary>{{ _("Baby teeth (51-85)") }}{% if baby_marked %} <span class="ux-count">{{ baby_marked | length }}</span>{% endif %}</summary>
+        <div class="tc-chart tc-chart-baby">
+          <div class="tc-row tc-row-baby">{% for n in fdi.BABY_UPPER %}{{ tooth(n) }}{% if n == 51 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+          <div class="tc-plane" aria-hidden="true"></div>
+          <div class="tc-row tc-row-baby">{% for n in fdi.BABY_LOWER %}{{ tooth(n) }}{% if n == 81 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+        </div>
+      </details>
+    </div>
+
+    <h3 class="ds-card-title mt-3">{{ _("Key") }}</h3>
+    <ul class="tc-key" data-chart-key>
+      {% for key, label in dchart.KIND_LABELS.items() %}<li><span class="tc-swatch tc-k-{{ key }}" aria-hidden="true">{{ fdi.KINDS[key][0] }}</span> {{ _(label) }}</li>{% endfor %}
+      <li><span class="tc-swatch tc-swatch-done" aria-hidden="true"></span> {{ _("Done or present: solid") }}</li>
+      <li><span class="tc-swatch tc-swatch-planned" aria-hidden="true"></span> {{ _("Planned: pale with a dashed edge") }}</li>
+    </ul>
+  </div>
+</section>
+
+{% if can_edit %}
+<section class="card dash-card sx-h-l" aria-labelledby="chart-form-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="chart-form-title">{{ _("Mark work on a tooth") }}</h2></div>
+  <div class="dash-card-body">
+    <form method="post" action="{{ url_for('chart.add', cf=cf) }}" class="tc-form" id="chart-form" aria-labelledby="chart-form-title">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3">
+        <div class="col-12">
+          <label class="form-label" for="chart-tooth">{{ _("Tooth") }}</label>
+          <select class="form-select form-select-sm" id="chart-tooth" name="tooth" required aria-describedby="chart-tooth-help">
+            <option value="">{{ _("Choose on the chart or here") }}</option>
+            {% for title, teeth in [(_("Upper"), fdi.UPPER), (_("Lower"), fdi.LOWER), (_("Baby teeth, upper"), fdi.BABY_UPPER), (_("Baby teeth, lower"), fdi.BABY_LOWER)] %}
+            <optgroup label="{{ title }}">{% for n in teeth %}<option value="{{ n }}">{{ n }} · {{ dchart.tooth_name(n) }}</option>{% endfor %}</optgroup>
+            {% endfor %}
+          </select>
+          <p class="ds-row-sub mt-1" id="chart-tooth-help">{{ _("Click a tooth on the chart to choose it.") }}</p>
+        </div>
+        <fieldset class="col-12">
+          <legend class="form-label">{{ _("Work") }}</legend>
+          <div class="tc-kinds">
+            {% for key, label in dchart.KIND_LABELS.items() %}
+            <input type="radio" class="btn-check" name="kind" id="chart-kind-{{ key }}" value="{{ key }}" required{% if fdi.surface_kind(key) %} data-surfaces{% endif %}>
+            <label class="tc-chip" for="chart-kind-{{ key }}"><span class="tc-swatch tc-k-{{ key }}" aria-hidden="true">{{ fdi.KINDS[key][0] }}</span> {{ _(label) }}</label>
+            {% endfor %}
+          </div>
+        </fieldset>
+        <fieldset class="col-12" id="chart-surfaces" aria-describedby="chart-surfaces-help">
+          <legend class="form-label">{{ _("Surfaces") }}</legend>
+          <div class="d-flex flex-wrap gap-3">
+            {% for letter, label in dchart.SURFACE_CHOICES %}<div class="form-check"><input class="form-check-input" type="checkbox" name="surface" value="{{ letter }}" id="chart-surface-{{ letter }}"><label class="form-check-label" for="chart-surface-{{ letter }}">{{ _(label) }}</label></div>{% endfor %}
+          </div>
+          <p class="ds-row-sub mt-1" id="chart-surfaces-help">{{ _("For caries, fillings, sealants and inlays. Other work covers the whole tooth.") }}</p>
+        </fieldset>
+        <fieldset class="col-sm-6">
+          <legend class="form-label">{{ _("State") }}</legend>
+          {% for key, label in dchart.STATE_LABELS.items() %}<div class="form-check"><input class="form-check-input" type="radio" name="state" value="{{ key }}" id="chart-state-{{ key }}"{% if loop.first %} checked{% endif %}><label class="form-check-label" for="chart-state-{{ key }}">{{ _(label) }}</label></div>{% endfor %}
+        </fieldset>
+        <div class="col-sm-6">
+          <label class="form-label" for="chart-date">{{ _("Date") }}</label>
+          <input class="form-control form-control-sm" type="date" id="chart-date" name="marked_on" value="{{ today }}">
+        </div>
+        <div class="col-12">
+          <label class="form-label" for="chart-note">{{ _("Note (optional; needed for other work)") }}</label>
+          <input class="form-control form-control-sm" type="text" id="chart-note" name="note" maxlength="200">
+        </div>
+        <div class="col-12"><button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg" aria-hidden="true"></i> {{ _("Add to the chart") }}</button></div>
+      </div>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+<section class="card dash-card sx-h-l{{ '' if can_edit else ' sx-wide' }}" aria-labelledby="chart-marks-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="chart-marks-title">{{ _("Marks on the chart") }} <span class="ux-count">{{ chart_marks | length }}</span></h2></div>
+  <div class="dash-card-body">
+    <p class="ds-row-sub" data-chart-filter hidden>{{ _("Showing one tooth:") }} <strong data-chart-filter-tooth></strong> <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-chart-filter-clear>{{ _("Show every tooth") }}</button></p>
+    {% if chart_marks %}
+    <div class="sx-tools sx-tools-row" data-list-tools data-for="chart-marks" data-noun="{{ _('mark|marks') }}"
+         data-sorts='{{ [['tooth', 'num', 1, _('Tooth number')], ['date', 'text', -1, _('Newest first')], ['date', 'text', 1, _('Oldest first')]] | tojson }}'
+         data-filters='{{ [['state', _('State'), [['done', _('Done or present')], ['planned', _('Planned')]]]] | tojson }}' data-search="{{ _('Search by tooth or work') }}" data-find="tooth work"></div>
+    <div class="sx-box sx-box-table"><table class="ux-table ux-table-page">
+      <caption class="visually-hidden">{{ _("Every mark on this patient's dental chart") }}</caption>
+      <thead><tr><th scope="col" data-sort="tooth">{{ _("Tooth") }}</th><th scope="col">{{ _("Work") }}</th><th scope="col" data-sort="date">{{ _("Date") }}</th><th scope="col">{{ _("From") }}</th><th scope="col">{{ _("Note") }}</th>{% if can_edit %}<th scope="col" class="text-end">{{ _("Actions") }}</th>{% endif %}</tr></thead>
+      <tbody id="chart-marks">{% for m in chart_marks %}
+        <tr data-tooth="{{ m.tooth }}" data-date="{{ m.marked_on or '' }}" data-state="{{ m.state }}" data-work="{{ _(dchart.KIND_LABELS[m.kind]) }}">
+          <td data-label="{{ _('Tooth') }}"><strong>{{ m.tooth }}</strong> <span class="ds-row-sub">{{ dchart.tooth_name(m.tooth) }}</span></td>
+          <td data-label="{{ _('Work') }}"><span class="tc-swatch tc-k-{{ m.kind }}{{ ' tc-planned' if m.state == 'planned' else '' }}" aria-hidden="true">{{ m.code }}</span> {{ dchart.describe(m) }}</td>
+          <td data-label="{{ _('Date') }}" class="ux-nowrap">{{ m.marked_on or '-' }}</td>
+          <td data-label="{{ _('From') }}">{% if m.source == 'note' %}{{ _('Note of {date}, approved by {who}', date=m.marked_on or _('no date'), who=m.decided_by) }}<br><span class="ds-row-sub">“{{ m.said }}”</span>{% else %}{{ _('Added by {who}', who=m.created_by) }}{% endif %}</td>
+          <td data-label="{{ _('Note') }}">{{ m.note or '-' }}</td>
+          {% if can_edit %}<td data-label="" class="text-end"><form method="post" action="{{ url_for('chart.remove', cf=cf, mark_id=m.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-outline-danger btn-sm">{{ _("Remove") }}<span class="visually-hidden">{{ _(': tooth {n}, {work}', n=m.tooth, work=_(dchart.KIND_LABELS[m.kind])) }}</span></button></form></td>{% endif %}
+        </tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}
+    <p class="dash-empty-line">{{ _("Nothing is marked on this chart yet.") }}{% if can_edit %} {{ _("Choose a tooth and the work to add a mark.") }}{% endif %}</p>
+    {% endif %}
+  </div>
+</section>

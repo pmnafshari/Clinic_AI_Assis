@@ -87,6 +87,9 @@ this file is stale.
 | GET | `/patients` | `patients.list_view` |
 | GET | `/patients/<cf>` | `patients.detail_view` |
 | GET | `/patients/<cf>/billing` | `billing.patient` |
+| POST | `/patients/<cf>/chart/decide` | `chart.decide` |
+| POST | `/patients/<cf>/chart/marks` | `chart.add` |
+| POST | `/patients/<cf>/chart/marks/<int:mark_id>/remove` | `chart.remove` |
 | POST | `/patients/<cf>/consent` | `patients.consent_submit` |
 | POST | `/patients/<cf>/data-request` | `data_requests.file_for_patient` |
 | GET | `/patients/<cf>/documents` | `documents.index` |
@@ -273,6 +276,7 @@ this file is stale.
 | `similar_case_feedback` | id, source_visit_id, case_visit_id, verdict, reason, criteria_version, decided_by, decided_at |
 | `support_ticket_events` | id, ticket_id, event, detail, actor, at |
 | `support_tickets` | id, source, summary, severity, status, owner, due_on, resolution, alert_key, created_by, created_at, closed_at |
+| `tooth_marks` | id, patient_id, tooth, surfaces, kind, state, status, source, visit_id, said, note, marked_on, created_by, created_at, decided_by, decided_at |
 | `users` | id, username, password_hash, role, active, must_change_password, failed_attempts, locked_until |
 | `visit_reviews` | visit_id, method, reviewed_by, reviewed_at, review_id |
 | `visit_summaries` | id, patient_id, status, generator, generator_version, source_ids, source_fingerprint, created_by, created_at, decided_by, decided_at, decision_reason, flags_at_approval |

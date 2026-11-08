@@ -11,6 +11,7 @@ import ask
 import clinic_time
 import consent
 import data_rights
+import dental_chart
 import imaging_requests
 import ledger
 import patient_auth
@@ -324,9 +325,19 @@ def detail_view(cf):
     log_audit(conn, g.user["username"], g.user["role"],
               "view_record_clinical" if show_clinical else "view_record", cf, allowed=1)
 
+    # NEW-07 / E-008: the dental chart, the dentist's alone. what the notes name is proposed here, on opening the
+    # record, and stays off the chart until the dentist approves it in the popup
+    tooth_chart = chart_pending = None
+    if show_clinical:
+        dental_chart.propose(conn, pid)
+        tooth_chart = dental_chart.chart(conn, pid)
+        chart_pending = dental_chart.pending(conn, pid) if authorize(g.user["role"], "edit_dental_chart") else []
+
     import appointments
     return render_template(
         "patients_detail.html",
+        tooth_chart=tooth_chart, chart_pending=chart_pending, chart_marks=dental_chart.marks(conn, pid) if show_clinical else [],
+        fdi=dental_chart, today=clinic_time.now().date().isoformat(),
         cf=cf,
         patient=patient,
         # P30: the record head says when the patient comes next - a booking, never a waiting request

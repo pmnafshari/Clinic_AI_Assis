@@ -226,6 +226,57 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   });
 })();
 
+// NEW-07 / E-008: a popup the page opens by itself when it loads - the dental chart's suggestions from the notes,
+// which wait for the dentist. closing it leaves them waiting; they are offered again the next time.
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".modal[data-auto-open]").forEach(function (el) {
+    if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(el).show();
+  });
+});
+
+// NEW-07 / E-008: the dental chart. clicking a tooth chooses it in the form below and shows only its marks; choosing
+// it in the list does the same. the surfaces are offered only for work that sits on surfaces.
+(function () {
+  var chart = document.querySelector("[data-dental-chart]");
+  if (!chart) return;
+  var section = chart.closest('[role="tabpanel"]') || document;
+  var select = document.getElementById("chart-tooth");
+  var rows = document.querySelectorAll("#chart-marks > tr");
+  var filter = section.querySelector("[data-chart-filter]");
+  var buttons = section.querySelectorAll(".tc-tooth");
+
+  function show(tooth) {
+    buttons.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-tooth") === tooth ? "true" : "false"); });
+    rows.forEach(function (r) { r.hidden = !!tooth && r.getAttribute("data-tooth") !== tooth; });
+    if (filter) {
+      filter.hidden = !tooth;
+      filter.querySelector("[data-chart-filter-tooth]").textContent = tooth || "";
+    }
+  }
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var tooth = b.getAttribute("data-tooth");
+      if (select) select.value = tooth;
+      show(tooth);
+    });
+  });
+  if (select) select.addEventListener("change", function () { show(select.value); });
+  var clear = section.querySelector("[data-chart-filter-clear]");
+  if (clear) clear.addEventListener("click", function () {
+    if (select) select.value = "";
+    show("");
+  });
+
+  var surfaces = document.getElementById("chart-surfaces");
+  var kinds = section.querySelectorAll('input[name="kind"]');
+  function surfacesFor() {
+    var chosen = section.querySelector('input[name="kind"]:checked');
+    if (surfaces) surfaces.disabled = !!chosen && !chosen.hasAttribute("data-surfaces");
+  }
+  kinds.forEach(function (k) { k.addEventListener("change", surfacesFor); });
+  surfacesFor();
+})();
+
 // P29 U-007 / R-021: a text field with a limit of 150 or more shows how much is used and says
 // when the limit is reached; a textarea marked data-grow grows with what is typed. the server
 // still cuts or refuses - this only says so before it happens

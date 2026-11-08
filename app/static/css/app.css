@@ -1761,3 +1761,69 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 :lang(it) .ux-table.ux-table-patients td[data-col="next"]::before { content: "Prossimo"; }
 :lang(it) .ux-panel > summary::after { content: "Apri"; }
 :lang(it) .ux-panel[open] > summary::after { content: "Chiudi"; }
+
+/* NEW-07 / E-008: the dental chart. each kind of work has its own colour (--k), a code and a way of being drawn;
+   planned work is pale with a dashed edge, done or present work is solid */
+.tc-k-caries { --k: #dc2626; } .tc-k-filling { --k: #2563eb; } .tc-k-temporary { --k: #b45309; }
+.tc-k-sealant { --k: #0f766e; } .tc-k-inlay { --k: #4f46e5; } .tc-k-veneer { --k: #be185d; }
+.tc-k-crown { --k: #a16207; } .tc-k-bridge { --k: #c2410c; } .tc-k-denture { --k: #0e7490; }
+.tc-k-rct { --k: #7c3aed; } .tc-k-post { --k: #78350f; } .tc-k-implant { --k: #334155; }
+.tc-k-extraction { --k: #111827; } .tc-k-missing { --k: #64748b; } .tc-k-fracture { --k: #86198f; }
+.tc-k-perio { --k: #15803d; } .tc-k-impacted { --k: #0369a1; } .tc-k-other { --k: #475569; }
+
+.tc-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
+.tc-chart { display: grid; justify-items: center; gap: 0.125rem; min-width: max-content; margin: 0 auto;
+  grid-template-columns: 1fr 1fr; }
+.tc-chart > .tc-row, .tc-chart > .tc-plane, .tc-chart > .tc-arch-name { grid-column: 1 / -1; }
+.tc-side { margin: 0; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--ds-text-muted); }
+.tc-side-r { justify-self: start; } .tc-side-l { justify-self: end; }
+.tc-arch-name { margin: 0; font-size: 0.75rem; color: var(--ds-text-muted); }
+.tc-row { display: flex; align-items: stretch; gap: 2px; }
+.tc-mid { width: 2px; margin: 0 6px; background: var(--ds-border-strong); border-radius: 1px; }
+.tc-plane { width: 100%; height: 0; border-top: 1px dashed var(--ds-border-strong); margin: 2px 0; }
+.tc-tooth { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 46px; padding: 3px 2px;
+  background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--ds-text); cursor: pointer; }
+.tc-tooth:hover { background: var(--ds-surface-sunken); }
+.tc-tooth:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
+.tc-tooth[aria-pressed="true"] { background: var(--ds-accent-soft); border-color: var(--ds-accent); }
+.tc-num { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.tc-codes { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; min-height: 14px; }
+.tc-code { font-size: 0.5625rem; font-weight: 700; line-height: 12px; padding: 0 2px; border-radius: 3px;
+  background: var(--k, #475569); color: #fff; }
+.tc-code.tc-planned { background: #fff; color: var(--k); box-shadow: inset 0 0 0 1px var(--k); }
+.tc-code.tc-more { background: var(--ds-text-muted); }
+.tc-svg { display: block; overflow: visible; }
+.tc-s { fill: #fff; stroke: #94a3b8; stroke-width: 1; }
+.tc-root { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1; }
+.tc-s[class*="tc-k-"], .tc-root[class*="tc-k-"], .tc-implant { fill: var(--k); stroke: var(--k); }
+.tc-s.tc-planned, .tc-root.tc-planned, .tc-implant.tc-planned { fill-opacity: 0.3; stroke-dasharray: 3 2; stroke-width: 1.5; }
+.tc-thread { stroke: #fff; stroke-width: 1.5; }
+.tc-ring, .tc-impacted { fill: none; stroke: var(--k); stroke-width: 3; }
+.tc-impacted { stroke-width: 2; stroke-dasharray: 4 3; }
+.tc-bar, .tc-gum { stroke: var(--k); stroke-width: 4; stroke-linecap: round; }
+.tc-cross { stroke: var(--k); stroke-width: 3.5; stroke-linecap: round; }
+.tc-crack { fill: none; stroke: var(--k); stroke-width: 2.5; stroke-linejoin: round; }
+.tc-ring.tc-planned, .tc-bar.tc-planned, .tc-gum.tc-planned, .tc-cross.tc-planned, .tc-crack.tc-planned { stroke-dasharray: 4 3; stroke-opacity: 0.75; }
+.tc-gone .tc-s, .tc-gone .tc-root { fill-opacity: 0.35; stroke-opacity: 0.5; }
+.tc-baby { margin-top: 0.75rem; }
+.tc-baby > summary { cursor: pointer; font-size: 0.875rem; font-weight: 600; }
+.tc-chart-baby { margin-top: 0.5rem; }
+
+.tc-key { display: flex; flex-wrap: wrap; gap: 0.375rem 1rem; list-style: none; margin: 0.25rem 0 0; padding: 0;
+  font-size: 0.8125rem; }
+.tc-key li { display: inline-flex; align-items: center; gap: 0.375rem; }
+.tc-swatch { display: inline-flex; align-items: center; justify-content: center; min-width: 1.5rem; height: 1.25rem;
+  padding: 0 0.25rem; border-radius: 4px; background: var(--k, #475569); color: #fff; font-size: 0.6875rem;
+  font-weight: 700; flex-shrink: 0; }
+.tc-swatch.tc-planned, .tc-swatch-planned { background: #fff; color: var(--k, #475569); box-shadow: inset 0 0 0 1.5px var(--k, #475569);
+  background-image: none; }
+.tc-swatch-planned { border: 1.5px dashed #475569; box-shadow: none; }
+.tc-swatch-done { background: #475569; }
+.tc-kinds { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+.tc-chip { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.25rem 0.625rem 0.25rem 0.3125rem;
+  border: 1px solid var(--ds-border-strong); border-radius: 999px; font-size: 0.8125rem; cursor: pointer; background: #fff; }
+.btn-check:checked + .tc-chip { border-color: var(--ds-primary); background: #eef4ff; box-shadow: inset 0 0 0 1px var(--ds-primary); font-weight: 600; }
+.btn-check:focus-visible + .tc-chip { box-shadow: var(--ds-focus-ring); }
+.tc-form fieldset[disabled] { opacity: 0.55; }
+.tc-decide { display: flex; flex-wrap: wrap; gap: 0.25rem; }

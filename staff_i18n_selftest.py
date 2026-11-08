@@ -323,7 +323,7 @@ def selftest():
     # 1. every text written for translation has its Italian, with the same placeholders
     texts = all_texts()
     missing = sorted(t for t in texts if not IT.get(t))
-    assert not missing, f"1: {len(missing)} texts without Italian, e.g. {missing[:30]}"
+    assert not missing, f"1: {len(missing)} texts without Italian, e.g. {missing[:200]}"
     for en, it in IT.items():
         assert set(re.findall(r"\{\w+\}", en)) == set(re.findall(r"\{\w+\}", it)), f"1: placeholders differ: {en!r} / {it!r}"
         # _(), _html() and template_text() take the sentence as "text": a value of that name never reaches it

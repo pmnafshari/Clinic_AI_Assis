@@ -585,7 +585,7 @@ def selftest():
 
         # 12e. the patient record is grouped into tabs; every section is still on the page (no script shows them all),
         # and a role only gets the tabs it may open
-        for role12, expect12 in (("dentist", ["overview", "clinical", "files", "billing", "portal", "imaging"]),
+        for role12, expect12 in (("dentist", ["overview", "clinical", "chart", "files", "billing", "portal", "imaging"]),
                                  ("assistant", ["overview", "files", "billing", "portal", "imaging"])):
             rec12 = clients[role12].get("/patients/ZZUA800101010101").get_data(as_text=True)
             tabs12 = re.findall(r'<button type="button" role="tab" id="tabbtn-(\w+)" aria-controls="tab-(\w+)"', rec12)
@@ -596,6 +596,8 @@ def selftest():
                 assert f">{heading}" in rec12, f"12e: {role12} lost the {heading} section"
             assert 'id="imaging"' in rec12 and 'id="editModal"' in rec12, "12e: a link target or the edit dialog is gone"
             assert ("Clinical history" in rec12) == (role12 == "dentist"), "12e: clinical history shown to the wrong role"
+            # NEW-07: the dental chart is the dentist's alone
+            assert ("data-dental-chart" in rec12) == (role12 == "dentist"), "12e: dental chart shown to the wrong role"
 
         # 12f. lists: a button opens each row, long lists keep their height and scroll inside, state filters are tabs
         stock12 = clients["dentist"].get("/stock").get_data(as_text=True)

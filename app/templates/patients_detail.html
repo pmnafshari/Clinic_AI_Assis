@@ -37,6 +37,7 @@
    stays hidden and every section is on the page in order. app.js opens the tab holding a linked #id (e.g. #imaging). #}
 {% set tabs = [('overview', _('Overview'), 'bi-person-lines-fill', none)] %}
 {% if show_clinical %}{% set tabs = tabs + [('clinical', _('Clinical'), 'bi-heart-pulse', clinical | length)] %}{% endif %}
+{% if show_clinical %}{% set tabs = tabs + [('chart', _('Dental chart'), 'bi-grid-3x3-gap', chart_marks | length)] %}{% endif %}
 {% if show_clinical or authorize(g.user.role, 'upload_file') %}{% set tabs = tabs + [('files', _('Files'), 'bi-folder2-open', file_timeline | length if show_clinical else none)] %}{% endif %}
 {% set tabs = tabs + [('billing', _('Billing'), 'bi-receipt', patient.invoices | length)] %}
 {% set tabs = tabs + [('portal', _('Portal & consent'), 'bi-shield-check', none)] %}
@@ -189,6 +190,12 @@
         {% endif %}
       </div>
     </section>
+</div>
+{% endif %}
+
+{% if show_clinical %}
+<div class="sx-panel sx-panel-2" id="tab-chart" role="tabpanel" aria-labelledby="tabbtn-chart" tabindex="0">
+  {% include "_dental_chart.html" %}
 </div>
 {% endif %}
 
@@ -504,6 +511,7 @@
     {% endif %}
 
 
+{% if chart_pending %}{% include "_chart_suggest.html" %}{% endif %}
 <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
