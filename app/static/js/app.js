@@ -41,9 +41,8 @@ function renderStagedFiles(zone, files) {
 
     var remove = document.createElement("button");
     remove.type = "button";
-    remove.className = "btn btn-sm btn-link text-secondary p-0 ms-1";
+    remove.className = "btn-close ms-1";
     remove.setAttribute("aria-label", uiText("Remove {name}", {name: file.name}));
-    remove.innerHTML = '<i class="bi bi-x-lg"></i>';
     remove.addEventListener("click", function () {
       var input = zone.querySelector("input[type=file]");
       var dt = new DataTransfer();
@@ -226,6 +225,97 @@ document.querySelectorAll("[data-record-tabs]").forEach(function (list) {
   });
 })();
 
+// Owner rule 2026-11-08: a long choice list opens as a list of fixed height that scrolls, never the height of the
+// screen (the browser's own list cannot be held to a height). A select with more than 12 choices gets a button and
+// a list beside it; the select stays in the form, out of sight, and keeps the value, so the form posts as before.
+// Arrow keys move in the list, Enter picks, Escape closes, typing jumps to the first choice that starts so.
+(function () {
+  var made = 0;
+  function enhance(select) {
+    if (select.multiple || select.options.length <= 12 || select.hasAttribute("data-pick-ready")) return;
+    select.setAttribute("data-pick-ready", "");
+    made += 1;
+    var id = select.id || ("pick-" + made);
+    var wrap = document.createElement("div");
+    wrap.className = "dropdown sx-pick";
+    var button = document.createElement("button");
+    button.type = "button";
+    button.id = id + "-pick";
+    button.className = "form-select sx-pick-btn" + (select.classList.contains("form-select-sm") ? " form-select-sm" : "");
+    button.setAttribute("data-bs-toggle", "dropdown");
+    button.setAttribute("aria-expanded", "false");
+    button.setAttribute("aria-haspopup", "listbox");
+    var menu = document.createElement("div");
+    menu.className = "dropdown-menu sx-pick-menu";
+    menu.setAttribute("role", "listbox");
+    var label = select.id ? document.querySelector('label[for="' + select.id + '"]') : null;
+    if (label) {
+      if (!label.id) label.id = id + "-label";
+      label.htmlFor = button.id;
+      menu.setAttribute("aria-labelledby", label.id);
+      button.setAttribute("aria-labelledby", label.id + " " + button.id);
+    }
+    var described = select.getAttribute("aria-describedby");
+    if (described) button.setAttribute("aria-describedby", described);
+    var items = [];
+    Array.prototype.forEach.call(select.children, function (child) {
+      var options = child.tagName === "OPTGROUP" ? child.children : [child];
+      if (child.tagName === "OPTGROUP") {
+        var head = document.createElement("h6");
+        head.className = "dropdown-header";
+        head.textContent = child.label;
+        menu.appendChild(head);
+      }
+      Array.prototype.forEach.call(options, function (option) {
+        var item = document.createElement("button");
+        item.type = "button";
+        item.className = "dropdown-item";
+        item.setAttribute("role", "option");
+        item.textContent = option.textContent;
+        item.addEventListener("click", function () {
+          select.value = option.value;
+          select.dispatchEvent(new Event("change", {bubbles: true}));
+          button.focus();
+        });
+        items.push({item: item, option: option});
+        menu.appendChild(item);
+      });
+    });
+    function refresh() {
+      var chosen = select.options[select.selectedIndex];
+      button.textContent = chosen ? chosen.textContent : "";
+      items.forEach(function (x) { x.item.setAttribute("aria-selected", x.option.selected ? "true" : "false"); });
+      button.classList.remove("is-invalid");
+    }
+    select.addEventListener("change", refresh);
+    select.addEventListener("invalid", function () { button.classList.add("is-invalid"); });
+    button.addEventListener("shown.bs.dropdown", function () {
+      var on = menu.querySelector('[aria-selected="true"]') || items[0].item;
+      on.scrollIntoView({block: "nearest"});
+      on.focus();
+    });
+    var typed = "", when = 0;
+    menu.addEventListener("keydown", function (e) {
+      if (e.key.length !== 1 || e.ctrlKey || e.metaKey || e.altKey) return;
+      typed = Date.now() - when > 700 ? e.key.toLowerCase() : typed + e.key.toLowerCase();
+      when = Date.now();
+      var hit = items.filter(function (x) { return x.item.textContent.toLowerCase().indexOf(typed) === 0; })[0];
+      if (hit) hit.item.focus();
+    });
+    select.classList.add("visually-hidden");
+    select.setAttribute("tabindex", "-1");
+    select.setAttribute("aria-hidden", "true");
+    wrap.appendChild(button);
+    wrap.appendChild(menu);
+    select.parentNode.insertBefore(wrap, select.nextSibling);
+    refresh();
+  }
+  document.querySelectorAll("select").forEach(enhance);
+  document.body.addEventListener("htmx:afterSwap", function (e) {
+    if (e.target && e.target.querySelectorAll) e.target.querySelectorAll("select").forEach(enhance);
+  });
+})();
+
 // NEW-07 / E-008: a popup the page opens by itself when it loads - the dental chart's suggestions from the notes,
 // which wait for the dentist. closing it leaves them waiting; they are offered again the next time.
 document.addEventListener("DOMContentLoaded", function () {
@@ -256,14 +346,20 @@ document.addEventListener("DOMContentLoaded", function () {
   buttons.forEach(function (b) {
     b.addEventListener("click", function () {
       var tooth = b.getAttribute("data-tooth");
-      if (select) select.value = tooth;
+      if (select) {
+        select.value = tooth;
+        select.dispatchEvent(new Event("change"));
+      }
       show(tooth);
     });
   });
   if (select) select.addEventListener("change", function () { show(select.value); });
   var clear = section.querySelector("[data-chart-filter-clear]");
   if (clear) clear.addEventListener("click", function () {
-    if (select) select.value = "";
+    if (select) {
+      select.value = "";
+      select.dispatchEvent(new Event("change"));
+    }
     show("");
   });
 

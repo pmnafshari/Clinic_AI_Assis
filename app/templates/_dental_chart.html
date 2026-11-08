@@ -112,7 +112,7 @@
 <section class="card dash-card sx-h-l{{ '' if can_edit else ' sx-wide' }}" aria-labelledby="chart-marks-title">
   <div class="dash-card-head"><h2 class="ds-card-title" id="chart-marks-title">{{ _("Marks on the chart") }} <span class="ux-count">{{ chart_marks | length }}</span></h2></div>
   <div class="dash-card-body">
-    <p class="ds-row-sub" data-chart-filter hidden>{{ _("Showing one tooth:") }} <strong data-chart-filter-tooth></strong> <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-chart-filter-clear>{{ _("Show every tooth") }}</button></p>
+    <p class="ds-row-sub" data-chart-filter hidden>{{ _("Showing one tooth:") }} <strong data-chart-filter-tooth></strong> <button type="button" class="btn btn-outline-secondary btn-sm ms-2" data-chart-filter-clear>{{ _("Show every tooth") }}</button></p>
     {% if chart_marks %}
     <div class="sx-tools sx-tools-row" data-list-tools data-for="chart-marks" data-noun="{{ _('mark|marks') }}"
          data-sorts='{{ [['tooth', 'num', 1, _('Tooth number')], ['date', 'text', -1, _('Newest first')], ['date', 'text', 1, _('Oldest first')]] | tojson }}'

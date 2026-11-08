@@ -144,6 +144,7 @@
     });
     var sortMenu = dropdown("", "arrow-down-up", menu);
     sortMenu.button.setAttribute("aria-label", uiText("Sort"));
+    sortMenu.button.classList.add("btn-icon");
     box.appendChild(sortMenu.wrap);
 
     // column headers sort too: a click picks that column, a second click flips it
@@ -178,7 +179,7 @@
     var empty = el("p", "sx-list-empty");
     empty.hidden = true;
     empty.appendChild(document.createTextNode(uiText("No {nouns} match. ", {nouns: noun[1]})));
-    var emptyClear = el("button", "btn btn-link btn-sm p-0 align-baseline", uiText("Clear search and filters"));
+    var emptyClear = el("button", "btn btn-outline-secondary btn-sm ms-2", uiText("Clear search and filters"));
     emptyClear.type = "button";
     emptyClear.addEventListener("click", clearAll);
     empty.appendChild(emptyClear);
@@ -282,7 +283,7 @@
         });
       });
       if (chips.firstChild) {
-        var all = el("button", "btn btn-link btn-sm p-0", uiText("Clear all"));
+        var all = el("button", "btn btn-outline-secondary btn-sm", uiText("Clear all"));
         all.type = "button";
         all.addEventListener("click", clearAll);
         chips.appendChild(all);

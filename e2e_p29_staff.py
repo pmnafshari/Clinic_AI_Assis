@@ -152,6 +152,14 @@ CAL_CHECK = r"""() => {
 }"""
 
 
+# what reaches past the right edge of the screen, innermost first - named in a sideways-scroll failure
+WIDE = """() => [...document.querySelectorAll('main *')].filter((e) => {
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.right > window.innerWidth + 1
+      && ![...e.children].some((c) => c.getBoundingClientRect().right > window.innerWidth + 1); })
+  .slice(0, 5).map((e) => e.tagName + '.' + e.className + ' "' + (e.textContent || '').trim().slice(0, 40) + '"')"""
+
+
 def main():
     with tempfile.TemporaryDirectory(prefix="clinic-p29-staff-") as tmp:
         app_db.DB_PATH = str(Path(tmp) / "clinic.sqlite")
@@ -166,7 +174,10 @@ def main():
         demo_seed.seed(conn, anchor=date.today().isoformat())
         conn.execute("INSERT OR IGNORE INTO users (username, password_hash, role, active) VALUES"
                      " ('p29_dentist', ?, 'dentist', 1)", (generate_password_hash("x"),))
-        day = (date.today() + timedelta(days=7)).isoformat()
+        day = date.today() + timedelta(days=7)
+        while day.weekday() == 6:   # the clinic is closed on Sundays
+            day += timedelta(days=1)
+        day = day.isoformat()
         cf = conn.execute("SELECT codice_fiscale FROM patients ORDER BY patient_name LIMIT 1").fetchone()[0]
         name = conn.execute("SELECT patient_name FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone()[0]
         appointments.book(conn, cf, "p29_dentist", f"{day}T11:00", 30)
@@ -378,7 +389,8 @@ def main():
                         page.goto(f"{base}/appointments?view={view}&day={date.today().isoformat()}")
                         bad = page.evaluate(CAL_CHECK)
                         assert not bad, f"F-012 {view} at {width}: {bad[:6]}"
-                        assert page.evaluate("document.documentElement.scrollWidth") <= width, f"sideways scroll {view} {width}"
+                        assert page.evaluate("document.documentElement.scrollWidth") <= width, \
+                            f"sideways scroll {view} {width}: {page.evaluate(WIDE)}"
                     if width == 390:
                         # R-014: the lookup and the filter are full width, a patient is a short card
                         page.goto(base + "/patients")
@@ -448,6 +460,12 @@ def main():
                     opens = first.get_attribute("href")
                     page.keyboard.press("Enter")
                     expect(page).to_have_url(base + opens)
+                    # NEW-07: the dental chart's suggestions open by themselves for a dentist; this walk leaves them for later
+                    popup = page.locator("#chartSuggest")
+                    if popup.count():
+                        popup.wait_for(state="visible", timeout=5000)
+                        popup.locator("button[data-bs-dismiss=modal]").first.click()
+                        popup.wait_for(state="hidden", timeout=5000)
                     # the menu: Tab reaches every link in it and Sign out
                     toggle = page.locator(".app-topbar-toggle")
                     if toggle.is_visible():

@@ -289,9 +289,9 @@ def selftest():
         flipped = dentist.get("/patients?sort=next&dir=desc").get_data(as_text=True)
         frows = re.findall(r'<tr[^>]*data-patient="([^"]+)"', flipped)
         assert frows.index(bea) < frows.index(anna), f"6 F-005: dir=desc did not reverse {frows}"
-        assert re.search(r'<th scope="col" aria-sort="ascending"><a href="[^"]*sort=next[^"]*dir=desc', pl), \
+        assert re.search(r'<th scope="col" aria-sort="ascending"><a class="sx-th" href="[^"]*sort=next[^"]*dir=desc', pl), \
             "6 F-005: the active column does not offer the reverse order"
-        assert re.search(r'<th scope="col" aria-sort="descending"><a href="[^"]*sort=next[^"]*dir=asc', flipped), \
+        assert re.search(r'<th scope="col" aria-sort="descending"><a class="sx-th" href="[^"]*sort=next[^"]*dir=asc', flipped), \
             "6 F-005: and back again"
         assert pl.count("bi-chevron-expand") == 2, "6 R-004: inactive sortable columns show no sort cue"
         assert "Booked" in text and f"{DAY} 09:30" in text, "6: next booking without date/time/status"
@@ -1053,7 +1053,7 @@ def paged_patients():
         nophone = conn.execute("SELECT COUNT(*) FROM patients WHERE phone IS NULL OR phone = ''").fetchone()[0]
         assert len(rows) == nophone == 58 and 'data-shown="58"' in tools and "\"phone\": [\"no\"]" in tools, \
             f"U-004: a filter does not act on every patient: {len(rows)} {tools}"
-        heads = re.findall(r'<th scope="col"[^>]*><a href="([^"]+)"', page)
+        heads = re.findall(r'<th scope="col"[^>]*><a class="sx-th" href="([^"]+)"', page)
         assert heads and all("phone=no" in h for h in heads), f"U-004: a column header drops the filter: {heads}"
         page, rows, _n, _t = view("/patients?phone=no&sort=name&dir=desc")
         assert rows == sorted(rows, reverse=True), "U-004: the server sort is not applied to the filtered rows"

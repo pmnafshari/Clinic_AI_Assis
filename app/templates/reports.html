@@ -90,12 +90,12 @@
       <div class="sx-tools sx-tools-row mt-3" data-list-tools data-for="proc-rows" data-noun="{{ _('procedure|procedures') }}"
            data-sorts='{{ [['count', 'num', -1, _('Most often first')], ['count', 'num', 1, _('Least often first')], ['name', 'text', 1, _('Code (A-Z)')]] | tojson }}'
            data-search="{{ _('Search a code') }}"></div>
-      <table class="ux-table">
+      <div class="sx-box sx-box-md"><table class="ux-table">
         <caption class="visually-hidden">{{ _("How often each procedure code appears") }}</caption>
         <thead><tr><th scope="col" data-sort="name">{{ _("Code") }}</th><th scope="col" class="ux-num" data-sort="count">{{ _("Visits") }}</th></tr></thead>
         <tbody id="proc-rows">{% for label in proc_labels %}<tr data-name="{{ label }}" data-count="{{ proc_values[loop.index0] }}">
           <td data-label="{{ _('Code') }}">{{ label }}</td><td data-label="{{ _('Visits') }}" class="ux-num">{{ proc_values[loop.index0] }}</td></tr>{% endfor %}</tbody>
-      </table>
+      </table></div>
       <p class="text-secondary small mb-0 mt-3">
         {{ _("A code the glossary does not recognise is flagged for review and still files, so it appears here as itself rather than being folded away.") }}
       </p>

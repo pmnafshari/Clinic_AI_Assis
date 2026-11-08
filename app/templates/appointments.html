@@ -68,10 +68,10 @@
   </nav>
   <input type="hidden" name="view" value="{{ view }}">
   <div class="ux-datenav{{ ' appt-cal-nav' if view == 'month' else '' }}">
-    <a class="btn btn-sm btn-outline-secondary" rel="prev" href="{{ url_for('appointments.index', view=view, day=prev_day, dentist=dentist, status=status) }}" aria-label="{{ {'day': _('Previous day'), 'week': _('Previous week'), 'month': _('Previous month')}[view] }}"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
+    <a class="btn btn-sm btn-outline-secondary btn-icon" rel="prev" href="{{ url_for('appointments.index', view=view, day=prev_day, dentist=dentist, status=status) }}" aria-label="{{ {'day': _('Previous day'), 'week': _('Previous week'), 'month': _('Previous month')}[view] }}"><i class="bi bi-chevron-left" aria-hidden="true"></i></a>
     <label class="visually-hidden" for="day">{{ _("Go to date") }}</label>
     <input type="date" id="day" name="day" value="{{ day }}" class="form-control form-control-sm">
-    <a class="btn btn-sm btn-outline-secondary" rel="next" href="{{ url_for('appointments.index', view=view, day=next_day, dentist=dentist, status=status) }}" aria-label="{{ {'day': _('Next day'), 'week': _('Next week'), 'month': _('Next month')}[view] }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
+    <a class="btn btn-sm btn-outline-secondary btn-icon" rel="next" href="{{ url_for('appointments.index', view=view, day=next_day, dentist=dentist, status=status) }}" aria-label="{{ {'day': _('Next day'), 'week': _('Next week'), 'month': _('Next month')}[view] }}"><i class="bi bi-chevron-right" aria-hidden="true"></i></a>
     <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('appointments.index', view=view, day=today, dentist=dentist, status=status) }}">{{ _("Today") }}</a>
   </div>
   <label class="visually-hidden" for="f-dentist">{{ _("Show clinician") }}</label>

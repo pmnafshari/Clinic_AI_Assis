@@ -7,7 +7,7 @@
 {% macro sort_th(key, label) %}
 {% set on = sort == key %}
 {% set flip = ('asc' if direction == 'desc' else 'desc') if on else ('desc' if key == 'last' else 'asc') %}
-<th scope="col"{% if on %} aria-sort="{{ 'descending' if direction == 'desc' else 'ascending' }}"{% endif %}><a href="{{ url_for('patients.list_view', sort=key, dir=flip, q=q or None, **keep) }}">{{ label }} <i class="bi bi-{{ ('caret-down-fill' if direction == 'desc' else 'caret-up-fill') if on else 'chevron-expand' }}" aria-hidden="true"></i><span class="visually-hidden">{% if not on %}{{ _(', select to sort') }}{% elif key == 'last' and direction == 'desc' %}{{ _(', sorted newest first, select to reverse') }}{% elif direction == 'desc' %}{{ _(', sorted descending, select to reverse') }}{% else %}{{ _(', sorted ascending, select to reverse') }}{% endif %}</span></a></th>
+<th scope="col"{% if on %} aria-sort="{{ 'descending' if direction == 'desc' else 'ascending' }}"{% endif %}><a class="sx-th" href="{{ url_for('patients.list_view', sort=key, dir=flip, q=q or None, **keep) }}">{{ label }} <i class="bi bi-{{ ('caret-down-fill' if direction == 'desc' else 'caret-up-fill') if on else 'chevron-expand' }}" aria-hidden="true"></i><span class="visually-hidden">{% if not on %}{{ _(', select to sort') }}{% elif key == 'last' and direction == 'desc' %}{{ _(', sorted newest first, select to reverse') }}{% elif direction == 'desc' %}{{ _(', sorted descending, select to reverse') }}{% else %}{{ _(', sorted ascending, select to reverse') }}{% endif %}</span></a></th>
 {% endmacro %}
 {% block content %}
 <div class="ds-page-head" data-ux="page-head">

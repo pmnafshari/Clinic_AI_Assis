@@ -36,7 +36,7 @@
     <section class="pp-card" aria-labelledby="consent">
       <div class="pp-card-head"><h2 id="consent">{{ t('consent_heading', lang) }}</h2></div>
       <p class="pp-muted small">{{ t('consent_template_note', lang) }}</p>
-      <ul class="pp-consents">
+      <ul class="pp-consents pp-box">
         {% for c in consents %}
         {% set given = c.granted and not c.outdated %}
         <li class="patient-consent">

@@ -64,7 +64,7 @@
     <p class="ux-muted">{{ _("Pick one to fill the question, then change the name.") }}</p>
     <ul class="ux-examples">
       {% for ex in [_("What is patient Rossi's next appointment?"), _("What is patient Ferrari's phone number?"), _("What is patient Gallo's invoice amount?"), _("What is patient Conti's last visit date?"), _("Which patients had a root canal?")] %}
-      <li><button type="button" class="btn btn-sm btn-outline-secondary" data-example="{{ ex }}">{{ ex }}</button></li>
+      <li><button type="button" class="btn btn-sm btn-outline-secondary" data-example="{{ ex }}" title="{{ ex }}">{{ ex }}</button></li>
       {% endfor %}
     </ul>
     <p class="ux-muted">{{ _("It answers from the records only - appointments come from the appointment book, never from a note's recall. It does not give clinical advice.") }}</p>

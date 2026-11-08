@@ -148,6 +148,12 @@ def main():
                 # the record: consent wording is folded behind Read out and opens under its own row
                 page.goto(base + "/patients")
                 page.goto(base + page.locator("#patients-rows a.btn").first.get_attribute("href"))
+                # NEW-07: what the notes suggest for the dental chart opens by itself for a dentist; left for later here
+                popup = page.locator("#chartSuggest")
+                if popup.count():
+                    popup.wait_for(state="visible", timeout=5000)
+                    popup.locator("button[data-bs-dismiss=modal]").first.click()
+                    popup.wait_for(state="hidden", timeout=5000)
                 page.get_by_role("tab", name="Portal & consent").click()
                 wording = page.locator("#wording-recording")
                 expect(wording).to_be_hidden()
