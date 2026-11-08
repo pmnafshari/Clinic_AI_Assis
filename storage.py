@@ -146,6 +146,8 @@ def init_db(db_path):
     conn.executescript(CONSENT_SCHEMA)
     from data_rights import SCHEMA as DATA_RIGHTS_SCHEMA
     conn.executescript(DATA_RIGHTS_SCHEMA)
+    from data_rights import ensure_section_columns
+    ensure_section_columns(conn)
 
     # the payment ledger (P07). its delete triggers read audit_unlock too
     import ledger

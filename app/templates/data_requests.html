@@ -37,6 +37,12 @@
             {% if r.hold_reason %} · {{ _('held: {why}', why=_msg(r.hold_reason)) }}{% endif %}
           </span>
           {% if r.detail %}<span class="ds-row-sub">"{{ r.detail }}"</span>{% endif %}
+          {# P29 E-005: the parts asked for, and once decided, the parts the copy holds #}
+          {% set names = dict(data_sections) %}
+          {% if r.asked %}{% set asked_words = [] %}{% for s in r.asked %}{% set _a = asked_words.append(_(names[s])) %}{% endfor %}
+          <span class="ds-row-sub" data-sections-asked>{{ _('Asked for: {parts}', parts=asked_words | join(', ')) }}</span>{% endif %}
+          {% if r.given %}{% set given_words = [] %}{% for s in r.given %}{% set _g = given_words.append(_(names[s])) %}{% endfor %}
+          <span class="ds-row-sub" data-sections-given>{{ _('In the copy: {parts}', parts=given_words | join(', ')) }}</span>{% endif %}
         </span>
         {% if r.status == 'open' %}
         <form method="post" action="{{ url_for('data_requests.review', req_id=r.id) }}" class="ms-auto d-flex gap-2 align-items-center flex-wrap">
@@ -45,6 +51,12 @@
           <textarea class="form-control form-control-sm" id="reason-{{ r.id }}" name="reason" placeholder="{{ _('Reason (needed to refuse)') }}" maxlength="500" rows="1" data-grow></textarea>
           {% if r.kind == 'erasure' %}
           <label class="small"><input type="checkbox" name="confirm" value="yes"> {{ _("Erase for good - this cannot be undone") }}</label>
+          {% endif %}
+          {% if r.kind in ('access', 'export') %}
+          <fieldset class="w-100"><legend class="small mb-1">{{ _("Parts the copy will hold - untick one to withhold it, and say why in the reason") }}</legend>
+            <input type="hidden" name="sections_shown" value="1">
+            <div class="d-flex flex-wrap gap-3">{% for s in (r.asked or names | list) %}<div class="form-check"><input class="form-check-input" type="checkbox" name="section" value="{{ s }}" id="rs-{{ r.id }}-{{ s }}" checked><label class="form-check-label" for="rs-{{ r.id }}-{{ s }}">{{ _(names[s]) }}</label></div>{% endfor %}</div>
+          </fieldset>
           {% endif %}
           <button type="submit" name="decision" value="approve" class="btn btn-primary btn-sm">{{ _("Approve") }}</button>
           <button type="submit" name="decision" value="reject" class="btn btn-outline-secondary btn-sm">{{ _("Refuse") }}</button>

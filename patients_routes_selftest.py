@@ -1148,6 +1148,10 @@ def selftest():
             "48a F-025: the record does not open the request"
         assert "reviewed by a dentist in Data requests" in assistant_client.get(f"/patients/{cf48}").text, \
             "48a F-025: reception is not told where the request goes"
+        # P29 E-005: the desk ticks the sections asked for; the dentist sees them and ticks the ones the copy holds
+        assert 'name="section" value="visits"' in page48.text, "48a E-005: no section to tick when filing"
+        assert 'name="section" value="visits"' in listing.text and "data-sections-asked" in listing.text, \
+            "48a E-005: the dentist does not see the sections asked for"
         dentist_client.post(f"/data-requests/{req48[0][0]}/review", data={
             "decision": "approve", "csrf_token": _csrf_from(listing.text)})
         got48 = dentist_client.get(f"/data-requests/{req48[0][0]}/download")

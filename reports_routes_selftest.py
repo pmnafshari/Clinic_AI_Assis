@@ -5,6 +5,7 @@ import io
 import json
 import sys
 import tempfile
+from datetime import timedelta
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
@@ -39,6 +40,8 @@ def selftest():
         held = patient_id.seed_patient(conn, CF_HELD, "Held Shell", None)
         import clinic_time
         today = clinic_time.now().date()
+        while today.weekday() == 6:
+            today = today + timedelta(days=1)  # the clinic is closed on Sundays
         appointments.book(conn, pa, "dr_alba", f"{today.isoformat()}T10:00", 30)
         appointments.book(conn, pb, "dr_bruno", f"{today.isoformat()}T11:00", 30)
         for pid, who, procs in ((pa, "dr_alba", ["filling 14"]), (pb, "dr_bruno", ["ext 38"])):

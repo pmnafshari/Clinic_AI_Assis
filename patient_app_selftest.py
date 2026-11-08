@@ -2098,6 +2098,19 @@ def selftest():
         mine = data_rights.for_patient(c33, pid_of(cf32))
         assert [(r["kind"], r["status"], r["requested_role"]) for r in mine] == \
             [("export", "open", "patient")], "33a: the request is the session patient's"
+        # P29 E-005: the patient ticks the parts of the copy they want, in their language
+        assert 'name="section" value="billing"' in profile33 and on_page(t("rights_sections", "en"), profile33), \
+            "33a E-005: the portal does not offer the sections"
+        none33 = client32.post("/data-request", data={"kind": "access", "sections_shown": "1",
+                                                      "csrf_token": _csrf_from(profile33)}, follow_redirects=True).text
+        assert on_page(t("rights_sent_none", "en"), none33), "33a E-005: a copy with no part ticked was sent"
+        client32.post("/data-request", data={"kind": "access", "sections_shown": "1", "section": ["billing", "bogus"],
+                                             "csrf_token": _csrf_from(profile33)})
+        access33 = [r for r in data_rights.for_patient(c33, pid_of(cf32)) if r["kind"] == "access"]
+        assert len(access33) == 1 and json.loads(access33[0]["sections_asked"]) == ["billing"], \
+            "33a E-005: the ticked parts are not what was asked for"
+        c33.execute("DELETE FROM data_requests WHERE id = ?", (access33[0]["id"],))
+        c33.commit()
         assert data_rights.for_patient(c33, pid_of(cf32_other)) == [], "33a: never another's"
         ok33, _ = data_rights.review(c33, mine[0]["id"], True, "test-dentist", "dentist", "",
                                      sorted_root=Path(tmp) / "sorted",

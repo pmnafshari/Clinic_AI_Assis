@@ -396,6 +396,11 @@
           </select>
           <label class="ds-sr-only" for="rights-detail">{{ _("Details") }}</label>
           <input type="text" class="form-control form-control-sm w-auto flex-grow-1" id="rights-detail" name="detail" placeholder="{{ _('What the patient asked for') }}" maxlength="1000">
+          {% set prefix = 'file-sec' %}
+          <fieldset class="w-100 mt-1"><legend class="form-label small mb-1">{{ _("For access or a copy: the parts it should hold") }}</legend>
+            <input type="hidden" name="sections_shown" value="1">
+            <div class="d-flex flex-wrap gap-3">{% for key, label in data_sections %}<div class="form-check"><input class="form-check-input" type="checkbox" name="section" value="{{ key }}" id="{{ prefix }}-{{ key }}" checked><label class="form-check-label" for="{{ prefix }}-{{ key }}">{{ _(label) }}</label></div>{% endfor %}</div>
+          </fieldset>
           <button type="submit" class="btn btn-outline-primary btn-sm">{{ _("File request") }}</button>
         </form>
         {% endif %}

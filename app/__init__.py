@@ -116,6 +116,8 @@ def create_app():
     # read per render, so the switch is the environment the app was started with
     app.jinja_env.globals["similar_cases_enabled"] = similar_cases.enabled
     # P29 U-003: what a visit's note writes as its date, when that is not the visit's own day
+    from .data_requests_routes import SECTION_LABELS
+    app.jinja_env.globals["data_sections"] = list(SECTION_LABELS.items())
     app.jinja_env.globals["note_date_differs"] = lambda day, text: note_dates.differs(str(day) if day else None, text)
     # avatars: initials on a stable tint (phase 43). presentation, not a figure
     app.jinja_env.filters["initials"] = initials

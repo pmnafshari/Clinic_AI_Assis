@@ -25,6 +25,11 @@ from auth import authorize, log_audit
 EXPORTS_DIR = Path(__file__).resolve().with_name("exports")
 EXPORT_HOURS = 24
 KINDS = ("access", "export", "amend", "erasure")
+# P29 E-005: what a copy can hold, section by section - the requester ticks the ones they want, the reviewing dentist the
+# ones the copy will hold. each section is the export keys it covers
+SECTIONS = {"details": ("patient",), "visits": ("visits",), "appointments": ("appointments",),
+            "billing": ("invoices", "billing", "payments"), "consent": ("consent",), "requests": ("requests",),
+            "summary": ("next_visit_summary",), "files": ()}
 
 SCHEMA = """
     CREATE TABLE IF NOT EXISTS data_requests (
@@ -43,7 +48,9 @@ SCHEMA = """
         hold_reason TEXT,
         done_at TEXT,
         export_file TEXT,
-        export_expires_at TEXT
+        export_expires_at TEXT,
+        sections_asked TEXT,
+        sections_given TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_data_requests_patient ON data_requests (patient_id);
 """
@@ -53,9 +60,23 @@ NOTICE = ("Copy of the data this clinic holds about you. DEMO: synthetic data fr
           "if you want to know about them.")
 
 
-def file_request(conn, pid, kind, actor, actor_role, detail=None):
+def ensure_section_columns(conn):
+    # the clinic database predates E-005; CREATE TABLE IF NOT EXISTS never reaches it
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(data_requests)").fetchall()}
+    for column in ("sections_asked", "sections_given"):
+        if column not in existing:
+            conn.execute(f"ALTER TABLE data_requests ADD COLUMN {column} TEXT")
+
+
+def file_request(conn, pid, kind, actor, actor_role, detail=None, sections=None):
+    """sections: for access or a copy, the parts asked for (None: all of them, as before E-005)"""
     if kind not in KINDS:
         return None
+    asked = None
+    if kind in ("access", "export"):
+        asked = list(SECTIONS) if sections is None else [s for s in SECTIONS if s in sections]
+        if not asked:
+            return None
     if conn.execute("SELECT 1 FROM patients WHERE patient_id = ?", (pid,)).fetchone() is None:
         return None
     # one open request of a kind at a time - a double click is not two requests
@@ -65,8 +86,9 @@ def file_request(conn, pid, kind, actor, actor_role, detail=None):
         return open_row["id"]
     cur = conn.execute(
         "INSERT INTO data_requests (patient_id, kind, detail, requested_by, requested_role,"
-        " requested_at) VALUES (?, ?, ?, ?, ?, ?)",
-        (pid, kind, (detail or "").strip()[:1000] or None, actor, actor_role, clinic_time.stamp()))
+        " requested_at, sections_asked) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (pid, kind, (detail or "").strip()[:1000] or None, actor, actor_role, clinic_time.stamp(),
+         json.dumps(asked) if asked is not None else None))
     conn.commit()
     log_audit(conn, actor, actor_role, "data_request", pid, allowed=1, reason=kind)
     return cur.lastrowid
@@ -85,8 +107,9 @@ def listing(conn):
 
 
 def review(conn, req_id, approve, reviewer, role, reason, sorted_root=Path("sorted"),
-           exports_dir=None, collection=None):
-    """Approve or reject an open request. Returns (ok, message)."""
+           exports_dir=None, collection=None, sections=None):
+    """Approve or reject an open request. Returns (ok, message). sections: for access or a copy, the asked sections
+    the copy will hold (None: all that were asked)."""
     if not authorize(role, "manage_data_requests"):
         log_audit(conn, reviewer, role, "review_data_request", str(req_id), allowed=0)
         return False, "not permitted"
@@ -96,6 +119,14 @@ def review(conn, req_id, approve, reviewer, role, reason, sorted_root=Path("sort
     reason = (reason or "").strip()[:500]
     if not approve and not reason:
         return False, "a refusal needs a reason the patient can be given"
+    given = None
+    if approve and row["kind"] in ("access", "export"):
+        asked = json.loads(row["sections_asked"]) if row["sections_asked"] else list(SECTIONS)
+        given = asked if sections is None else [s for s in asked if s in sections]
+        if not given:
+            return False, "choose at least one section for the copy"
+        if len(given) < len(asked) and not reason:
+            return False, "say why some sections are withheld"
 
     now = clinic_time.stamp()
     conn.execute("UPDATE data_requests SET status = ?, reviewed_by = ?, reviewed_at = ?,"
@@ -108,9 +139,9 @@ def review(conn, req_id, approve, reviewer, role, reason, sorted_root=Path("sort
         return True, "request refused"
 
     if row["kind"] in ("access", "export"):
-        name = build_export(conn, row["patient_id"], sorted_root, exports_dir)
+        name = build_export(conn, row["patient_id"], sorted_root, exports_dir, sections=given)
         expires = clinic_time.to_storage(clinic_time.now_utc() + timedelta(hours=EXPORT_HOURS))
-        _done(conn, req_id, export_file=name, export_expires_at=expires)
+        _done(conn, req_id, export_file=name, export_expires_at=expires, sections_given=json.dumps(given))
         return True, f"export ready for {EXPORT_HOURS} hours"
     if row["kind"] == "amend":
         # the correction itself goes through the normal, audited edit screens;
@@ -147,7 +178,18 @@ def _billing(conn, pid):
             for inv in summary["invoices"]]
 
 
-def patient_data(conn, pid):
+def patient_data(conn, pid, sections=None):
+    """the copy's data.json - only the given sections' keys when sections are named (P29 E-005)"""
+    data = _patient_data(conn, pid)
+    if sections is None:
+        return data
+    keep = {"notice", "exported_at"} | {key for s in sections for key in SECTIONS.get(s, ())}
+    data = {k: v for k, v in data.items() if k in keep}
+    data["sections"] = list(sections)
+    return data
+
+
+def _patient_data(conn, pid):
     patient = conn.execute("SELECT patient_id, codice_fiscale, patient_name, phone FROM patients"
                            " WHERE patient_id = ?", (pid,)).fetchone()
     return {
@@ -174,23 +216,28 @@ def patient_data(conn, pid):
     }
 
 
-def build_export(conn, pid, sorted_root=Path("sorted"), exports_dir=None):
+def _add_files(zf, conn, pid, sorted_root):
+    # P15: confirmed document originals only - never extracted text, never
+    # an unreviewed, refused or superseded file
+    import documents
+    for arc_name, blob in documents.exportable(conn, pid):
+        zf.writestr(arc_name, blob)
+    patient_dir = Path(sorted_root) / pid
+    if patient_dir.is_dir():
+        for f in sorted(patient_dir.rglob("*")):
+            if f.is_file():
+                zf.write(f, "files/" + str(f.relative_to(patient_dir)))
+
+
+def build_export(conn, pid, sorted_root=Path("sorted"), exports_dir=None, sections=None):
     exports_dir = Path(exports_dir or EXPORTS_DIR)
     exports_dir.mkdir(parents=True, exist_ok=True)
     name = f"export-{secrets.token_hex(16)}.zip"
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("data.json", json.dumps(patient_data(conn, pid), indent=2, ensure_ascii=False))
-        # P15: confirmed document originals only - never extracted text, never
-        # an unreviewed, refused or superseded file
-        import documents
-        for arc_name, blob in documents.exportable(conn, pid):
-            zf.writestr(arc_name, blob)
-        patient_dir = Path(sorted_root) / pid
-        if patient_dir.is_dir():
-            for f in sorted(patient_dir.rglob("*")):
-                if f.is_file():
-                    zf.write(f, "files/" + str(f.relative_to(patient_dir)))
+        zf.writestr("data.json", json.dumps(patient_data(conn, pid, sections), indent=2, ensure_ascii=False))
+        if sections is None or "files" in sections:
+            _add_files(zf, conn, pid, sorted_root)
     path = exports_dir / name
     path.write_bytes(buffer.getvalue())
     path.chmod(0o600)
@@ -292,6 +339,30 @@ def selftest():
             "SELECT reason FROM audit_log WHERE target = ? AND action IN"
             " ('data_request', 'review_data_request') ORDER BY id", (pid,))]
         assert audits == ["export", "export:approved", "amend", "amend:approved"], f"5: {audits}"
+
+        # 6. P29 E-005: the requester ticks the sections they want; the dentist ticks the ones the copy holds. a
+        # section withheld needs a reason; the copy holds the given sections and nothing else
+        part = file_request(conn, other, "access", other, "patient", sections=["visits", "billing", "nonsense"])
+        asked = conn.execute("SELECT sections_asked FROM data_requests WHERE id = ?", (part,)).fetchone()[0]
+        assert json.loads(asked) == ["visits", "billing"], f"6: asked {asked}"
+        assert file_request(conn, other, "export", other, "patient", sections=[]) is None, "6: a copy of nothing"
+        assert not review(conn, part, True, "drossi", "dentist", "", sorted_root, exports, sections=["visits"])[0], \
+            "6: a section withheld without a reason"
+        assert not review(conn, part, True, "drossi", "dentist", "x", sorted_root, exports, sections=[])[0], \
+            "6: a copy of nothing approved"
+        ok, message = review(conn, part, True, "drossi", "dentist", "invoices are disputed", sorted_root, exports,
+                             sections=["visits", "files"])
+        assert ok, f"6: {message}"
+        given = conn.execute("SELECT sections_given FROM data_requests WHERE id = ?", (part,)).fetchone()[0]
+        assert json.loads(given) == ["visits"], f"6: a section not asked for was given: {given}"
+        path, _row = export_path(conn, part, other, exports)
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            data = json.loads(zf.read("data.json"))
+        assert "visits" in data and data["sections"] == ["visits"], f"6: {sorted(data)}"
+        for withheld in ("billing", "invoices", "payments", "patient", "appointments", "consent"):
+            assert withheld not in data, f"6: HARD FAIL - {withheld} is in a copy that withheld it"
+        assert names == ["data.json"], f"6: files went into a copy that did not ask for them: {names}"
 
     print("selftest ok")
 

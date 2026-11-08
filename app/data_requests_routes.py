@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from flask import (Blueprint, abort, flash, g, redirect, render_template, request, send_file,
@@ -9,9 +10,20 @@ from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf
 
 from .db import get_chroma, get_db
-from .i18n import _
+from .i18n import N_, _
 
 data_requests_bp = Blueprint("data_requests", __name__)
+
+# P29 E-005: how each part of a copy is named on the page
+SECTION_LABELS = {"details": N_("Personal details"), "visits": N_("Visits and notes"), "appointments": N_("Appointments"),
+                  "billing": N_("Invoices and payments"), "consent": N_("Consents"), "requests": N_("Earlier data requests"),
+                  "summary": N_("Approved visit summary"), "files": N_("Files and documents")}
+
+
+def _sections(form):
+    # None when the form had no section boxes (an older page): every part, as before
+    return form.getlist("section") if form.get("sections_shown") else None
+
 
 SORTED_ROOT = Path("sorted")
 EXPORTS_DIR = data_rights.EXPORTS_DIR
@@ -31,7 +43,10 @@ def index():
     # expired exports are deleted whenever someone looks, as well as by the
     # retention sweep, so a forgotten one does not sit on disk
     data_rights.expire_exports(conn, EXPORTS_DIR)
-    return render_template("data_requests.html", rows=data_rights.listing(conn))
+    rows = [dict(r, asked=json.loads(r["sections_asked"]) if r["sections_asked"] else None,
+                 given=json.loads(r["sections_given"]) if r["sections_given"] else None)
+            for r in data_rights.listing(conn)]
+    return render_template("data_requests.html", rows=rows)
 
 
 @data_requests_bp.route("/data-requests/<int:req_id>/review", methods=["POST"])
@@ -50,7 +65,7 @@ def review(req_id):
     ok, message = data_rights.review(
         get_db(), req_id, approve,
         g.user["username"], g.user["role"], request.form.get("reason", ""),
-        sorted_root=SORTED_ROOT, exports_dir=EXPORTS_DIR, collection=collection)
+        sorted_root=SORTED_ROOT, exports_dir=EXPORTS_DIR, collection=collection, sections=_sections(request.form))
     flash(message[0].upper() + message[1:] + ".", "success" if ok else "danger")
     return redirect(url_for("data_requests.index"))
 
@@ -83,7 +98,7 @@ def file_for_patient(cf):
         abort(404)
     req = data_rights.file_request(conn, pid, request.form.get("kind", ""),
                                    g.user["username"], g.user["role"],
-                                   request.form.get("detail"))
+                                   request.form.get("detail"), sections=_sections(request.form))
     flash(_("Request filed for review.") if req else _("That request could not be filed."),
           "success" if req else "danger")
     return redirect(url_for("patients.detail_view", cf=cf) + "#rights-title")

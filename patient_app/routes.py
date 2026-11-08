@@ -223,7 +223,9 @@ def data_request():
     # P29 F-024: tell the patient what happened - sent, already open, or not sent
     already = conn.execute("SELECT 1 FROM data_requests WHERE patient_id = ? AND kind = ? AND status = 'open'",
                            (pid, kind)).fetchone()
-    filed = data_rights.file_request(conn, pid, kind, pid, "patient", request.form.get("detail"))
+    # P29 E-005: the parts of a copy the patient ticked (an older page sends none of the boxes: every part)
+    sections = request.form.getlist("section") if request.form.get("sections_shown") else None
+    filed = data_rights.file_request(conn, pid, kind, pid, "patient", request.form.get("detail"), sections=sections)
     sent = "none" if filed is None else "open" if already else "new"
     return redirect(url_for("patient.profile", sent=sent) + "#rights")
 
