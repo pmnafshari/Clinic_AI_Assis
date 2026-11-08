@@ -66,32 +66,6 @@ def tooth_label(t):
     return head + ": " + "; ".join(describe(m) for m in t["marks"])
 
 
-def shapes(tooth):
-    """where each part of a drawn tooth goes, in a 40 x 76 box: the crown's five surfaces (by the surface each side
-    is on this tooth), the root (two for a molar), and the lines the whole-tooth marks use. an upper tooth has its
-    root at the top, a lower one at the bottom, so the crowns meet in the middle as the arches do"""
-    upper = tooth // 10 in (1, 2, 5, 6)
-    molar = tooth % 10 >= (4 if tooth // 10 >= 5 else 6)
-    x0, y0, s, i = 2, 38 if upper else 2, 36, 11
-
-    def pts(*xy):
-        return " ".join(f"{x0 + x},{y0 + y}" for x, y in xy)
-    sides = {"top": pts((0, 0), (s, 0), (s - i, i), (i, i)), "right": pts((s, 0), (s, s), (s - i, s - i), (s - i, i)),
-             "bottom": pts((0, s), (s, s), (s - i, s - i), (i, s - i)), "left": pts((0, 0), (i, i), (i, s - i), (0, s)),
-             "center": pts((i, i), (s - i, i), (s - i, s - i), (i, s - i))}
-    lay = dental_chart.layout(tooth)
-    root = [(11, 37), (12, 6), (17, 6), (20, 20), (23, 6), (28, 6), (29, 37)] if molar else \
-        [(13, 37), (17, 4), (23, 4), (27, 37)]
-    if not upper:
-        root = [(x, 76 - y) for x, y in root]
-    implant_y = 6 if upper else 40
-    return {"upper": upper, "surfaces": [(lay[side], sides[side]) for side in ("top", "right", "bottom", "left", "center")],
-            "root": " ".join(f"{x},{y}" for x, y in root), "crown_y": y0, "neck": 37 if upper else 39,
-            "edge": 75 if upper else 1, "implant_y": implant_y,
-            "threads": [implant_y + k for k in (6, 12, 18, 24)],
-            "crack": f"8,{y0 + 4} 17,{y0 + 17} 23,{y0 + 13} 33,{y0 + 32}"}
-
-
 def _patient(cf):
     # the same checks as the record itself: a real codice fiscale, a patient behind it
     if not is_valid_cf(cf):

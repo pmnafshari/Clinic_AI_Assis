@@ -1,36 +1,15 @@
-{# NEW-07 / E-008: the dental chart, FDI numbering, the dentist's view of the patient (their right on the left).
-   Only what the dentist approved or added is drawn; what the notes suggest waits in the popup. #}
+{# NEW-07 / E-008: the dental chart, FDI numbering, the dentist's view of the patient (their right on the left). Each
+   tooth is drawn from the front - crown, roots, the jaw bone behind them, the gum over the neck - and from above, at
+   its real width (tooth_art.py). Only what the dentist approved or added is drawn; what the notes suggest waits in
+   the popup. #}
 {% set can_edit = authorize(g.user.role, 'edit_dental_chart') %}
 {% macro tooth(n) %}
-{% set t = tooth_chart[n] %}{% set s = dchart.shapes(n) %}{% set label = dchart.tooth_label(t) %}
-{% set root_mark = t.whole | selectattr(2, 'equalto', 'root') | list | last %}
-{% set gone = t.whole | selectattr(2, 'equalto', 'cross') | list | last %}
-{% set implant = t.whole | selectattr(2, 'equalto', 'implant') | list | last %}
-{% macro codes() %}<span class="tc-codes">{% for m in t.marks[:3] %}<span class="tc-code tc-k-{{ m.kind }}{{ ' tc-planned' if m.state == 'planned' else '' }}">{{ m.code }}</span>{% endfor %}{% if t.marks | length > 3 %}<span class="tc-code tc-more">+{{ t.marks | length - 3 }}</span>{% endif %}</span>{% endmacro %}
-<button type="button" class="tc-tooth{{ ' tc-has' if t.marks else '' }}{{ ' tc-gone' if gone else '' }}" data-tooth="{{ n }}" aria-pressed="false" aria-label="{{ label }}" title="{{ label }}">
-  {% if s.upper %}{{ codes() }}{% else %}<span class="tc-num">{{ n }}</span>{% endif %}
-  <svg class="tc-svg" viewBox="0 0 40 76" width="40" height="76" aria-hidden="true" focusable="false">
-    {% if implant %}
-    <rect class="tc-implant tc-k-{{ implant[0] }} tc-{{ implant[1] }}" x="15" y="{{ s.implant_y }}" width="10" height="30" rx="2"/>
-    {% for y in s.threads %}<line class="tc-thread" x1="13" y1="{{ y }}" x2="27" y2="{{ y }}"/>{% endfor %}
-    {% else %}
-    <polygon class="tc-root{% if root_mark %} tc-k-{{ root_mark[0] }} tc-{{ root_mark[1] }}{% endif %}" points="{{ s.root }}"/>
-    {% endif %}
-    {% for letter, points in s.surfaces %}{% set f = t.fills.get(letter) %}
-    <polygon class="tc-s{% if f %} tc-k-{{ f[0] }} tc-{{ f[1] }}{% endif %}" data-surface="{{ letter }}" points="{{ points }}"/>
-    {% endfor %}
-    {% for kind, state, draw in t.whole %}
-      {% if draw == 'ring' %}<rect class="tc-ring tc-k-{{ kind }} tc-{{ state }}" x="1" y="{{ s.crown_y - 1 }}" width="38" height="38" rx="5"/>
-        {% if kind == 'bridge' %}<line class="tc-bar tc-k-{{ kind }} tc-{{ state }}" x1="0" y1="{{ s.edge }}" x2="40" y2="{{ s.edge }}"/>{% endif %}
-      {% elif draw == 'cross' %}<line class="tc-cross tc-k-{{ kind }} tc-{{ state }}" x1="4" y1="4" x2="36" y2="72"/><line class="tc-cross tc-k-{{ kind }} tc-{{ state }}" x1="36" y1="4" x2="4" y2="72"/>
-      {% elif draw == 'crack' %}<polyline class="tc-crack tc-k-{{ kind }} tc-{{ state }}" points="{{ s.crack }}"/>
-      {% elif draw == 'gum' %}<line class="tc-gum tc-k-{{ kind }} tc-{{ state }}" x1="0" y1="{{ s.neck }}" x2="40" y2="{{ s.neck }}"/>
-      {% elif draw == 'dashed' %}<rect class="tc-impacted tc-k-{{ kind }}" x="1" y="1" width="38" height="74" rx="6"/>
-      {% elif draw == 'fill' %}<rect class="tc-ring tc-k-{{ kind }} tc-{{ state }}" x="1" y="{{ s.crown_y - 1 }}" width="38" height="38" rx="5"/>
-      {% endif %}
-    {% endfor %}
-  </svg>
-  {% if s.upper %}<span class="tc-num">{{ n }}</span>{% else %}{{ codes() }}{% endif %}
+{% set t = tooth_chart[n] %}{% set v = art.views(t) %}{% set label = dchart.tooth_label(t) %}
+{% set shown = v.room if t.marks | length <= v.room else [v.room - 1, 1] | max %}
+{% macro codes() %}<span class="tc-codes">{% for m in t.marks[:shown] %}<span class="tc-code tc-k-{{ m.kind }}{{ ' tc-planned' if m.state == 'planned' else '' }}">{{ m.code }}</span>{% endfor %}{% if t.marks | length > shown %}<span class="tc-code tc-more">+{{ t.marks | length - shown }}</span>{% endif %}</span>{% endmacro %}
+<button type="button" class="tc-tooth{{ ' tc-has' if t.marks else '' }}{{ ' tc-mid-r' if n in (11, 41, 51, 81) else '' }}" data-tooth="{{ n }}" aria-pressed="false" aria-label="{{ label }}" title="{{ label }}">
+  {% if v.upper %}{{ codes() }}{{ v.front }}{{ v.top }}<span class="tc-num">{{ n }}</span>
+  {% else %}<span class="tc-num">{{ n }}</span>{{ v.top }}{{ v.front }}{{ codes() }}{% endif %}
 </button>
 {% endmacro %}
 
@@ -38,37 +17,43 @@
   <div class="dash-card-head">
     <div>
       <h2 class="ds-card-title" id="chart-title">{{ _("Dental chart") }}</h2>
-      <p class="ds-card-sub">{{ _("Dentist only · FDI numbering · seen from the front: the patient's right is on the left") }}</p>
+      <p class="ds-card-sub">{{ _("Dentist only · FDI numbering · each tooth from the front and from above, with the jaw and the gum; the patient's right is on the left") }}</p>
     </div>
     {% if chart_pending %}<button type="button" class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#chartSuggest"><i class="bi bi-lightbulb" aria-hidden="true"></i> {{ _('{n} suggestion from the notes', n=1) if chart_pending | length == 1 else _('{n} suggestions from the notes', n=chart_pending | length) }}</button>{% endif %}
   </div>
   <div class="dash-card-body">
+    <div class="tc-layout">
     <div class="tc-scroll" role="group" aria-label="{{ _('Teeth: choose one to mark it or see its marks') }}">
+      <svg class="tc-defs" aria-hidden="true" focusable="false"><defs>
+        <linearGradient id="tc-gum" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2899a" stop-opacity="0"/><stop offset="0.35" stop-color="#e2899a" stop-opacity="0.55"/><stop offset="1" stop-color="#e2899a" stop-opacity="0.78"/></linearGradient>
+      </defs></svg>
       <div class="tc-chart" data-dental-chart>
-        <p class="tc-side tc-side-r">{{ _("Patient's right") }}</p><p class="tc-side tc-side-l">{{ _("Patient's left") }}</p>
-        <p class="tc-arch-name">{{ _("Upper") }}</p>
-        <div class="tc-row tc-row-adult">{% for n in fdi.UPPER %}{{ tooth(n) }}{% if n == 11 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+        <p class="tc-side tc-side-r">{{ _("Patient's right") }}</p><p class="tc-arch-name">{{ _("Upper jaw") }}</p><p class="tc-side tc-side-l">{{ _("Patient's left") }}</p>
+        <div class="tc-row">{% for n in fdi.UPPER %}{{ tooth(n) }}{% endfor %}</div>
         <div class="tc-plane" aria-hidden="true"></div>
-        <div class="tc-row tc-row-adult">{% for n in fdi.LOWER %}{{ tooth(n) }}{% if n == 41 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
-        <p class="tc-arch-name">{{ _("Lower") }}</p>
+        <div class="tc-row">{% for n in fdi.LOWER %}{{ tooth(n) }}{% endfor %}</div>
+        <p class="tc-arch-name tc-arch-low">{{ _("Lower jaw") }}</p>
       </div>
       {% set baby_marked = chart_marks | selectattr('tooth', 'ge', 51) | list %}
       <details class="tc-baby"{% if baby_marked %} open{% endif %}>
         <summary>{{ _("Baby teeth (51-85)") }}{% if baby_marked %} <span class="ux-count">{{ baby_marked | length }}</span>{% endif %}</summary>
         <div class="tc-chart tc-chart-baby">
-          <div class="tc-row tc-row-baby">{% for n in fdi.BABY_UPPER %}{{ tooth(n) }}{% if n == 51 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+          <div class="tc-row">{% for n in fdi.BABY_UPPER %}{{ tooth(n) }}{% endfor %}</div>
           <div class="tc-plane" aria-hidden="true"></div>
-          <div class="tc-row tc-row-baby">{% for n in fdi.BABY_LOWER %}{{ tooth(n) }}{% if n == 81 %}<span class="tc-mid" aria-hidden="true"></span>{% endif %}{% endfor %}</div>
+          <div class="tc-row">{% for n in fdi.BABY_LOWER %}{{ tooth(n) }}{% endfor %}</div>
         </div>
       </details>
     </div>
 
-    <h3 class="ds-card-title mt-3">{{ _("Key") }}</h3>
+    <div class="tc-key-box">
+    <h3 class="ds-card-title">{{ _("Key") }}</h3>
     <ul class="tc-key" data-chart-key>
       {% for key, label in dchart.KIND_LABELS.items() %}<li><span class="tc-swatch tc-k-{{ key }}" aria-hidden="true">{{ fdi.KINDS[key][0] }}</span> {{ _(label) }}</li>{% endfor %}
       <li><span class="tc-swatch tc-swatch-done" aria-hidden="true"></span> {{ _("Done or present: solid") }}</li>
       <li><span class="tc-swatch tc-swatch-planned" aria-hidden="true"></span> {{ _("Planned: pale with a dashed edge") }}</li>
     </ul>
+    </div>
+    </div>
   </div>
 </section>
 

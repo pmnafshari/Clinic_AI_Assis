@@ -14,6 +14,7 @@ from playwright.sync_api import sync_playwright
 from werkzeug.security import generate_password_hash
 from werkzeug.serving import WSGIRequestHandler, make_server
 
+import dental_chart
 import patient_id
 import storage
 import web_session
@@ -62,7 +63,7 @@ def walk(p, engine, app, conn, headed, shots):
             popup = page.locator("#chartSuggest")
             popup.wait_for(state="visible", timeout=10000)
             assert popup.locator("[data-suggestion]").count() == 2, f"{where}: the popup does not hold two suggestions"
-            assert page.locator(".tc-svg .tc-k-filling").count() == 0, f"{where}: HARD FAIL - a suggestion drawn"
+            assert page.locator(".tc-tooth .tc-k-filling").count() == 0, f"{where}: HARD FAIL - a suggestion drawn"
             if shots:
                 page.wait_for_timeout(600)  # past the popup's fade-in, so the picture shows it as a person sees it
                 page.screenshot(path=str(Path(shots) / f"chart-popup-{engine}-{width}.png"))
@@ -79,9 +80,27 @@ def walk(p, engine, app, conn, headed, shots):
             assert page.locator("#chartSuggest").count() == 0, f"{where}: the popup came back after deciding"
             assert page.locator('#tab-chart').is_visible(), f"{where}: the redirect did not open the chart tab"
             t36 = page.locator('.tc-tooth[data-tooth="36"]')
-            assert t36.locator(".tc-s.tc-k-filling").count() == 2, f"{where}: the filling is not drawn on two surfaces"
+            assert t36.locator(".tc-z.tc-k-filling").count() == 4, f"{where}: the filling is not drawn on two surfaces, two views"
             assert page.locator('.tc-tooth[data-tooth="48"] .tc-cross').count() == 0, f"{where}: the refused one drawn"
 
+            page.locator(".tc-baby > summary").click()   # the baby teeth too
+            # every surface on the side of the tooth dental_chart.layout says: mesial toward the midline, the cheek
+            # side at the chart's edge; and the crowns of both jaws meet in the middle
+            for n in (16, 26, 36, 46, 11, 31, 55, 75):
+                # one snapshot of every surface's place: the page may still be scrolling to the chart
+                centres = page.evaluate("""(n) => { const out = {};
+                    document.querySelectorAll(`.tc-tooth[data-tooth="${n}"] [data-surface]`).forEach((e) => {
+                      const r = e.getBoundingClientRect();
+                      out[e.dataset.view + " " + e.dataset.surface] = [r.x + r.width / 2, r.y + r.height / 2]; });
+                    return out; }""", n)
+                box = {tuple(k.split()): v for k, v in centres.items()}
+                side = dental_chart.layout(n)
+                mesial_right = side["right"] == "M"
+                assert (box["top", "M"][0] > box["top", "D"][0]) == mesial_right, f"{where}: {n} mesial/distal from above"
+                assert (box["front", "M"][0] > box["front", "D"][0]) == mesial_right, f"{where}: {n} mesial/distal from the front"
+                assert (box["top", "B"][1] < box["top", "L"][1]) == (side["top"] == "B"), f"{where}: {n} cheek/tongue side"
+                upper = n // 10 in (1, 2, 5, 6)
+                assert (box["front", "O"][1] > box["front", "B"][1]) == upper, f"{where}: {n} the crown faces the wrong way"
             # clicking a tooth chooses it in the form and shows only its marks
             page.locator('.tc-tooth[data-tooth="11"]').click()
             assert page.input_value("#chart-tooth") == "11", f"{where}: the click did not choose tooth 11"
@@ -100,7 +119,7 @@ def walk(p, engine, app, conn, headed, shots):
             page.locator("#chart-state-planned").check()
             with page.expect_navigation(timeout=15000):
                 page.locator("#chart-form button[type=submit]").click()
-            assert page.locator('.tc-tooth[data-tooth="11"] .tc-ring.tc-k-crown.tc-planned').count() == 1, \
+            assert page.locator('.tc-tooth[data-tooth="11"] .tc-cap.tc-k-crown.tc-planned').count() == 2, \
                 f"{where}: the planned crown is not drawn as planned"
 
             # never a sideways page; on a phone the chart scrolls in its own box

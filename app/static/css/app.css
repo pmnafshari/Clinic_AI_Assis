@@ -1771,45 +1771,72 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .tc-k-extraction { --k: #111827; } .tc-k-missing { --k: #64748b; } .tc-k-fracture { --k: #86198f; }
 .tc-k-perio { --k: #15803d; } .tc-k-impacted { --k: #0369a1; } .tc-k-other { --k: #475569; }
 
-.tc-scroll { overflow-x: auto; padding-bottom: 0.25rem; }
-.tc-chart { display: grid; justify-items: center; gap: 0.125rem; min-width: max-content; margin: 0 auto;
-  grid-template-columns: 1fr 1fr; }
-.tc-chart > .tc-row, .tc-chart > .tc-plane, .tc-chart > .tc-arch-name { grid-column: 1 / -1; }
-.tc-side { margin: 0; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+.tc-layout { display: grid; gap: 1rem 1.5rem; align-items: start; }
+@media (min-width: 1400px) { .tc-layout { grid-template-columns: minmax(0, 1fr) 13.5rem; } }
+.tc-scroll { position: relative; overflow-x: auto; padding-bottom: 0.25rem; min-width: 0; }
+.tc-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+.tc-chart { display: grid; grid-template-columns: 1fr auto 1fr; align-items: end; justify-items: center; gap: 0;
+  width: max-content; margin: 0 auto; }
+.tc-chart > .tc-row, .tc-chart > .tc-plane, .tc-chart > .tc-arch-low { grid-column: 1 / -1; }
+.tc-side { margin: 0 0 0.25rem; font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
   color: var(--ds-text-muted); }
 .tc-side-r { justify-self: start; } .tc-side-l { justify-self: end; }
-.tc-arch-name { margin: 0; font-size: 0.75rem; color: var(--ds-text-muted); }
-.tc-row { display: flex; align-items: stretch; gap: 2px; }
-.tc-mid { width: 2px; margin: 0 6px; background: var(--ds-border-strong); border-radius: 1px; }
-.tc-plane { width: 100%; height: 0; border-top: 1px dashed var(--ds-border-strong); margin: 2px 0; }
-.tc-tooth { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 46px; padding: 3px 2px;
-  background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--ds-text); cursor: pointer; }
-.tc-tooth:hover { background: var(--ds-surface-sunken); }
-.tc-tooth:focus-visible { outline: none; box-shadow: var(--ds-focus-ring); }
-.tc-tooth[aria-pressed="true"] { background: var(--ds-accent-soft); border-color: var(--ds-accent); }
-.tc-num { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.tc-codes { display: flex; flex-wrap: wrap; justify-content: center; gap: 1px; min-height: 14px; }
+.tc-arch-name { margin: 0 0 0.25rem; font-size: 0.75rem; font-weight: 600; color: var(--ds-text-muted); }
+.tc-arch-low { margin: 0.25rem 0 0; }
+/* the teeth touch, so the jaw and the gum run on from one to the next */
+.tc-row { display: flex; align-items: stretch; justify-content: center; gap: 0; }
+.tc-plane { width: 100%; height: 0; border-top: 1px dashed var(--ds-border-strong); margin: 3px 0; }
+.tc-tooth { position: relative; display: flex; flex-direction: column; align-items: center; padding: 0; margin: 0;
+  background: transparent; border: 0; border-radius: 0; color: var(--ds-text); cursor: pointer; }
+.tc-tooth::after { content: ""; position: absolute; inset: 0; border-radius: 6px; pointer-events: none; }
+.tc-tooth:hover::after { background: rgba(37, 99, 235, 0.08); }
+.tc-tooth:focus-visible { outline: none; }
+.tc-tooth:focus-visible::after { box-shadow: inset 0 0 0 3px rgba(37, 99, 235, 0.6); }
+.tc-tooth[aria-pressed="true"]::after { background: rgba(15, 118, 110, 0.1); box-shadow: inset 0 0 0 2px var(--ds-accent); }
+.tc-mid-r::before { content: ""; position: absolute; top: 0; bottom: 0; right: -1px; z-index: 1; pointer-events: none;
+  border-right: 1.5px dashed #8392a5; }
+.tc-num { font-size: 0.6875rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 15px; }
+.tc-codes { display: flex; justify-content: center; align-items: center; gap: 1px; height: 14px; white-space: nowrap; }
 .tc-code { font-size: 0.5625rem; font-weight: 700; line-height: 12px; padding: 0 2px; border-radius: 3px;
   background: var(--k, #475569); color: #fff; }
 .tc-code.tc-planned { background: #fff; color: var(--k); box-shadow: inset 0 0 0 1px var(--k); }
 .tc-code.tc-more { background: var(--ds-text-muted); }
-.tc-svg { display: block; overflow: visible; }
-.tc-s { fill: #fff; stroke: #94a3b8; stroke-width: 1; }
-.tc-root { fill: #f1f5f9; stroke: #94a3b8; stroke-width: 1; }
-.tc-s[class*="tc-k-"], .tc-root[class*="tc-k-"], .tc-implant { fill: var(--k); stroke: var(--k); }
-.tc-s.tc-planned, .tc-root.tc-planned, .tc-implant.tc-planned { fill-opacity: 0.3; stroke-dasharray: 3 2; stroke-width: 1.5; }
-.tc-thread { stroke: #fff; stroke-width: 1.5; }
-.tc-ring, .tc-impacted { fill: none; stroke: var(--k); stroke-width: 3; }
-.tc-impacted { stroke-width: 2; stroke-dasharray: 4 3; }
-.tc-bar, .tc-gum { stroke: var(--k); stroke-width: 4; stroke-linecap: round; }
-.tc-cross { stroke: var(--k); stroke-width: 3.5; stroke-linecap: round; }
-.tc-crack { fill: none; stroke: var(--k); stroke-width: 2.5; stroke-linejoin: round; }
-.tc-ring.tc-planned, .tc-bar.tc-planned, .tc-gum.tc-planned, .tc-cross.tc-planned, .tc-crack.tc-planned { stroke-dasharray: 4 3; stroke-opacity: 0.75; }
-.tc-gone .tc-s, .tc-gone .tc-root { fill-opacity: 0.35; stroke-opacity: 0.5; }
+.tc-front, .tc-top { display: block; overflow: visible; }
+/* the jaw, the gum and the tooth itself */
+.tc-bone { fill: #eee2cb; }
+.tc-ridge { fill: #f4cdd5; }
+.tc-root { fill: #f8f0e0; stroke: #a8977a; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tc-root-back { fill: #ede0c8; stroke-dasharray: 2 2; }
+.tc-enamel { fill: #fff; }
+.tc-outline { fill: none; stroke: #74838f; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tc-outline.tc-hl { stroke: var(--k); stroke-width: 2.5; }
+.tc-z { fill: transparent; stroke: #d6dde5; stroke-width: 0.75; vector-effect: non-scaling-stroke; }
+.tc-z[class*="tc-k-"] { fill: var(--k); }
+.tc-front .tc-z:not([class*="tc-k-"]) { stroke: none; }   /* from the front only the marked surfaces show */
+.tc-groove { fill: none; stroke: #c3ccd6; stroke-width: 0.9; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+/* the work on it: surfaces are filled, a crown covers the crown, what is in the root is drawn in it */
+.tc-cap { fill: var(--k); fill-opacity: 0.85; stroke: var(--k); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.tc-implant { fill: var(--k); }
+.tc-thread { fill: none; stroke: #fff; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.tc-z.tc-planned, .tc-cap.tc-planned, .tc-implant.tc-planned { fill-opacity: 0.28; stroke: var(--k); stroke-width: 1.5;
+  stroke-dasharray: 3 2; vector-effect: non-scaling-stroke; }
+.tc-canal { fill: none; stroke: var(--k); stroke-width: 0.75; stroke-linecap: round; }
+.tc-post { fill: none; stroke: var(--k); stroke-width: 1.3; stroke-linecap: round; }
+.tc-perio { fill: none; stroke: var(--k); stroke-width: 0.8; stroke-linecap: round; }
+.tc-crack { fill: none; stroke: var(--k); stroke-width: 0.55; stroke-linejoin: round; stroke-linecap: round; }
+.tc-bar { fill: none; stroke: var(--k); stroke-width: 1.2; stroke-linecap: round; }
+.tc-cross { fill: none; stroke: var(--k); stroke-width: 0.8; stroke-linecap: round; }
+.tc-imp { fill: none; stroke: var(--k); stroke-width: 2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
+.tc-canal.tc-planned, .tc-post.tc-planned, .tc-perio.tc-planned, .tc-crack.tc-planned, .tc-bar.tc-planned,
+.tc-cross.tc-planned { stroke-dasharray: 1.2 0.9; stroke-opacity: 0.85; }
+.tc-ghost { opacity: 0.22; }
+.tc-ghost .tc-outline { stroke-dasharray: 3 2; }
 .tc-baby { margin-top: 0.75rem; }
 .tc-baby > summary { cursor: pointer; font-size: 0.875rem; font-weight: 600; }
-.tc-chart-baby { margin-top: 0.5rem; }
+.tc-chart-baby { grid-template-columns: auto; margin-top: 0.5rem; }
 
+.tc-key-box .ds-card-title { margin-bottom: 0.25rem; }
+@media (min-width: 1400px) { .tc-key-box .tc-key { flex-direction: column; flex-wrap: nowrap; gap: 0.3rem; } }
 .tc-key { display: flex; flex-wrap: wrap; gap: 0.375rem 1rem; list-style: none; margin: 0.25rem 0 0; padding: 0;
   font-size: 0.8125rem; }
 .tc-key li { display: inline-flex; align-items: center; gap: 0.375rem; }

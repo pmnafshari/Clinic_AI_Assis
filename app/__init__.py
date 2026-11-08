@@ -121,6 +121,8 @@ def create_app():
     # NEW-07: the dental chart's names for teeth, work, states and surfaces
     from . import chart_routes
     app.jinja_env.globals["dchart"] = chart_routes
+    import tooth_art
+    app.jinja_env.globals["art"] = tooth_art
     app.jinja_env.globals["note_date_differs"] = lambda day, text: note_dates.differs(str(day) if day else None, text)
     # avatars: initials on a stable tint (phase 43). presentation, not a figure
     app.jinja_env.filters["initials"] = initials

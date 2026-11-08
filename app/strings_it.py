@@ -2475,4 +2475,7 @@ IT = {
     '{position}, {side}': '{position}, {side}',
     '{position}, {side} (baby tooth)': '{position}, {side} (dente deciduo)',
     'That mark could not be added.': 'Non è stato possibile aggiungere il segno.',
+    "Dentist only · FDI numbering · each tooth from the front and from above, with the jaw and the gum; the patient's right is on the left": 'Solo dentista · numerazione FDI · ogni dente visto di fronte e dall\'alto, con osso e gengiva; la destra del paziente è a sinistra',
+    'Upper jaw': 'Arcata superiore',
+    'Lower jaw': 'Arcata inferiore',
 }

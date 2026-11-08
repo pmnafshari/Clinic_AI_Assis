@@ -50,9 +50,12 @@ def selftest():
             return sorted(tuple(r) for r in conn.execute(q, (pid, status) if status else (pid,)).fetchall())
 
         def drawn(page, kind):
-            # a surface or a whole-tooth shape coloured as that kind, inside the chart itself
+            # what the chart itself draws for that kind of work: (view, surface) for a surface, (part, "") for the rest
             part = page.split('data-dental-chart', 1)[1].split('data-chart-key', 1)[0]
-            return re.findall(rf'<(?:polygon|rect|line|polyline) class="tc-[a-z]+ tc-k-{kind} tc-(?:done|planned)"(?: data-surface="(\w)")?', part)
+            zones = re.findall(rf'class="tc-z tc-k-{kind} tc-(?:done|planned)" data-surface="(\w)" data-view="(\w+)"', part)
+            whole = re.findall(rf'class="tc-(cap|canal|post|perio|crack|bar|cross|imp|implant|outline tc-hl) tc-k-{kind}'
+                               rf' tc-(?:done|planned)"', part)
+            return sorted((view, letter) for letter, view in zones) + sorted((w, "") for w in whole)
 
         # 1. the dentist opens the record: the chart tab, and the popup with the two suggestions; nothing drawn yet
         page = dentist.get(f"/patients/{CF}").get_data(as_text=True)
@@ -89,7 +92,8 @@ def selftest():
         assert resp.status_code == 302 and resp.headers["Location"].endswith("#chart"), "3: not back on the chart"
         assert marks() == [(36, "filling", "confirmed"), (48, "extraction", "rejected")], f"3: {marks()}"
         page = dentist.get(f"/patients/{CF}").get_data(as_text=True)
-        assert sorted(drawn(page, "filling")) == ["M", "O"], f"3: the filling is not drawn on M and O: {drawn(page, 'filling')}"
+        assert drawn(page, "filling") == [("front", "M"), ("front", "O"), ("top", "M"), ("top", "O")], \
+            f"3: the filling is not drawn on M and O, from the front and from above: {drawn(page, 'filling')}"
         assert drawn(page, "extraction") == [] and 'id="chartSuggest"' not in page, "3: a refused suggestion stays"
         assert "approved by dr_denti" in page, "3: who approved it is not said"
         n = conn.execute("SELECT COUNT(*) FROM audit_log WHERE action IN ('dental_chart_approve', 'dental_chart_reject')"
@@ -107,9 +111,11 @@ def selftest():
         assert marks("confirmed") == [(11, "crown", "confirmed"), (36, "filling", "confirmed"),
                                       (46, "caries", "confirmed")], f"4: {marks('confirmed')}"
         page = dentist.get(f"/patients/{CF}").get_data(as_text=True)
-        assert drawn(page, "crown") == [""], f"4: a planned crown is not drawn as one ring: {drawn(page, 'crown')}"
-        assert 'class="tc-ring tc-k-crown tc-planned"' in page, "4: the planned crown is not drawn as planned"
-        assert sorted(drawn(page, "caries")) == ["B", "D", "O"], f"4: caries surfaces {drawn(page, 'caries')}"
+        assert drawn(page, "crown") == [("cap", ""), ("cap", "")], f"4: the crown is not drawn over the tooth: {drawn(page, 'crown')}"
+        assert 'class="tc-cap tc-k-crown tc-planned"' in page, "4: the planned crown is not drawn as planned"
+        assert drawn(page, "caries") == [("front", "B"), ("front", "D"), ("front", "O"), ("top", "B"), ("top", "D"), ("top", "O")], \
+            f"4: caries surfaces {drawn(page, 'caries')}"
+        assert 'class="tc-bone"' in page and 'class="tc-gum"' in page and 'class="tc-ridge"' in page, "4: no jaw or gum drawn"
         assert conn.execute("SELECT surfaces FROM tooth_marks WHERE tooth = 11").fetchone()[0] == "", \
             "4: a crown took surfaces"
 
