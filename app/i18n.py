@@ -51,6 +51,7 @@ JS_TEXT = (
     "No preview for this kind of file. Download the original to open it.",
     "The clinic app is not answering. Nothing was sent, and what you typed is still here.", "Try again", "OK",
     # nana.js (Nana's card, 2026-11-09)
+    'Answers are switched off on this computer - Nana listens but does not answer.',
     'After saving',
     'Ask your next question - no wake word needed for a few seconds.',
     'Before',

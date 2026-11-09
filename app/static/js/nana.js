@@ -208,7 +208,9 @@
     else if (p === "unavailable") { word = uiText("Not available"); why = uiText("Nana cannot listen now - its own page says why."); }
     else {
       word = mode === "standby" ? uiText("Standby") : uiText("Ready");
-      why = snap && /^Ask your next/.test(snap.status && snap.status.why || "") ?
+      why = snap && snap.answers && !snap.answers.on ?        // every question would get "switched off": say so first
+        uiText("Answers are switched off on this computer - Nana listens but does not answer.") :
+        snap && /^Ask your next/.test(snap.status && snap.status.why || "") ?
         uiText("Ask your next question - no wake word needed for a few seconds.") :
         uiText("Say “{phrase}”, then your question.", {phrase: PHRASE});
     }

@@ -1,7 +1,8 @@
 /* Nana's card on the doctor's pages (owner, 2026-11-09). The card is dark on every theme, as the owner's reference.
    data-mode: on (the card) | standby (the orb, still listening) | off (the orb, dim; the microphone closed).
    data-phase: what Nana is doing - ready, listening, thinking, check, pick, paused, offline, starting, unavailable.
-   Power up: the orb lights, a ring goes out, the card opens from the orb. Power down: the card closes into the orb,
+   About 15 % smaller than first drawn (owner, 2026-11-09): width, conversation, orbs and spacing; buttons keep the
+   app's one size. Power up: the orb lights, a ring goes out, the card opens from the orb. Power down: the card closes into the orb,
    the orb goes dark, the ring comes back in. Reduced motion: no movement, only fades. */
 .nana {
   --nana-bg: #0f1b34;
@@ -14,16 +15,16 @@
   --nana-muted: #a5b4cf;
   --nana-warn: #fcd34d;
   --nana-lvl: 0;
-  --nana-orb: 3.5rem;
+  --nana-orb: 3rem;
   --nana-at: calc(100% - var(--nana-orb) / 2) calc(100% - var(--nana-orb) / 2);
   position: fixed;
   right: 1rem;
   bottom: 1rem;
   z-index: 1045;
-  width: min(23.5rem, calc(100vw - 2rem));
+  width: min(20rem, calc(100vw - 2rem));
   height: 0;
   pointer-events: none;
-  font-size: .9375rem;
+  font-size: .875rem;
 }
 .nana > * { pointer-events: auto; }
 
@@ -32,8 +33,8 @@
   position: relative;
   display: inline-grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.35rem;
+  height: 2.35rem;
   flex: none;
   border-radius: 50%;
   background: radial-gradient(circle at 34% 30%, #a7f3e4 0%, #2dd4bf 38%, #0f9a86 72%, #0b6f63 100%);
@@ -81,7 +82,7 @@
   transition: transform .45s cubic-bezier(.2, .8, .2, 1), opacity .3s ease, visibility 0s;
 }
 .nana-pill:focus-visible { outline: 3px solid var(--nana-teal-2); outline-offset: 3px; }
-.nana-pill .nana-orb { width: 2.5rem; height: 2.5rem; }
+.nana-pill .nana-orb { width: 2.15rem; height: 2.15rem; }
 .nana-off-mark { position: relative; color: #0b2a2a; font-size: 1.05rem; opacity: 0; transition: opacity .4s ease; }
 .nana[data-mode="off"] .nana-pill { border-color: rgba(165, 180, 207, .45); box-shadow: 0 .6rem 1.4rem rgba(15, 27, 52, .3); }
 .nana[data-mode="off"] .nana-pill .nana-orb { filter: grayscale(1) brightness(.55); box-shadow: none; }
@@ -96,12 +97,12 @@
   right: 0;
   bottom: 0;
   width: 100%;
-  padding: 1rem 1.1rem .85rem;
+  padding: .85rem .95rem .75rem;
   color: var(--nana-text);
   background: radial-gradient(130% 90% at 0% 0%, var(--nana-bg-2) 0%, var(--nana-bg) 62%);
   border: 1px solid var(--nana-edge);
-  border-radius: 1.25rem;
-  box-shadow: 0 0 0 .4rem var(--nana-glow), 0 1.25rem 2.5rem rgba(15, 27, 52, .38);
+  border-radius: 1.1rem;
+  box-shadow: 0 0 0 .35rem var(--nana-glow), 0 1.1rem 2.1rem rgba(15, 27, 52, .38);
   clip-path: circle(150% at var(--nana-at));
   transition: clip-path .62s cubic-bezier(.2, .8, .2, 1), opacity .35s ease, visibility 0s;
 }
@@ -118,12 +119,12 @@
 .nana[data-mode="on"] .nana-foot { transition-delay: .3s; }
 .nana:not([data-mode="on"]) .nana-card > * { opacity: 0; transform: translateY(.5rem); }
 
-.nana-head { display: flex; align-items: center; gap: .85rem; }
+.nana-head { display: flex; align-items: center; gap: .7rem; }
 .nana-id { flex: 1; min-width: 0; }
-.nana-name { margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff; line-height: 1.2; }
+.nana-name { margin: 0; font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; }
 .nana-state {
   margin: .1rem 0 0;
-  font-size: .78rem;
+  font-size: .7rem;
   font-weight: 700;
   letter-spacing: .12em;
   text-transform: uppercase;
@@ -131,15 +132,15 @@
 }
 .nana[data-phase="offline"] .nana-state, .nana[data-phase="unavailable"] .nana-state,
 .nana[data-phase="paused"] .nana-state { color: var(--nana-muted); }
-.nana-why { margin: .55rem 0 0; min-height: 1.2em; color: var(--nana-muted); font-size: .85rem; }
+.nana-why { margin: .45rem 0 0; min-height: 1.2em; color: var(--nana-muted); font-size: .8rem; }
 
 /* the seven dots: still when ready, with the voice while listening, a wave while thinking */
-.nana-dots { display: inline-flex; align-items: center; gap: .3rem; height: 1.6rem; }
+.nana-dots { display: inline-flex; align-items: center; gap: .26rem; height: 1.4rem; }
 .nana-dots i {
   display: block;
-  width: .4rem;
-  height: .4rem;
-  border-radius: .2rem;
+  width: .34rem;
+  height: .34rem;
+  border-radius: .17rem;
   background: var(--nana-teal);
   opacity: .9;
   transition: height .12s linear;
@@ -159,8 +160,8 @@
 
 /* --- the conversation: a box of fixed height that scrolls (owner rule) -------------------------------------------- */
 .nana-log {
-  max-height: 17rem;
-  margin-top: .75rem;
+  max-height: 14.5rem;
+  margin-top: .65rem;
   padding-right: .25rem;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -168,12 +169,12 @@
   scrollbar-color: rgba(165, 180, 207, .4) transparent;
 }
 .nana-log:focus-visible { outline: 2px solid var(--nana-teal-2); outline-offset: 2px; border-radius: .5rem; }
-.nana-turn + .nana-turn { margin-top: .9rem; padding-top: .9rem; border-top: 1px solid rgba(165, 180, 207, .16); }
+.nana-turn + .nana-turn { margin-top: .75rem; padding-top: .75rem; border-top: 1px solid rgba(165, 180, 207, .16); }
 .nana-msg.nana-new { animation: nana-in .35s cubic-bezier(.2, .8, .2, 1) both; }
 .nana-msg + .nana-msg { margin-top: .6rem; }
 .nana-msg p { margin: .2rem 0 0; }
 .nana-who { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--nana-muted); }
-.nana-you p { color: #dbe4f3; font-size: 1rem; }
+.nana-you p { color: #dbe4f3; font-size: .9375rem; }
 .nana-bot { padding-left: .7rem; border-left: 2px solid var(--nana-teal); }
 .nana-bot .nana-who { color: var(--nana-teal); }
 .nana-title { font-weight: 700; color: #fff; }
@@ -206,7 +207,7 @@
 .nana .btn-outline-light { color: var(--nana-text); border-color: rgba(232, 238, 249, .45); }
 .nana .btn-outline-light:hover, .nana .btn-outline-light:focus-visible { color: #0f1b34; background: var(--nana-text); }
 .nana .btn:focus-visible { outline: 3px solid var(--nana-teal-2); outline-offset: 2px; box-shadow: none; }
-.nana-foot { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .8rem; }
+.nana-foot { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .65rem; }
 
 /* a short message beside the orb: why Nana could not be turned on */
 .nana-note {
@@ -253,7 +254,7 @@
 
 @media (max-width: 575.98px) {
   .nana { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
-  .nana-log { max-height: 42vh; }
+  .nana-log { max-height: 36vh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .nana *, .nana *::before, .nana *::after { animation: none !important; transition: opacity .2s ease !important; }

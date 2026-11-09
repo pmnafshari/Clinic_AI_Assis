@@ -43,6 +43,7 @@ IT = {
     'Imaging tasks': 'Attività di imaging',
     'Its check letter shows the code was typed without a slip, not who it belongs to - so check it against the document you name below.': 'La lettera di controllo dice solo che il codice è stato scritto senza errori, non a chi appartiene: verificalo sul documento indicato sotto.',
     'Nana': 'Nana',
+    'Answers are switched off on this computer - Nana listens but does not answer.': 'Le risposte sono disattivate su questo computer: Nana ascolta ma non risponde.',
     'Nana devices': 'Dispositivi Nana',
     'Leave without saving': 'Esci senza salvare',
     'Leave without saving?': 'Uscire senza salvare?',

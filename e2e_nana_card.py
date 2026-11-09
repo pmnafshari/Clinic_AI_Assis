@@ -68,6 +68,7 @@ def main():
         m = states.Machine()
         m.go("READY", "listening")
         m.set_clinic(True, "connected as Walk Mac", device)
+        m.set_answers(True, "on - SYNTHETIC DEMO MODE", demo=True)
         servers = [make_server("127.0.0.1", staff_port, create_app(), request_handler=Quiet, threaded=True),
                    make_server("127.0.0.1", nana_port, service_app(m, clinic_url=f"http://127.0.0.1:{staff_port}",
                                                                    port=nana_port), request_handler=Quiet, threaded=True)]
@@ -114,6 +115,15 @@ def main():
                     check(page.inner_text("#nana-state").strip().lower() == "ready" and "Hey Jarvis" in page.inner_text("#nana-why"),
                           f"{tag} 2: Ready, with the wake phrase in use")
                     m.set_access({"username": USER, "role": "dentist", "expires_at": "x", "kind": "web"})   # the link check
+                    m.set_answers(False, "switched off on this computer")     # as on the owner's Mac today
+                    page.wait_for_function("document.getElementById('nana-why').textContent.indexOf('switched off') >= 0",
+                                           timeout=5000)
+                    check("does not answer" in page.inner_text("#nana-why"), f"{tag} 2: says when answers are switched off")
+                    m.set_answers(True, "on - SYNTHETIC DEMO MODE", demo=True)
+                    page.wait_for_function("document.getElementById('nana-why').textContent.indexOf('Hey Jarvis') >= 0",
+                                           timeout=5000)
+                    wide = page.locator("#nana-card").bounding_box()["width"]
+                    check(wide <= 321, f"{tag} 2: the card is about 15 % smaller than first drawn ({wide:.0f} px, was 376)")
                     snap(page, f"{tag}-2-on")
 
                     # 3. what was asked is printed, then Nana thinks, then the answer - with Open record
