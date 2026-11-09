@@ -435,7 +435,7 @@
           <thead><tr><th scope="col">{{ _("Consent") }}</th><th scope="col">{{ _("Status") }}</th><th scope="col">{{ _("Last change") }}</th><th scope="col">{{ _("Wording") }}</th><th scope="col"><span class="visually-hidden">{{ _("Action") }}</span></th></tr></thead>
           <tbody>
           {% for c in consents %}
-          {% set label = {'ai_assistant': _('Portal assistant'), 'messaging': _('Messages and reminders'), 'recording': _('Call recording')}[c.purpose] %}
+          {% set label = {'ai_assistant': _('Portal assistant'), 'messaging': _('Messages and reminders'), 'recording': _('Call recording'), 'marketing': _('Offers and news')}[c.purpose] %}
           <tr data-consent="{{ c.purpose }}">
             <td data-label="{{ _('Consent') }}"><strong>{{ label }}</strong></td>
             <td data-label="{{ _('Status') }}">

@@ -320,6 +320,7 @@ STRINGS = {
     },
     "consent_ai_assistant": {"it": "Assistente del portale", "en": "Portal assistant"},
     "consent_messaging": {"it": "Messaggi e promemoria", "en": "Messages and reminders"},
+    "consent_marketing": {"it": "Offerte e novità", "en": "Offers and news"},
     "consent_recording": {"it": "Registrazione delle chiamate", "en": "Call recording"},
     "consent_given": {"it": "Dato", "en": "Given"},
     "consent_withdrawn": {"it": "Ritirato", "en": "Withdrawn"},

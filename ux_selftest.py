@@ -30,9 +30,9 @@ NAV = {
     # /tasks (NEW-04): dentist and reception; admin never
     # /aftercare (NEW-05): the dentist's alone - clinical content
     "dentist": {"/", "/appointments", "/requests", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/tasks", "/notes/new", "/billing", "/stock",
-                "/handoffs", "/reminders", "/data-requests", "/aftercare", "/reports", "/providers"},
+                "/handoffs", "/reminders", "/data-requests", "/aftercare", "/outreach", "/reports", "/providers"},
     "assistant": {"/", "/appointments", "/requests", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/tasks", "/notes/new", "/billing", "/stock",
-                  "/handoffs", "/reminders", "/providers"},
+                  "/handoffs", "/reminders", "/outreach", "/providers"},
     "admin": {"/admin/users", "/patients/duplicates", "/jarvis/devices"},
 }
 CF_SHAPE = re.compile(r"\b[A-Z]{6}[0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{2}[A-Z][0-9LMNPQRSTUV]{3}[A-Z]\b|\b[A-Z]{4}[0-9]{12}\b")
@@ -747,7 +747,7 @@ def selftest():
             assert table17 and all(h in _text(table17.group(1)) for h in ("Consent", "Status", "Last change", "Wording")), \
                 f"17a: {role17}: consent is not a table"
             rows17 = re.findall(r'<tr data-consent="(\w+)"', box17)
-            assert sorted(rows17) == ["ai_assistant", "messaging", "recording"], f"17a: consent rows {rows17}"
+            assert sorted(rows17) == ["ai_assistant", "marketing", "messaging", "recording"], f"17a: consent rows {rows17}"
             for purpose17 in rows17:
                 assert re.search(rf'<button[^>]*data-read-out[^>]*aria-controls="wording-{purpose17}"[^>]*hidden', box17) or \
                     re.search(rf'<button[^>]*aria-controls="wording-{purpose17}"[^>]*data-read-out[^>]*hidden', box17), \

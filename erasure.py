@@ -147,6 +147,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # the staff's tasks about the patient
             import staff_tasks
             staff_tasks.on_erase(conn, pid)
+        if _has(conn, "outreach_contacts"):
+            # NEW-06: the win-back list's contacts
+            import outreach
+            outreach.on_erase(conn, pid)
         if _has(conn, "call_id_failures"):
             # E-006: wrong phone checks against the record
             conn.execute("DELETE FROM call_id_failures WHERE patient_id = ?", (pid,))

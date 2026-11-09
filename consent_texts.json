@@ -15,5 +15,10 @@
     "version": "demo-2026-09-22",
     "it": "Acconsento alla registrazione delle chiamate con l'assistente vocale della clinica, conservate secondo la politica di conservazione della clinica. Posso ritirare il consenso quando voglio.",
     "en": "I agree that calls with the clinic's voice assistant may be recorded and kept under the clinic's retention policy. I can withdraw this at any time."
+  },
+  "marketing": {
+    "version": "demo-2026-11-09",
+    "it": "Acconsento a essere contattato dalla clinica per offerte e novità, anche quando non ho appuntamenti. Posso ritirare il consenso quando voglio.",
+    "en": "I agree that the clinic may contact me about offers and news, even when I have no appointment. I can withdraw this at any time."
   }
 }

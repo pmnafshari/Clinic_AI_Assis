@@ -157,6 +157,7 @@ def create_app():
     from .care_routes import care_bp
     from .tasks_routes import tasks_bp
     from .aftercare_routes import aftercare_bp
+    from .outreach_routes import outreach_bp
     from .dashboard_routes import dashboard_bp
     from .handoff_routes import handoff_bp
     from .requests_routes import requests_bp
@@ -186,6 +187,7 @@ def create_app():
     app.register_blueprint(care_bp)
     app.register_blueprint(tasks_bp)
     app.register_blueprint(aftercare_bp)
+    app.register_blueprint(outreach_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(handoff_bp)

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{# P29 NEW-06: patients to win back - not seen for 12 months or more, nothing booked, and they agreed to be contacted
+   about offers and news. Contacted by hand; nothing is sent from here. #}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ _("Operations") }}</p>
+    <h1 class="ds-page-title">{{ _("Patients to win back") }}</h1>
+    <p class="ds-page-meta">{{ _("Patients whose last visit was 12 months ago or more, with nothing booked, who agreed to be contacted about offers and news. Call them yourself and record how it went; nothing is sent from here.") }}</p>
+  </div>
+</div>
+<div class="ds-alert ds-alert-info mb-3" role="note">{{ _("Only patients who gave the Offers and news consent are listed. A patient who withdraws it leaves the list at once.") }}</div>
+
+<section class="card dash-card mb-3" aria-labelledby="winback-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="winback-title">{{ _("To contact") }} <span class="ux-count">{{ rows | length }}</span></h2></div>
+  <div class="dash-card-body">
+    {% if rows %}
+    <div class="sx-tools sx-tools-row" data-list-tools data-for="winback-rows" data-noun="{{ _('patient|patients') }}"
+         data-sorts='{{ [['visit', 'text', 1, _('Longest since a visit')], ['name', 'text', 1, _('Patient (A-Z)')]] | tojson }}'
+         data-search="{{ _('Search by patient') }}" data-find="name"></div>
+    <div class="sx-box sx-box-table"><table class="ux-table ux-table-page">
+      <caption class="visually-hidden">{{ _("Patients to win back") }}</caption>
+      <thead><tr><th scope="col" data-sort="name">{{ _("Patient") }}</th><th scope="col">{{ _("Phone") }}</th><th scope="col" data-sort="visit">{{ _("Last visit") }}</th><th scope="col">{{ _("Last contact") }}</th><th scope="col">{{ _("Record a contact") }}</th></tr></thead>
+      <tbody id="winback-rows">{% for r in rows %}
+        <tr data-name="{{ r.name }}" data-visit="{{ r.last_visit }}">
+          <td data-label="{{ _('Patient') }}"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=r.cf) }}">{{ r.name }}</a></td>
+          <td data-label="{{ _('Phone') }}">{{ r.phone|phone or _('No phone on file') }}</td>
+          <td data-label="{{ _('Last visit') }}" class="ux-nowrap">{{ r.last_visit }}</td>
+          <td data-label="{{ _('Last contact') }}">{% if r.last_contact %}{{ _(outcomes[r.last_contact.outcome]) }} · {{ r.last_contact.at | appt_date }} · {{ r.last_contact.by_user }}{% if r.last_contact.note %} · "{{ r.last_contact.note }}"{% endif %}{% else %}{{ _("Not contacted yet") }}{% endif %}</td>
+          <td data-label="{{ _('Record a contact') }}">
+            <form method="post" action="{{ url_for('outreach.contact', cf=r.cf) }}" class="d-flex flex-wrap gap-2 align-items-end">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <label class="visually-hidden" for="outcome-{{ loop.index }}">{{ _("How it went") }}</label>
+              <select class="form-select form-select-sm w-auto" id="outcome-{{ loop.index }}" name="outcome" required>
+                <option value="">{{ _("How it went") }}</option>
+                {% for key, label in outcomes.items() %}<option value="{{ key }}">{{ _(label) }}</option>{% endfor %}
+              </select>
+              <label class="visually-hidden" for="note-{{ loop.index }}">{{ _("Note (optional)") }}</label>
+              <input class="form-control form-control-sm w-auto" id="note-{{ loop.index }}" name="note" maxlength="300" placeholder="{{ _('Note (optional)') }}">
+              <button type="submit" class="btn btn-primary btn-sm">{{ _("Record") }}<span class="visually-hidden">{{ _(': {name}', name=r.name) }}</span></button>
+            </form>
+          </td>
+        </tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}
+    <p class="dash-empty-line">{{ _("Nobody to contact: no patient who agreed to it has gone 12 months without a visit.") }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

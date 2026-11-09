@@ -225,6 +225,9 @@ def init_db(db_path):
     import aftercare
     conn.executescript(aftercare.SCHEMA)
     aftercare.seed_demo(conn)
+    # the win-back list's contacts (NEW-06)
+    import outreach
+    conn.executescript(outreach.SCHEMA)
     # DRV (P25-D4): the read-only Drive source - its checks, the files it fetched, the automatic check
     import drive_source
     conn.executescript(drive_source.SCHEMA)

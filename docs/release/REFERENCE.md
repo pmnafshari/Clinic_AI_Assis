@@ -87,6 +87,8 @@ this file is stale.
 | POST | `/logout` | `auth.logout` |
 | POST | `/notes/dictate` | `notes.dictate` |
 | GET,POST | `/notes/new` | `notes.new_note` |
+| GET | `/outreach` | `outreach.index` |
+| POST | `/outreach/<cf>/contact` | `outreach.contact` |
 | GET | `/patients` | `patients.list_view` |
 | GET | `/patients/<cf>` | `patients.detail_view` |
 | GET | `/patients/<cf>/billing` | `billing.patient` |
@@ -265,6 +267,7 @@ this file is stale.
 | `note_confirm_tokens` | token, username, issued_at, used_at |
 | `note_reviews` | id, origin, status, patient_id, codice_fiscale, staged_dir, original_path, original_name, original_sha256, extraction, extraction_error, attempts, visit_id, confirmed_fields, edited, created_by, created_at, decided_by, decided_at, decision_reason |
 | `ops_health_samples` | id, at, all_up, alerts, checks |
+| `outreach_contacts` | id, patient_id, outcome, note, by_user, at |
 | `patient_agent_actions` | id, patient_id, kind, payload, status, created_at, expires_at, resolved_at, result_id |
 | `patient_credentials` | id, patient_id, pin_hash, must_change_pin, issued_at, expires_at, failed_attempts, locked_until, active |
 | `patient_documents` | id, patient_id, kind, display_name, stored_path, sha256, size, status, reason, extraction, extractor, uploaded_by, uploaded_at, decided_by, decided_at, supersedes_id, category, source, import_item_id, acquired_at, acquired_basis, visit_id, lost_at, lost_by, lost_reason |

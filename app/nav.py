@@ -36,6 +36,8 @@ ITEMS = [
     ("Operations", "Call-backs", "handoff.index", "/handoffs", "bi-telephone", "handle_handoff", None, "handoff."),
     ("Operations", "Reminders", "reminders.index", "/reminders", "bi-bell", "view_reminders", None, "reminders."),
     ("Operations", "Data requests", "data_requests.index", "/data-requests", "bi-shield-lock", "manage_data_requests", None, "data_requests."),
+    # NEW-06: patients not seen for 12 months who agreed to be contacted - by hand, nothing is sent
+    ("Operations", "Win back", "outreach.index", "/outreach", "bi-arrow-repeat", "handle_outreach", None, "outreach."),
     # R-020 / NEW-05: the aftercare texts patients are shown, the dentist's to write and approve
     ("Operations", "Aftercare", "aftercare.index", "/aftercare", "bi-bandaid", "manage_aftercare", None, "aftercare."),
     ("Operations", "Reports", "reports.index", "/reports", "bi-graph-up", "read_clinical", None, "reports."),

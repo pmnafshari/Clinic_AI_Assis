@@ -16,7 +16,9 @@ import clinic_time
 from auth import log_audit
 
 TEXTS_PATH = Path(__file__).with_name("consent_texts.json")
-PURPOSES = ("ai_assistant", "messaging", "recording")
+# marketing (P29 NEW-06): contact about offers and news - the only basis on which a patient who no longer comes is
+# put on the win-back list; nothing is sent automatically
+PURPOSES = ("ai_assistant", "messaging", "recording", "marketing")
 
 SCHEMA = """
     CREATE TABLE IF NOT EXISTS consent_records (
@@ -124,7 +126,7 @@ def selftest():
 
         # 1. nothing recorded is not consent
         assert not allows(conn, pid, "ai_assistant"), "1: no row must mean no consent"
-        assert [s["recorded"] for s in state(conn, pid)] == [False, False, False], "1: empty state"
+        assert [s["recorded"] for s in state(conn, pid)] == [False] * len(PURPOSES), "1: empty state"
 
         # 2. a grant allows, and says who, when and to which wording
         ok, _ = record(conn, pid, "ai_assistant", True, "aassist", "assistant", "at the desk")
@@ -156,7 +158,7 @@ def selftest():
                 raise AssertionError(f"5: {sql} should be refused")
             except sqlite3.IntegrityError:
                 conn.rollback()
-        assert record(conn, pid, "marketing", True, "x", "dentist") == (False, "unknown purpose")
+        assert record(conn, pid, "advertising", True, "x", "dentist") == (False, "unknown purpose")
 
         # 6. every change is audited under the surrogate, with the purpose
         audits = conn.execute("SELECT action, target, reason FROM audit_log WHERE action LIKE"
