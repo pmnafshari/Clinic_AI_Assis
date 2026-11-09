@@ -12,8 +12,8 @@ MARK = {"STARTING": "◌", "READY": "●", "ACTIVE": "◉", "WAITING_FOR_CONFIRM
 
 def label(status):
     if not status:
-        return "Rima ✕ not running"
-    return f"Rima {MARK.get(status['state'], '?')} {status['state']}"
+        return "Nana ✕ not running"
+    return f"Nana {MARK.get(status['state'], '?')} {status['state']}"
 
 
 def fetch():
@@ -29,16 +29,16 @@ def main():
 
     class App(rumps.App):
         def __init__(self):
-            super().__init__("Rima", title=label(None), quit_button="Quit indicator")
+            super().__init__("Nana", title=label(None), quit_button="Quit indicator")
             self.why = rumps.MenuItem("starting")
             self.link = rumps.MenuItem("clinic link: unknown")
-            self.menu = [self.why, self.link, None, rumps.MenuItem("Open Rima page", callback=self.open_page)]
+            self.menu = [self.why, self.link, None, rumps.MenuItem("Open Nana page", callback=self.open_page)]
 
         @rumps.timer(2)
         def refresh(self, _):
             s = fetch()
             self.title = label(s)
-            self.why.title = s["reason"] if s else "the Rima service is not running"
+            self.why.title = s["reason"] if s else "the Nana service is not running"
             self.link.title = f"clinic link: {s['clinic']['detail']}" if s and s.get("clinic") else "clinic link: unknown"
 
         def open_page(self, _):

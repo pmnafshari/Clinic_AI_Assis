@@ -126,7 +126,8 @@ def serve(make_source=listen.SoundDeviceSource, cue=listen.chime):
                 runtime.check_link(machine, _link(), enabled)
             except Exception as e:
                 machine.set_clinic(False, f"link check fault ({type(e).__name__})")
-            stop.wait(CHECK_SECONDS)
+            if machine.recheck.wait(CHECK_SECONDS):      # the card asked for it now
+                machine.recheck.clear()
 
     def listening():
         exchange = answer.Exchange(machine, stt.transcribe, _link, enabled=enabled, confirm=confirm_for(enabled),

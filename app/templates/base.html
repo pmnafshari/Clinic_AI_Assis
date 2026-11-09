@@ -1,5 +1,7 @@
 <!doctype html>
 <html lang="{{ lang() }}">
+{% set chromeless = request.endpoint in ('auth.login', 'auth.change_password') %}
+{% set nana_card = not chromeless and g.get('user') and authorize(g.user.role, 'nana_card') %}
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,9 +11,9 @@
   <link rel="stylesheet" href="{{ url_for('shared', filename='css/tokens.css') }}">
   <link rel="stylesheet" href="{{ url_for('shared', filename='css/components.css') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  {% if nana_card %}<link rel="stylesheet" href="{{ url_for('static', filename='css/nana.css') }}">{% endif %}
 </head>
 <body hx-headers='{"X-CSRFToken": "{{ csrf_token() }}"}'>
-  {% set chromeless = request.endpoint in ('auth.login', 'auth.change_password') %}
   <a class="app-skip" href="#main">{{ _('Skip to content') }}</a>
   {# P29 U-008: what the last action did, as a popup with OK over the updated page. it leaves the page usable (owner,
      2026-11-03): no backdrop, nothing locked. it comes first for the keyboard, before the menu #}
@@ -62,5 +64,7 @@
   <script type="application/json" id="ui-text">{{ js_text() | tojson }}</script>
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
   <script src="{{ url_for('static', filename='js/list_tools.js') }}"></script>
+  {% if nana_card %}{% include "_nana.html" %}
+  <script src="{{ url_for('static', filename='js/nana.js') }}"></script>{% endif %}
 </body>
 </html>

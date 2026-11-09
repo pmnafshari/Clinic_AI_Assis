@@ -425,7 +425,7 @@ def selftest():
                                  (d, "/patients/ZZIT800101010101/summary", ("Riepilogo per la prossima visita", "Ancora nessun riepilogo")),
                                  (d, "/notes/new", ("Scrivi o incolla la nota",)),
                                  (d, "/agent/command", ("Esegui un comando",)),
-                                 (d, "/jarvis/link", ("Usa Rima su questo dispositivo",)),
+                                 (d, "/jarvis/link", ("Usa Nana su questo dispositivo",)),
                                  (c, "/imaging/tasks", ("Richiede un intervento della reception",)),
                                  (d, "/change-password", ("Password attuale", "Nascondi la password attuale")),
                                  (a, "/admin/users", ("Account del personale",)),
@@ -451,7 +451,7 @@ def selftest():
     # a person reads outside uiText()
     import app.i18n as i18n
     said = set()
-    for name in ("app.js", "list_tools.js", "look.js", "login_return.js"):
+    for name in ("app.js", "list_tools.js", "look.js", "login_return.js", "nana.js"):
         src = (ROOT / "app" / "static" / "js" / name).read_text(encoding="utf-8")
         said |= set(re.findall(r'uiText\("([^"]*)"', src))
         loose = re.findall(r'(?:textContent|placeholder|title|alt)\s*=\s*(?:[^;]*\?\s*)?["`][A-Z][a-z]|'

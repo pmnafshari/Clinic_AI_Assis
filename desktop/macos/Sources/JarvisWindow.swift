@@ -24,12 +24,12 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
         config.websiteDataStore = WKWebsiteDataStore(forIdentifier: UUID(uuidString: "6C1F0D5E-2E0B-4C55-9D1E-0A0000000003")!)
         web = WKWebView(frame: .zero, configuration: config)
         super.init()
-        window.title = "Rima"
+        window.title = "Nana"
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("ClinicWorkspaceJarvis")
         web.navigationDelegate = self
         web.uiDelegate = self
-        web.setAccessibilityLabel("Rima page")
+        web.setAccessibilityLabel("Nana page")
         window.contentView = web
     }
 
@@ -84,7 +84,7 @@ final class JarvisWindow: NSObject, WKNavigationDelegate, WKUIDelegate {
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         webView.loadHTMLString("""
             <!doctype html><body style="font:16px -apple-system;margin:40px"><h1 role="status" style="font-size:20px">
-            Rima is not running</h1><p>Its own login service starts it; this app only shows it.</p></body>
+            Nana is not running</h1><p>Its own login service starts it; this app only shows it.</p></body>
             """, baseURL: nil)
     }
 

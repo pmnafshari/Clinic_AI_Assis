@@ -4,7 +4,7 @@ never guesses the patient or the words.
 """
 import re
 
-COMMAND = re.compile(r"^\s*(?:please\s+|(?:hey\s+)?(?:rima|jarvis)[,\s]+)*(?:add|make|write|put|leave|create)\s+"
+COMMAND = re.compile(r"^\s*(?:please\s+|(?:hey\s+)?(?:nana|jarvis)[,\s]+)*(?:add|make|write|put|leave|create)\s+"
                      r"(?:a\s+|an\s+)?(?:new\s+)?note\s+(?:to|for|on|in|into|about)\s+(?:the\s+)?(?:patient\s+)?(?P<rest>.+?)\s*$", re.I)
 SPLIT = re.compile(r"\s*(?:[,:;.]\s*)?\b(?:saying|that says|that)\b\s*|\s*(?:[,:;]|\.\s)\s*", re.I)
 # a word spelled out after it, as people do with a name: "Julia G-I-U-L-I-A" or "Julia G I U L I A"

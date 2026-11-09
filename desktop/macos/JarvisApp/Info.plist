@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key><string>local.clinicdemo.jarvis-app</string>
-	<key>CFBundleName</key><string>Rima</string>
-	<key>CFBundleDisplayName</key><string>Rima</string>
+	<key>CFBundleName</key><string>Nana</string>
+	<key>CFBundleDisplayName</key><string>Nana</string>
 	<key>CFBundleExecutable</key><string>Jarvis</string>
 	<key>CFBundlePackageType</key><string>APPL</string>
 	<key>CFBundleShortVersionString</key><string>@VERSION@</string>
@@ -14,7 +14,7 @@
 	<key>LSApplicationCategoryType</key><string>public.app-category.medical</string>
 	<key>NSHighResolutionCapable</key><true/>
 	<key>NSSupportsAutomaticTermination</key><false/>
-	<key>NSHumanReadableCopyright</key><string>Local test build - Rima and this Mac's clinic records (signed in). Not notarized.</string>
+	<key>NSHumanReadableCopyright</key><string>Local test build - Nana and this Mac's clinic records (signed in). Not notarized.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key><true/>

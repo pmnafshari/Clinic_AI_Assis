@@ -74,6 +74,7 @@ case " $* " in *" --full "*)
   step outage $PY e2e_outage.py
   step dental-chart $PY e2e_dental_chart.py
   step ui-rules $PY e2e_ui_rules.py
+  step nana-card $PY e2e_nana_card.py
   step portal-ui-rules $PY e2e_portal_ui_rules.py
   step shots $PY shot_pages.py --width 390 --width 1440
   step a11y-1440 $PY a11y_audit.py

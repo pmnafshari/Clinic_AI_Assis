@@ -10,15 +10,15 @@ from jarvis.clinic import LinkDown, LinkRefused
 OFF = "switched off on this computer (J02 is not accepted for use); listening is not affected"
 DEMO = "on - SYNTHETIC DEMO MODE (J02 is not accepted; synthetic library only)"
 DEMO_BUT = "switched on for the synthetic demo, but not available: "
-NOT_REGISTERED = ("this computer is not registered - an admin registers it under Admin > Rima devices, then its "
+NOT_REGISTERED = ("this computer is not registered - an admin registers it under Admin > Nana devices, then its "
                   "credential is stored here (jarvis_run.py --store-token)")
 REFUSED = ("the clinic app refused this computer (not registered or revoked) - an admin registers it again under "
-           "Admin > Rima devices")
+           "Admin > Nana devices")
 DOWN = "the clinic app is unreachable - start the clinic staff app on this computer"
 NO_GUIDES = ("no approved clinic guides yet - a dentist, or the designated approver for administrative documents, "
              "approves them in the Guides library of the clinic app")
 NO_DELEGATION = ("no staff session delegated (not needed for clinic-guide answers; a staff member delegates their own "
-                 "session under Rima in the clinic sidebar)")
+                 "session under Nana in the clinic sidebar)")
 
 
 def check_link(machine, link, answers_on=False):
@@ -37,7 +37,7 @@ def check_link(machine, link, answers_on=False):
     machine.set_access(acting)
     detail = f"connected as {who.get('device')}; " + (f"acting for {acting['username']} ({acting['role']})" if acting
                                                       else NO_DELEGATION)
-    machine.set_clinic(True, detail)
+    machine.set_clinic(True, detail, who.get("device_id"))
     answers(machine, answers_on, None if who.get("approved_guides") else NO_GUIDES)
 
 

@@ -1,0 +1,261 @@
+/* Nana's card on the doctor's pages (owner, 2026-11-09). The card is dark on every theme, as the owner's reference.
+   data-mode: on (the card) | standby (the orb, still listening) | off (the orb, dim; the microphone closed).
+   data-phase: what Nana is doing - ready, listening, thinking, check, pick, paused, offline, starting, unavailable.
+   Power up: the orb lights, a ring goes out, the card opens from the orb. Power down: the card closes into the orb,
+   the orb goes dark, the ring comes back in. Reduced motion: no movement, only fades. */
+.nana {
+  --nana-bg: #0f1b34;
+  --nana-bg-2: #15284d;
+  --nana-edge: rgba(45, 212, 191, .62);
+  --nana-glow: rgba(45, 212, 191, .2);
+  --nana-teal: #2dd4bf;
+  --nana-teal-2: #5eead4;
+  --nana-text: #e8eef9;
+  --nana-muted: #a5b4cf;
+  --nana-warn: #fcd34d;
+  --nana-lvl: 0;
+  --nana-orb: 3.5rem;
+  --nana-at: calc(100% - var(--nana-orb) / 2) calc(100% - var(--nana-orb) / 2);
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 1045;
+  width: min(23.5rem, calc(100vw - 2rem));
+  height: 0;
+  pointer-events: none;
+  font-size: .9375rem;
+}
+.nana > * { pointer-events: auto; }
+
+/* --- the orb ---------------------------------------------------------------------------------------------------- */
+.nana-orb {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, #a7f3e4 0%, #2dd4bf 38%, #0f9a86 72%, #0b6f63 100%);
+  box-shadow: 0 0 .9rem rgba(45, 212, 191, .55), inset 0 -.25rem .6rem rgba(6, 50, 45, .45);
+  transform: scale(calc(1 + var(--nana-lvl) * .22));
+  transition: transform .12s linear, filter .5s ease, box-shadow .5s ease;
+}
+.nana-core {
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(255, 255, 255, .85), rgba(255, 255, 255, 0) 70%);
+  opacity: .55;
+}
+.nana-ring {
+  position: absolute;
+  inset: -.3rem;
+  border-radius: 50%;
+  border: 2px solid transparent;
+}
+.nana[data-phase="thinking"] .nana-ring {
+  border-color: rgba(94, 234, 212, .9) transparent rgba(94, 234, 212, .35) transparent;
+  animation: nana-spin 1.1s linear infinite;
+}
+.nana[data-phase="listening"] .nana-orb { box-shadow: 0 0 calc(.9rem + var(--nana-lvl) * 1.6rem) rgba(45, 212, 191, .75); }
+.nana[data-phase="check"] .nana-orb, .nana[data-phase="pick"] .nana-orb { animation: nana-breathe 1.6s ease-in-out infinite; }
+.nana[data-phase="offline"] .nana-orb, .nana[data-phase="unavailable"] .nana-orb,
+.nana[data-phase="paused"] .nana-orb { filter: grayscale(.85) brightness(.7); box-shadow: none; }
+
+/* --- the round button at the corner: off and standby ------------------------------------------------------------- */
+.nana-pill {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: var(--nana-orb);
+  height: var(--nana-orb);
+  padding: 0;
+  border: 1px solid var(--nana-edge);
+  border-radius: 50%;
+  background: var(--nana-bg);
+  box-shadow: 0 0 0 .3rem var(--nana-glow), 0 .6rem 1.4rem rgba(15, 27, 52, .35);
+  cursor: pointer;
+  transition: transform .45s cubic-bezier(.2, .8, .2, 1), opacity .3s ease, visibility 0s;
+}
+.nana-pill:focus-visible { outline: 3px solid var(--nana-teal-2); outline-offset: 3px; }
+.nana-pill .nana-orb { width: 2.5rem; height: 2.5rem; }
+.nana-off-mark { position: relative; color: #0b2a2a; font-size: 1.05rem; opacity: 0; transition: opacity .4s ease; }
+.nana[data-mode="off"] .nana-pill { border-color: rgba(165, 180, 207, .45); box-shadow: 0 .6rem 1.4rem rgba(15, 27, 52, .3); }
+.nana[data-mode="off"] .nana-pill .nana-orb { filter: grayscale(1) brightness(.55); box-shadow: none; }
+.nana[data-mode="off"] .nana-off-mark { opacity: 1; color: #dbe4f3; }
+.nana[data-mode="standby"] .nana-pill .nana-orb { animation: nana-breathe 3.2s ease-in-out infinite; }
+.nana[data-mode="on"] .nana-pill { transform: scale(.4); opacity: 0; visibility: hidden; transition: transform .35s ease, opacity .25s ease, visibility 0s .35s; }
+.nana-waking .nana-pill .nana-orb { animation: nana-breathe .7s ease-in-out infinite; filter: none; }
+
+/* --- the card ----------------------------------------------------------------------------------------------------- */
+.nana-card {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  padding: 1rem 1.1rem .85rem;
+  color: var(--nana-text);
+  background: radial-gradient(130% 90% at 0% 0%, var(--nana-bg-2) 0%, var(--nana-bg) 62%);
+  border: 1px solid var(--nana-edge);
+  border-radius: 1.25rem;
+  box-shadow: 0 0 0 .4rem var(--nana-glow), 0 1.25rem 2.5rem rgba(15, 27, 52, .38);
+  clip-path: circle(150% at var(--nana-at));
+  transition: clip-path .62s cubic-bezier(.2, .8, .2, 1), opacity .35s ease, visibility 0s;
+}
+.nana[data-mode="off"] .nana-card, .nana[data-mode="standby"] .nana-card {
+  clip-path: circle(0 at var(--nana-at));
+  opacity: 0;
+  visibility: hidden;
+  transition: clip-path .5s cubic-bezier(.6, 0, .4, 1), opacity .3s ease .2s, visibility 0s .55s;
+}
+.nana-card > * { transition: opacity .35s ease, transform .45s cubic-bezier(.2, .8, .2, 1); }
+.nana[data-mode="on"] .nana-head { transition-delay: .12s; }
+.nana[data-mode="on"] .nana-why { transition-delay: .18s; }
+.nana[data-mode="on"] .nana-log { transition-delay: .24s; }
+.nana[data-mode="on"] .nana-foot { transition-delay: .3s; }
+.nana:not([data-mode="on"]) .nana-card > * { opacity: 0; transform: translateY(.5rem); }
+
+.nana-head { display: flex; align-items: center; gap: .85rem; }
+.nana-id { flex: 1; min-width: 0; }
+.nana-name { margin: 0; font-size: 1.15rem; font-weight: 700; color: #fff; line-height: 1.2; }
+.nana-state {
+  margin: .1rem 0 0;
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--nana-teal);
+}
+.nana[data-phase="offline"] .nana-state, .nana[data-phase="unavailable"] .nana-state,
+.nana[data-phase="paused"] .nana-state { color: var(--nana-muted); }
+.nana-why { margin: .55rem 0 0; min-height: 1.2em; color: var(--nana-muted); font-size: .85rem; }
+
+/* the seven dots: still when ready, with the voice while listening, a wave while thinking */
+.nana-dots { display: inline-flex; align-items: center; gap: .3rem; height: 1.6rem; }
+.nana-dots i {
+  display: block;
+  width: .4rem;
+  height: .4rem;
+  border-radius: .2rem;
+  background: var(--nana-teal);
+  opacity: .9;
+  transition: height .12s linear;
+}
+.nana[data-phase="listening"] .nana-dots i { height: calc(.4rem + var(--nana-lvl) * 1.1rem); }
+.nana[data-phase="listening"] .nana-dots i:nth-child(2n) { height: calc(.4rem + var(--nana-lvl) * .7rem); }
+.nana[data-phase="listening"] .nana-dots i:nth-child(3n) { height: calc(.4rem + var(--nana-lvl) * 1.4rem); }
+.nana[data-phase="thinking"] .nana-dots i { animation: nana-wave 1s ease-in-out infinite; }
+.nana-dots i:nth-child(2) { animation-delay: .1s; }
+.nana-dots i:nth-child(3) { animation-delay: .2s; }
+.nana-dots i:nth-child(4) { animation-delay: .3s; }
+.nana-dots i:nth-child(5) { animation-delay: .4s; }
+.nana-dots i:nth-child(6) { animation-delay: .5s; }
+.nana-dots i:nth-child(7) { animation-delay: .6s; }
+.nana[data-phase="offline"] .nana-dots i, .nana[data-phase="paused"] .nana-dots i,
+.nana[data-phase="unavailable"] .nana-dots i { background: var(--nana-muted); opacity: .45; }
+
+/* --- the conversation: a box of fixed height that scrolls (owner rule) -------------------------------------------- */
+.nana-log {
+  max-height: 17rem;
+  margin-top: .75rem;
+  padding-right: .25rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(165, 180, 207, .4) transparent;
+}
+.nana-log:focus-visible { outline: 2px solid var(--nana-teal-2); outline-offset: 2px; border-radius: .5rem; }
+.nana-turn + .nana-turn { margin-top: .9rem; padding-top: .9rem; border-top: 1px solid rgba(165, 180, 207, .16); }
+.nana-msg.nana-new { animation: nana-in .35s cubic-bezier(.2, .8, .2, 1) both; }
+.nana-msg + .nana-msg { margin-top: .6rem; }
+.nana-msg p { margin: .2rem 0 0; }
+.nana-who { display: block; font-size: .7rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--nana-muted); }
+.nana-you p { color: #dbe4f3; font-size: 1rem; }
+.nana-bot { padding-left: .7rem; border-left: 2px solid var(--nana-teal); }
+.nana-bot .nana-who { color: var(--nana-teal); }
+.nana-title { font-weight: 700; color: #fff; }
+.nana-muted { color: var(--nana-muted); font-size: .84rem; }
+.nana-warn { color: var(--nana-warn); font-size: .84rem; }
+.nana-empty { margin: 0; color: var(--nana-muted); font-size: .85rem; }
+.nana-quote { margin: .35rem 0 0; padding: .45rem .6rem; background: rgba(255, 255, 255, .06); border-radius: .5rem; color: var(--nana-text); }
+.nana-label { display: block; margin-top: .4rem; color: var(--nana-muted); font-size: .8rem; }
+.nana-fix { margin-top: .2rem; background: rgba(255, 255, 255, .08); border-color: rgba(165, 180, 207, .35); color: #fff; }
+.nana-fix:focus { background: rgba(255, 255, 255, .12); color: #fff; border-color: var(--nana-teal); box-shadow: 0 0 0 .2rem rgba(45, 212, 191, .25); }
+.nana-plist { margin: .35rem 0 0; padding: 0; list-style: none; }
+.nana-plist li + li { margin-top: .5rem; }
+.nana-pname { margin: 0; }
+.nana-cf { color: var(--nana-muted); font-size: .8rem; }
+.nana-when { color: var(--nana-text); }
+.nana-change { display: grid; grid-template-columns: auto 1fr; gap: .1rem .6rem; margin: .25rem 0 0; font-size: .85rem; }
+.nana-change dt { color: var(--nana-muted); font-weight: 400; }
+.nana-change dd { margin: 0; }
+.nana-actions { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .45rem; }
+.nana-wait { display: flex; align-items: center; gap: .55rem; }
+.nana-typing { display: inline-flex; gap: .22rem; }
+.nana-typing i { width: .38rem; height: .38rem; border-radius: 50%; background: var(--nana-teal); animation: nana-wave 1s ease-in-out infinite; }
+.nana-typing i:nth-child(2) { animation-delay: .15s; }
+.nana-typing i:nth-child(3) { animation-delay: .3s; }
+
+/* buttons on the dark card: the app's one size, light on dark */
+.nana .btn-primary { background: var(--nana-teal); border-color: var(--nana-teal); color: #062a25; font-weight: 600; }
+.nana .btn-primary:hover, .nana .btn-primary:focus-visible { background: var(--nana-teal-2); border-color: var(--nana-teal-2); color: #062a25; }
+.nana .btn-light { background: rgba(255, 255, 255, .92); border-color: transparent; color: #0f1b34; font-weight: 600; }
+.nana .btn-outline-light { color: var(--nana-text); border-color: rgba(232, 238, 249, .45); }
+.nana .btn-outline-light:hover, .nana .btn-outline-light:focus-visible { color: #0f1b34; background: var(--nana-text); }
+.nana .btn:focus-visible { outline: 3px solid var(--nana-teal-2); outline-offset: 2px; box-shadow: none; }
+.nana-foot { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .8rem; }
+
+/* a short message beside the orb: why Nana could not be turned on */
+.nana-note {
+  position: absolute;
+  right: calc(var(--nana-orb) + .6rem);
+  bottom: .3rem;
+  max-width: calc(100% - var(--nana-orb) - .6rem);
+  margin: 0;
+  padding: .5rem .75rem;
+  color: var(--nana-text);
+  background: var(--nana-bg);
+  border: 1px solid rgba(252, 211, 77, .55);
+  border-radius: .75rem;
+  font-size: .84rem;
+  box-shadow: 0 .6rem 1.4rem rgba(15, 27, 52, .3);
+  animation: nana-in .3s ease both;
+}
+
+/* --- turning on and off ------------------------------------------------------------------------------------------- */
+.nana-power-up .nana-card { animation: nana-glow-in 1s ease both; }
+.nana-power-up .nana-head .nana-orb { animation: nana-ignite .9s cubic-bezier(.2, .8, .2, 1) both; }
+.nana-power-up .nana-head .nana-ring { animation: nana-ripple .9s ease-out both; border-color: rgba(94, 234, 212, .9); }
+.nana-power-down .nana-pill .nana-orb { animation: nana-dim 1s ease both; }
+.nana-power-down .nana-pill .nana-ring { animation: nana-implode .8s ease-in both; border-color: rgba(94, 234, 212, .8); }
+.nana-fold .nana-pill .nana-orb { animation: nana-ignite .7s ease both; }
+
+@keyframes nana-spin { to { transform: rotate(360deg); } }
+@keyframes nana-breathe { 0%, 100% { box-shadow: 0 0 .5rem rgba(45, 212, 191, .4); } 50% { box-shadow: 0 0 1.6rem rgba(45, 212, 191, .85); } }
+@keyframes nana-wave { 0%, 100% { transform: translateY(0); opacity: .55; } 40% { transform: translateY(-.3rem); opacity: 1; } }
+@keyframes nana-in { from { opacity: 0; transform: translateY(.35rem); } to { opacity: 1; transform: none; } }
+@keyframes nana-ignite {
+  0% { transform: scale(.5); filter: grayscale(1) brightness(.5); box-shadow: none; }
+  45% { transform: scale(1.22); filter: none; box-shadow: 0 0 2.4rem rgba(94, 234, 212, .95); }
+  100% { transform: scale(1); box-shadow: 0 0 .9rem rgba(45, 212, 191, .55); }
+}
+@keyframes nana-ripple { 0% { transform: scale(.7); opacity: 1; } 100% { transform: scale(2.6); opacity: 0; } }
+@keyframes nana-glow-in { 0% { box-shadow: 0 0 0 0 rgba(45, 212, 191, .6); } 60% { box-shadow: 0 0 0 1rem rgba(45, 212, 191, 0); } 100% { box-shadow: 0 0 0 .4rem var(--nana-glow), 0 1.25rem 2.5rem rgba(15, 27, 52, .38); } }
+@keyframes nana-dim {
+  0% { transform: scale(1.15); filter: none; box-shadow: 0 0 2rem rgba(94, 234, 212, .9); }
+  55% { transform: scale(.82); filter: grayscale(.4) brightness(.8); }
+  100% { transform: scale(1); filter: grayscale(1) brightness(.55); box-shadow: none; }
+}
+@keyframes nana-implode { 0% { transform: scale(2.4); opacity: 0; } 50% { opacity: .9; } 100% { transform: scale(.6); opacity: 0; } }
+
+@media (max-width: 575.98px) {
+  .nana { right: .75rem; bottom: .75rem; width: calc(100vw - 1.5rem); }
+  .nana-log { max-height: 42vh; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nana *, .nana *::before, .nana *::after { animation: none !important; transition: opacity .2s ease !important; }
+  .nana-orb { transform: none; }
+}

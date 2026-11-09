@@ -1,0 +1,28 @@
+{# Nana's card (owner, 2026-11-09): the voice companion at the bottom of every page a dentist opens. On: the card,
+   waiting for the wake phrase. Standby: a small orb, still listening, that opens by itself when Nana is spoken to.
+   Off: the microphone is closed. Turning it on hands this dentist's own session to this computer's Nana - no second
+   sign-in; off takes it back. What was asked and answered stays in this tab only (nana.js). #}
+<aside class="nana" id="nana" data-mode="off" data-phase="off" data-service="{{ nana.url }}"
+       data-card="{{ url_for('jarvis.card') }}" data-user="{{ g.user.username }}" data-phrase="{{ nana.phrase }}"
+       aria-label="{{ _('Nana, the voice assistant') }}">
+  <section class="nana-card" id="nana-card" aria-labelledby="nana-name" inert>
+    <header class="nana-head">
+      <span class="nana-orb nana-orb-lg" aria-hidden="true"><span class="nana-core"></span><span class="nana-ring"></span></span>
+      <div class="nana-id">
+        <h2 class="nana-name" id="nana-name">{{ _("Nana") }}</h2>
+        <p class="nana-state" id="nana-state" role="status">{{ _("Off") }}</p>
+      </div>
+      <span class="nana-dots" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+    </header>
+    <p class="nana-why" id="nana-why"></p>
+    <div class="nana-log" id="nana-log" role="log" aria-live="polite" aria-label="{{ _('Conversation with Nana') }}" tabindex="0"></div>
+    <footer class="nana-foot">
+      <button type="button" class="btn btn-sm btn-outline-light" data-nana="standby"><i class="bi bi-dash-lg" aria-hidden="true"></i> {{ _("Standby") }}</button>
+      <button type="button" class="btn btn-sm btn-outline-light" data-nana="power" aria-pressed="false"><i class="bi bi-power" aria-hidden="true"></i> {{ _("Turn off") }}</button>
+    </footer>
+  </section>
+  <p class="nana-note" id="nana-note" role="alert" hidden></p>
+  <button type="button" class="nana-pill" id="nana-pill" aria-pressed="false" aria-label="{{ _('Turn Nana on') }}" title="{{ _('Turn Nana on') }}">
+    <span class="nana-orb" aria-hidden="true"><span class="nana-core"></span><span class="nana-ring"></span><i class="bi bi-power nana-off-mark"></i></span>
+  </button>
+</aside>

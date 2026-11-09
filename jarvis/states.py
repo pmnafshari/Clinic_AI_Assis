@@ -97,7 +97,7 @@ def readiness(state, reason, answers):
     """The page's one overall line (J02 UI review): ready for the demo only while listening is READY and every
     clinic-guide prerequisite holds; otherwise what is missing, from the answers line, which says who can fix it."""
     if not answers.get("demo"):
-        return {"ok": False, "text": "Clinic-guide answers are switched off on this computer - Rima only listens "
+        return {"ok": False, "text": "Clinic-guide answers are switched off on this computer - Nana only listens "
                                      "for its wake phrase (J02 is not accepted for use)."}
     if not answers["on"]:
         return {"ok": False, "text": "Not ready for the demo: " + answers.get("missing", answers["detail"]) + "."}
@@ -132,6 +132,8 @@ class Machine:
         self.paused = False
         self.access = None         # the doctor this device acts for, as the clinic says (2026-10-11), or None
         self.access_epoch = 0      # changes with every sign-in and sign-out
+        self.asked = None          # what the current interaction asked, once transcribed: {turn, text} (the card)
+        self.recheck = threading.Event()   # set: the link check runs now (the card handed a session over)
         self.mic_level = 0.0       # the microphone's loudness now (0-1), for the page's animation only - not a state        # listening switched off by the owner (Clinic Workspace, P28) until resumed
 
     # --- moves ------------------------------------------------------------------------------------------------
@@ -173,6 +175,7 @@ class Machine:
                 self._answer = None            # a new request: the last answer goes
             self._turns += 1
             self.turn = self._turns
+            self.asked = None
             self.follow_until = 0.0
             self.follow_turn = self.turn if follow_up else 0
             self._move("ACTIVE", reason, again=True)       # a second wake is a new interaction, in the history too
@@ -198,6 +201,16 @@ class Machine:
     def current(self, turn):
         with self._lock:
             return bool(turn) and turn == self.turn
+
+    def heard_for(self, turn, text):
+        """What interaction `turn` asked, as transcribed - shown at once (Nana's card prints it, then thinks, then the
+        answer). False if `turn` is no longer current."""
+        with self._lock:
+            if not turn or turn != self.turn:
+                return False
+            self.asked = {"turn": turn, "text": text}
+            self._changed()
+            return True
 
     def go_for(self, turn, state, reason):
         """A move made by interaction `turn`, only while it is the current one. -> whether it was made."""
@@ -235,10 +248,13 @@ class Machine:
             return True
 
     # --- what the page shows -----------------------------------------------------------------------------------
-    def set_clinic(self, ok, detail):
-        """The clinic link is shown beside the state, never as a listening state (J01)."""
+    def set_clinic(self, ok, detail, device_id=None):
+        """The clinic link is shown beside the state, never as a listening state (J01); with this device's id while
+        the clinic knows it (the card hands the doctor's session to it)."""
         with self._lock:
             new = {"ok": bool(ok), "detail": detail}
+            if device_id is not None:
+                new["device_id"] = device_id
             if new != self.clinic:
                 self.clinic = new
                 self._changed()
@@ -396,7 +412,7 @@ class Machine:
                     "answers": dict(self.answers), "answer": self._shown(), "paused": self.paused,
                     "status": status_words(self.state, self.reason, self.paused,
                                            self.state == "READY" and self.clock() < self.follow_until),
-                    "access": self.access,
+                    "access": self.access, "turn": self.turn, "turns": self._turns, "asked": self.asked,
                     "ready": readiness(self.state, self.reason, self.answers)}
 
     def wait_change(self, version, timeout):

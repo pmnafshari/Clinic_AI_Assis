@@ -12,6 +12,7 @@ and links to its page in the clinic app (opened there under the viewer's own sig
 app's); conflicting documents are listed with links and nothing is chosen; the card says the clock time it is discarded
 at; and a click keeps the keyboard focus on the page."""
 import json
+from urllib.parse import urlsplit
 
 from flask import Flask, Response, abort, jsonify, render_template_string, request
 
@@ -21,12 +22,16 @@ PORT = 5020
 CLINIC_URL = "http://127.0.0.1:5000"
 HOSTS = {"127.0.0.1", "localhost", f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
 ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
+# Nana's card on the doctor's pages (owner, 2026-11-09): the clinic app on this machine may read the status and the
+# live stream and press these buttons - never the password sign-in, the hand-over or the sign-out, which stay this page's
+CARD_READS = {"/status", "/events", "/live"}
+CARD_POSTS = {"/confirm", "/listening", "/recheck"}
 LOOPBACK = {"127.0.0.1", "::1"}
 HEARTBEAT_SECONDS = 2
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Rima</title>
+<title>Nana</title>
 <style>
   :root { --bg: #05060a; --ink: #f4ead9; --muted: #c4b096; --card: rgba(17, 19, 26, .92); --line: rgba(255, 150, 60, .28);
           --glow: #ff9a3c; --ok: #7ee2a8; --warn: #ffd27a; --bad: #ff8a7a; --info: #ffb468; }
@@ -132,11 +137,11 @@ PAGE = """<!doctype html>
   @media (prefers-reduced-motion: reduce) { .hud::before, .hud::after { opacity: .6; } }
 </style></head>
 <body><main data-clinic="{{ clinic_url }}">
-  <p class="brand">RIMA</p>
+  <p class="brand">NANA</p>
   <div class="hud"><canvas id="orb" aria-hidden="true"></canvas>
-    <label class="power" title="Switch Rima's listening on or off">
-      <input type="checkbox" id="power" role="switch" aria-label="Rima listening"{% if not s.paused %} checked{% endif %}>
-      <span class="ring" aria-hidden="true"><span class="name">RIMA</span>
+    <label class="power" title="Switch Nana's listening on or off">
+      <input type="checkbox" id="power" role="switch" aria-label="Nana listening"{% if not s.paused %} checked{% endif %}>
+      <span class="ring" aria-hidden="true"><span class="name">NANA</span>
         <span class="onoff" id="power-word">{{ "OFF" if s.paused else "ON" }}</span></span>
     </label></div>
   <div class="status-block"><div aria-live="polite" aria-atomic="true">
@@ -145,7 +150,7 @@ PAGE = """<!doctype html>
   </div></div>
   {% set u = s.access %}
   <form id="signin" class="access"{% if u %} hidden{% endif %}>
-    <p class="access-title">Sign in to Rima - doctors only</p>
+    <p class="access-title">Sign in to Nana - doctors only</p>
     <label>Username <input name="username" autocomplete="username" required></label>
     <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
     <input type="submit" value="Sign in">
@@ -163,7 +168,7 @@ PAGE = """<!doctype html>
   {% set a = s.answer %}
   <section id="qa" class="qa" aria-label="Question and answer">
     <p class="line"><span class="who">You</span><span id="cc-you">{{ a.heard if a and a.heard else "" }}</span></p>
-    <p class="line"><span class="who">Rima</span><span id="cc-jarvis" aria-hidden="true"></span></p>
+    <p class="line"><span class="who">Nana</span><span id="cc-jarvis" aria-hidden="true"></span></p>
     <div id="qa-cite" class="cite"></div>
     <p id="qa-said" class="sr-only" aria-live="polite"></p>
   </section>
@@ -207,10 +212,10 @@ PAGE = """<!doctype html>
     {% endif %}</div>
   </section>
   <section class="card">
-    <h2>How Rima works</h2>
-    <p>Rima starts when you log in to this computer and listens only for its wake phrase. You never click to talk.
+    <h2>How Nana works</h2>
+    <p>Nana starts when you log in to this computer and listens only for its wake phrase. You never click to talk.
     Anything about a patient needs a staff member's own signed-in session, delegated to this device in the clinic app
-    (<em>Rima</em> in the sidebar). A voice, a name or a spoken "yes" never proves who you are.</p>
+    (<em>Nana</em> in the sidebar). A voice, a name or a spoken "yes" never proves who you are.</p>
     <ol class="muted">
       <li>STARTING - opening the microphone and the wake engine; READY only once real sound is being heard</li>
       <li>READY - only the wake phrase is listened for; nothing is recorded or sent</li>
@@ -229,7 +234,7 @@ PAGE = """<!doctype html>
 </main>
 <script>
   const CLINIC = document.querySelector("main").dataset.clinic;
-  // --- the orb: particles on rings and a core, moving with the sound (the microphone while listening, Rima's own
+  // --- the orb: particles on rings and a core, moving with the sound (the microphone while listening, Nana's own
   //     voice while it speaks); calm when READY, dim when DEGRADED or paused; less motion if the viewer asks for it
   const orb = document.getElementById("orb"), ctx = orb.getContext("2d");
   const REDUCE = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -278,7 +283,7 @@ PAGE = """<!doctype html>
     window.requestAnimationFrame(frame);
   }
   window.requestAnimationFrame(frame);
-  // --- the question and the answer (the captions): what Rima heard, then what it says, word by word with its voice
+  // --- the question and the answer (the captions): what Nana heard, then what it says, word by word with its voice
   let fullAnswer = "", speakingId = null;
   function caption(who, text) {
     const el = document.getElementById("cc-" + who);
@@ -344,14 +349,14 @@ PAGE = """<!doctype html>
     const h = document.getElementById("state");
     h.textContent = "NOT REACHABLE"; h.className = "state UNREACHABLE";
     setText("status", "Offline"); document.getElementById("status").className = "status offline";
-    document.getElementById("power").disabled = true;            // nothing to switch while Rima is not reachable
-    setText("status-why", "Rima is not running");
-    setReady({ok: false, text: "Not ready: Rima is not reachable."});
-    document.getElementById("meaning").textContent = "Rima is not reachable - the state shown is unknown";
+    document.getElementById("power").disabled = true;            // nothing to switch while Nana is not reachable
+    setText("status-why", "Nana is not running");
+    setReady({ok: false, text: "Not ready: Nana is not reachable."});
+    document.getElementById("meaning").textContent = "Nana is not reachable - the state shown is unknown";
     document.getElementById("reason").textContent = why + " at " + new Date().toLocaleTimeString() +
       "; this page keeps trying";
-    document.getElementById("answers").textContent = "unknown while Rima is not reachable";
-    document.getElementById("clinic").textContent = "unknown while Rima is not reachable";
+    document.getElementById("answers").textContent = "unknown while Nana is not reachable";
+    document.getElementById("clinic").textContent = "unknown while Nana is not reachable";
     showAnswer(null);
   }
   es.onmessage = (e) => { seen(); render(JSON.parse(e.data)); };
@@ -364,9 +369,9 @@ PAGE = """<!doctype html>
     setText("ready", r.text);
     document.getElementById("ready").className = "ready-line " + (r.ok ? "ok" : "no");
   }
-  // --- a doctor signs Rima in (2026-10-11): the page passes the username and password to Rima, which passes
+  // --- a doctor signs Nana in (2026-10-11): the page passes the username and password to Nana, which passes
   //     them to the clinic; nothing is kept in the page either - the password field is cleared at once
-  const SIGNIN = {credentials: "Wrong username or password.", not_doctor: "Only a doctor can sign Rima in.",
+  const SIGNIN = {credentials: "Wrong username or password.", not_doctor: "Only a doctor can sign Nana in.",
                   password_change: "Change your password in the clinic app first.",  // pragma: allowlist secret
                   clinic: "The clinic app is not reachable - is it running?"};
   function setAccess(u) {
@@ -386,7 +391,7 @@ PAGE = """<!doctype html>
     fetch("/signin", {method: "POST", headers: {"Content-Type": "application/json"}, body: body})
       .then((r) => r.ok ? r.json().then((u) => { setAccess(u); handoff(u.handoff); }) :
             r.json().catch(() => ({})).then((b) => { err.textContent = SIGNIN[b.error] || "Not signed in."; }))
-      .catch(() => { err.textContent = "Rima is not reachable."; });
+      .catch(() => { err.textContent = "Nana is not reachable."; });
   });
   // one sign-in (2026-10-12): the clinic's one-time link signs the Clinic tab in as the same doctor. Jarvis.app opens
   // it in its Clinic tab by itself; a browser shows it as a link, valid for 60 seconds.
@@ -412,14 +417,14 @@ PAGE = """<!doctype html>
     e.preventDefault();
     fetch("/signout", {method: "POST"}).then(() => setAccess(null)).catch(() => {});
   });
-  // --- the on/off switch: asks Rima itself to pause or resume listening; shows what Rima then says
+  // --- the on/off switch: asks Nana itself to pause or resume listening; shows what Nana then says
   function power(on) {
     fetch("/listening", {method: "POST", headers: {"Content-Type": "application/json"},
                          body: JSON.stringify({paused: !on})})
       .then((r) => { if (r.status !== 204) throw new Error(String(r.status)); })
       .catch(() => {
         document.getElementById("power").checked = !on;
-        setText("status-why", "Rima did not take that - nothing changed");
+        setText("status-why", "Nana did not take that - nothing changed");
       });
   }
   document.getElementById("power").addEventListener("change", (e) => power(e.target.checked));
@@ -442,8 +447,8 @@ PAGE = """<!doctype html>
     showAnswer(s.answer);
   }
   es.addEventListener("ping", seen);
-  es.onerror = () => unreachable("this page lost its connection to the Rima service");
-  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Rima service"); }, CHECK_MS);
+  es.onerror = () => unreachable("this page lost its connection to the Nana service");
+  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Nana service"); }, CHECK_MS);
   // text only: what was heard and what the guides say are never treated as markup
   function line(tag, text, cls) {
     const el = document.createElement(tag);
@@ -454,7 +459,7 @@ PAGE = """<!doctype html>
   const REFUSED = {
     expired: "Too late: the time to confirm had passed, so nothing was asked. Say the wake phrase and ask again.",
     gone: "This question is no longer waiting (cancelled, or already decided) - nothing was asked.",
-    ambiguous: "More than one choice reached Rima, so nothing was asked. Say the wake phrase and ask again.",
+    ambiguous: "More than one choice reached Nana, so nothing was asked. Say the wake phrase and ask again.",
   };
   function decide(id, decision, box, text) {
     const status = document.getElementById("confirm-status");
@@ -473,11 +478,11 @@ PAGE = """<!doctype html>
           return;
         }
         return r.json().catch(() => ({})).then((body) => {
-          status.textContent = REFUSED[body.result] || "Rima did not take your choice - nothing was asked.";
+          status.textContent = REFUSED[body.result] || "Nana did not take your choice - nothing was asked.";
         });
       })
       .catch(() => {
-        status.textContent = "Your choice did not reach Rima - nothing was asked. Check that Rima is running.";
+        status.textContent = "Your choice did not reach Nana - nothing was asked. Check that Nana is running.";
         for (const b of box.querySelectorAll("button")) b.disabled = false;
       });
   }
@@ -637,13 +642,22 @@ PAGE = """<!doctype html>
 </body></html>"""
 
 
-def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
+def card_origins(clinic_url):
+    """the clinic app's own pages: its address as this service knows it, and this machine's other names on that port"""
+    port = urlsplit(clinic_url).port or 80
+    return {f"http://127.0.0.1:{port}", f"http://localhost:{port}", f"http://[::1]:{port}"}
+
+
+def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None, port=PORT):
     app = Flask(__name__)
+    card = card_origins(clinic_url)
+    hosts = HOSTS | {f"127.0.0.1:{port}", f"localhost:{port}"}          # a browser walk runs it on a port of its own
+    own = ORIGINS | {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
 
     @app.before_request
     def loopback_only():
         # the page and the API exist for this machine only: a foreign Host (DNS rebinding) or address is refused
-        if request.host not in HOSTS or (request.remote_addr or "127.0.0.1") not in LOOPBACK:
+        if request.host not in hosts or (request.remote_addr or "127.0.0.1") not in LOOPBACK:
             abort(403)
 
     @app.after_request
@@ -652,6 +666,14 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Content-Security-Policy"] = ("default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';"
                                                    " connect-src 'self'; frame-ancestors 'none'")
+        origin = request.headers.get("Origin")
+        if origin in card and request.path in CARD_READS | CARD_POSTS:
+            resp.headers["Access-Control-Allow-Origin"] = origin
+            resp.headers["Vary"] = "Origin"
+            if request.method == "OPTIONS" and request.path in CARD_POSTS:
+                resp.headers["Access-Control-Allow-Methods"] = "POST"
+                resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+                resp.headers["Access-Control-Max-Age"] = "600"
         return resp
 
     @app.route("/")
@@ -660,9 +682,9 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
 
     @app.route("/confirm", methods=["POST"])
     def confirm():
-        # only this page may answer: its own origin, as JSON (a cross-site page cannot send that without a preflight
-        # nobody answers; get_json reads nothing else), for the id it was shown
-        if request.headers.get("Origin") not in ORIGINS:
+        # only this page or the clinic app's card may answer: their origins, as JSON (a cross-site page cannot send that
+        # without a preflight nobody answers; get_json reads nothing else), for the id it was shown
+        if request.headers.get("Origin") not in own | card:
             abort(403)
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("id"), str) or not isinstance(body.get("decision"), str):
@@ -674,8 +696,8 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
 
     @app.route("/listening", methods=["POST"])
     def listening():
-        # pause or resume listening (P28, the Clinic Workspace app); the same checks as /confirm
-        if request.headers.get("Origin") not in ORIGINS:
+        # pause or resume listening (P28, the Clinic Workspace app; the card's on/off); the same checks as /confirm
+        if request.headers.get("Origin") not in own | card:
             abort(403)
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("paused"), bool):
@@ -683,11 +705,19 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
         machine.set_paused(body["paused"])
         return "", 204
 
+    @app.route("/recheck", methods=["POST"])
+    def recheck():
+        # the card has just handed a session over or taken it back: the link check runs now, not in 30 s
+        if request.headers.get("Origin") not in own | card:
+            abort(403)
+        machine.recheck.set()
+        return "", 204
+
     @app.route("/signin", methods=["POST"])
     def signin():
         # a doctor signs Jarvis in (owner, 2026-10-11): only this page may (Origin, as /confirm); the username and
         # password go straight to the clinic and are kept nowhere here
-        if request.headers.get("Origin") not in ORIGINS:
+        if request.headers.get("Origin") not in own:
             abort(403)
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("username"), str) or \
@@ -707,7 +737,7 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
     @app.route("/handoff", methods=["POST"])
     def handoff():
         # one sign-in (2026-10-12): a fresh one-time link that signs the Clinic tab in as the doctor signed in here
-        if request.headers.get("Origin") not in ORIGINS:
+        if request.headers.get("Origin") not in own:
             abort(403)
         if access is None:
             abort(400)
@@ -721,7 +751,7 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
 
     @app.route("/signout", methods=["POST"])
     def signout():
-        if request.headers.get("Origin") not in ORIGINS:
+        if request.headers.get("Origin") not in own:
             abort(403)
         if access is not None:
             from jarvis.clinic import LinkDown, LinkRefused

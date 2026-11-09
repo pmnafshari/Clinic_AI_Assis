@@ -13,8 +13,8 @@ from pathlib import Path
 import numpy as np
 
 MODEL = Path("models/jarvis/wake/hey_jarvis.npz")
-# what the page tells people to say - always the phrase of MODEL. "Rima" alone (owner, 2026-11-09) waits for a model
-# that hears Italian speakers: models/jarvis/wake/rima.npz, trained on an English voice, does not yet
+# what the page tells people to say - always the phrase of MODEL. The owner named it Nana (2026-11-09, after Rima, whose
+# model heard an English "Reema" but not Italian speakers); "Nana" switches on once its model passes the Italian check
 PHRASE = "Hey Jarvis"
 WINDOW = 16             # embeddings the classifier sees (16 x 80 ms)
 HITS = 2                # consecutive chunks over the threshold, unless the model says (Rima: chosen on validation)

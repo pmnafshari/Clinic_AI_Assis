@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from flask import Flask, flash, g, redirect, request, send_from_directory, url_for
@@ -10,6 +11,7 @@ import similar_cases
 import web_session
 from auth import authorize
 from env_config import load_secret_key
+from jarvis.wake import PHRASE as NANA_PHRASE
 from shared import STATIC_ROOT as SHARED_STATIC_ROOT
 from shared.names import initials, tint
 from storage import init_db
@@ -103,6 +105,8 @@ def create_app():
     app.jinja_env.filters["clinic_when"] = imaging_bookings._when    # P29: a stored instant as dd/mm/yyyy hh:mm, clinic time
     from .nav import notifications, sidebar
     app.jinja_env.globals["side_nav"] = sidebar             # P23: the role-aware sidebar
+    # Nana's card on a dentist's pages (owner, 2026-11-09): its service on this computer, and the wake phrase in use
+    app.jinja_env.globals["nana"] = {"url": os.environ.get("NANA_URL", "http://127.0.0.1:5020"), "phrase": NANA_PHRASE}
     app.jinja_env.globals["top_notifications"] = notifications   # P30: what is waiting, for the top bar's bell
 
 

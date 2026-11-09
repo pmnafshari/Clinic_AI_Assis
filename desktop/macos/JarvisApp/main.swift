@@ -69,9 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ app: NSApplication) -> NSApplication.TerminateReply {
         if workspace?.hasUnsavedForm() == true {
             let alert = NSAlert()
-            alert.messageText = "Quit Rima?"
+            alert.messageText = "Quit Nana?"
             alert.informativeText = "A form on the Clinic page may not have been saved. Anything not saved is lost. " +
-                "The clinic keeps everything that was saved. Rima itself keeps running."
+                "The clinic keeps everything that was saved. Nana itself keeps running."
             alert.addButton(withTitle: "Quit")
             alert.addButton(withTitle: "Cancel")
             if alert.runModal() != .alertFirstButtonReturn { return .terminateCancel }
@@ -93,13 +93,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             i.keyEquivalentModifierMask = mods
             return i
         }
-        menu("Rima", [
-            item("About Rima", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
+        menu("Nana", [
+            item("About Nana", #selector(NSApplication.orderFrontStandardAboutPanel(_:))),
             .separator(),
             item("Settings and Permissions…", #selector(showPermissions(_:)), ","),
             .separator(),
-            item("Hide Rima", #selector(NSApplication.hide(_:)), "h"),
-            item("Quit Rima (Rima keeps listening)", #selector(NSApplication.terminate(_:)), "q"),
+            item("Hide Nana", #selector(NSApplication.hide(_:)), "h"),
+            item("Quit Nana (Nana keeps listening)", #selector(NSApplication.terminate(_:)), "q"),
         ])
         menu("File", [item("Close Window", #selector(NSWindow.performClose(_:)), "w")])
         menu("Edit", [
@@ -114,7 +114,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Actual Size", #selector(WorkspaceWindow.zoomReset(_:)), "0"),
         ])
         menu("Window", [
-            item("Rima", #selector(showJarvis(_:)), "1"),
+            item("Nana", #selector(showJarvis(_:)), "1"),
             item("Clinic", #selector(showWorkspace(_:)), "2"),
             item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"),
         ])

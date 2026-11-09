@@ -76,6 +76,7 @@ this file is stale.
 | POST | `/imports/items/<int:import_id>/hold` | `imports.hold` |
 | GET | `/imports/items/<int:import_id>/original` | `imports.original` |
 | POST | `/imports/items/<int:import_id>/reject` | `imports.reject` |
+| POST | `/jarvis/card` | `jarvis.card` |
 | GET,POST | `/jarvis/devices` | `jarvis.devices` |
 | POST | `/jarvis/devices/<int:device_id>/revoke` | `jarvis.revoke_device` |
 | GET | `/jarvis/handoff/<ticket>` | `jarvis.handoff` |

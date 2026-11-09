@@ -1,6 +1,6 @@
 # Clinic Workspace for macOS (P28) - install, use, return to the web version
 
-Clinic Workspace is a macOS app that shows the clinic's own staff pages and Rima's page in native windows. It
+Clinic Workspace is a macOS app that shows the clinic's own staff pages and Nana's page in native windows. It
 does not replace the web version: every read, write, role check and audit stays in the clinic app (`run.py`), and
 the browser keeps working exactly as before.
 
@@ -35,45 +35,45 @@ workers. Clinic Service is small, unsandboxed (hardened runtime, no entitlements
 
 ## Everyday use
 - Close the window: the app stays in the Dock (the demo backend keeps running); click the Dock icon to reopen.
-- **Quit** (Cmd-Q) stops only what the app started (its demo backend). It never stops the clinic app, Rima or
+- **Quit** (Cmd-Q) stops only what the app started (its demo backend). It never stops the clinic app, Nana or
   Ollama. Quitting signs you out, as closing a browser does.
 - Files: uploads use the macOS file picker - only the file you pick is read. Downloads ask where to save. Clinic
   images (guide pages) open in a preview window under the same sign-in.
 - Links to other sites, the patient portal or the public site open in your default browser.
 - View > Zoom In / Zoom Out / Actual Size (Cmd + / Cmd - / Cmd 0); the window can be resized freely.
-- **Rima** (Cmd-Shift-J): Rima's own page. The round RIMA switch in the middle of the orb asks Rima to close
-  the microphone (OFF) or open it again (ON). Rima runs on its own (its login service); the app never records.
+- **Nana** (Cmd-Shift-J): Nana's own page. The round NANA switch in the middle of the orb asks Nana to close
+  the microphone (OFF) or open it again (ON). Nana runs on its own (its login service); the app never records.
 
-## Rima as its own app (Jarvis.app)
-Drag **Jarvis** (the file keeps its old name; the app calls itself Rima) from the disk image to Applications too if you want Rima with its own icon. Its window has two tabs
+## Nana as its own app (Jarvis.app)
+Drag **Jarvis** (the file keeps its old name; the app calls itself Nana) from the disk image to Applications too if you want Nana with its own icon. Its window has two tabs
 (Cmd-1, Cmd-2):
-- **Rima** - Rima's own page: Ready / Active / Sleep, what it heard and what it answered, the on/off switch in the
+- **Nana** - Nana's own page: Ready / Active / Sleep, what it heard and what it answered, the on/off switch in the
   orb, and the doctor's sign-in. A clinic page it opens or cites opens in the Clinic tab.
 - **Clinic** - the clinic app on this Mac (`127.0.0.1:5000`, the same database as the browser). Sign in as yourself;
   you then see and change every record your role allows - a dentist all clinical records - through the clinic's own
   role checks, CSRF protection and audit, exactly as in the browser. Writes are on by default here (Settings and
   Permissions switches them off). There is no direct database access: the app talks only to the clinic app.
-Jarvis.app never listens itself (no microphone access) - Rima's login service does, and keeps running when you close
+Jarvis.app never listens itself (no microphone access) - Nana's login service does, and keeps running when you close
 or quit Jarvis.app.
 
-**One sign-in.** A doctor signs Rima in on its page (username and password; doctors only). Jarvis.app then signs the
+**One sign-in.** A doctor signs Nana in on its page (username and password; doctors only). Jarvis.app then signs the
 Clinic tab in as the same doctor by itself - nothing is typed there. Both end together: at 00:00, when you press Sign
-out on the Rima page, when Rima restarts, or when another doctor signs Rima in. The Clinic tab still signs out
-after 30 idle minutes like any clinic session; **Sign the clinic app in too** on the Rima page signs it in again. In
-a browser the Rima page shows a one-time link instead (valid for 60 seconds, used once). Signing out of the Clinic
-tab does not sign Rima out. This sign-in does not reach Clinic Workspace or the browser's own clinic sign-in.
+out on the Nana page, when Nana restarts, or when another doctor signs Nana in. The Clinic tab still signs out
+after 30 idle minutes like any clinic session; **Sign the clinic app in too** on the Nana page signs it in again. In
+a browser the Nana page shows a one-time link instead (valid for 60 seconds, used once). Signing out of the Clinic
+tab does not sign Nana out. This sign-in does not reach Clinic Workspace or the browser's own clinic sign-in.
 
 **By voice (synthetic demo only, while a doctor is signed in).** "Hey Jarvis, show me Giulia Santoro" opens her record (the wake phrase is still "Hey Jarvis" - the page says
-which; "Rima" alone follows once its model hears Italian speakers)
+which; "Nana" follows once its own model passes the check with Italian voices)
 in the Clinic tab (same names wait on screen for you to pick one); "when is her next appointment?" or "when is Giulia
 Santoro's next appointment?" answers on screen; "change Paola Rossi's phone number to 333 123 4567" shows the old and
 new number and changes it only when you press Save; "add a note to Marco Gallo saying ..." saves a note only when you
-press Save. Rima never says anything about a patient aloud - its voice says only "It is on screen." Only the phone
+press Save. Nana never says anything about a patient aloud - its voice says only "It is on screen." Only the phone
 number can be changed by voice. Outside the synthetic demo none of this is switched on.
 
 ## Settings and Permissions
 Shows, for the open environment: who is signed in and what the clinic lets that role do; writes from this app (on/
-off); the microphone (this app never records - Rima's own service holds that permission); files (one pick at a
+off); the microphone (this app never records - Nana's own service holds that permission); files (one pick at a
 time); notifications (asked only when you press the button); open at login; whether the clinic app is running
 and whether Clinic Service is installed (it opens Clinic Service; it cannot switch it); the demo
 backend's state and data folder. A state macOS controls is never changed silently - the app asks macOS or opens
@@ -93,7 +93,7 @@ format between these builds.
 ## Uninstall
 1. In Settings and Permissions switch off "Open at login"; in Clinic Service press **Switch off** (if used).
 2. Quit the apps and move **Clinic Workspace** (and **Clinic Service**, **Jarvis**) from Applications to the Bin.
-The clinic's data, the web version and Rima are untouched. The demo's own synthetic data stays in
+The clinic's data, the web version and Nana are untouched. The demo's own synthetic data stays in
 `~/Library/Containers/local.clinicdemo.workspace` until you delete that folder yourself (it holds only the demo).
 
 ## Backups
