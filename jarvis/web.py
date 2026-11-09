@@ -64,7 +64,9 @@ PAGE = """<!doctype html>
   @media (prefers-reduced-motion: reduce) { .power .ring::before, .power .ring::after { animation: none; } }
   .status-block { text-align: center; margin: 4px 0 14px; }
   .status { font-size: 44px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; margin: 0; }
-  .status.Ready { color: var(--ok); } .status.Active { color: var(--glow); } .status.Sleep { color: var(--muted); }
+  .status.ready { color: var(--ok); } .status.active { color: var(--glow); } .status.sleep { color: var(--muted); }
+  .status.paused { color: var(--info); } .status.starting { color: var(--muted); } .status.mic { color: var(--bad); }
+  .status.offline { color: var(--bad); }
   .why { margin: 2px 0 0; color: var(--muted); font-size: 17px; }
   .qa { max-width: 40rem; margin: 0 auto 18px; padding: 14px 18px; border-radius: 12px; background: rgba(0, 0, 0, .6);
         border: 1px solid var(--line); font-size: 20px; line-height: 1.45; min-height: 3.2em; }
@@ -84,9 +86,18 @@ PAGE = """<!doctype html>
   #clinic-signin a { color: var(--info); margin-right: 8px; }
   .access input.linkish, .linkish { font: inherit; background: none; border: 0; color: var(--info); text-decoration: underline; cursor: pointer;
              min-height: 24px; padding: 2px 4px; }
-  .patients { list-style: none; padding: 0; margin: 8px 0 0; text-align: left; }
-  .patients li { margin: 0 0 8px; } .patients .when { color: var(--ink); font-weight: 600; }
-  .patients .before { color: var(--muted); text-decoration: line-through; margin-right: 6px; }
+  /* P29 U-018: each patient is its own card, with its own buttons; before and after are labelled */
+  .patients { list-style: none; padding: 0; margin: 10px 0 0; text-align: left; display: grid; gap: 12px; }
+  .patients li { margin: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px;
+                 background: rgba(255, 255, 255, .04); }
+  .patients li strong { display: block; font-size: 18px; } .patients .cf { color: var(--muted); font-size: 14px; }
+  .patients .when { color: var(--ink); font-weight: 600; }
+  .patients .change { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 8px 0; }
+  .patients .change dt { color: var(--muted); } .patients .change dd { margin: 0; font-weight: 600; }
+  .patients .acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+  .btnlink, .patients .acts a, .source a, #clinic-signin a { display: inline-flex; align-items: center; min-height: 40px;
+           padding: 6px 14px; border: 2px solid var(--info); border-radius: 10px; color: var(--info); text-decoration: none;
+           font-weight: 600; margin: 4px 8px 4px 0; }
   .access input:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; }
   .access p { margin: 0; } #signin-error:empty { display: none; }
   .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -100,7 +111,7 @@ PAGE = """<!doctype html>
   .status { text-align: center; } .status p { margin: 4px 0; }
   #confirm-status:empty { display: none; }
   .ready-line { font-weight: 600; margin-top: 0; } .ready-line.ok { color: var(--ok); } .ready-line.no { color: var(--warn); }
-  .source { margin: 4px 0 12px; } .source a { color: var(--info); display: inline-block; min-height: 24px; padding: 2px 0; }
+  .source { margin: 6px 0 14px; }
   a { color: var(--info); }
   #confirm-status { font-weight: 600; }
   .muted { color: var(--muted); } ol { padding-left: 1.2rem; } code { font-size: 14px; }
@@ -127,7 +138,7 @@ PAGE = """<!doctype html>
         <span class="onoff" id="power-word">{{ "OFF" if s.paused else "ON" }}</span></span>
     </label></div>
   <div class="status-block"><div aria-live="polite" aria-atomic="true">
-    <h1 id="status" class="status {{ s.status.word }}">{{ s.status.word }}</h1>
+    <h1 id="status" class="status {{ s.status.tone }}">{{ s.status.word }}</h1>
     <p id="status-why" class="why">{{ s.status.why }}</p>
   </div></div>
   {% set u = s.access %}
@@ -330,7 +341,7 @@ PAGE = """<!doctype html>
     lost = true;
     const h = document.getElementById("state");
     h.textContent = "NOT REACHABLE"; h.className = "state UNREACHABLE";
-    setText("status", "Sleep"); document.getElementById("status").className = "status Sleep";
+    setText("status", "Offline"); document.getElementById("status").className = "status offline";
     document.getElementById("power").disabled = true;            // nothing to switch while Jarvis is not reachable
     setText("status-why", "Jarvis is not running");
     setReady({ok: false, text: "Not ready: Jarvis is not reachable."});
@@ -416,7 +427,7 @@ PAGE = """<!doctype html>
     setText("power-word", s.paused ? "OFF" : "ON");
     setAccess(s.access);
     setText("status", s.status.word);
-    document.getElementById("status").className = "status " + s.status.word;
+    document.getElementById("status").className = "status " + s.status.tone;
     setText("status-why", s.status.why);
     setReady(s.ready);
     setText("state", s.state);
@@ -513,26 +524,38 @@ PAGE = """<!doctype html>
     const box = line("div", ""), list = line("ul", "", "patients");
     if (a.message && a.outcome !== "note_saved") box.append(line("p", a.message));
     for (const c of a.choices || []) {
-      const li = line("li", "");
-      li.append(line("strong", c.name), document.createTextNode(" \u00b7 " + c.cf + " "));
+      const li = line("li", ""), acts = line("div", "", "acts");
+      li.append(line("strong", c.name), line("span", c.cf, "cf"));
       if (a.outcome === "patient_next") {
         const n = c.next;
-        li.append(document.createElement("br"), line("span", n ? n.weekday + " " + n.date + ", " + n.time + " with " +
-                  n.dentist + " (" + n.minutes + " min)" : "No appointment booked", "when"));
+        li.append(line("p", n ? n.weekday + " " + n.date + ", " + n.time + " with " + n.dentist + " (" + n.minutes +
+                       " min)" : "No appointment booked", "when"));
       }
       if (a.outcome === "edit_confirm") {
-        li.append(document.createElement("br"), line("span", c.before || "no phone number", "before"),
-                  line("span", "\u2192 " + a.value, "when"));
-        const b = line("button", "Save to " + c.name + " \u00b7 " + c.cf, "yes");
+        const change = line("dl", "", "change");
+        change.append(line("dt", "Now"), line("dd", c.before || "no phone number"),
+                      line("dt", "After saving"), line("dd", a.value));
+        li.append(change);
+        const b = line("button", "Save to " + c.name, "yes");
         b.type = "button";
+        b.setAttribute("aria-label", "Save to " + c.name + " \u00b7 " + c.cf);
         b.addEventListener("click", () => decide(a.id, "save:" + c.cf, box));
-        li.append(document.createElement("br"), b);
+        acts.append(b);
       } else {
         const link = line("a", "Open record");
         link.href = recordUrl(c.cf); link.target = "_blank"; link.rel = "noopener noreferrer";
+        link.setAttribute("aria-label", "Open " + c.name + "'s record");
         if (a.outcome === "patient_pick") link.addEventListener("click", () => decide(a.id, "open:" + c.cf, box));
-        li.append(link);
+        acts.append(link);
       }
+      if (a.outcome === "edit_saved" && a.before !== undefined) {
+        const change = line("dl", "", "change");
+        change.append(line("dt", "Before"), line("dd", a.before || "no phone number"),
+                      line("dt", "Now"), line("dd", a.value));
+        li.append(change);
+        if (a.undo) li.append(line("p", a.undo, "muted"));
+      }
+      li.append(acts);
       list.append(li);
     }
     box.append(list);

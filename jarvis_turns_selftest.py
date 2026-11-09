@@ -672,9 +672,10 @@ def ui_review_findings():
     check = re.search(r"const CHECK_MS = (\d+);", code)
     assert check and stale + int(check.group(1)) <= 4500 and "}, CHECK_MS);" in code, \
         f"13: a frozen service may show after {stale} ms + the check interval"
-    # a link on its own line is a target of its own: at least 24 px tall (found at 768 and 1024 px in run 2)
-    assert re.search(r"\.source a \{[^}]*display: inline-block;[^}]*min-height: 24px;", html), \
-        "13: the source links are at least 24 px tall"
+    # a link on its own line is a target of its own (found at 768 and 1024 px in run 2); since P29 U-018 and the owner's
+    # rule of 2026-11-08 it is drawn as a button, at least 40 px tall
+    assert re.search(r"\.source a, #clinic-signin a \{[^}]*display: inline-flex;[^}]*min-height: 40px;", html), \
+        "13: the source links are buttons at least 40 px tall"
     assert 'data-clinic="http://127.0.0.1:5000"' in html and "/guides/sources/" in _fn_body(code, "sourceLink"), \
         "13: links go to the clinic app's own page view"
 
@@ -821,17 +822,26 @@ def simple_page():
     # 18. Owner request 2026-10-11: the page shows only the orb, one status word (Ready / Active / Sleep, decided by
     #     the service) and the question and the answer; everything else is under Details - still there when something
     #     is wrong; a Yes/No card opens Details itself; not reachable reads Sleep, "Jarvis is not running"
+    #     P29 U-018: each condition now has its own word - Ready, Active, Paused, Starting, Mic error, Sleep; Offline
+    #     when the page cannot reach the service - where Sleep used to stand for all of them
     words = states.status_words
     assert words("READY", "listening for the wake phrase", False)["word"] == "Ready"
-    assert words("ACTIVE", "heard the wake phrase - listening to the request", False) == {"word": "Active", "why": "Listening"}
-    assert words("ACTIVE", answer.ASKING, False) == {"word": "Active", "why": "Working on it"}
+    assert words("ACTIVE", "heard the wake phrase - listening to the request", False) == \
+        {"word": "Active", "why": "Listening", "tone": "active"}
+    assert words("ACTIVE", answer.ASKING, False) == {"word": "Active", "why": "Working on it", "tone": "active"}
     assert words("WAITING_FOR_CONFIRMATION", "x", False)["word"] == "Active"
     assert words("DEGRADED", "no microphone available (PortAudioError)", False) == \
-        {"word": "Sleep", "why": "no microphone available (PortAudioError)"}, "18: asleep says why"
-    assert words("READY", "listening for the wake phrase", True) == {"word": "Sleep", "why": "Paused"}
-    assert words("STARTING", "opening the microphone", False)["word"] == "Sleep"
+        {"word": "Mic error", "why": "no microphone available (PortAudioError)", "tone": "mic"}, "18: a microphone fault"
+    assert words("DEGRADED", "the wake engine could not start", False) == \
+        {"word": "Sleep", "why": "the wake engine could not start", "tone": "sleep"}, "18: asleep says why"
+    assert words("READY", "listening for the wake phrase", True)["word"] == "Paused", "18: switched off is Paused"
+    assert words("STARTING", "opening the microphone", False)["word"] == "Starting"
+    assert len({words(*x)["word"] for x in (("READY", "", False), ("ACTIVE", "", False), ("READY", "", True),
+                                            ("STARTING", "", False), ("DEGRADED", "microphone", False),
+                                            ("DEGRADED", "other", False))}) == 6, "18: six conditions, six words"
     m = machine()
-    assert m.snapshot()["status"] == {"word": "Ready", "why": 'Say "Hey Jarvis"'}, "18: the status is the service's"
+    assert m.snapshot()["status"] == {"word": "Ready", "why": 'Say "Hey Jarvis"', "tone": "ready"}, \
+        "18: the status is the service's"
     html = create_app(m).test_client().get("/", base_url=BASE).data.decode()
     top = html[html.index("<main"):html.index('<details id="more"')]
     for gone in ("Clinic-guide answers:", "Clinic link", "How Jarvis works", "Why:", "Since", "Listening:"):
@@ -842,7 +852,8 @@ def simple_page():
     assert "Clinic-guide answers:" in more and "How Jarvis works" in more and 'id="answer"' in more
     code = _code_only(html)
     assert '"more").open = true' in _fn_body(code, "showAnswer"), "18: a Yes/No card is shown, not hidden under Details"
-    assert '"Jarvis is not running"' in _fn_body(code, "unreachable"), "18: not reachable reads Sleep"
+    assert '"Jarvis is not running"' in _fn_body(code, "unreachable") and '"Offline"' in _fn_body(code, "unreachable"), \
+        "18: not reachable reads Offline"
     assert "s.status.word" in _fn_body(code, "render"), "18: the page shows the service's status word"
 
 
@@ -1246,6 +1257,9 @@ def voice_reads_and_edits():
     card = m.snapshot()["answer"]
     assert link.calls[-1] == ("commit", "e1", "RSSP850010150900") and card["outcome"] == "edit_saved" \
         and speech.words(card) == "Saved.", f"22: saved on the patient clicked ({card})"
+    # P29 U-018: the saved change says what it was before, what it is now, and how to undo it
+    assert card["before"] == "+390611111111" and card["value"] == "+393331234567" and "Undo change" in card["undo"], \
+        f"22: before, now and undo on the saved card ({card})"
     said[0] = "Change her phone number to 3339999999"
     run(link, said, decide="discard", m=m, ex=ex)
     assert link.calls[-1] == ("draft", "Paola Rossi", "phone", "3339999999", "RSSP850010150900"), \
@@ -1265,6 +1279,11 @@ def voice_reads_and_edits():
     assert '"save:" + c.cf' in body and '"open:" + c.cf' in body and "recordUrl(c.cf)" in body and \
         "IN_APP" in body and "location.assign" in body, "22: the page lists the patients, picks through /confirm"
     assert "a.private" in _fn_body(code, "spoken"), "22: the captions say only what the voice says"
+    # P29 U-018: each patient is its own card - name, code, its own buttons; a change is labelled Now / After saving
+    assert '"acts"' in body and 'line("strong", c.name), line("span", c.cf, "cf")' in body, "22: a patient card"
+    assert '"Now"' in body and '"After saving"' in body and '"Before"' in body, "22: before and after are labelled"
+    import re
+    assert re.search(r"\.patients li \{[^}]*border: 1px solid", html), "22: the patient cards are drawn apart"
 
 
 def one_signin():

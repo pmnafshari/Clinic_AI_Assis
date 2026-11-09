@@ -63,21 +63,30 @@ BUSY = {"ACTIVE", "WAITING_FOR_CONFIRMATION", "CONFIRMING", "AUTH_REQUIRED"}
 WAITING = ("confirm", "note_confirm", "edit_confirm", "patient_pick")     # cards that wait for a click
 
 
+MIC_TROUBLE = ("microphone", "portaudio", "audio input", "input device", "permission")
+
+
 def status_words(state, reason, paused):
-    """What the page shows in large type - Ready, Active or Sleep - and a few words under it."""
+    """What the page shows in large type and a few words under it. P29 U-018: each condition has its own word - Ready,
+    Active, Paused (switched off), Starting, Mic error (the microphone failed or is not allowed) and Sleep (not
+    available for another reason, said under it); the page itself shows Offline when it cannot reach the service.
+    `tone` is the word's class on the page."""
     if paused:
-        return {"word": "Sleep", "why": "Paused"}
+        return {"word": "Paused", "why": "Switched off - turn it on to listen again", "tone": "paused"}
     if state == "READY":
-        return {"word": "Ready", "why": 'Say "Hey Jarvis"'}
+        return {"word": "Ready", "why": 'Say "Hey Jarvis"', "tone": "ready"}
     if state in BUSY:
         if state == "WAITING_FOR_CONFIRMATION":
-            return {"word": "Active", "why": "Check what I heard"}
+            return {"word": "Active", "why": "Check what I heard", "tone": "active"}
         if state == "CONFIRMING":
-            return {"word": "Active", "why": "Pick the patient on screen"}
-        return {"word": "Active", "why": "Listening" if reason.startswith("heard the wake phrase") else "Working on it"}
+            return {"word": "Active", "why": "Pick the patient on screen", "tone": "active"}
+        return {"word": "Active", "why": "Listening" if reason.startswith("heard the wake phrase") else "Working on it",
+                "tone": "active"}
     if state == "STARTING":
-        return {"word": "Sleep", "why": "Starting up"}
-    return {"word": "Sleep", "why": reason}
+        return {"word": "Starting", "why": "Opening the microphone", "tone": "starting"}
+    if any(w in (reason or "").lower() for w in MIC_TROUBLE):
+        return {"word": "Mic error", "why": reason, "tone": "mic"}
+    return {"word": "Sleep", "why": reason, "tone": "sleep"}
 
 
 def readiness(state, reason, answers):

@@ -298,8 +298,11 @@ class Exchange:
         except NoteRefused as e:
             return self.note_card(turn, heard, e.code, f"{e} Nothing was changed.", f"change not saved ({e.code})")
         self.remember(given, out["cf"], out["name"])
+        before = next((c.get("before") for c in draft["choices"] if c["cf"] == out["cf"]), None)
         m.show_for(turn, {"outcome": "edit_saved", "title": "Phone number saved", "private": True, "say": "Saved.",
                           "message": f"{out['name']}'s phone number is now {out['value']}.", "heard": heard,
+                          "before": before or "", "value": out["value"],
+                          "undo": "To undo it: in the clinic app, Home > Your recent activity > Undo change.",
                           "choices": [{"cf": out["cf"], "name": out["name"]}], "citations": [], "warnings": []},
                    ANSWER_SECONDS)
         return "a phone number was changed after it was picked on screen"
