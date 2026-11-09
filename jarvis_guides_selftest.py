@@ -810,7 +810,41 @@ def correction():
     assert m.corrected() is None, "13: the correction is kept after it was read"
 
 
+def follow_up_context():
+    # 14. P29 U-015: the question that follows on from an answer. A follow-up (no wake phrase) that names no device is
+    #     asked about the device just answered; after "Which device?" the answer completes the waiting question, even
+    #     after a new wake; a new wake with a new question is asked as heard; an answer opens the follow-up window
+    pcm = (np.sin(np.arange(16000) / 5) * 3000).astype(np.int16)
+    clock = Clock()
+    m = states.Machine(clock=clock)
+    m.go("READY", "listening for the wake phrase")
+    said = ["what does the DRY button do on the AX-200"]
+    link = Link(ANSWER)
+    ex = answer.Exchange(m, lambda pcm, hint=None, cancelled=None: (said[0], "en"), lambda: link, confirm=False)
+
+    def ask(follow_up=False):
+        turn = m.begin("follow-up - listening to the request" if follow_up else "heard the wake phrase",
+                       follow_up=follow_up)
+        m.finish(turn, ex(pcm, turn))
+        return link.asked[-1]
+    assert ask() == said[0] and m.follow_up_open(), "14: an answer opens the follow-up window"
+    said[0] = "and what about STANDBY together"
+    assert ask(follow_up=True) == "and what about STANDBY together (AX-200)", f"14: the device goes along ({link.asked[-1]})"
+    said[0] = "what does STANDBY do on the AX-300"
+    assert ask(follow_up=True) == said[0], "14: a follow-up naming a device is asked as it is"
+    said[0] = "where is the bite wing holder kept"
+    assert ask() == said[0], "14: a new wake with a new question is asked as heard"
+    link.result = {**ANSWER, "outcome": "abstain", "reason": "ask_device", "device": None, "citations": [], "warnings": []}
+    said[0] = "what does E05 mean"
+    ask()
+    said[0] = "the AX-200"
+    assert ask() == "what does E05 mean the AX-200", f"14: the device answer completes the waiting question ({link.asked[-1]})"
+    clock.t += states.FOLLOW_UP_SECONDS + 1
+    assert not m.follow_up_open(), "14: the window closes"
+
+
 def selftest():
+    follow_up_context()
     with tempfile.TemporaryDirectory() as tmp:
         route(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:

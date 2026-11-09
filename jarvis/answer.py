@@ -10,11 +10,15 @@ while that interaction is current (a new wake, DEGRADED or a refused device ends
 checked again before what was heard is shown, every few seconds while it waits, and before it is asked; each kind of
 failure has its own card; and answers are given only when switched on (JARVIS_GUIDE_ANSWERS=demo, jarvis_run.py).
 """
-from jarvis import notes, patients
+import re
+
+from jarvis import notes, patients, states
 from jarvis.clinic import LinkDown, LinkRefused, NoteRefused
 from jarvis.stt import Cancelled, Failed, Unclear
 
 ANSWER_SECONDS = 120
+CONTEXT_GRACE = 60          # P29 U-015: how long after the follow-up window a "Which device?" can still be answered
+MODEL_NAMED = re.compile(r"\b[A-Za-z]{1,4}[- ]?\d{3,4}\b")   # a device model in a question (AX-200), not a code (E05)
 CONFIRM_SECONDS = 30
 RECHECK_SECONDS = 4          # + the whoami call itself: a revoked device or ended delegation is noticed within 5 s
 AGAIN = "Say the wake phrase and ask again."
@@ -71,6 +75,7 @@ class Exchange:
         self.confirm = confirm      # False only for the synthetic demo (owner decision 2026-10-11): asked at once
         self.notes = notes          # notes, reads and phone changes by voice (J03), only in the synthetic demo
         self.handled = None         # the patient just handled: {cf, name, user, at} - memory only
+        self.context = None         # P29 U-015: the last guide question - {question, device, reason, at} - memory only
 
     def __call__(self, pcm, turn):
         """-> the reason for going back to READY (the caller ends the interaction with it)."""
@@ -124,7 +129,7 @@ class Exchange:
                     "timeout": "nobody confirmed what was heard in time - nothing was asked"}.get(
                 decision, "the confirmation was not clear - nothing was asked")
         fixed = m.corrected() if self.confirm else None     # P29 U-016: what the person corrected it to on screen
-        question = fixed or heard
+        question = self.with_context(turn, fixed or heard)
         self.recheck(turn, link, given)
         if not m.go_for(turn, "ACTIVE", ASKING) or not m.sending(turn):
             return "cancelled"
@@ -137,10 +142,31 @@ class Exchange:
         if not m.show_for(turn, {**result, "heard": heard, "corrected": fixed if fixed and fixed != heard else None},
                           ANSWER_SECONDS):
             return "cancelled"
+        if result.get("reason") not in ("clinical", "patient_data"):
+            # P29 U-015: the next question can follow on from this one - asked without the wake phrase, or naming the
+            # device asked for
+            self.context = {"question": question, "device": result.get("device"), "reason": result.get("reason"),
+                            "at": m.clock()}
+            m.open_follow_up(turn)
         if result["outcome"] == "answer":
             c = result["citations"][0]
             return f"answered on screen ({c['title']}, page {c['page']})"
         return f"a refusal is on screen ({result.get('title') or result['reason']})"
+
+    def with_context(self, turn, text):
+        """P29 U-015: a question that follows on from the last one. The device it was about goes with a follow-up that
+        names none; after "Which device?" the answer completes the question that was waiting, even after a new wake.
+        Anything else - a new wake with a new question - is asked as it was heard."""
+        ctx = self.context
+        if not ctx or self.machine.clock() - ctx["at"] > states.FOLLOW_UP_SECONDS + CONTEXT_GRACE:
+            return text
+        if ctx["reason"] == "ask_device":
+            self.context = None
+            return f"{ctx['question']} {text}"
+        device = ctx.get("device")
+        if self.machine.is_follow_up(turn) and device and not MODEL_NAMED.search(text):
+            return f"{text} ({device['model']})"
+        return text
 
     def note(self, turn, link, given, heard, patient, words):
         """A note by voice (J03): drafted at the clinic, put on screen with the patients the name matches, saved only

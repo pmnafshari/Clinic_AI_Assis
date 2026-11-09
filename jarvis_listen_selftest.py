@@ -468,7 +468,47 @@ def damaged_model():
         jarvis.features.Features = real
 
 
+def follow_up():
+    # 16. P29 U-015: after an answer, speech alone starts the next question for FOLLOW_UP_SECONDS - with the half second
+    #     before it, so the first word is not cut - and is marked a follow-up; once the window has passed, speech
+    #     without the wake phrase starts nothing; a wake still starts a turn of its own, not a follow-up
+    def scene(gap_chunks, detector=None):
+        clock = Clock()
+        m = states.Machine(clock=lambda: clock.mono)
+        cues = []
+        script = [SOUND] * 20 + [SOUND] * gap_chunks + [SPEECH] * 10 + [SOUND] * 30
+        src = Source(script)
+        lst = listen.Listener(m, lambda: detector or Detector(), lambda: src, cue=lambda: cues.append(clock.mono),
+                              mono=lambda: clock.mono, wall=lambda: clock.wall)
+        lst.start()
+        seen, i, opened = [], 0, False
+        while True:
+            try:
+                lst.step()
+            except StopIteration:
+                break
+            i += 1
+            if m.state == "READY" and not opened:      # an answer just finished: the window opens
+                t = m.begin("heard the wake phrase - listening to the request")
+                m.open_follow_up(t)
+                m.finish(t, "answered on screen")
+                opened = True
+            seen.append((m.state, m.follow_turn))
+            clock.tick()
+        return m, lst, seen, cues
+    m, lst, seen, cues = scene(gap_chunks=20)                       # speech 1.6 s after the answer
+    started = [s for s in seen if s[0] == "ACTIVE" and s[1]]
+    assert started and len(cues) == 1, "16: speech in the window did not start a follow-up"
+    assert m.state == "READY", "16: the follow-up did not end in READY"
+    m, lst, seen, cues = scene(gap_chunks=int(states.FOLLOW_UP_SECONDS / 0.08) + 10)   # speech after the window
+    assert not any(s[0] == "ACTIVE" for s in seen[1:]) and not cues, "16: HARD FAIL - speech without the wake phrase after the window"
+    m, lst, seen, cues = scene(gap_chunks=20, detector=Detector(wake_at={30}))          # a wake inside the window
+    assert any(s[0] == "ACTIVE" and not s[1] for s in seen[1:]), "16: a wake is its own turn, not a follow-up"
+    assert states.status_words("READY", "x", False, True)["why"].startswith("Ask your next question"), "16: the page says so"
+
+
 def selftest():
+    follow_up()
     ready_only_on_real_audio()
     wake_and_return()
     degraded_and_recovery()

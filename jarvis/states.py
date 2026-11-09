@@ -33,6 +33,7 @@ MEANING = {
                   "picks the patient there",
     "DEGRADED": "not available",
 }
+FOLLOW_UP_SECONDS = 15.0  # P29 U-015 (owner, 2026-11-09): after an answer, speech alone asks the next question this long
 MAX_CORRECTION = 300      # P29 U-016: the longest correction of what was heard the page may send
 WAIT_SLICE = 1.0           # a wait wakes at least this often, so a deadline passed during sleep is seen at once
 
@@ -66,7 +67,7 @@ WAITING = ("confirm", "note_confirm", "edit_confirm", "patient_pick")     # card
 MIC_TROUBLE = ("microphone", "portaudio", "audio input", "input device", "permission")
 
 
-def status_words(state, reason, paused):
+def status_words(state, reason, paused, follow_up=False):
     """What the page shows in large type and a few words under it. P29 U-018: each condition has its own word - Ready,
     Active, Paused (switched off), Starting, Mic error (the microphone failed or is not allowed) and Sleep (not
     available for another reason, said under it); the page itself shows Offline when it cannot reach the service.
@@ -74,6 +75,8 @@ def status_words(state, reason, paused):
     if paused:
         return {"word": "Paused", "why": "Switched off - turn it on to listen again", "tone": "paused"}
     if state == "READY":
+        if follow_up:
+            return {"word": "Ready", "why": "Ask your next question - no wake word needed for a few seconds", "tone": "ready"}
         return {"word": "Ready", "why": 'Say "Hey Jarvis"', "tone": "ready"}
     if state in BUSY:
         if state == "WAITING_FOR_CONFIRMATION":
@@ -123,6 +126,8 @@ class Machine:
         self._answer = None        # (what to show, expiry on self.clock) - memory only (J02)
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
         self._corrected = None     # P29 U-016: the corrected words given with the last "ask", for the exchange
+        self.follow_until = 0.0    # P29 U-015: until then (self.clock) speech alone starts a follow-up - no wake phrase
+        self.follow_turn = 0       # the interaction a follow-up started (no wake phrase), for its question's context
         self.paused = False
         self.access = None         # the doctor this device acts for, as the clinic says (2026-10-11), or None
         self.access_epoch = 0      # changes with every sign-in and sign-out
@@ -159,15 +164,35 @@ class Machine:
         with self._lock:
             self._move(state, reason)
 
-    def begin(self, reason):
-        """A wake phrase: a new interaction, in ACTIVE. Whatever was still in flight is cancelled. -> its number."""
+    def begin(self, reason, follow_up=False):
+        """A wake phrase - or, inside the follow-up window, speech alone (`follow_up`): a new interaction, in ACTIVE.
+        Whatever was still in flight is cancelled; the follow-up window closes. -> its number."""
         with self._lock:
             if not self._cancel("a new wake phrase was heard"):
                 self._answer = None            # a new request: the last answer goes
             self._turns += 1
             self.turn = self._turns
+            self.follow_until = 0.0
+            self.follow_turn = self.turn if follow_up else 0
             self._move("ACTIVE", reason, again=True)       # a second wake is a new interaction, in the history too
             return self.turn
+
+    def open_follow_up(self, turn, seconds=FOLLOW_UP_SECONDS):
+        """P29 U-015: interaction `turn` answered - for `seconds` the next question needs no wake phrase."""
+        with self._lock:
+            if not turn or turn != self.turn:
+                return False
+            self.follow_until = self.clock() + seconds
+            self._changed()
+            return True
+
+    def follow_up_open(self):
+        with self._lock:
+            return self.state == "READY" and not self.paused and self.clock() < self.follow_until
+
+    def is_follow_up(self, turn):
+        with self._lock:
+            return bool(turn) and turn == self.follow_turn
 
     def current(self, turn):
         with self._lock:
@@ -368,7 +393,9 @@ class Machine:
             return {"state": self.state, "reason": self.reason, "since": self.since, "meaning": MEANING[self.state],
                     "version": self.version, "history": list(self.history), "clinic": dict(self.clinic),
                     "answers": dict(self.answers), "answer": self._shown(), "paused": self.paused,
-                    "status": status_words(self.state, self.reason, self.paused), "access": self.access,
+                    "status": status_words(self.state, self.reason, self.paused,
+                                           self.state == "READY" and self.clock() < self.follow_until),
+                    "access": self.access,
                     "ready": readiness(self.state, self.reason, self.answers)}
 
     def wait_change(self, version, timeout):

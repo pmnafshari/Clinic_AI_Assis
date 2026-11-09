@@ -27,6 +27,8 @@ SILENCE_SECONDS = 1.2           # end of the request
 IDLE_SECONDS = 6.0              # nothing said after the wake phrase
 MAX_ACTIVE_SECONDS = 15.0
 RETRY_SECONDS = 5.0
+ONSET_CHUNKS = 2                # P29 U-015: speech this many chunks in a row starts a follow-up
+PRE_ROLL_CHUNKS = 6             # and the 0.48 s before it is kept
 PAUSED = "paused - listening switched off by the owner (resume in Clinic Workspace)"
 
 
@@ -55,6 +57,7 @@ class Listener:
         self.good = self.zeros = self.starved = 0
         self.retry_at = 0.0
         self.last = None
+        self.onset = 0                     # P29 U-015: chunks of speech in a row while a follow-up is open
 
     @property
     def heard_bytes(self):
@@ -183,6 +186,22 @@ class Listener:
             if self.good * CHUNK_SECONDS >= READY_AFTER_SECONDS:
                 self.become_ready("listening for the wake phrase")
             return
+        # P29 U-015: just after an answer, speech alone starts the next question - two chunks over the room's noise
+        # floor, with the half second before them so its first word is not cut off
+        if not woke and state == "READY" and self.machine.follow_up_open():
+            floor = float(np.median([rms(c) for c in self.buffer])) if len(self.buffer) > ONSET_CHUNKS else 0.0
+            self.onset = self.onset + 1 if rms(chunk) > max(2.5 * floor, 300.0) else 0
+            if self.onset >= ONSET_CHUNKS:
+                pre = list(self.buffer)[-PRE_ROLL_CHUNKS:]
+                self.floor, self.onset = floor, 0
+                self.buffer.clear()
+                self.turn = self.machine.begin("follow-up - listening to the request", follow_up=True)
+                self.recording = True
+                self.request = pre
+                self.cue()
+                self.active_since = self.last_speech = self.mono()
+            return
+        self.onset = 0
         # READY, or an exchange working or waiting for its confirmation: a wake starts a new interaction
         if woke and state in ("READY", "ACTIVE", "WAITING_FOR_CONFIRMATION", "CONFIRMING"):
             self.floor = float(np.median([rms(c) for c in self.buffer])) if self.buffer else 0.0
