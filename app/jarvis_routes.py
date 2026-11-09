@@ -66,7 +66,7 @@ def delegate(device_id):
         return _refuse("jarvis_delegate", f"jarvis_device:{device_id}")
     try:
         jl.delegate(get_db(), device_id, request.cookies.get(web_session.COOKIE_NAME), *_who())
-        flash(_("Jarvis on this device now acts for your session. It ends when you sign out or go idle."), "success")
+        flash(_("Rima on this device now acts for your session. It ends when you sign out or go idle."), "success")
     except jl.LinkError as e:
         flash(str(e), "danger")
     return redirect(url_for("jarvis.link"))
@@ -78,7 +78,7 @@ def revoke_delegation(delegation_id):
         return _refuse("jarvis_delegation_revoke", f"jarvis_delegation:{delegation_id}")
     try:
         jl.revoke_delegation(get_db(), delegation_id, *_who())
-        flash(_("Jarvis no longer acts for your session."), "success")
+        flash(_("Rima no longer acts for your session."), "success")
     except jl.LinkError as e:
         flash(str(e), "danger")
     return redirect(url_for("jarvis.link"))
@@ -94,7 +94,7 @@ def api_whoami():
         info = jl.whoami(conn, bearer)
     except jl.LinkError:
         log_audit(conn, "jarvis-device", "device", "jarvis_api", "whoami", allowed=0)
-        return jsonify({"error": "not a registered Jarvis device"}), 401
+        return jsonify({"error": "not a registered Rima device"}), 401
     log_audit(conn, f"jarvis-device:{info['device_id']}", "device", "jarvis_api", "whoami", allowed=1)
     info["approved_guides"] = jl.approved_guides(gconn())       # the Jarvis page says when there is nothing to ask
     resp = jsonify(info)
@@ -112,7 +112,7 @@ def api_guides_ask():
         device = jl.authenticate(conn, header[7:] if header.startswith("Bearer ") else "")
     except jl.LinkError:
         log_audit(conn, "jarvis-device", "device", "jarvis_api", "guides_ask", allowed=0)
-        return jsonify({"error": "not a registered Jarvis device"}), 401
+        return jsonify({"error": "not a registered Rima device"}), 401
     actor = f"jarvis-device:{device['id']}"
     body = request.get_json(silent=True)
     question = body.get("question") if isinstance(body, dict) else None
@@ -137,7 +137,7 @@ def api_guides_vocabulary():
         device = jl.authenticate(conn, header[7:] if header.startswith("Bearer ") else "")
     except jl.LinkError:
         log_audit(conn, "jarvis-device", "device", "jarvis_api", "guides_vocabulary", allowed=0)
-        return jsonify({"error": "not a registered Jarvis device"}), 401
+        return jsonify({"error": "not a registered Rima device"}), 401
     ranked = jl.ranked_terms(gconn(), conn)
     terms = ranked[:jl.MAX_TERMS]
     log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_api", "guides_vocabulary", allowed=1)
@@ -169,7 +169,7 @@ def api_note_draft():
     conn = get_db()
     device = _device(conn, "note_draft")
     if device is None:
-        return _json({"error": "not a registered Jarvis device"}, 401)
+        return _json({"error": "not a registered Rima device"}, 401)
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or not isinstance(body.get("patient"), str) or not isinstance(body.get("text"), str):
         return _json({"error": "send {\"patient\": \"...\", \"text\": \"...\"}"}, 400)
@@ -185,7 +185,7 @@ def api_note_commit():
     conn = get_db()
     device = _device(conn, "note_commit")
     if device is None:
-        return _json({"error": "not a registered Jarvis device"}, 401)
+        return _json({"error": "not a registered Rima device"}, 401)
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or not isinstance(body.get("draft"), str) or not isinstance(body.get("cf"), str):
         return _json({"error": "send {\"draft\": \"...\", \"cf\": \"...\"}"}, 400)
@@ -206,7 +206,7 @@ def api_login():
     conn = get_db()
     device = _device(conn, "login")
     if device is None:
-        return _json({"error": "not a registered Jarvis device"}, 401)
+        return _json({"error": "not a registered Rima device"}, 401)
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or not isinstance(body.get("username"), str) or \
             not isinstance(body.get("password"), str):
@@ -223,7 +223,7 @@ def api_logout():
     conn = get_db()
     device = _device(conn, "logout")
     if device is None:
-        return _json({"error": "not a registered Jarvis device"}, 401)
+        return _json({"error": "not a registered Rima device"}, 401)
     body = request.get_json(silent=True)
     why = body.get("why") if isinstance(body, dict) and body.get("why") in ("signed_out", "restarted") else "signed_out"
     jl.logout(conn, device, why)
@@ -236,7 +236,7 @@ def _device_body(action, fields):
     conn = get_db()
     device = _device(conn, action)
     if device is None:
-        return None, _json({"error": "not a registered Jarvis device"}, 401)
+        return None, _json({"error": "not a registered Rima device"}, 401)
     body = request.get_json(silent=True)
     if not isinstance(body, dict) or any(not isinstance(body.get(f), str) for f in fields):
         return None, _json({"error": "send " + ", ".join(fields)}, 400)
@@ -302,7 +302,7 @@ def api_handoff():
     conn = get_db()
     device = _device(conn, "handoff")
     if device is None:
-        return _json({"error": "not a registered Jarvis device"}, 401)
+        return _json({"error": "not a registered Rima device"}, 401)
     try:
         ticket = jl.handoff_ticket(conn, device)
     except jl.LinkError as e:

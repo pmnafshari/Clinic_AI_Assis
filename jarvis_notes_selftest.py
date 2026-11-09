@@ -168,7 +168,7 @@ def selftest():
         note, role, username = saved[-1]
         assert out["saved"] and out["name"] == "Giulia Santoro", f"2: saved ({out})"
         assert note.codice_fiscale == "SNTGLI51R49D612Y" and WORDS in note.clinical_notes \
-            and note.clinical_notes.startswith("Dictated to Jarvis:"), f"2: the spoken words, marked ({note})"
+            and note.clinical_notes.startswith("Dictated to Rima:"), f"2: the spoken words, marked ({note})"
         assert note.procedures == [] and note.invoices == [], "2: HARD FAIL - nothing invented beside the words"
         assert (role, username) == ("dentist", "drossi"), "2: saved as the delegated dentist, under their own role"
         import patient_id

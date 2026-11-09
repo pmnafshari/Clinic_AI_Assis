@@ -103,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             item("Isolated Demo (synthetic data)", #selector(useDemo(_:)), "1", [.command, .option]),
             item("Connected Clinic (this Mac's clinic service)", #selector(useConnected(_:)), "2", [.command, .option]),
         ])
-        menu("Jarvis", [item("Open Jarvis Workspace", #selector(showJarvis(_:)), "j", [.command, .shift])])
+        menu("Rima", [item("Open Rima Workspace", #selector(showJarvis(_:)), "j", [.command, .shift])])
         menu("Window", [
             item("Clinic Workspace", #selector(showWorkspace(_:)), "0", [.command, .shift]),
             item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"),

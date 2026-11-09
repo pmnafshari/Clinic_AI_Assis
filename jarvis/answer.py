@@ -31,9 +31,9 @@ PROBLEMS = {               # kind -> (the card's title, what to do next)
     "clinic_down": ("The clinic app could not be reached",
                     "Nothing was asked. Check that the clinic app is running, then ask again."),
     "not_set_up": ("Clinic-guide answers are not set up on this computer",
-                   "Nothing was asked. An admin registers this computer under Admin > Jarvis devices."),
+                   "Nothing was asked. An admin registers this computer under Admin > Rima devices."),
     "refused": ("The clinic app refused this computer",
-                "Nothing was asked. An admin can register this computer again (Admin > Jarvis devices)."),
+                "Nothing was asked. An admin can register this computer again (Admin > Rima devices)."),
     "switched_off": ("Clinic-guide answers are switched off on this computer", "Nothing was transcribed or asked."),
 }
 NOTE_TITLES = {             # J03: why a note was not saved, as the card's title
@@ -49,7 +49,7 @@ NOTE_SAYING = 'Say: "add a note to" the patient\'s full name, then "saying" and 
 DISCARDED = {
     "discard": "You pressed No. Nothing was asked. " + AGAIN,
     "timeout": "Not confirmed within {seconds} seconds. Nothing was asked. " + AGAIN,
-    "ambiguous": "The confirmation was not clear (more than one choice reached Jarvis). Nothing was asked. " + AGAIN,
+    "ambiguous": "The confirmation was not clear (more than one choice reached Rima). Nothing was asked. " + AGAIN,
 }
 
 
@@ -92,7 +92,7 @@ class Exchange:
             return "cancelled"
         link = self.link_factory()
         if link is None:
-            return self.problem(turn, "not_set_up", "no device credential (Admin > Jarvis devices)")
+            return self.problem(turn, "not_set_up", "no device credential (Admin > Rima devices)")
         given = identity(self.call(turn, link.whoami))
         terms = self.call(turn, link.vocabulary)
         try:
@@ -176,7 +176,7 @@ class Exchange:
             return self.note_card(turn, heard, "unclear", NOTE_SAYING, "a note command could not be read")
         if given[1] is None:                       # no staff session delegated: the clinic is not even asked
             return self.note_card(turn, heard, "auth_required",
-                                  "A doctor must sign Jarvis in first, on this page. Nothing was written.",
+                                  "A doctor must sign Rima in first, on this page. Nothing was written.",
                                   "a note needs a delegated staff session - nothing written")
         if not m.go_for(turn, "ACTIVE", "preparing the note - not recording"):
             return "cancelled"
@@ -240,7 +240,7 @@ class Exchange:
             if bare:
                 return None
             return self.note_card(turn, heard, "auth_required",
-                                  "A doctor must sign Jarvis in first, on this page. Nothing was read or changed.",
+                                  "A doctor must sign Rima in first, on this page. Nothing was read or changed.",
                                   "a patient request needs a doctor signed in - nothing read")
         cf, name = None, asked["name"]
         if name is None:                           # her / his / their

@@ -10,6 +10,7 @@ import time
 from collections import deque
 
 import clinic_time
+from jarvis.wake import PHRASE
 
 STATES = ("STARTING", "READY", "ACTIVE", "WAITING_FOR_CONFIRMATION", "AUTH_REQUIRED", "CONFIRMING", "DEGRADED")
 TRANSITIONS = {
@@ -77,7 +78,7 @@ def status_words(state, reason, paused, follow_up=False):
     if state == "READY":
         if follow_up:
             return {"word": "Ready", "why": "Ask your next question - no wake word needed for a few seconds", "tone": "ready"}
-        return {"word": "Ready", "why": 'Say "Hey Jarvis"', "tone": "ready"}
+        return {"word": "Ready", "why": f'Say "{PHRASE}"', "tone": "ready"}
     if state in BUSY:
         if state == "WAITING_FOR_CONFIRMATION":
             return {"word": "Active", "why": "Check what I heard", "tone": "active"}
@@ -96,7 +97,7 @@ def readiness(state, reason, answers):
     """The page's one overall line (J02 UI review): ready for the demo only while listening is READY and every
     clinic-guide prerequisite holds; otherwise what is missing, from the answers line, which says who can fix it."""
     if not answers.get("demo"):
-        return {"ok": False, "text": "Clinic-guide answers are switched off on this computer - Jarvis only listens "
+        return {"ok": False, "text": "Clinic-guide answers are switched off on this computer - Rima only listens "
                                      "for its wake phrase (J02 is not accepted for use)."}
     if not answers["on"]:
         return {"ok": False, "text": "Not ready for the demo: " + answers.get("missing", answers["detail"]) + "."}
@@ -104,7 +105,7 @@ def readiness(state, reason, answers):
         return {"ok": True, "text": "A question is in progress."}
     if state != "READY":
         return {"ok": False, "text": f"Not ready for the demo: listening is {state} ({reason})."}
-    return {"ok": True, "text": 'Ready for the controlled demo - say "Hey Jarvis", then a question about the synthetic '
+    return {"ok": True, "text": f'Ready for the controlled demo - say "{PHRASE}", then a question about the synthetic '
                                 "clinic guides."}
 
 

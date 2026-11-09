@@ -15,6 +15,8 @@ import json
 
 from flask import Flask, Response, abort, jsonify, render_template_string, request
 
+from jarvis.wake import PHRASE
+
 PORT = 5020
 CLINIC_URL = "http://127.0.0.1:5000"
 HOSTS = {"127.0.0.1", "localhost", f"127.0.0.1:{PORT}", f"localhost:{PORT}"}
@@ -24,7 +26,7 @@ HEARTBEAT_SECONDS = 2
 
 PAGE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jarvis</title>
+<title>Rima</title>
 <style>
   :root { --bg: #05060a; --ink: #f4ead9; --muted: #c4b096; --card: rgba(17, 19, 26, .92); --line: rgba(255, 150, 60, .28);
           --glow: #ff9a3c; --ok: #7ee2a8; --warn: #ffd27a; --bad: #ff8a7a; --info: #ffb468; }
@@ -130,11 +132,11 @@ PAGE = """<!doctype html>
   @media (prefers-reduced-motion: reduce) { .hud::before, .hud::after { opacity: .6; } }
 </style></head>
 <body><main data-clinic="{{ clinic_url }}">
-  <p class="brand">JARVIS</p>
+  <p class="brand">RIMA</p>
   <div class="hud"><canvas id="orb" aria-hidden="true"></canvas>
-    <label class="power" title="Switch Jarvis's listening on or off">
-      <input type="checkbox" id="power" role="switch" aria-label="Jarvis listening"{% if not s.paused %} checked{% endif %}>
-      <span class="ring" aria-hidden="true"><span class="name">JARVIS</span>
+    <label class="power" title="Switch Rima's listening on or off">
+      <input type="checkbox" id="power" role="switch" aria-label="Rima listening"{% if not s.paused %} checked{% endif %}>
+      <span class="ring" aria-hidden="true"><span class="name">RIMA</span>
         <span class="onoff" id="power-word">{{ "OFF" if s.paused else "ON" }}</span></span>
     </label></div>
   <div class="status-block"><div aria-live="polite" aria-atomic="true">
@@ -143,7 +145,7 @@ PAGE = """<!doctype html>
   </div></div>
   {% set u = s.access %}
   <form id="signin" class="access"{% if u %} hidden{% endif %}>
-    <p class="access-title">Sign in to Jarvis - doctors only</p>
+    <p class="access-title">Sign in to Rima - doctors only</p>
     <label>Username <input name="username" autocomplete="username" required></label>
     <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
     <input type="submit" value="Sign in">
@@ -161,7 +163,7 @@ PAGE = """<!doctype html>
   {% set a = s.answer %}
   <section id="qa" class="qa" aria-label="Question and answer">
     <p class="line"><span class="who">You</span><span id="cc-you">{{ a.heard if a and a.heard else "" }}</span></p>
-    <p class="line"><span class="who">Jarvis</span><span id="cc-jarvis" aria-hidden="true"></span></p>
+    <p class="line"><span class="who">Rima</span><span id="cc-jarvis" aria-hidden="true"></span></p>
     <div id="qa-cite" class="cite"></div>
     <p id="qa-said" class="sr-only" aria-live="polite"></p>
   </section>
@@ -181,7 +183,7 @@ PAGE = """<!doctype html>
   <section class="card" id="answer"{% if not a %} hidden{% endif %}>
     <h2 id="answer-title" tabindex="-1">Last question</h2>
     <p class="muted">{% if s.answers.demo %}Answers are shown and read aloud by this Mac's voice (synthetic demo only; a
-      new "Hey Jarvis" or Pause stops it).{% else %}Answers are shown on screen, not spoken.{% endif %} They stay for two
+      new "{{ phrase }}" or Pause stops it).{% else %}Answers are shown on screen, not spoken.{% endif %} They stay for two
       minutes and are kept nowhere.</p>
     <div id="answer-body">{% if a and a.title %}<h3>{{ a.title }}</h3>{% endif %}{% if a and a.outcome == "confirm" %}
       <h3>Did I hear you right?</h3>
@@ -205,10 +207,10 @@ PAGE = """<!doctype html>
     {% endif %}</div>
   </section>
   <section class="card">
-    <h2>How Jarvis works</h2>
-    <p>Jarvis starts when you log in to this computer and listens only for its wake phrase. You never click to talk.
+    <h2>How Rima works</h2>
+    <p>Rima starts when you log in to this computer and listens only for its wake phrase. You never click to talk.
     Anything about a patient needs a staff member's own signed-in session, delegated to this device in the clinic app
-    (<em>Jarvis</em> in the sidebar). A voice, a name or a spoken "yes" never proves who you are.</p>
+    (<em>Rima</em> in the sidebar). A voice, a name or a spoken "yes" never proves who you are.</p>
     <ol class="muted">
       <li>STARTING - opening the microphone and the wake engine; READY only once real sound is being heard</li>
       <li>READY - only the wake phrase is listened for; nothing is recorded or sent</li>
@@ -227,7 +229,7 @@ PAGE = """<!doctype html>
 </main>
 <script>
   const CLINIC = document.querySelector("main").dataset.clinic;
-  // --- the orb: particles on rings and a core, moving with the sound (the microphone while listening, Jarvis's own
+  // --- the orb: particles on rings and a core, moving with the sound (the microphone while listening, Rima's own
   //     voice while it speaks); calm when READY, dim when DEGRADED or paused; less motion if the viewer asks for it
   const orb = document.getElementById("orb"), ctx = orb.getContext("2d");
   const REDUCE = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -276,7 +278,7 @@ PAGE = """<!doctype html>
     window.requestAnimationFrame(frame);
   }
   window.requestAnimationFrame(frame);
-  // --- the question and the answer (the captions): what Jarvis heard, then what it says, word by word with its voice
+  // --- the question and the answer (the captions): what Rima heard, then what it says, word by word with its voice
   let fullAnswer = "", speakingId = null;
   function caption(who, text) {
     const el = document.getElementById("cc-" + who);
@@ -342,14 +344,14 @@ PAGE = """<!doctype html>
     const h = document.getElementById("state");
     h.textContent = "NOT REACHABLE"; h.className = "state UNREACHABLE";
     setText("status", "Offline"); document.getElementById("status").className = "status offline";
-    document.getElementById("power").disabled = true;            // nothing to switch while Jarvis is not reachable
-    setText("status-why", "Jarvis is not running");
-    setReady({ok: false, text: "Not ready: Jarvis is not reachable."});
-    document.getElementById("meaning").textContent = "Jarvis is not reachable - the state shown is unknown";
+    document.getElementById("power").disabled = true;            // nothing to switch while Rima is not reachable
+    setText("status-why", "Rima is not running");
+    setReady({ok: false, text: "Not ready: Rima is not reachable."});
+    document.getElementById("meaning").textContent = "Rima is not reachable - the state shown is unknown";
     document.getElementById("reason").textContent = why + " at " + new Date().toLocaleTimeString() +
       "; this page keeps trying";
-    document.getElementById("answers").textContent = "unknown while Jarvis is not reachable";
-    document.getElementById("clinic").textContent = "unknown while Jarvis is not reachable";
+    document.getElementById("answers").textContent = "unknown while Rima is not reachable";
+    document.getElementById("clinic").textContent = "unknown while Rima is not reachable";
     showAnswer(null);
   }
   es.onmessage = (e) => { seen(); render(JSON.parse(e.data)); };
@@ -362,9 +364,9 @@ PAGE = """<!doctype html>
     setText("ready", r.text);
     document.getElementById("ready").className = "ready-line " + (r.ok ? "ok" : "no");
   }
-  // --- a doctor signs Jarvis in (2026-10-11): the page passes the username and password to Jarvis, which passes
+  // --- a doctor signs Rima in (2026-10-11): the page passes the username and password to Rima, which passes
   //     them to the clinic; nothing is kept in the page either - the password field is cleared at once
-  const SIGNIN = {credentials: "Wrong username or password.", not_doctor: "Only a doctor can sign Jarvis in.",
+  const SIGNIN = {credentials: "Wrong username or password.", not_doctor: "Only a doctor can sign Rima in.",
                   password_change: "Change your password in the clinic app first.",  // pragma: allowlist secret
                   clinic: "The clinic app is not reachable - is it running?"};
   function setAccess(u) {
@@ -384,7 +386,7 @@ PAGE = """<!doctype html>
     fetch("/signin", {method: "POST", headers: {"Content-Type": "application/json"}, body: body})
       .then((r) => r.ok ? r.json().then((u) => { setAccess(u); handoff(u.handoff); }) :
             r.json().catch(() => ({})).then((b) => { err.textContent = SIGNIN[b.error] || "Not signed in."; }))
-      .catch(() => { err.textContent = "Jarvis is not reachable."; });
+      .catch(() => { err.textContent = "Rima is not reachable."; });
   });
   // one sign-in (2026-10-12): the clinic's one-time link signs the Clinic tab in as the same doctor. Jarvis.app opens
   // it in its Clinic tab by itself; a browser shows it as a link, valid for 60 seconds.
@@ -410,14 +412,14 @@ PAGE = """<!doctype html>
     e.preventDefault();
     fetch("/signout", {method: "POST"}).then(() => setAccess(null)).catch(() => {});
   });
-  // --- the on/off switch: asks Jarvis itself to pause or resume listening; shows what Jarvis then says
+  // --- the on/off switch: asks Rima itself to pause or resume listening; shows what Rima then says
   function power(on) {
     fetch("/listening", {method: "POST", headers: {"Content-Type": "application/json"},
                          body: JSON.stringify({paused: !on})})
       .then((r) => { if (r.status !== 204) throw new Error(String(r.status)); })
       .catch(() => {
         document.getElementById("power").checked = !on;
-        setText("status-why", "Jarvis did not take that - nothing changed");
+        setText("status-why", "Rima did not take that - nothing changed");
       });
   }
   document.getElementById("power").addEventListener("change", (e) => power(e.target.checked));
@@ -440,8 +442,8 @@ PAGE = """<!doctype html>
     showAnswer(s.answer);
   }
   es.addEventListener("ping", seen);
-  es.onerror = () => unreachable("this page lost its connection to the Jarvis service");
-  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Jarvis service"); }, CHECK_MS);
+  es.onerror = () => unreachable("this page lost its connection to the Rima service");
+  setInterval(() => { if (Date.now() - lastSeen > STALE_MS) unreachable("no word from the Rima service"); }, CHECK_MS);
   // text only: what was heard and what the guides say are never treated as markup
   function line(tag, text, cls) {
     const el = document.createElement(tag);
@@ -452,7 +454,7 @@ PAGE = """<!doctype html>
   const REFUSED = {
     expired: "Too late: the time to confirm had passed, so nothing was asked. Say the wake phrase and ask again.",
     gone: "This question is no longer waiting (cancelled, or already decided) - nothing was asked.",
-    ambiguous: "More than one choice reached Jarvis, so nothing was asked. Say the wake phrase and ask again.",
+    ambiguous: "More than one choice reached Rima, so nothing was asked. Say the wake phrase and ask again.",
   };
   function decide(id, decision, box, text) {
     const status = document.getElementById("confirm-status");
@@ -471,11 +473,11 @@ PAGE = """<!doctype html>
           return;
         }
         return r.json().catch(() => ({})).then((body) => {
-          status.textContent = REFUSED[body.result] || "Jarvis did not take your choice - nothing was asked.";
+          status.textContent = REFUSED[body.result] || "Rima did not take your choice - nothing was asked.";
         });
       })
       .catch(() => {
-        status.textContent = "Your choice did not reach Jarvis - nothing was asked. Check that Jarvis is running.";
+        status.textContent = "Your choice did not reach Rima - nothing was asked. Check that Rima is running.";
         for (const b of box.querySelectorAll("button")) b.disabled = false;
       });
   }
@@ -654,7 +656,7 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
 
     @app.route("/")
     def page():
-        return render_template_string(PAGE, s=machine.snapshot(), clinic_url=clinic_url.rstrip("/"))
+        return render_template_string(PAGE, s=machine.snapshot(), clinic_url=clinic_url.rstrip("/"), phrase=PHRASE)
 
     @app.route("/confirm", methods=["POST"])
     def confirm():

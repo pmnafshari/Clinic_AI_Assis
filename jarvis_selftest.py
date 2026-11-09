@@ -198,7 +198,7 @@ def boot(tmp):
                                 # since the J02 UI review a missing delegation says it does not stop guide answers
                                 ({"device": "Reception Mac", "delegation": None}, True,
                                  "connected as Reception Mac; no staff session delegated (not needed for clinic-guide "
-                                 "answers; a staff member delegates their own session under Jarvis in the clinic "
+                                 "answers; a staff member delegates their own session under Rima in the clinic "
                                  "sidebar)")):
         m = states.Machine()
         runtime.check_link(m, FakeLink(outcome))

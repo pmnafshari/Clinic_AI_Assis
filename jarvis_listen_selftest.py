@@ -507,7 +507,47 @@ def follow_up():
     assert states.status_words("READY", "x", False, True)["why"].startswith("Ask your next question"), "16: the page says so"
 
 
+def wake_hits():
+    # 17. the wake model says how many chunks in a row must pass (Rima, 2026-11-09: a short word may need 3); a model
+    #     that does not say keeps the 2 every model had before
+    import tempfile
+    from jarvis import wake
+
+    class Scores:
+        threshold = 0.5
+
+        def __init__(self, hits=None):
+            if hits:
+                self.hits = hits
+            self.seq = iter([0, 1, 1, 0, 1, 1, 1, 0] + [0] * 40)
+
+        def score(self, _window):
+            return float(next(self.seq))
+
+    class Same:
+        def reset(self):
+            pass
+
+        def add(self, samples):
+            return np.zeros((len(samples) // 1280, 6), np.float32)
+
+    def wakes(model):
+        det = wake.Detector(model, Same())
+        det.window.extend([np.zeros(6, np.float32)] * (wake.WINDOW - 1))
+        det.levels.extend([1.0] * wake.WINDOW)
+        loud = (np.ones(1280) * 5000).astype(np.int16)
+        return [i for i in range(16) if det._judge(loud, np.zeros(6, np.float32))]
+    assert wakes(Scores()) == [2], f"17: two in a row by default ({wakes(Scores())})"
+    assert wakes(Scores(3)) == [6], f"17: three in a row when the model says 3 ({wakes(Scores(3))})"
+    with tempfile.TemporaryDirectory() as tmp:
+        z = np.zeros((2, 2), np.float32)
+        np.savez(f"{tmp}/old.npz", mean=z[0], std=z[0] + 1, w1=z, b1=z[0], w2=z[0], b2=0.0, threshold=0.9)
+        np.savez(f"{tmp}/new.npz", mean=z[0], std=z[0] + 1, w1=z, b1=z[0], w2=z[0], b2=0.0, threshold=0.9, hits=3)
+        assert wake.WakeModel(f"{tmp}/old.npz").hits == 2 and wake.WakeModel(f"{tmp}/new.npz").hits == 3, "17: hits read"
+
+
 def selftest():
+    wake_hits()
     follow_up()
     ready_only_on_real_audio()
     wake_and_return()

@@ -27,7 +27,7 @@ ITEMS = [
     ("Workspace", "Ask records", "qa.qa_page", "/qa", "bi-chat-square-text", "read_notes", None, "qa."),
     # P24: clinic-wide manuals and procedures - no patient data; admin holds no guides capability
     ("Workspace", "Ask clinic guides", "guides.ask", "/guides/ask", "bi-journal-bookmark", "ask_guides", None, "guides."),
-    ("Workspace", "Jarvis", "jarvis.link", "/jarvis/link", "bi-broadcast", "use_jarvis", None, "jarvis.link|jarvis.delegate|jarvis.revoke_delegation"),
+    ("Workspace", "Rima", "jarvis.link", "/jarvis/link", "bi-broadcast", "use_jarvis", None, "jarvis.link|jarvis.delegate|jarvis.revoke_delegation"),
     # NEW-04: the count is one's own tasks overdue or due today
     ("Workspace", "Tasks", "tasks.index", "/tasks", "bi-check2-square", "manage_tasks", "tasks", "tasks."),
     ("Workspace", "Add note", "notes.new_note", "/notes/new", "bi-journal-plus", "read_notes", None, "notes."),
@@ -44,7 +44,7 @@ ITEMS = [
     ("Operations", "Connections", "providers.index", "/providers", "bi-plug", "view_providers", None, "providers."),
     ("Admin", "Staff accounts", "admin.users_view", "/admin/users", "bi-person-gear", "manage_users", None, "admin."),
     ("Admin", "Duplicates", "patients.duplicates_view", "/patients/duplicates", "bi-people-fill", "manage_users", None, "patients.duplicates"),
-    ("Admin", "Jarvis devices", "jarvis.devices", "/jarvis/devices", "bi-broadcast", "manage_users", None, "jarvis.devices|jarvis.revoke_device"),
+    ("Admin", "Rima devices", "jarvis.devices", "/jarvis/devices", "bi-broadcast", "manage_users", None, "jarvis.devices|jarvis.revoke_device"),
 ]
 
 

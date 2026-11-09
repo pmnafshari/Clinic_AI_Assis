@@ -29,7 +29,7 @@ final class PermissionsWindow: NSObject {
         addRow("session", "Clinic access (this environment)", nil)
         addRow("writes", "Writes from this app", button("Switch", #selector(toggleWrites)))
         addRow("mic", "Microphone (this app)", nil)
-        addRow("jarvis", "Microphone and listening (Jarvis)", button("Open Jarvis", #selector(openJarvis)))
+        addRow("jarvis", "Microphone and listening (Rima)", button("Open Rima", #selector(openJarvis)))
         addRow("files", "Files and folders", nil)
         addRow("notify", "Notifications", button("Ask macOS", #selector(askNotifications)))
         addRow("login", "Open Clinic Workspace at login", button("Switch", #selector(toggleLogin)))
@@ -78,10 +78,10 @@ final class PermissionsWindow: NSObject {
             button: app.settings.writesAllowed(p) ? "Switch off" : "Allow writes")
         set("files", "one file at a time, only the file or folder you pick (macOS file picker); nothing is " +
                      "remembered between picks, and no other folder is readable by this app")
-        set("network", "this app talks only to this Mac (127.0.0.1): the clinic, its own demo backend and Jarvis; " +
+        set("network", "this app talks only to this Mac (127.0.0.1): the clinic, its own demo backend and Rima; " +
                        "other links open in your browser")
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
-        case .notDetermined: set("mic", "not requested - this app never records; Jarvis's own service listens")
+        case .notDetermined: set("mic", "not requested - this app never records; Rima's own service listens")
         case .authorized: set("mic", "allowed for this app (it still never records)")
         case .denied: set("mic", "denied for this app - nothing changes: it never records")
         case .restricted: set("mic", "unavailable (restricted by this Mac's settings)")
@@ -143,11 +143,11 @@ final class PermissionsWindow: NSObject {
             let text: String
             if let s = s {
                 let state = s["state"] as? String ?? "?", reason = s["reason"] as? String ?? ""
-                text = "\(state) - \(reason). Jarvis's own login service holds the microphone permission (macOS lists " +
+                text = "\(state) - \(reason). Rima's own login service holds the microphone permission (macOS lists " +
                        "it under its own name); change it in System Settings > Privacy & Security > Microphone. " +
-                       "Pause it from the Jarvis window."
+                       "Pause it from the Rima window."
             } else {
-                text = "Jarvis is not running - its own login service starts it; this app never listens"
+                text = "Rima is not running - its own login service starts it; this app never listens"
             }
             DispatchQueue.main.async { self?.set("jarvis", text) }
         }.resume()

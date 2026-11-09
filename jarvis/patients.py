@@ -7,7 +7,7 @@ import re
 
 from jarvis import notes
 
-LEAD = r"^\s*(?:please\s+|(?:hey\s+)?jarvis[,\s]+|ok(?:ay)?[,\s]+)*"
+LEAD = r"^\s*(?:please\s+|(?:hey\s+)?(?:rima|jarvis)[,\s]+|ok(?:ay)?[,\s]+)*"
 END = r"\s*[.?!]*\s*$"
 POSSESSIVE = r"(?:'s|’s|s'|’)"
 NOUN = r"(?:record|file|chart|profile|notes)"

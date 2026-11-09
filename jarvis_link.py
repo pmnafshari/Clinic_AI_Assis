@@ -113,7 +113,7 @@ def delegate(conn, device_id, session_token, actor, role, now=None):
     live = web_session.session_alive(conn, web_session.token_hash(session_token or ""), now)
     if live is None or live["username"] != actor:
         log_audit(conn, actor, role, "jarvis_delegate", f"jarvis_device:{device_id}", allowed=0)
-        raise LinkError("session", "only your own live session can be used for Jarvis")
+        raise LinkError("session", "only your own live session can be used for Rima")
     device = conn.execute("SELECT id FROM jarvis_devices WHERE id = ? AND revoked_at IS NULL", (device_id,)).fetchone()
     if device is None:
         raise LinkError("device", "that device is not registered or was revoked")
@@ -151,11 +151,11 @@ def delegations_for(conn, username):
 def authenticate(conn, bearer):
     """-> the active device for this credential, or LinkError. Says nothing about which part was wrong."""
     if not bearer or len(bearer) < 20:
-        raise LinkError("device", "not a registered Jarvis device")
+        raise LinkError("device", "not a registered Rima device")
     row = conn.execute("SELECT * FROM jarvis_devices WHERE token_hash = ? AND revoked_at IS NULL",
                        (web_session.token_hash(bearer),)).fetchone()
     if row is None:
-        raise LinkError("device", "not a registered Jarvis device")
+        raise LinkError("device", "not a registered Rima device")
     return row
 
 
@@ -197,7 +197,7 @@ def login(conn, device, username, password, now=None):
         raise LinkError("credentials", "wrong username or password")
     if role != DOCTOR:
         log_audit(conn, username, role, "jarvis_signin", target, allowed=0, reason="not_doctor")
-        raise LinkError("not_doctor", "only a doctor can sign Jarvis in")
+        raise LinkError("not_doctor", "only a doctor can sign Rima in")
     owes = conn.execute("SELECT must_change_password FROM users WHERE username = ?", (username,)).fetchone()
     if owes and owes[0]:
         log_audit(conn, username, role, "jarvis_signin", target, allowed=0, reason="password_change")
@@ -368,7 +368,7 @@ def approved_guides(gconn, role=GUIDE_ROLE):
 NOTE_SECONDS = 120
 MAX_NOTE = 1000
 MAX_MATCHES = 5
-NOTE_PREFIX = "Dictated to Jarvis: "
+NOTE_PREFIX = "Dictated to Rima: "
 _DRAFTS = {}
 _DRAFTS_LOCK = __import__("threading").Lock()
 
@@ -422,7 +422,7 @@ def _delegated(conn, device, action, target, now, capability="append_note", what
         raise LinkError("auth_required", "a staff member must hand their signed-in session to this device first")
     if who["role"] != DOCTOR or not authorize(who["role"], capability):
         log_audit(conn, who["username"], who["role"], action, target, allowed=0, reason="role")
-        raise LinkError("role", f"only a doctor can let Jarvis {what}")
+        raise LinkError("role", f"only a doctor can let Rima {what}")
     return who
 
 
@@ -536,7 +536,7 @@ def draft_edit(conn, device, spoken_patient, field, value, cf=None, now=None):
     target = f"jarvis_device:{device['id']}"
     who = _delegated(conn, device, "jarvis_edit_draft", target, now, "update_field", "change patient records")
     if field not in EDIT_FIELDS:
-        raise LinkError("field", "Jarvis can change only a patient's phone number")
+        raise LinkError("field", "Rima can change only a patient's phone number")
     value = phones.canonical(value or "")
     if value is None:
         log_audit(conn, who["username"], who["role"], "jarvis_edit_draft", target, allowed=1, reason="bad_value")
@@ -608,7 +608,7 @@ def handoff_ticket(conn, device, now=None):
     if who is None or who["kind"] != "login":
         log_audit(conn, f"jarvis-device:{device['id']}", "device", "jarvis_handoff", f"jarvis_device:{device['id']}",
                   allowed=0, reason="no_signin")
-        raise LinkError("auth_required", "a doctor must sign Jarvis in first")
+        raise LinkError("auth_required", "a doctor must sign Rima in first")
     row = conn.execute("SELECT id FROM jarvis_delegations WHERE device_id = ? AND revoked_at IS NULL ORDER BY id DESC"
                        " LIMIT 1", (device["id"],)).fetchone()
     ticket = secrets.token_urlsafe(32)
@@ -637,7 +637,7 @@ def use_handoff(conn, ticket, now=None):
             or who["kind"] != "login":
         log_audit(conn, t["username"], "unknown", "jarvis_handoff", f"jarvis_device:{t['device_id']}", allowed=0,
                   reason="signin_ended")
-        raise LinkError("gone", "the Jarvis sign-in this link came from has ended")
+        raise LinkError("gone", "the Rima sign-in this link came from has ended")
     token = web_session.create_session(conn, who["username"], who["role"], now)
     conn.execute("UPDATE jarvis_delegations SET session_hash = ? WHERE id = ?", (web_session.token_hash(token), row["id"]))
     conn.commit()

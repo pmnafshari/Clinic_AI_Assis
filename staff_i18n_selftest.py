@@ -425,7 +425,7 @@ def selftest():
                                  (d, "/patients/ZZIT800101010101/summary", ("Riepilogo per la prossima visita", "Ancora nessun riepilogo")),
                                  (d, "/notes/new", ("Scrivi o incolla la nota",)),
                                  (d, "/agent/command", ("Esegui un comando",)),
-                                 (d, "/jarvis/link", ("Usa Jarvis su questo dispositivo",)),
+                                 (d, "/jarvis/link", ("Usa Rima su questo dispositivo",)),
                                  (c, "/imaging/tasks", ("Richiede un intervento della reception",)),
                                  (d, "/change-password", ("Password attuale", "Nascondi la password attuale")),
                                  (a, "/admin/users", ("Account del personale",)),

@@ -840,19 +840,22 @@ def simple_page():
                                             ("STARTING", "", False), ("DEGRADED", "microphone", False),
                                             ("DEGRADED", "other", False))}) == 6, "18: six conditions, six words"
     m = machine()
-    assert m.snapshot()["status"] == {"word": "Ready", "why": 'Say "Hey Jarvis"', "tone": "ready"}, \
+    from jarvis import wake
+    assert m.snapshot()["status"] == {"word": "Ready", "why": f'Say "{wake.PHRASE}"', "tone": "ready"}, \
         "18: the status is the service's"
+    assert (wake.MODEL.name, wake.PHRASE) in {("hey_jarvis.npz", "Hey Jarvis"), ("rima.npz", "Rima")}, \
+        "18: HARD FAIL - the page tells people to say a phrase the wake model in use does not listen for"
     html = create_app(m).test_client().get("/", base_url=BASE).data.decode()
     top = html[html.index("<main"):html.index('<details id="more"')]
-    for gone in ("Clinic-guide answers:", "Clinic link", "How Jarvis works", "Why:", "Since", "Listening:"):
+    for gone in ("Clinic-guide answers:", "Clinic link", "How Rima works", "Why:", "Since", "Listening:"):
         assert gone not in top, f"18: '{gone}' is only under Details"
     assert '<canvas id="orb"' in top and 'id="status"' in top and 'id="cc-you"' in top and 'id="cc-jarvis"' in top
     assert "<button" not in top.lower(), "18: still no click-to-talk"
     more = html[html.index('<details id="more"'):]
-    assert "Clinic-guide answers:" in more and "How Jarvis works" in more and 'id="answer"' in more
+    assert "Clinic-guide answers:" in more and "How Rima works" in more and 'id="answer"' in more
     code = _code_only(html)
     assert '"more").open = true' in _fn_body(code, "showAnswer"), "18: a Yes/No card is shown, not hidden under Details"
-    assert '"Jarvis is not running"' in _fn_body(code, "unreachable") and '"Offline"' in _fn_body(code, "unreachable"), \
+    assert '"Rima is not running"' in _fn_body(code, "unreachable") and '"Offline"' in _fn_body(code, "unreachable"), \
         "18: not reachable reads Offline"
     assert "s.status.word" in _fn_body(code, "render"), "18: the page shows the service's status word"
 
@@ -914,6 +917,7 @@ def voice_notes():
     assert notes.parse("Add a note to Giulia Santoro saying the patient reports sensitivity.") == \
         ("Giulia Santoro", "the patient reports sensitivity.")
     assert notes.parse("Please make a note for Paola Rossi: review in two weeks") == ("Paola Rossi", "review in two weeks")
+    assert notes.parse("Rima, make a note for Paola Rossi: review in two weeks") == ("Paola Rossi", "review in two weeks")
     assert notes.parse("write a note on Marco Gallo's record, allergic to latex") == ("Marco Gallo", "allergic to latex")
     assert notes.parse("Add a note to Giulia Santoro") == (None, None), "19: a command without words asks again"
     # the owner's own sentence (2026-10-11): ", saying" splits once; a spelled name replaces the misheard word and
@@ -1089,8 +1093,8 @@ def power_switch():
     hud = html[html.index('<div class="hud">'):html.index('<div class="status-block">')]
     assert 'id="power"' in hud and 'role="switch"' in hud and 'type="checkbox"' in hud and 'checked' in hud, \
         "21: the on/off switch sits in the orb, on while listening"
-    assert "JARVIS" in hud and "<button" not in html[html.index("<main"):html.index('<details id="more"')].lower(), \
-        "21: labelled JARVIS; still no button to talk"
+    assert "RIMA" in hud and "JARVIS" not in hud and "<button" not in html[html.index("<main"):html.index('<details id="more"')].lower(), \
+        "21: labelled RIMA (owner, 2026-11-09); still no button to talk"
     code = _code_only(html)
     body = _fn_body(code, "power")
     assert '"/listening"' in body and "paused: !" in body and ".catch(" in body, \
@@ -1113,6 +1117,7 @@ def voice_reads_and_edits():
     P = patients.parse
     assert P("Show me Giulia Santoro.") == {"kind": "open", "name": "Giulia Santoro", "explicit": False}
     assert P("Hey Jarvis, open the record of Paola Rossi") == {"kind": "open", "name": "Paola Rossi", "explicit": True}
+    assert P("Rima, open the record of Paola Rossi") == {"kind": "open", "name": "Paola Rossi", "explicit": True}
     assert P("Pull up Marco Gallo's record.")["explicit"] is True
     assert P("When is Giulia Santoro's next appointment?") == {"kind": "next", "name": "Giulia Santoro", "explicit": True}
     assert P("What's the next appointment for Marco Gallo?")["name"] == "Marco Gallo"
@@ -1302,7 +1307,7 @@ def one_signin():
 
         def handoff(self):
             if not self.give:
-                raise Refused("auth_required", "a doctor must sign Jarvis in first")
+                raise Refused("auth_required", "a doctor must sign Rima in first")
             return "http://127.0.0.1:5000/jarvis/handoff/TICKET"
     access = jarvis_run.Access(lambda: Link())
     who = access.signin("drossi", "pw")
