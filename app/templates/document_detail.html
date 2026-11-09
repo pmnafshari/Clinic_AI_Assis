@@ -15,6 +15,25 @@
   </div>
 </div>
 
+{# P29 U-023: an original that is gone - recorded as lost, or found missing and waiting for a dentist to say so #}
+{% if doc.lost_at %}
+<div class="ds-alert ds-alert-danger mb-3" role="note" data-lost>
+  <div><strong class="ds-alert-title">{{ _("Original lost") }}</strong>
+  {{ _('Marked lost on {when} by {who}: {why}. What was read from it stays in the record; the patient no longer sees it.', when=doc.lost_at | appt_date, who=doc.lost_by, why=doc.lost_reason) }}</div>
+</div>
+{% elif missing %}
+<div class="ds-alert ds-alert-danger mb-3" role="note" data-missing>
+  <div><strong class="ds-alert-title">{{ _("The original file is missing") }}</strong>
+  {{ _("The record and what was read from it are here, but the file is not. Restore it from a verified backup, or record that it is lost.") }}
+  <form method="post" action="{{ url_for('documents.mark_lost', cf=cf, did=doc.id) }}" class="d-flex flex-wrap gap-2 align-items-end mt-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="flex-grow-1"><label class="form-label small" for="lost-reason">{{ _("Why it is lost") }}</label>
+      <textarea class="form-control form-control-sm" id="lost-reason" name="reason" maxlength="300" rows="1" data-grow required></textarea></div>
+    <button type="submit" class="btn btn-outline-danger btn-sm">{{ _("Mark the original as lost") }}</button>
+  </form></div>
+</div>
+{% endif %}
+
 {% if doc.status == 'pending_review' %}
 <div class="ds-alert ds-alert-warning mb-3" role="note">
   <div><strong class="ds-alert-title">{{ _("Not part of the record yet") }}</strong>
@@ -63,7 +82,7 @@
     {% if doc.decided_by %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Decision") }}</span><span class="ds-row-title">{{ _('{status} by {who}', status=_(doc.status.replace('_', ' ')), who=doc.decided_by) }} · {{ doc.decided_at | appt_date }}</span></span></li>{% endif %}
     {% if doc.supersedes_id %}<li class="ds-row"><span class="ds-row-main"><span class="ds-row-sub">{{ _("Replaces") }}</span><span class="ds-row-title">{{ _('document {id}', id=doc.supersedes_id) }}</span></span><span class="sx-row-acts"><a class="btn btn-outline-secondary btn-sm" href="{{ url_for('documents.detail', cf=cf, did=doc.supersedes_id) }}">{{ _("Open") }}<span class="visually-hidden">{{ _(': document {id}', id=doc.supersedes_id) }}</span></a></span></li>{% endif %}
   </ul>
-  <a href="{{ url_for('documents.original', cf=cf, did=doc.id) }}">{{ _("Download the original") }}</a>
+  {% if not doc.lost_at and not missing %}<a href="{{ url_for('documents.original', cf=cf, did=doc.id) }}">{{ _("Download the original") }}</a>{% endif %}
   </div>
 </section>
 
@@ -82,7 +101,7 @@
         <a href="{{ url_for('documents.preview', cf=cf, did=doc.id) }}" target="_blank" rel="noopener">{{ _("Open full size") }}<span class="visually-hidden">{{ _(' (opens {name} in a new tab)', name=doc.display_name) }}</span></a>
         {{ _("or download the original.") }}</figcaption>
     </figure>
-    {% elif doc.kind == 'pdf' or doc.kind == 'text' %}
+    {% elif (doc.kind == 'pdf' or doc.kind == 'text') and not doc.lost_at and not missing %}
     <p class="ds-row-sub">{{ _("No preview for this type. Download the original to open it.") }}</p>
     {% endif %}
     <ul class="ds-rows">

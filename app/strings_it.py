@@ -2583,4 +2583,15 @@ IT = {
     'The approved manual does not say what these buttons do together.': 'Il manuale approvato non dice cosa fanno insieme questi pulsanti.',
     'Check the code on the display and in the paper manual, or ask the dentist.': 'Controlla il codice sul display e nel manuale cartaceo, oppure chiedi al dentista.',
     'Do not press them together on a guess. Check the paper manual or ask the dentist.': 'Non premerli insieme a caso. Controlla il manuale cartaceo o chiedi al dentista.',
+    # P29 U-023: lost originals
+    'Mark the original as lost': "Segna l'originale come perso",
+    'Marked as lost. The record keeps what was read from it; the patient no longer sees it.': 'Segnato come perso. La cartella conserva ciò che ne è stato letto; il paziente non lo vede più.',
+    'Marked lost on {when} by {who}: {why}. What was read from it stays in the record; the patient no longer sees it.': 'Segnato come perso il {when} da {who}: {why}. Ciò che ne è stato letto resta nella cartella; il paziente non lo vede più.',
+    'Original lost': 'Originale perso',
+    'The original file is missing': 'Il file originale manca',
+    'The record and what was read from it are here, but the file is not. Restore it from a verified backup, or record that it is lost.': 'La registrazione e ciò che ne è stato letto ci sono, ma il file no. Ripristinalo da un backup verificato, oppure registra che è perso.',
+    'Why it is lost': 'Perché è perso',
+    'say why the original is lost': "scrivi perché l'originale è perso",
+    'the original is still here, so it cannot be marked as lost': "l'originale c'è ancora, quindi non può essere segnato come perso",
+    'this original is already marked as lost': 'questo originale è già segnato come perso',
 }

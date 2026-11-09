@@ -101,6 +101,7 @@ this file is stale.
 | POST | `/patients/<cf>/documents/<int:did>/confirm` | `documents.confirm` |
 | POST | `/patients/<cf>/documents/<int:did>/correct` | `documents.correct` |
 | GET | `/patients/<cf>/documents/<int:did>/file` | `documents.original` |
+| POST | `/patients/<cf>/documents/<int:did>/lost` | `documents.mark_lost` |
 | GET | `/patients/<cf>/documents/<int:did>/preview` | `documents.preview` |
 | POST | `/patients/<cf>/documents/<int:did>/publish` | `documents.publish` |
 | GET | `/patients/<cf>/documents/<int:did>/raw` | `documents.raw` |
@@ -266,7 +267,7 @@ this file is stale.
 | `ops_health_samples` | id, at, all_up, alerts, checks |
 | `patient_agent_actions` | id, patient_id, kind, payload, status, created_at, expires_at, resolved_at, result_id |
 | `patient_credentials` | id, patient_id, pin_hash, must_change_pin, issued_at, expires_at, failed_attempts, locked_until, active |
-| `patient_documents` | id, patient_id, kind, display_name, stored_path, sha256, size, status, reason, extraction, extractor, uploaded_by, uploaded_at, decided_by, decided_at, supersedes_id, category, source, import_item_id, acquired_at, acquired_basis, visit_id |
+| `patient_documents` | id, patient_id, kind, display_name, stored_path, sha256, size, status, reason, extraction, extractor, uploaded_by, uploaded_at, decided_by, decided_at, supersedes_id, category, source, import_item_id, acquired_at, acquired_basis, visit_id, lost_at, lost_by, lost_reason |
 | `patient_duplicate_dismissals` | id, patient_id_a, patient_id_b, cf_a, cf_b, dismissed_at, dismissed_by, reason |
 | `patient_login_attempts` | id, ip, attempted_at |
 | `patient_merges` | id, source_cf, target_cf, target_patient_id, merged_at, merged_by, source_row, moved |

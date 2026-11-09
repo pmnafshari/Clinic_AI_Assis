@@ -687,7 +687,7 @@ def reconcile_after_crash(tmp):
                            if p.is_file())
     clean = docs.reconcile(conn)
     assert clean == {"orphan_files": 0, "temp_files": 0, "missing_originals": [],
-                     "damaged_originals": [], "applied": False}, clean
+                     "damaged_originals": [], "lost_originals": [], "applied": False}, clean
 
     # R1. killed after the file is written, before the row commits
     body = (f"docs.display_name = die\n"
@@ -925,8 +925,72 @@ def walks_keep_their_own_store():
             f"21: HARD FAIL - {script.name} files documents into the clinic's own store"
 
 
+def lost_originals(tmp):
+    # 22. P29 U-023 (owner, 2026-11-09): an original that is gone is recorded as lost by a dentist - only while it really
+    #     is missing, with a reason; the row and what was read stay, the patient no longer sees it, and the check reports
+    #     it as lost rather than missing. Reception cannot; the page offers it only for a missing file
+    from werkzeug.security import generate_password_hash
+    import app.db as app_db
+    import patient_files as pf
+    import web_session
+    from app import create_app
+    conn = setup(tmp)
+    app_db.DB_PATH = conn.execute("PRAGMA database_list").fetchone()[2]
+    app_db.CHROMA_PATH = str(Path(tmp) / "chroma")
+    app = create_app()
+    app.config["TESTING"] = True
+    app.config["WTF_CSRF_ENABLED"] = False
+    cf = "ZZPL000000000007"
+    pid = patient_id.seed_patient(conn, cf, "Lia Persa")
+    did = docs.ingest(conn, pid, pdf(["referto perso"]), "lost.pdf", *D)
+    docs.confirm(conn, did, pid, *D)
+    pf.publish(conn, did, pid, *D)
+    assert pf.published(conn, did, pid), "22: setup - published"
+    try:
+        docs.mark_lost(conn, did, pid, *D, reason="gone")
+        raise AssertionError("22: HARD FAIL - an original still here was marked lost")
+    except docs.DocumentError:
+        pass
+    docs.original_path(docs.row(conn, did)).unlink()
+    assert docs.reconcile(conn)["missing_originals"] == [did], "22: the missing file is reported"
+
+    def client(u, r):
+        conn.execute("INSERT OR IGNORE INTO users (username, password_hash, role, active) VALUES (?, ?, ?, 1)",
+                     (u, generate_password_hash("x"), r))
+        conn.commit()
+        c = app.test_client()
+        c.set_cookie(web_session.COOKIE_NAME, web_session.create_session(conn, u, r))
+        return c
+    dentist, reception = client("dr_lost", "dentist"), client("as_lost", "assistant")
+    page = dentist.get(f"/patients/{cf}/documents/{did}").text
+    assert "data-missing" in page and f"/documents/{did}/lost" in page and "Download the original" not in page, \
+        "22: the page does not say the file is missing, or still offers it"
+    reception.post(f"/patients/{cf}/documents/{did}/lost", data={"reason": "gone"})
+    dentist.post(f"/patients/{cf}/documents/{did}/lost", data={"reason": "  "})
+    assert docs.row(conn, did)["lost_at"] is None, "22: HARD FAIL - marked lost by reception or without a reason"
+    dentist.post(f"/patients/{cf}/documents/{did}/lost", data={"reason": "deleted outside the app"})
+    r = docs.row(conn, did)
+    assert r["lost_at"] and r["lost_by"] == "dr_lost" and r["lost_reason"] == "deleted outside the app", "22: recorded"
+    assert r["status"] == "confirmed" and r["extraction"], "22: the row and what was read stay"
+    assert not pf.published(conn, did, pid), "22: HARD FAIL - the patient still sees a lost original"
+    found = docs.reconcile(conn)
+    assert found["missing_originals"] == [] and found["lost_originals"] == [did], f"22: the check ({found})"
+    page = dentist.get(f"/patients/{cf}/documents/{did}").text
+    assert "data-lost" in page and "deleted outside the app" in page and "data-missing" not in page, "22: the page says lost"
+    try:
+        docs.mark_lost(conn, did, pid, *D, reason="again")
+        raise AssertionError("22: marked lost twice")
+    except docs.DocumentError:
+        pass
+    assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'document_mark_lost' AND allowed = 1")\
+        .fetchone()[0] == 1, "22: not audited once"
+    conn.close()
+
+
 def selftest():
     walks_keep_their_own_store()
+    with tempfile.TemporaryDirectory() as tmp:
+        lost_originals(tmp)
     with tempfile.TemporaryDirectory() as tmp:
         domain(tmp)
     with tempfile.TemporaryDirectory() as tmp:

@@ -89,7 +89,8 @@ def detail(cf, did):
     return render_template("document_detail.html", cf=cf, patient=patient, doc=r, pages=pages,
                            uncertain_below=docs.UNCERTAIN_BELOW, published=pf.published(conn, did, pid),
                            history=pf.history(conn, did, *_who()), label=pf.label(r),
-                           date=pf.dated(r), visit=visit, previewable=r["kind"] in pf.PREVIEWABLE and r["status"] != "quarantined")
+                           date=pf.dated(r), visit=visit, previewable=r["kind"] in pf.PREVIEWABLE and r["status"] != "quarantined"
+                           and not r["lost_at"], missing=not r["lost_at"] and not docs.original_path(r).is_file())
 
 
 def _step(cf, did, fn, done, back="detail", kind="success", **kwargs):
@@ -127,6 +128,15 @@ def reject(cf, did):
         return _refuse("document_reject", f"document:{did}")
     return _step(cf, did, docs.reject, _("Rejected. The file is kept; it is not part of the record."), kind="removed",
                  reason=request.form.get("reason", ""))
+
+
+@documents_bp.route("/patients/<cf>/documents/<int:did>/lost", methods=["POST"])
+def mark_lost(cf, did):
+    # P29 U-023: the original file is gone - recorded by a dentist, with why; the row and what was read stay
+    if not authorize(g.user["role"], docs.CAPABILITY):
+        return _refuse("document_mark_lost", f"document:{did}")
+    done = _("Marked as lost. The record keeps what was read from it; the patient no longer sees it.")
+    return _step(cf, did, docs.mark_lost, done, kind="removed", reason=request.form.get("reason", ""))
 
 
 @documents_bp.route("/patients/<cf>/documents/<int:did>/replace", methods=["POST"])

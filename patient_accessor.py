@@ -107,7 +107,8 @@ def _file(row):
 # publication naming them. the one rule for it; patient_files.published() reads it here too
 PUBLISHED = ("SELECT d.id, d.patient_id, d.display_name, d.kind, d.category, d.sha256, d.stored_path,"
              " d.acquired_at, d.uploaded_at FROM patient_documents d JOIN document_publications p"
-             " ON p.document_id = d.id AND p.patient_id = d.patient_id AND p.withdrawn_at IS NULL")
+             " ON p.document_id = d.id AND p.patient_id = d.patient_id AND p.withdrawn_at IS NULL"
+             " AND d.lost_at IS NULL")
 
 
 def get_published_files(pid, conn, ip=None):

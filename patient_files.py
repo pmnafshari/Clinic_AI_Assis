@@ -57,7 +57,9 @@ SCHEMA = """
 
 # M25: added to P15's table. Legacy rows read NULL: unknown, never guessed
 COLUMNS = (("category", "TEXT"), ("source", "TEXT"), ("import_item_id", "INTEGER"),
-           ("acquired_at", "TEXT"), ("acquired_basis", "TEXT"), ("visit_id", "INTEGER"))
+           ("acquired_at", "TEXT"), ("acquired_basis", "TEXT"), ("visit_id", "INTEGER"),
+           # P29 U-023: an original that is gone, marked by a person - when, who and why
+           ("lost_at", "TEXT"), ("lost_by", "TEXT"), ("lost_reason", "TEXT"))
 
 CATEGORIES = {"opg": "OPG", "xray": "X-ray", "photo": "Photo", "report": "Report",
               "letter": "Letter", "consent": "Consent form", "other": "Document"}

@@ -145,6 +145,7 @@ ROUTE_POLICY = {
     "documents.retry": "read_clinical",
     "documents.reject": "read_clinical",
     "documents.replace": "read_clinical",
+    "documents.mark_lost": "read_clinical",   # P29 U-023
     "documents.original": "read_clinical",
     # P25: previews, portal publication and correction are the dentist's; the import
     # page shows reception progress only, every item and decision is the dentist's

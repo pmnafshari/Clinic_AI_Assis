@@ -434,6 +434,27 @@ def reject(conn, doc_id, pid, reason, actor, role, now=None):
     log_audit(conn, actor, role, "document_reject", f"document:{doc_id}", allowed=1)
 
 
+def mark_lost(conn, doc_id, pid, actor, role, reason="", now=None):
+    """P29 U-023: a person records that a document's original file is gone. Only while it really is missing; the row,
+    what was read from it and its history stay, it is withdrawn from the patient's portal, and it is no longer reported
+    as missing. Restoring the file later is a separate decision."""
+    r = _own(conn, doc_id, pid, actor, role, "document_mark_lost")
+    if r["lost_at"]:
+        raise DocumentError("already_lost", "this original is already marked as lost")
+    if original_path(r).is_file():
+        raise DocumentError("not_missing", "the original is still here, so it cannot be marked as lost")
+    reason = (reason or "").strip()[:300]
+    if not reason:
+        raise DocumentError("no_reason", "say why the original is lost")
+    at = _now(now)
+    conn.execute("UPDATE patient_documents SET lost_at = ?, lost_by = ?, lost_reason = ? WHERE id = ?",
+                 (at, actor, reason, doc_id))
+    conn.execute("UPDATE document_publications SET withdrawn_by = ?, withdrawn_at = ?, withdraw_reason = ?"
+                 " WHERE document_id = ? AND withdrawn_at IS NULL", (actor, at, "original lost", doc_id))
+    conn.commit()
+    log_audit(conn, actor, role, "document_mark_lost", f"document:{doc_id}", allowed=1, reason=reason)
+
+
 def replace(conn, doc_id, pid, data, name, actor, role, now=None):
     """A new version. The old one is kept, marked superseded, and leaves the index."""
     old = _own(conn, doc_id, pid, actor, role, "document_replace")
@@ -636,7 +657,7 @@ def reconcile(conn, apply=False, actor="reconcile", role="system"):
     conn.commit()
     conn.execute("BEGIN IMMEDIATE")
     try:
-        rows = conn.execute("SELECT id, stored_path, sha256 FROM patient_documents"
+        rows = conn.execute("SELECT id, stored_path, sha256, lost_at FROM patient_documents"
                             " ORDER BY id").fetchall()
         named = {r["stored_path"] for r in rows}
         orphans, temps = [], []
@@ -656,15 +677,17 @@ def reconcile(conn, apply=False, actor="reconcile", role="system"):
     finally:
         conn.rollback()
     # reading the originals needs no lock: a named file is never rewritten
-    missing, damaged = [], []
+    missing, damaged, lost = [], [], []
     for r in rows:
         path = root / r["stored_path"]
-        if not path.is_file():
+        if r["lost_at"]:
+            lost.append(r["id"])            # P29 U-023: a person recorded it as gone - not an error any more
+        elif not path.is_file():
             missing.append(r["id"])
         elif hashlib.sha256(path.read_bytes()).hexdigest() != r["sha256"]:
             damaged.append(r["id"])
     found = {"orphan_files": len(orphans), "temp_files": len(temps),
-             "missing_originals": missing, "damaged_originals": damaged, "applied": apply}
+             "missing_originals": missing, "damaged_originals": damaged, "lost_originals": lost, "applied": apply}
     if apply:
         log_audit(conn, actor, role, "document_reconcile", "documents", allowed=1,
                   reason=f"orphan_files {len(orphans)}; temp_files {len(temps)};"
@@ -688,7 +711,20 @@ def report_at_startup(db_path):
 
 
 def main(argv):
-    """python documents.py --reconcile [--apply]"""
+    """python documents.py --reconcile [--apply]
+    python documents.py --mark-lost ID[,ID...] --by NAME --reason TEXT   (P29 U-023: a person's decision, audited)"""
+    if argv[:1] == ["--mark-lost"] and len(argv) >= 6 and argv[2] == "--by" and argv[4] == "--reason":
+        from storage import connect
+        conn = connect("db/clinic.sqlite")
+        for doc_id in [int(x) for x in argv[1].split(",")]:
+            row = conn.execute("SELECT patient_id FROM patient_documents WHERE id = ?", (doc_id,)).fetchone()
+            try:
+                mark_lost(conn, doc_id, row["patient_id"] if row else "", argv[3], "dentist", argv[5])
+                print(f"document {doc_id}: marked lost")
+            except (LookupError, DocumentError) as e:
+                print(f"document {doc_id}: not changed - {e}")
+        conn.close()
+        return 0
     if argv[:1] != ["--reconcile"]:
         print(main.__doc__)
         return 2
