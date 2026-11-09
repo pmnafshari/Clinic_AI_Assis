@@ -154,6 +154,10 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
         if _has(conn, "call_id_failures"):
             # E-006: wrong phone checks against the record
             conn.execute("DELETE FROM call_id_failures WHERE patient_id = ?", (pid,))
+        if _has(conn, "call_sessions"):
+            # a phone call keeps its times and how it ended; who it identified, or the codice fiscale said, goes
+            conn.execute(f"UPDATE call_sessions SET patient_id = NULL, pending_cf = NULL WHERE patient_id = ?"
+                         f" OR upper(pending_cf) IN ({','.join('?' * len(keys))})", [pid] + [k.upper() for k in keys])
         if _has(conn, "document_publications"):
             # P25: what was shown to the patient, and who said whose each file is
             import patient_files
@@ -356,6 +360,10 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
     if _has(conn, "call_id_failures"):
         left["call_id_failures"] = conn.execute("SELECT COUNT(*) FROM call_id_failures WHERE patient_id = ?",
                                                 (pid,)).fetchone()[0]
+    if _has(conn, "call_sessions"):
+        left["call_sessions"] = conn.execute(
+            f"SELECT COUNT(*) FROM call_sessions WHERE patient_id = ? OR upper(pending_cf) IN"
+            f" ({','.join('?' * len(keys))})", [pid] + [k.upper() for k in keys]).fetchone()[0]
     if _has(conn, "note_reviews"):
         left["note_reviews"] = conn.execute(
             f"SELECT COUNT(*) FROM note_reviews WHERE patient_id = ? OR codice_fiscale IN"
@@ -505,6 +513,12 @@ def selftest():
             import consent
             consent.record(conn, pid, "messaging", True, "drossi", "dentist")
             log_audit(conn, "drossi", "dentist", "upload_file", f"sorted/{pid}/notes/{cf}.txt", 1)
+            # a phone call that identified the patient, and one still waiting for the PIN after the codice fiscale
+            for ref, stage, who, said in ((f"done-{cf}", "ended", pid, None), (f"live-{cf}", "need_pin", None, cf)):
+                conn.execute("INSERT INTO call_sessions (call_ref, lang, stage, patient_id, pending_cf, started_at,"
+                             " last_event_at) VALUES (?, 'it', ?, ?, ?, '2026-09-01T08:00:00+00:00',"
+                             " '2026-09-01T08:01:00+00:00')", (ref, stage, who, said))
+            conn.commit()
             return pid
 
         gone = seed("ZZER800101010101", "Ezio Gone", invoice=False)
@@ -539,6 +553,12 @@ def selftest():
                             (f"sorted/{gone}/%",)).fetchone()[0] == 0, "2: audit paths redacted"
         assert conn.execute("SELECT COUNT(*) FROM audit_log WHERE action = 'erase_patient'"
                             " AND target = ? AND allowed = 1", (gone,)).fetchone()[0] == 1
+        calls = conn.execute("SELECT patient_id, pending_cf FROM call_sessions WHERE call_ref LIKE ?",
+                             ("%ZZER800101010101",)).fetchall()
+        assert len(calls) == 2 and all(r[0] is None and r[1] is None for r in calls), \
+            f"2: HARD FAIL - a phone call still names the erased patient ({[tuple(r) for r in calls]})"
+        assert conn.execute("SELECT COUNT(*) FROM call_sessions WHERE patient_id = ? OR pending_cf = ?",
+                            (stay, "ZZER800101010103")).fetchone()[0] == 2, "2: another patient's calls touched"
 
         # 3. a held erasure keeps invoices and the identity on them, nothing else
         result = erase(conn, held, "drossi", "dentist", 2, sorted_root, drop, undo, collection,

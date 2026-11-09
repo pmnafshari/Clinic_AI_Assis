@@ -407,7 +407,8 @@ def dismiss(conn, cf_a, cf_b, actor, actor_role, reason=None):
 MERGE_RELATIONS = ("visits", "invoices", "appointments", "patient_sessions", "visit_summaries",
                    "note_reviews", "patient_documents", "import_items", "imaging_requests",
                    "imaging_request_events", "imaging_request_files", "imaging_bookings",
-                   "imaging_completions", "tooth_marks", "patient_services", "staff_tasks", "outreach_contacts")
+                   "imaging_completions", "tooth_marks", "patient_services", "staff_tasks", "outreach_contacts",
+                   "call_sessions", "call_id_failures")     # a merge must not reset the phone lockout
 
 # Phase 51: everything below is keyed on patient_id. The codice fiscale is kept
 # on `patient_merges.source_cf` because resolving an OLD one is that table's
@@ -1076,6 +1077,13 @@ def selftest():
         give(GONE, 2, hour=11)
         give(OTHER, 1, hour=15)
         m.commit()
+        # a phone call that identified the record about to go, and a wrong PIN against it: both follow the survivor
+        # (a merge must not reset the phone lockout)
+        m.execute("INSERT INTO call_sessions (call_ref, lang, stage, patient_id, started_at, last_event_at)"
+                  " VALUES ('merge-call', 'it', 'ended', ?, '2026-01-01T09:00:00+00:00', '2026-01-01T09:01:00+00:00')",
+                  (pids[GONE],))
+        m.execute("INSERT INTO call_id_failures (patient_id, at) VALUES (?, '2026-01-01T09:00:30+00:00')", (pids[GONE],))
+        m.commit()
         keep_before = relations(KEEP)
         gone_before = relations(GONE)
         other_before = relations(OTHER)
@@ -1144,6 +1152,9 @@ def selftest():
                 f"14: {table} should have moved to the survivor"
         assert relations(GONE) == {t: 0 for t in MERGE_RELATIONS}, \
             "14: nothing is left pointing at the merged record"
+        assert m.execute("SELECT patient_id FROM call_sessions WHERE call_ref = 'merge-call'").fetchone()[0] == pids[KEEP] \
+            and m.execute("SELECT COUNT(*) FROM call_id_failures WHERE patient_id = ?", (pids[KEEP],)).fetchone()[0] == 1, \
+            "14: the phone call and the wrong PIN did not follow the survivor"
         assert relations(OTHER) == other_before, \
             "14: AN UNRELATED PATIENT MUST NOT BE TOUCHED"
         row14 = m.execute("SELECT * FROM patient_merges WHERE source_cf = ?", (GONE,)).fetchone()
