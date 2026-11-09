@@ -229,6 +229,7 @@ this file is stale.
 | `billing_events` | id, event, patient_id, invoice_id, installment_id, due_date, created_at, consumed_at |
 | `billing_invoices` | id, patient_id, visit_id, currency, state, issued_at, due_date, reconciled_at, reconciled_by, void_reason, created_at |
 | `call_events` | event_id, call_ref, type, received_at |
+| `call_id_failures` | patient_id, at |
 | `call_sessions` | id, call_ref, lang, stage, patient_id, pending_cf, silences, unclear, auth_failures, started_at, last_event_at, ended_at, end_reason |
 | `clinic_closures` | closure_date, reason |
 | `clinic_hours` | weekday, opens, closes, closed, capacity |

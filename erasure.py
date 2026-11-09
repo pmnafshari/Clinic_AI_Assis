@@ -147,6 +147,9 @@ def _sqlite(conn, pid, cf, sources, hold_invoices):
             # the staff's tasks about the patient
             import staff_tasks
             staff_tasks.on_erase(conn, pid)
+        if _has(conn, "call_id_failures"):
+            # E-006: wrong phone checks against the record
+            conn.execute("DELETE FROM call_id_failures WHERE patient_id = ?", (pid,))
         if _has(conn, "document_publications"):
             # P25: what was shown to the patient, and who said whose each file is
             import patient_files
@@ -346,6 +349,9 @@ def remaining(conn, pid, keys, sorted_root, undo_log, collection, keep_records):
                                                 (pid,)).fetchone()[0]
     if _has(conn, "staff_tasks"):
         left["staff_tasks"] = conn.execute("SELECT COUNT(*) FROM staff_tasks WHERE patient_id = ?", (pid,)).fetchone()[0]
+    if _has(conn, "call_id_failures"):
+        left["call_id_failures"] = conn.execute("SELECT COUNT(*) FROM call_id_failures WHERE patient_id = ?",
+                                                (pid,)).fetchone()[0]
     if _has(conn, "note_reviews"):
         left["note_reviews"] = conn.execute(
             f"SELECT COUNT(*) FROM note_reviews WHERE patient_id = ? OR codice_fiscale IN"
