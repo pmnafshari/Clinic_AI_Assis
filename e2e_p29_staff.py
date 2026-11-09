@@ -182,8 +182,13 @@ def main():
         name = conn.execute("SELECT patient_name FROM patients WHERE codice_fiscale = ?", (cf,)).fetchone()[0]
         appointments.book(conn, cf, "p29_dentist", f"{day}T11:00", 30)
         conn.commit()
-        # R-005: a two-page PDF and a text, confirmed, for the Preview over the file list
+        # R-005: a two-page PDF and a text, confirmed, for the Preview over the file list. The originals and their index
+        # go to this walk's temp dir: until 2026-11-09 they went to the clinic's own documents/ and stayed there
+        # (U-023 investigation found 38 such files)
         import documents
+        documents.DOC_ROOT = Path(tmp) / "documents"
+        documents.DOC_CHROMA_PATH = str(Path(tmp) / "doc_chroma")
+        documents._collection_cache.clear()
         from documents_selftest import pdf as make_pdf
         look_pid = patient_id.resolve(conn, cf)
         for data, file_name in ((make_pdf(["p29 preview page one", "p29 preview page two"]), "p29-look.pdf"),

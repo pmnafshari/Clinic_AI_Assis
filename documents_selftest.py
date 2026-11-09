@@ -910,7 +910,23 @@ def routes(tmp):
     conn.close()
 
 
+def walks_keep_their_own_store():
+    # 21. P29 U-023 (2026-11-09): a browser walk that files documents keeps their originals and their index in its own
+    #     temp dir. e2e_p29_staff did not, and left 38 files in the clinic's documents/ and its text over two real
+    #     documents' entries in the search index. every walk or tool that files one must point the store elsewhere first
+    from pathlib import Path as _Path
+    for script in sorted(_Path(__file__).parent.glob("*.py")):
+        if script.name == "documents_selftest.py" or script.name == "documents.py":
+            continue
+        src = script.read_text(encoding="utf-8")
+        if not script.name.startswith(("e2e_", "populated_pages", "shot_pages")) or ".ingest(" not in src:
+            continue
+        assert "DOC_ROOT =" in src and "DOC_CHROMA_PATH =" in src, \
+            f"21: HARD FAIL - {script.name} files documents into the clinic's own store"
+
+
 def selftest():
+    walks_keep_their_own_store()
     with tempfile.TemporaryDirectory() as tmp:
         domain(tmp)
     with tempfile.TemporaryDirectory() as tmp:
