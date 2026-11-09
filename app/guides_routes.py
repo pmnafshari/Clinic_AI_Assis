@@ -19,7 +19,9 @@ REASON_TITLES = {"ask_device": N_("Which device?"), "wrong_model": N_("Different
                  "conflict": N_("Approved documents disagree"), "unreadable": N_("The page cannot be read reliably"),
                  "restricted": N_("Not for your role"), "servicing": N_("Service work"), "clinical": N_("A decision for the dentist"),
                  "patient_data": N_("No patient information here"), "not_for_role": N_("Not for your role"),
-                 "not_found": N_("No approved document answers this")}
+                 "not_found": N_("No approved document answers this"),
+                 # P29 U-017: a code the device's manual does not list; buttons the manual never describes together
+                 "code_not_listed": N_("Code not in the manual"), "no_combination": N_("Not described together")}
 
 
 def gconn():

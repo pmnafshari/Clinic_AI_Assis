@@ -2575,4 +2575,12 @@ IT = {
     'demo sample, not clinical advice': 'esempio dimostrativo, non consiglio clinico',
     'version {n}, approved {when} by {who}': 'versione {n}, approvata il {when} da {who}',
     'written by {who}': 'scritta da {who}',
+    # P29 U-016 / U-017: guide answers
+    'Code not in the manual': 'Codice non presente nel manuale',
+    'Not described together': 'Combinazione non descritta',
+    'The approved manual for this device does not list that code.': 'Il manuale approvato di questo dispositivo non riporta quel codice.',
+    'The approved manual does not say what {buttons} do together.': 'Il manuale approvato non dice cosa fanno insieme {buttons}.',
+    'The approved manual does not say what these buttons do together.': 'Il manuale approvato non dice cosa fanno insieme questi pulsanti.',
+    'Check the code on the display and in the paper manual, or ask the dentist.': 'Controlla il codice sul display e nel manuale cartaceo, oppure chiedi al dentista.',
+    'Do not press them together on a guess. Check the paper manual or ask the dentist.': 'Non premerli insieme a caso. Controlla il manuale cartaceo o chiedi al dentista.',
 }

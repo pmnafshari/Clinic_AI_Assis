@@ -568,13 +568,49 @@ def title_alone(conn, ids, devices):
     # "User error codes (page 4)" as the answer. A title followed by its numbered steps is still an answer.
     for q in ("What does error E nine nine mean on the AX-200?", "What does the error mean on the AX-200?"):
         r = cg.ask(conn, q, "assistant")
-        assert r["outcome"] == "abstain" and r["reason"] == "not_found" and not r["citations"], \
+        assert r["outcome"] == "abstain" and r["reason"] in ("not_found", "code_not_listed") and not r["citations"], \
             f"12: a page title alone answered {q!r} ({r['outcome']} {[c['passage'] for c in r['citations']]})"
     r = cg.ask(conn, "What does error E05 mean on the AX-200?", "assistant")
     assert r["outcome"] == "answer" and r["citations"][0]["passage"].startswith("E05"), "12: the code's own line"
     r = cg.ask(conn, "Quando il dentista ha gia prescritto una OPG, cosa fa l'accettazione?", "assistant")
     assert r["outcome"] == "answer" and r["citations"][0]["passage"].startswith("Quando") and \
         "1. Verificare" in r["citations"][0]["passage"], f"12: a title with its numbered steps is kept ({r})"
+
+
+def jrv05(conn, ids, devices):
+    # 13. P29 U-016 / U-017 (UAT JRV-05): two buttons asked about together are answered only by a line that names both
+    # and says they are pressed together, from that device's own manual; a code heard as speech ("E zero five") is the code; a misheard edition ("addition
+    # one") is still the edition asked; a code no manual lists is said to be not listed - never "a different model"
+    combo = "Hold DRY and STANDBY together for 10 seconds to enter calibration."
+    for q in ("What happens if I press DRY and STANDBY at the same time on the AX-200?", "AX-200 DRY plus STANDBY?",
+              "What does DRY do with STANDBY on the AX-200?", "On the AX-200 what happens if I hold DRY and STANDBY together?",
+              "Cosa succede se tengo premuti DRY e STANDBY insieme sull'AX-200?"):
+        r = cg.ask(conn, q, "dentist")
+        assert r["outcome"] == "answer" and r["citations"][0]["passage"].startswith(combo) and \
+            r["citations"][0]["source_id"] == ids["ax200_v2"], \
+            f"13: HARD FAIL - {q!r} answered with one button's line: {[c['passage'] for c in r['citations']]}"
+        # the line is on the service-menu page: reception is told it is not for their role, never shown one button's line
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] == "restricted" and not r["citations"], \
+            f"13: {q!r} for reception: {r['reason']} {[c['passage'] for c in r['citations']]}"
+    r = cg.ask(conn, "On the AX-200 what happens if I hold START and DRY together?", "assistant")
+    assert r["outcome"] == "abstain" and r["reason"] == "no_combination" and not r["citations"], \
+        f"13: HARD FAIL - a combination no page names was answered: {r['reason']} {r['citations']}"
+    assert "START" in r["message"] and "DRY" in r["message"], f"13: the refusal does not name the buttons: {r['message']}"
+    for q in ("What does E zero five mean on the AX-200?", "What does E 5 mean on the AX-200?",
+              "What does E-05 mean on the AX-200?", "What does E oh five mean on the AX-200?"):
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "answer" and r["citations"][0]["passage"].startswith("E05"), \
+            f"13: {q!r} - the code as speech writes it - was not found: {r['reason']}"
+    for q in ("What does E-99 mean on the AX-200?", "What does E99 mean on the AX-200?",
+              "What does error E nine nine mean on the AX-200?"):
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] == "code_not_listed" and not r["citations"], \
+            f"13: {q!r} refused for the wrong reason: {r['reason']}"
+    for q in ("What does E05 mean on the AX-200 addition one?", "What does E05 mean on the AX-200, edition one?"):
+        r = cg.ask(conn, q, "assistant")
+        assert r["outcome"] == "abstain" and r["reason"] == "old_edition", \
+            f"13: HARD FAIL - {q!r} was answered from another edition: {r['outcome']} {r['reason']}"
 
 
 def lifecycle(conn, lib, ids, devices):
@@ -798,6 +834,7 @@ def selftest():
         two_part_and_conflicts(conn, ids, devices)
         booking_permission(conn, ids, devices)
         title_alone(conn, ids, devices)
+        jrv05(conn, ids, devices)
         offline(conn, devices)
         lifecycle(conn, lib, ids, devices)
         conn.close()

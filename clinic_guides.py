@@ -472,7 +472,9 @@ fa fare si sono e ha hanno mi ti ci vi non piu anche tasto serve significa dell 
 GENERIC = {"manual", "page", "document", "procedure", "manuale", "pagina", "procedura", "edition", "edizione"}
 TOKEN = re.compile(r"[A-Za-z0-9À-ÿ]+(?:[-'][A-Za-z0-9À-ÿ]+)*")
 MODEL_SHAPE = re.compile(r"\b[A-Z]{1,4}-\d{1,4}[A-Z]?\b")
-EDITION_ASKED = re.compile(r"\b(edition|edizione|version|versione|ed\.)\s*(\d+)|\b(19[89]\d|20[0-4]\d)\b", re.IGNORECASE)
+# "addition one" is how speech to text often writes "edition one" (P29 U-016, UAT JRV-05)
+EDITION_ASKED = re.compile(r"\b(edition|edizione|version|versione|ed\.|addition)\s*(\d+)|\b(19[89]\d|20[0-4]\d)\b",
+                           re.IGNORECASE)
 # case matters for the names: "patient Rossi" names someone, "patient need" does not
 PATIENT = re.compile(r"\b(?i:patient|paziente|pz)[\s,:;]+[A-Z][a-z]+|\b[A-Z][a-z]+\s+[A-Z][a-z]+'s\s+(?i:phone|number|"
                      r"address|appointment|record|x[- ]?ray|opg|invoice|bill)|\b(?i:phone|telephone|numero di telefono|"
@@ -545,14 +547,15 @@ NUMBER_WORDS.update(zip("zero uno due tre quattro cinque sei sette otto nove die
                         "quindici sedici diciassette diciotto diciannove venti".split(), range(21)))
 # a number word is a number only after something numbered: "program one", not "which one"
 SPOKEN_NUMBER = re.compile(r"\b(programs?|programmes?|programm[ai]|prog|errors?|errore|errori|steps?|pass[oi]|"
-                           r"editions?|edizion[ei]|versions?|version[ei]|pages?|pagin[ae])\s+(" + "|".join(NUMBER_WORDS) +
+                           r"editions?|edizion[ei]|additions?|versions?|version[ei]|pages?|pagin[ae])\s+(" + "|".join(NUMBER_WORDS) +
                            r")\b", re.IGNORECASE)
 # an edition by its order or its year in words: "first edition", "prima edizione", "twenty nineteen", "two thousand
 # and nineteen" ("twenty one minutes" is not a year)
 ORDINALS = {"first": 1, "1st": 1, "second": 2, "2nd": 2, "third": 3, "3rd": 3, "fourth": 4, "4th": 4, "fifth": 5,
             "5th": 5, "prima": 1, "primo": 1, "seconda": 2, "secondo": 2, "terza": 3, "terzo": 3, "quarta": 4,
             "quarto": 4, "quinta": 5, "quinto": 5}
-ORDINAL_EDITION = re.compile(r"\b(" + "|".join(ORDINALS) + r")\s+(edition|edizione|version|versione)\b", re.IGNORECASE)
+ORDINAL_EDITION = re.compile(r"\b(" + "|".join(ORDINALS) + r")\s+(edition|edizione|addition|version|versione)\b",
+                             re.IGNORECASE)
 TENS = {"twenty": 20, "thirty": 30, "forty": 40, "fifty": 50, "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90}
 UNIT = r"(?:one|two|three|four|five|six|seven|eight|nine)"
 TEEN = r"(?:ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen)"
@@ -560,6 +563,20 @@ SPOKEN_YEAR = re.compile(r"\b(?:(nineteen|twenty)[\s-]+((?:oh|zero)[\s-]+" + UNI
                          r"|(?:" + "|".join(TENS) + r")(?:[\s-]+" + UNIT + r")?)"
                          r"|two thousand(?:\s+and)?\s+(" + UNIT + "|" + TEEN + r"|(?:" + "|".join(TENS) + r")(?:[\s-]+" + UNIT +
                          r")?))\b", re.IGNORECASE)
+# P29 U-016: an error code as speech to text writes it - "E zero five", "E oh five", "E 5", "E-05", "error E nine nine".
+# a capital E (or "error"/"errore" before it): the Italian "e" is "and"
+DIGIT_WORDS = {"zero": "0", "oh": "0", "o": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+               "six": "6", "seven": "7", "eight": "8", "nine": "9", "uno": "1", "due": "2", "tre": "3", "quattro": "4",
+               "cinque": "5", "sei": "6", "sette": "7", "otto": "8", "nove": "9"}
+_DIGIT = r"(?:" + "|".join(sorted(DIGIT_WORDS, key=len, reverse=True)) + r"|\d)"
+SPOKEN_CODE = re.compile(r"(?:\b(?:errors?|errore|errori)\s+[Ee]|\bE)\s*-?\s*(" + _DIGIT + r"(?:[\s-]*" + _DIGIT + r"){0,2})(?![\w-])")
+ERROR_CODE = re.compile(r"^E-?\d{1,3}$")
+# P29 U-017: two or more buttons asked about together - only a line that names every one of them answers
+TOGETHER = re.compile(r"\b(together|same time|at once|simultaneous\w*|plus|both|with|hold|holding|press|pressing|"
+                      r"insieme|contemporaneamente|entramb[ie]|tengo|tieni|tenere|tenendo|premuti|tenuti|premo|premere)\b",
+                      re.IGNORECASE)
+ACTED_TOGETHER = re.compile(r"\b(together|same time|at once|simultaneous\w*|hold|press|insieme|contemporaneamente|"
+                            r"tenere|tenendo|premere|premendo)\b", re.IGNORECASE)
 # "program 1" is one term: the 3 of "3.5 minutes" is not program 3
 NUMBERED = re.compile(r"\b(programs?|programmes?|programm[ai]|prog|errors?|errore|errori|steps?|pass[oi])\s+(\d{1,3})\b",
                       re.IGNORECASE)
@@ -580,6 +597,8 @@ ESCALATE = {
                     "patient's record.",
     "not_for_role": "An approved document covers this for the dentist only.",
     "not_found": "No approved document answers this. Check the paper manual or ask the dentist.",
+    "code_not_listed": "Check the code on the display and in the paper manual, or ask the dentist.",
+    "no_combination": "Do not press them together on a guess. Check the paper manual or ask the dentist.",
 }
 MESSAGES = {
     "ask_device": "Which device do you mean?",
@@ -593,6 +612,8 @@ MESSAGES = {
     "patient_data": "The assistant has no patient information.",
     "not_for_role": "That document is not for your role.",
     "not_found": "The approved documents do not answer this.",
+    "code_not_listed": "The approved manual for this device does not list that code.",
+    "no_combination": "The approved manual does not say what these buttons do together.",
 }
 
 
@@ -647,6 +668,7 @@ def _library_form(conn, question):
     question = SPOKEN_YEAR.sub(_year, question)
     question = ORDINAL_EDITION.sub(lambda m: f"{m.group(2)} {ORDINALS[m.group(1).lower()]}", question)
     question = SPOKEN_NUMBER.sub(lambda m: f"{m.group(1)} {NUMBER_WORDS[m.group(2).lower()]}", question)
+    question = SPOKEN_CODE.sub(lambda m: _code_form(conn, m.group(1)), question)
     shouted = question.upper() == question      # typed in capitals: the case says nothing about which word is a label
 
     def term(m):
@@ -662,6 +684,17 @@ def _library_form(conn, question):
             tok = tok.lower()
         return head + ("'" if head else "") + tok
     return TOKEN.sub(term, question)
+
+
+def _code_form(conn, spoken):
+    """the digits of a spoken code -> the code as the library prints it: E05 when a page has E05, else E5 if a page has
+    that, else E05 - a code no page has, which the answer then says is not listed"""
+    digits = "".join(DIGIT_WORDS.get(w.lower(), w) for w in re.findall(r"[A-Za-z]+|\d", spoken))
+    tries = [f"E{digits.zfill(2)}", f"E{digits.lstrip('0') or '0'}"]
+    for code in tries:
+        if _in_any_page(conn, code):
+            return code
+    return tries[0]
 
 
 def _year(m):
@@ -717,7 +750,7 @@ def _resolve_device(conn, question, device_id):
     named = [d for d in rows if _has_code(question, d["model"])]
     shaped = {m.upper() for m in MODEL_SHAPE.findall(question)}
     known = {d["model"].upper() for d in rows}
-    unknown = [m for m in shaped - known if not _in_any_page(conn, m)]
+    unknown = [m for m in shaped - known if not _in_any_page(conn, m) and not ERROR_CODE.match(m)]
     chosen = next((d for d in rows if d["id"] == device_id), None) if device_id else None
     if unknown:
         return chosen, "wrong_model"
@@ -869,6 +902,22 @@ def _passage(row, codes, words):
     if best == 0 and len(chosen) == 1:
         return field, ""            # the page's title alone answers nothing (J02 UI review: "User error codes (page 4)")
     return field, _norm(" ".join(chosen))
+
+
+def _combo_line(row, buttons):
+    """the first line of the page that names every button asked about, with the numbered steps after it; "" if none"""
+    lines = _clean_lines(row["text"])
+    for i, line in enumerate(lines):
+        # a line that only lists the buttons ("four buttons: START, B-PROG, STANDBY and DRY") says nothing about
+        # pressing them together
+        if all(_has_code(line, b) for b in buttons) and ACTED_TOGETHER.search(line):
+            chosen = [line]
+            for nxt in lines[i + 1:i + 7]:
+                if not re.match(r"^\s*\d+[.)]\s", nxt):
+                    break
+                chosen.append(nxt)
+            return _norm(" ".join(chosen))
+    return ""
 
 
 NEGATION = re.compile(r"\b(not|never|no|don'?t|doesn'?t|non|mai)\b", re.IGNORECASE)
@@ -1118,7 +1167,21 @@ def _ask(conn, question, role, device_id, model):
     codes, words = _terms(question, drop=drop)
     codes = [c for c in codes if not device or c != device["model"].upper()]
     ranked, _cover = _candidates(conn, codes, words, device, embed=RETRIEVAL_EMBED, question=question)
+    buttons = [c for c in codes if re.fullmatch(r"[A-Z]{3,}(?:-[A-Z]+)?", c)]
+    together = len(buttons) >= 2 and TOGETHER.search(question) is not None
+    if device is not None and (together or any(ERROR_CODE.match(c) for c in codes)):
+        # P29 U-017: a question about this device's buttons or codes is answered from this device's own documents
+        ranked = [r for r in ranked if r["kind"] == "device" and r["device_id"] == device["id"]]
+    if together:
+        ranked = [r for r in ranked if _combo_line(r, buttons)]
+        if not ranked and device is not None:
+            named = " and ".join(buttons)
+            return _abstain("no_combination", device,
+                            {"message": f"The approved manual does not say what {named} do together."})
     if not ranked:
+        missing = [c for c in codes if ERROR_CODE.match(c) and not _in_any_page(conn, c)]
+        if missing and device is not None:
+            return _abstain("code_not_listed", device)
         blurred = _unreadable_match(conn, codes, words, device)
         if blurred:
             return _abstain("unreadable", device, {"see": blurred})
@@ -1133,6 +1196,8 @@ def _ask(conn, question, role, device_id, model):
     if not best["readable"] or (not _accepted(best["text"], codes, words)[0] and best["ocr_conf"] < READABLE_AT):
         return _abstain("unreadable", device, {"see": {"source_id": best["sid"], "page": best["page"]}})
     field, passage = _passage(best, codes, words)
+    if together:
+        field, passage = "text", _combo_line(best, buttons)
     if not passage:
         return _abstain("not_found", device)
     conflicting = _conflicts(conn, best, field, passage, device, role)
