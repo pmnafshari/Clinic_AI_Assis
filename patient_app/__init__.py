@@ -226,6 +226,7 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
         # the same scoped function its own page uses, so home shows nothing
         # the patient could not already see one tab over. money is printed as
         # the ledger has it; the earliest open installment is picked, not worked out.
+        import aftercare
         import handoff
 
         pid = g.patient["patient_id"]
@@ -248,6 +249,8 @@ def create_patient_app(env_path=PATIENT_ENV_PATH):
             next_installment=routes.next_installment(billing),
             file_count=len(files),
             waiting=handoff.open_for_patient(get_db(), pid),
+            # P29 R-020 / NEW-05: only texts a dentist approved, for the treatments of the last 30 days
+            aftercare=[a for a in aftercare.for_patient(get_db(), pid, current_language()) if a["text"]],
             fmt=ledger_fmt,
         )
 

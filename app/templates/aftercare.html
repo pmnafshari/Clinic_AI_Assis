@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{# P29 R-020 / NEW-05: the aftercare texts, per treatment and language - what patients see, the draft waiting, a new
+   draft, Approve. The shipped texts are demo samples; none reaches a patient until a dentist approves it. #}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ _("Clinical content") }}</p>
+    <h1 class="ds-page-title">{{ _("Aftercare") }}</h1>
+    <p class="ds-page-meta">{{ _("What a patient is told after each treatment, on the portal and by the assistant, for 30 days after the visit. Only an approved text is ever shown; until then the patient's question goes to a person.") }}</p>
+  </div>
+</div>
+<div class="ds-alert ds-alert-warning mb-3" role="note">{{ _("The texts that came with the system are demo samples, not clinical advice. Read and correct each one before you approve it.") }}</div>
+
+{% for row in rows %}
+<section class="card dash-card mb-3" aria-labelledby="topic-{{ row.topic }}-title" id="topic-{{ row.topic }}">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="topic-{{ row.topic }}-title">{{ _(aftercare_topics[row.topic]) }}</h2></div>
+  <div class="dash-card-body">
+    <div class="row g-3">
+      {% for lang in ('it', 'en') %}{% set x = row[lang] %}
+      <div class="col-lg-6" data-aftercare="{{ row.topic }}-{{ lang }}">
+        <h3 class="ds-card-title">{{ _(aftercare_langs[lang]) }}</h3>
+        {% if x.approved %}
+        <p class="ds-row-sub mb-1"><span class="ds-badge ds-badge-success">{{ _("Approved") }}</span> {{ _('version {n}, approved {when} by {who}', n=x.approved.version, when=x.approved.approved_at | appt_date, who=x.approved.approved_by) }}</p>
+        <p class="sx-quote" data-approved>{{ x.approved.body }}</p>
+        {% else %}
+        <p class="ds-row-sub" data-none-approved><span class="ds-badge ds-badge-warning">{{ _("Nothing approved") }}</span> {{ _("Patients are shown nothing for this treatment yet.") }}</p>
+        {% endif %}
+        {% if x.draft %}
+        <p class="ds-row-sub mb-1"><span class="ds-badge">{{ _("Draft") }}</span> {{ _('version {n}', n=x.draft.version) }}{% if x.draft.demo %} · <strong>{{ _("demo sample, not clinical advice") }}</strong>{% else %} · {{ _('written by {who}', who=x.draft.created_by) }}{% endif %}</p>
+        <p class="sx-quote" data-draft>{{ x.draft.body }}</p>
+        <form method="post" action="{{ url_for('aftercare.approve', text_id=x.draft.id) }}" class="mb-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="btn btn-success btn-sm">{{ _("Approve this draft") }}<span class="visually-hidden">{{ _(': {topic}, {lang}', topic=_(aftercare_topics[row.topic]), lang=_(aftercare_langs[lang])) }}</span></button></form>
+        {% endif %}
+        <form method="post" action="{{ url_for('aftercare.save', topic=row.topic, lang=lang) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <label class="form-label small" for="body-{{ row.topic }}-{{ lang }}">{{ _("New draft") }}</label>
+          <textarea class="form-control form-control-sm mb-2" id="body-{{ row.topic }}-{{ lang }}" name="body" rows="4" maxlength="2000" required>{{ (x.draft or x.approved or {}).get('body', '') }}</textarea>
+          <button type="submit" class="btn btn-outline-primary btn-sm">{{ _("Save as draft") }}</button>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</section>
+{% endfor %}
+{% endblock %}

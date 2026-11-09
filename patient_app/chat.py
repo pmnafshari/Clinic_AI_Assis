@@ -397,6 +397,11 @@ def _answer(question, cf, conn, lang, ip, urlopen):
         return {"state": "answer", "body": faq_body, "target": f"faq:{faq_meta['key']}",
                 "source": faq_meta["source"], "content_version": faq_meta["version"]}
     if faq_state == "unapproved":
+        # P29 R-020 / NEW-05: an aftercare question about a treatment the patient had in the last 30 days, with a
+        # text a dentist approved, is answered with that text word for word - no model. otherwise, a person
+        found = _aftercare(conn, cf, faq_meta["key"], lang)
+        if found:
+            return found
         hid, created = handoff.raise_request(conn, cf, "no_content", faq_meta["topic"])
         return {"state": "deflection", "body": None, "target": f"unapproved:{faq_meta['key']}",
                 "handoff": hid, "handoff_created": created}
@@ -522,6 +527,26 @@ def _answer(question, cf, conn, lang, ip, urlopen):
     if state == "invalid":
         return {"state": "refusal", "body": None, "target": f"{route}:invalid_reply"}
     return {"state": "answer", "body": text, "target": route}
+
+
+def _aftercare(conn, cf, faq_key, lang):
+    import aftercare
+    import patient_id
+    pid = patient_id.resolve(conn, cf)
+    found = aftercare.answer_for(conn, pid, faq_key, lang) if pid else None
+    if not found:
+        return None
+    parts = []
+    for a in found:
+        when = ""
+        if a["visit_date"]:
+            y, m, d = a["visit_date"][:10].split("-")
+            when = f"{d}/{m}/{y}"
+        parts.append(t("chat_aftercare", lang).format(topic=t("aftercare_topic_" + a["topic"], lang), date=when)
+                     + " " + a["text"]["body"])
+    return {"state": "answer", "body": "\n\n".join(parts), "target": f"aftercare:{faq_key}",
+            "source": "aftercare approved by a dentist",
+            "content_version": ",".join(f"{a['topic']}-{a['text']['lang']}-v{a['text']['version']}" for a in found)}
 
 
 def answer_question(question, cf, conn, lang, ip=None, urlopen=local_urlopen):

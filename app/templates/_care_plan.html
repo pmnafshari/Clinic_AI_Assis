@@ -57,3 +57,36 @@
   </div>
 </section>
 {% endif %}
+
+{% if aftercare_items is not none %}
+{# P29 R-020 / NEW-05: the aftercare this patient is shown for the treatments of the last 30 days - only approved
+   texts; a treatment without one shows nothing to the patient #}
+<section class="card dash-card sx-h-m sx-wide" aria-labelledby="aftercare-title" id="aftercare">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="aftercare-title">{{ _("Aftercare the patient sees") }} <span class="ux-count">{{ aftercare_items | selectattr('text') | list | length }}</span></h2>
+      <p class="ds-card-sub">{{ _("For the treatments of the last 30 days, on the portal and from the assistant. Only a text a dentist approved is shown.") }}</p>
+    </div>
+    {% if authorize(g.user.role, 'manage_aftercare') %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('aftercare.index') }}">{{ _("Aftercare texts") }}</a>{% endif %}
+  </div>
+  <div class="dash-card-body">
+    {% if aftercare_items %}
+    <ul class="ds-rows">
+      {% for a in aftercare_items %}
+      <li class="ds-row" data-aftercare-item="{{ a.topic }}"><span class="ds-row-main">
+        <span class="ds-row-title">{{ _(aftercare_topics[a.topic]) }} · {{ _('visit of {date}', date=a.visit_date) }}</span>
+        {% if a.text %}
+        <span class="ds-row-sub">{{ _('Shown: version {n}, approved by {who}', n=a.text.version, who=a.text.approved_by) }}</span>
+        <span class="sx-quote d-block mt-1">{{ a.text.body }}</span>
+        {% else %}
+        <span class="ds-row-sub"><span class="ds-badge ds-badge-warning">{{ _("Nothing approved") }}</span> {{ _("The patient is shown nothing for this treatment; a question about it goes to a person.") }}</span>
+        {% endif %}
+      </span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="dash-empty-line">{{ _("No treatment in the last 30 days that has aftercare.") }}</p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}

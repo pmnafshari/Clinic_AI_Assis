@@ -6,6 +6,7 @@ from flask import Blueprint, abort, flash, g, redirect, render_template, request
 import secrets
 import sqlite3
 
+import aftercare
 import agent
 import ask
 import clinic_time
@@ -25,7 +26,7 @@ from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
 from storage import lookup_clinical, lookup_patient
 
 from .db import get_chroma, get_db
-from .i18n import _
+from .i18n import _, current as lang
 
 patients_bp = Blueprint("patients", __name__)
 
@@ -342,6 +343,7 @@ def detail_view(cf):
         patient_tasks=(staff_tasks.listing(conn, pid=pid) + staff_tasks.listing(conn, pid=pid, status="closed"))
         if authorize(g.user["role"], "manage_tasks") else None,
         task_staff=staff_tasks.staff(conn),
+        aftercare_items=aftercare.for_patient(conn, pid, lang()) if authorize(g.user["role"], "assign_services") else None,
         tooth_chart=tooth_chart, chart_pending=chart_pending, chart_marks=dental_chart.marks(conn, pid) if show_clinical else [],
         fdi=dental_chart, today=clinic_time.now().date().isoformat(),
         cf=cf,

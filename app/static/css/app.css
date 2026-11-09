@@ -1916,3 +1916,6 @@ main#main details:not(.ux-panel) > summary:focus-visible { outline: none; box-sh
 a.sx-th { text-decoration: none; }
 /* a field beside a button is as tall as the button */
 .form-control-sm, .form-select-sm { min-height: 2.375rem; padding-top: 0.4375rem; padding-bottom: 0.4375rem; font-size: 0.875rem; }
+/* R-020 / NEW-05: a text as the patient reads it */
+.sx-quote { margin: 0 0 0.5rem; padding: 0.5rem 0.75rem; border-left: 3px solid var(--ds-border-strong); border-radius: 6px;
+  background: var(--ds-surface-sunken); font-size: 0.875rem; white-space: pre-wrap; }

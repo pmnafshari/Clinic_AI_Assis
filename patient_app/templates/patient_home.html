@@ -63,6 +63,21 @@
       <p class="pp-muted mb-0">{{ t('home_nothing_to_do', lang) }}</p>
       {% endif %}
     </section>
+
+    {% if aftercare %}
+    <section class="pp-card" id="home-aftercare" aria-labelledby="aftercare-title">
+      <div class="pp-card-head"><h2 id="aftercare-title">{{ t('home_aftercare', lang) }}</h2></div>
+      <ul class="pp-todo pp-box" style="--h:320px">
+        {% for a in aftercare %}
+        <li data-aftercare="{{ a.topic }}">
+          <span class="pp-ico" aria-hidden="true"><i class="bi bi-bandaid"></i></span>
+          <span class="pp-todo-text"><b>{{ t('chat_aftercare', lang).format(topic=t('aftercare_topic_' ~ a.topic, lang), date=a.visit_date | appt_day(lang)) }}</b><span>{{ a.text.body }}</span></span>
+        </li>
+        {% endfor %}
+      </ul>
+      <p class="pp-muted small mb-0 mt-2">{{ t('home_aftercare_note', lang) }}</p>
+    </section>
+    {% endif %}
   </div>
 
   <div class="pp-home-side">

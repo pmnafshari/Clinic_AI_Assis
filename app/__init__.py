@@ -123,6 +123,9 @@ def create_app():
     app.jinja_env.globals["dchart"] = chart_routes
     from . import care_routes
     app.jinja_env.globals["care"] = care_routes
+    from .aftercare_routes import LANG_LABELS, TOPIC_LABELS
+    app.jinja_env.globals["aftercare_topics"] = TOPIC_LABELS
+    app.jinja_env.globals["aftercare_langs"] = LANG_LABELS
     import tooth_art
     app.jinja_env.globals["art"] = tooth_art
     app.jinja_env.globals["note_date_differs"] = lambda day, text: note_dates.differs(str(day) if day else None, text)
@@ -153,6 +156,7 @@ def create_app():
     from .chart_routes import chart_bp
     from .care_routes import care_bp
     from .tasks_routes import tasks_bp
+    from .aftercare_routes import aftercare_bp
     from .dashboard_routes import dashboard_bp
     from .handoff_routes import handoff_bp
     from .requests_routes import requests_bp
@@ -181,6 +185,7 @@ def create_app():
     app.register_blueprint(chart_bp)
     app.register_blueprint(care_bp)
     app.register_blueprint(tasks_bp)
+    app.register_blueprint(aftercare_bp)
     app.register_blueprint(requests_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(handoff_bp)

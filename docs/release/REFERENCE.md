@@ -12,6 +12,9 @@ this file is stale.
 | POST | `/admin/users` | `admin.create` |
 | POST | `/admin/users/<username>` | `admin.apply` |
 | GET | `/admin/users/<username>/confirm` | `admin.confirm_fragment` |
+| GET | `/aftercare` | `aftercare.index` |
+| POST | `/aftercare/<topic>/<lang>` | `aftercare.save` |
+| POST | `/aftercare/texts/<int:text_id>/approve` | `aftercare.approve` |
 | GET,POST | `/agent/command` | `agent.command_page` |
 | POST | `/agent/confirm` | `agent.confirm_change` |
 | POST | `/agent/dictate` | `agent.dictate_command` |
@@ -219,6 +222,7 @@ this file is stale.
 
 | Table | Columns |
 |---|---|
+| `aftercare_texts` | id, topic, lang, version, body, status, demo, created_by, created_at, approved_by, approved_at |
 | `appointments` | id, patient_id, dentist, starts_at, minutes, status, note, period, created_at, updated_at |
 | `audit_log` | id, ts, username, role, action, target, allowed, ip, reason |
 | `audit_unlock` | reason |

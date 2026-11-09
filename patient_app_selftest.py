@@ -2763,6 +2763,56 @@ def selftest():
         assert len(re.findall(r'class="[^"]*\bpatient-login-intro\b', login36)) == 2, \
             "36d: the heading and the line under it are the parts phones hide"
 
+        # 37. P29 R-020 / NEW-05: aftercare. a patient whose visit five days ago was an extraction: while the text is
+        # a draft, home shows nothing and the assistant sends the question to a person; once a dentist approves it,
+        # home shows it and the assistant answers with it word for word - no model, no person queued. a patient
+        # without such a visit still goes to a person
+        import aftercare as aftercare37
+        import clinic_time as clinic_time37
+        cf37, cf37b = "ZZAF800101010101", "ZZAF800101010102"
+        pin37, pin37b = seed_and_issue(cf37, "Alda Cura"), seed_and_issue(cf37b, "Bruno Senza")
+        c37 = raw_db()
+        day37 = (clinic_time37.now() - timedelta(days=5)).date().isoformat()
+        c37.execute("INSERT INTO visits (patient_id, visit_date, procedures, clinical_notes, source_path)"
+                    " VALUES (?, ?, ?, 'ok', 'af37.json')", (pid_of(cf37), day37, json.dumps(["ext 48", "prophy"])))
+        c37.commit()
+        c37.close()
+
+        def ready37(cf, pin):
+            client, _ = sign_in(cf, pin)
+            page = client.get("/change-pin")
+            client.post("/change-pin", data={"pin": "24681357", "confirm": "24681357", "csrf_token": _csrf_from(page.text)})
+            return client
+
+        def ask37(client, question):
+            page = client.get("/chat")
+            return client.post("/chat", data={"question": question, "csrf_token": _csrf_from(page.text)}).text
+
+        def callbacks37(cf):
+            return count("SELECT COUNT(*) FROM handoff_requests WHERE patient_id = ?", (pid_of(cf),))
+        client37 = ready37(cf37, pin37)
+        assert 'id="home-aftercare"' not in client37.get("/").text, "37: HARD FAIL - a draft aftercare text shown"
+        before37 = callbacks37(cf37)
+        reply37 = ask37(client37, "What can I eat after extraction?")
+        assert "garza" not in reply37 and "gauze" not in reply37 and callbacks37(cf37) == before37 + 1, \
+            "37: HARD FAIL - a draft answered the patient, or no person was queued"
+        c37 = raw_db()
+        draft37 = c37.execute("SELECT id FROM aftercare_texts WHERE topic = 'extraction' AND lang = 'it'"
+                              " AND status = 'draft'").fetchone()[0]
+        aftercare37.approve(c37, draft37, "test-dentist")
+        c37.close()
+        home37 = client37.get("/").text
+        assert 'id="home-aftercare"' in home37 and "garza" in home37 and 'data-aftercare="cleaning"' not in home37, \
+            "37: home does not show the approved text, or shows a cleaning text nobody approved"
+        before37 = callbacks37(cf37)
+        reply37 = ask37(client37, "Cosa posso mangiare dopo l'estrazione?")
+        assert "garza" in reply37 and t("answer_heading", "it") in reply37, "37: the assistant does not give the approved text"
+        assert callbacks37(cf37) == before37, "37: a person was queued although the text answered"
+        other37 = ready37(cf37b, pin37b)
+        before37 = callbacks37(cf37b)
+        assert "garza" not in ask37(other37, "What can I eat after extraction?") and callbacks37(cf37b) == before37 + 1, \
+            "37: HARD FAIL - a patient without an extraction was given its aftercare"
+
     print("selftest ok")
 
 

@@ -28,8 +28,9 @@ NAV = {
     # /imaging/tasks (P27): dentist and reception; admin never
     # /jarvis/link (Jarvis J00): dentist and reception delegate their own session; admin registers devices instead
     # /tasks (NEW-04): dentist and reception; admin never
+    # /aftercare (NEW-05): the dentist's alone - clinical content
     "dentist": {"/", "/appointments", "/requests", "/patients", "/reviews", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/tasks", "/notes/new", "/billing", "/stock",
-                "/handoffs", "/reminders", "/data-requests", "/reports", "/providers"},
+                "/handoffs", "/reminders", "/data-requests", "/aftercare", "/reports", "/providers"},
     "assistant": {"/", "/appointments", "/requests", "/patients", "/imports", "/imaging/tasks", "/qa", "/guides/ask", "/jarvis/link", "/tasks", "/notes/new", "/billing", "/stock",
                   "/handoffs", "/reminders", "/providers"},
     "admin": {"/admin/users", "/patients/duplicates", "/jarvis/devices"},

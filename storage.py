@@ -221,6 +221,10 @@ def init_db(db_path):
     # staff tasks (NEW-04): one person, a due time, a patient if it is about one
     import staff_tasks
     conn.executescript(staff_tasks.SCHEMA)
+    # aftercare texts (R-020 / NEW-05): the demo samples go in as drafts; only a dentist's approval shows one
+    import aftercare
+    conn.executescript(aftercare.SCHEMA)
+    aftercare.seed_demo(conn)
     # DRV (P25-D4): the read-only Drive source - its checks, the files it fetched, the automatic check
     import drive_source
     conn.executescript(drive_source.SCHEMA)
