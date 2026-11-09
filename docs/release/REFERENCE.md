@@ -166,6 +166,9 @@ this file is stale.
 | POST | `/stock/<int:item_id>/threshold` | `stock.threshold` |
 | POST | `/stock/alerts/<int:alert_id>/acknowledge` | `stock.acknowledge` |
 | POST | `/stock/items` | `stock.create` |
+| GET | `/tasks` | `tasks.index` |
+| POST | `/tasks` | `tasks.create` |
+| POST | `/tasks/<int:tid>/close` | `tasks.close` |
 | POST | `/upload` | `upload.submit_dashboard` |
 | GET | `/upload/recent` | `upload.recent_intake` |
 
@@ -277,6 +280,7 @@ this file is stale.
 | `sessions` | id, token_hash, username, role, created_at, last_seen_at |
 | `similar_case_exclusions` | visit_id, reason, criteria_version, decided_by, decided_at |
 | `similar_case_feedback` | id, source_visit_id, case_visit_id, verdict, reason, criteria_version, decided_by, decided_at |
+| `staff_tasks` | id, title, note, patient_id, assignee, due_at, status, created_by, created_at, closed_by, closed_at |
 | `support_ticket_events` | id, ticket_id, event, detail, actor, at |
 | `support_tickets` | id, source, summary, severity, status, owner, due_on, resolution, alert_key, created_by, created_at, closed_at |
 | `tooth_marks` | id, patient_id, tooth, surfaces, kind, state, status, source, visit_id, said, note, marked_on, created_by, created_at, decided_by, decided_at |

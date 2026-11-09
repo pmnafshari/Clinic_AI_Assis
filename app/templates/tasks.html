@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{# P29 NEW-04: the staff's tasks - one's own first, then everyone else's, overdue ones flagged; the ones closed in
+   the last 30 days below. Nothing is sent to anyone. #}
+{% block content %}
+<div class="ds-page-head">
+  <div>
+    <p class="ds-page-eyebrow">{{ _("Workspace") }}</p>
+    <h1 class="ds-page-title">{{ _("Tasks") }}</h1>
+    <p class="ds-page-meta">{{ _("Work for the clinic's staff, each with one person who does it and a due time. Overdue tasks are flagged here, on Home and in the bell; nothing is sent to anyone.") }}</p>
+  </div>
+</div>
+
+<section class="card dash-card mb-3" aria-labelledby="new-task-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="new-task-title">{{ _("New task") }}</h2></div>
+  <div class="dash-card-body">{% with prefix='task', task_cf=none, task_staff=staff %}{% include "_task_form.html" %}{% endwith %}</div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="my-tasks-title" id="mine">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="my-tasks-title">{{ _("Your tasks") }} <span class="ux-count">{{ mine | length }}</span></h2></div>
+  <div class="dash-card-body">{% with rows=mine, with_patient=true, back_cf=none, empty=_("Nothing is waiting for you.") %}{% include "_task_rows.html" %}{% endwith %}</div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="other-tasks-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="other-tasks-title">{{ _("Everyone else's") }} <span class="ux-count">{{ others | length }}</span></h2></div>
+  <div class="dash-card-body">{% with rows=others, with_patient=true, back_cf=none, empty=_("No open task for anyone else.") %}{% include "_task_rows.html" %}{% endwith %}</div>
+</section>
+
+<section class="card dash-card mb-3" aria-labelledby="closed-tasks-title">
+  <div class="dash-card-head"><h2 class="ds-card-title" id="closed-tasks-title">{{ _("Done or cancelled, last 30 days") }} <span class="ux-count">{{ closed | length }}</span></h2></div>
+  <div class="dash-card-body">{% with rows=closed, with_patient=true, back_cf=none, empty=_("Nothing closed in the last 30 days.") %}{% include "_task_rows.html" %}{% endwith %}</div>
+</section>
+{% endblock %}

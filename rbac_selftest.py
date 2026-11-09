@@ -141,6 +141,10 @@ def _seed(db_path, root):
                            " 'rb-case.json')", (other_pid,)).lastrowid
     conn.execute("INSERT INTO visit_reviews (visit_id, method, reviewed_by, reviewed_at)"
                  " VALUES (?, 'typed', 'rb_dentist', '2026-09-23T06:00:00+00:00')", (case_id,))
+    # NEW-04: a task about the canary, for the close route
+    tid = conn.execute("INSERT INTO staff_tasks (title, patient_id, assignee, due_at, created_by, created_at) VALUES"
+                       " ('rb task', ?, 'rb_dentist', '2026-09-23T06:00:00+00:00', 'rb_dentist',"
+                       " '2026-09-23T06:00:00+00:00')", (pid,)).lastrowid
     # E-002: a referral on the canary's care plan, for the close route
     sid = conn.execute("INSERT INTO patient_services (patient_id, service, assigned_by, assigned_role, assigned_at)"
                        " VALUES (?, 'hygiene', 'rb_dentist', 'dentist', '2026-09-23T06:00:00+00:00')", (pid,)).lastrowid
@@ -158,7 +162,7 @@ def _seed(db_path, root):
             "item_id": item_id, "alert_id": alert_id, "job_id": job_id,
             "handoff_id": handoff_id, "kind": "messaging", "sid": sid, "review_id": review_id, "did": did,
             "vid": visit_id, "case": case_id, "import_id": import_id, "doc_id": did, "guide_id": 1, "page": 1, "rid": rid, "bid": bid, "device_id": 1, "delegation_id": 1,
-            "username": "rb_target", "filename": "app.css", "mark_id": mark_id, "sid": sid}
+            "username": "rb_target", "filename": "app.css", "mark_id": mark_id, "sid": sid, "tid": tid}
 
 
 def _state(db_path, root):

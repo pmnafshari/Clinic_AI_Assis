@@ -218,6 +218,9 @@ def init_db(db_path):
     # the care plan (E-002): the services a patient should attend
     import patient_services
     conn.executescript(patient_services.SCHEMA)
+    # staff tasks (NEW-04): one person, a due time, a patient if it is about one
+    import staff_tasks
+    conn.executescript(staff_tasks.SCHEMA)
     # DRV (P25-D4): the read-only Drive source - its checks, the files it fetched, the automatic check
     import drive_source
     conn.executescript(drive_source.SCHEMA)

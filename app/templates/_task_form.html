@@ -1,0 +1,22 @@
+{# a new task: what, who does it, when it is due; the patient comes from the record when it is added there #}
+<form method="post" action="{{ url_for('tasks.create') }}" class="row g-2 align-items-end" data-task-form>
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if task_cf %}<input type="hidden" name="cf" value="{{ task_cf }}">{% endif %}
+  <div class="col-12 col-md-6"><label class="form-label small" for="{{ prefix }}-title">{{ _("Task") }}</label>
+    <input class="form-control form-control-sm" id="{{ prefix }}-title" name="title" maxlength="200" required></div>
+  <div class="col-6 col-md-3"><label class="form-label small" for="{{ prefix }}-assignee">{{ _("Who does it") }}</label>
+    <select class="form-select form-select-sm" id="{{ prefix }}-assignee" name="assignee" required>
+      {% for who in task_staff %}<option value="{{ who }}"{% if who == g.user.username %} selected{% endif %}>{{ who }}</option>{% endfor %}
+    </select></div>
+  <div class="col-6 col-md-3"><label class="form-label small" for="{{ prefix }}-day">{{ _("Due") }}</label>
+    <input class="form-control form-control-sm" type="date" id="{{ prefix }}-day" name="day" value="{{ today }}" required></div>
+  <div class="col-6 col-md-3"><label class="form-label small" for="{{ prefix }}-time">{{ _("Time") }}</label>
+    <input class="form-control form-control-sm" type="time" id="{{ prefix }}-time" name="time" value="09:00"></div>
+  {% if not task_cf %}
+  <div class="col-6 col-md-3"><label class="form-label small" for="{{ prefix }}-cf">{{ _("Patient's codice fiscale (optional)") }}</label>
+    <input class="form-control form-control-sm" id="{{ prefix }}-cf" name="cf" maxlength="16" autocomplete="off"></div>
+  {% endif %}
+  <div class="col-12 col-md"><label class="form-label small" for="{{ prefix }}-note">{{ _("Note (optional)") }}</label>
+    <input class="form-control form-control-sm" id="{{ prefix }}-note" name="note" maxlength="500"></div>
+  <div class="col-12 col-md-auto"><button type="submit" class="btn btn-primary btn-sm">{{ _("Add task") }}</button></div>
+</form>

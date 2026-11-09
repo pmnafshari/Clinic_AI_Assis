@@ -173,6 +173,13 @@ def index():
         alerts.append((_("{n} item low on stock", n=stock_low) if stock_low == 1 else _("{n} items low on stock", n=stock_low), url_for("stock.index")))
     if callbacks:
         alerts.append((_("{n} call-back open", n=callbacks) if callbacks == 1 else _("{n} call-backs open", n=callbacks), url_for("handoff.index")))
+    if authorize(role, "manage_tasks"):
+        import staff_tasks
+        overdue, due_today = staff_tasks.due_for(conn, g.user["username"])
+        if overdue:
+            alerts.append((_("{n} of your tasks is overdue", n=overdue) if overdue == 1 else _("{n} of your tasks are overdue", n=overdue), url_for("tasks.index") + "#mine"))
+        if due_today:
+            alerts.append((_("{n} task due today", n=due_today) if due_today == 1 else _("{n} tasks due today", n=due_today), url_for("tasks.index") + "#mine"))
     attention = []
     if pending:
         attention.append((_("{n} request to confirm", n=len(pending)) if len(pending) == 1 else _("{n} requests to confirm", n=len(pending)), url_for("appointments.index") + "#requests"))

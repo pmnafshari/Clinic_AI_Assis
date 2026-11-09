@@ -1,0 +1,23 @@
+{# one list of tasks: what, who, when (overdue flagged), the patient if any, and done / cancel for an open one #}
+{% if rows %}
+<ul class="ds-rows" data-tasks>
+  {% for t in rows %}
+  <li class="ds-row" data-task="{{ t.id }}"{% if t.overdue %} data-overdue{% endif %}>
+    <span class="ds-row-main">
+      <span class="ds-row-title">{{ t.title }}
+        {% if t.overdue %}<span class="ds-badge ds-badge-danger">{{ _("Overdue") }}</span>{% elif t.today %}<span class="ds-badge ds-badge-warning">{{ _("Due today") }}</span>{% elif t.status == 'done' %}<span class="ds-badge ds-badge-success">{{ _("Done") }}</span>{% elif t.status == 'cancelled' %}<span class="ds-badge">{{ _("Cancelled") }}</span>{% endif %}</span>
+      <span class="ds-row-sub">{{ _('Due {day} at {time}', day=t.due_day, time=t.due_time) }} · {{ _('for {who}', who=t.assignee) }} · {{ _('added by {who}', who=t.created_by) }}{% if t.closed_by %} · {{ _('closed by {who}', who=t.closed_by) }}{% endif %}{% if t.note %} · "{{ t.note }}"{% endif %}</span>
+    </span>
+    <span class="sx-row-acts">
+      {% if with_patient and t.patient_name %}<a class="btn btn-outline-secondary btn-sm" href="{{ url_for('patients.detail_view', cf=t.codice_fiscale) }}#tasks">{{ t.patient_name }}</a>{% endif %}
+      {% if t.status == 'open' %}
+      <form method="post" action="{{ url_for('tasks.close', tid=t.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="done">{% if back_cf %}<input type="hidden" name="cf" value="{{ back_cf }}">{% endif %}<button type="submit" class="btn btn-outline-success btn-sm">{{ _("Done") }}<span class="visually-hidden">{{ _(': {task}', task=t.title) }}</span></button></form>
+      <form method="post" action="{{ url_for('tasks.close', tid=t.id) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="status" value="cancelled">{% if back_cf %}<input type="hidden" name="cf" value="{{ back_cf }}">{% endif %}<button type="submit" class="btn btn-outline-danger btn-sm">{{ _("Cancel") }}<span class="visually-hidden">{{ _(': {task}', task=t.title) }}</span></button></form>
+      {% endif %}
+    </span>
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="dash-empty-line">{{ empty }}</p>
+{% endif %}

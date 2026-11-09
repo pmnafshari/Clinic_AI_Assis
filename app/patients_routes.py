@@ -18,6 +18,7 @@ import patient_auth
 import patient_files
 import patient_identity
 import patient_services
+import staff_tasks
 import pending_actions
 from auth import authorize, log_audit
 from codice_fiscale import is_valid as is_valid_cf, normalize as normalize_cf
@@ -338,6 +339,9 @@ def detail_view(cf):
     return render_template(
         "patients_detail.html",
         services=patient_services.for_patient(conn, pid) if authorize(g.user["role"], "assign_services") else None,
+        patient_tasks=(staff_tasks.listing(conn, pid=pid) + staff_tasks.listing(conn, pid=pid, status="closed"))
+        if authorize(g.user["role"], "manage_tasks") else None,
+        task_staff=staff_tasks.staff(conn),
         tooth_chart=tooth_chart, chart_pending=chart_pending, chart_marks=dental_chart.marks(conn, pid) if show_clinical else [],
         fdi=dental_chart, today=clinic_time.now().date().isoformat(),
         cf=cf,

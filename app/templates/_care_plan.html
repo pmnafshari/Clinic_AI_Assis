@@ -41,3 +41,19 @@
     {% endif %}
   </div>
 </section>
+
+{% if patient_tasks is not none %}
+{# P29 NEW-04: tasks about this patient, added here or on the Tasks page #}
+<section class="card dash-card sx-h-m sx-wide" aria-labelledby="tasks-title" id="tasks">
+  <div class="dash-card-head">
+    <div>
+      <h2 class="ds-card-title" id="tasks-title">{{ _("Tasks for this patient") }} <span class="ux-count">{{ patient_tasks | selectattr('status', 'equalto', 'open') | list | length }}</span></h2>
+      <p class="ds-card-sub">{{ _("Work about this patient for one member of staff, with a due time. Nothing is sent to the patient.") }}</p>
+    </div>
+  </div>
+  <div class="dash-card-body">
+    <div class="mb-3">{% with prefix='ptask', task_cf=cf, task_staff=task_staff %}{% include "_task_form.html" %}{% endwith %}</div>
+    {% with rows=patient_tasks, with_patient=false, back_cf=cf, empty=_("No task for this patient.") %}{% include "_task_rows.html" %}{% endwith %}
+  </div>
+</section>
+{% endif %}

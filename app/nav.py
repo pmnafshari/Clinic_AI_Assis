@@ -28,6 +28,8 @@ ITEMS = [
     # P24: clinic-wide manuals and procedures - no patient data; admin holds no guides capability
     ("Workspace", "Ask clinic guides", "guides.ask", "/guides/ask", "bi-journal-bookmark", "ask_guides", None, "guides."),
     ("Workspace", "Jarvis", "jarvis.link", "/jarvis/link", "bi-broadcast", "use_jarvis", None, "jarvis.link|jarvis.delegate|jarvis.revoke_delegation"),
+    # NEW-04: the count is one's own tasks overdue or due today
+    ("Workspace", "Tasks", "tasks.index", "/tasks", "bi-check2-square", "manage_tasks", "tasks", "tasks."),
     ("Workspace", "Add note", "notes.new_note", "/notes/new", "bi-journal-plus", "read_notes", None, "notes."),
     ("Operations", "Billing", "billing.index", "/billing", "bi-receipt", "view_billing", None, "billing."),
     ("Operations", "Stock", "stock.index", "/stock", "bi-box-seam", "use_inventory", None, "stock."),
@@ -45,11 +47,15 @@ ITEMS = [
 # what a count counts, for its accessible name: (one, many)
 COUNT_NOUNS = {"requests": ("pending request", "pending requests"), "reviews": ("note to review", "notes to review"),
                "imports": ("imported file to review", "imported files to review"),
-               "imaging": ("imaging task", "imaging tasks")}
+               "imaging": ("imaging task", "imaging tasks"), "tasks": ("task due", "tasks due")}
 
 
-def _counts(conn, role):
+def _counts(conn, role, username=None):
     out = {}
+    if authorize(role, "manage_tasks") and username:
+        import staff_tasks
+        overdue, today = staff_tasks.due_for(conn, username)
+        out["tasks"] = overdue + today
     if authorize(role, "manage_appointments"):
         out["requests"] = conn.execute("SELECT COUNT(*) FROM appointments WHERE status = 'requested'").fetchone()[0]
     if authorize(role, "review_upload"):
@@ -67,7 +73,7 @@ def _request_counts():
     """the sidebar's counts for the signed-in role, read once per request (the top bar lists the same ones)."""
     if not hasattr(g, "_nav_counts"):
         from .db import get_db
-        g._nav_counts = _counts(get_db(), g.user["role"])
+        g._nav_counts = _counts(get_db(), g.user["role"], g.user["username"])
     return g._nav_counts
 
 
@@ -102,6 +108,7 @@ NOTIFY = [
     ("imports", "bi-folder-symlink", ("imported file to review", "imported files to review"), "Waiting for a dentist's decision", "/imports", False),
     ("imaging", "bi-calendar2-check", ("imaging task", "imaging tasks"), "Reception needs to act on a booking", "/imaging/tasks", True),
     ("stock", "bi-box-seam", ("stock alert", "stock alerts"), "An item is under its reorder level", "/stock", True),
+    ("tasks", "bi-check2-square", ("task due", "tasks due"), "Yours, due today or overdue", "/tasks#mine", True),
 ]
 
 

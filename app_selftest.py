@@ -781,7 +781,7 @@ def selftest():
         side_links = re.findall(rb'class="app-side-link[^"]*" href="([^"]+)"', shell.data)
         # P25 adds Legacy import, P24 Ask clinic guides, P27 Imaging tasks: 17
         # 18 since Jarvis J00 added "Jarvis" (2026-10-04)
-        assert len(side_links) == 18, f"20: a dentist should see 18 sidebar links, got {len(side_links)}"
+        assert len(side_links) == 19, f"20: a dentist should see 19 sidebar links (Tasks since NEW-04), got {len(side_links)}"
         assert b"/data-requests" in side_links, f"20: a dentist is offered Data requests: {side_links}"
         foot = shell.data.split(b'data-ux="account"', 1)[1]
         assert b"Change password" in foot and b'action="/logout"' in foot and b"Sign out" in foot, \
