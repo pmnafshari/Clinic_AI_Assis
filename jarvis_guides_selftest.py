@@ -763,6 +763,53 @@ def ui_review_route(tmp):
     gconn.close()
 
 
+def correction():
+    # 13. P29 U-016: what was heard can be corrected on the card before it is asked. Yes asks the corrected words and
+    #     the answer shows both; an empty, overlong or non-text correction, or one sent with No, is not a clear choice -
+    #     nothing is asked; the page offers the field and sends it with Yes, through /confirm
+    heard_text = "what does E 05 mean on the a x 200"
+    fixed = "What does E05 mean on the AX-200?"
+
+    def one(decide):
+        m = states.Machine(clock=Clock())
+        m.go("READY", "listening for the wake phrase")
+        turn = m.begin("heard the wake phrase - listening to the request")
+        link = Link(ANSWER)
+        ex = answer.Exchange(m, lambda pcm, hint=None, cancelled=None: (heard_text, "en"), lambda: link, confirm_seconds=3)
+        pcm = (np.sin(np.arange(16000) / 5) * 3000).astype(np.int16)
+        got = {}
+        run_exchange(ex, pcm, m, turn, lambda card: got.setdefault("result", decide(m, card)))
+        return m, link, got.get("result")
+    m, link, result = one(lambda mm, card: mm.decide(card["id"], "ask", text="  What does   E05 mean on the AX-200? "))
+    assert result == "taken" and link.asked == [fixed], f"13: the corrected words are not what was asked ({link.asked})"
+    a = m.snapshot()["answer"]
+    assert a["heard"] == heard_text and a["corrected"] == fixed, "13: the answer does not show what was heard and the correction"
+    m, link, result = one(lambda mm, card: mm.decide(card["id"], "ask"))
+    assert link.asked == [heard_text] and m.snapshot()["answer"]["corrected"] is None, "13: without a correction, what was heard"
+    for bad in ("", "   ", "x" * (states.MAX_CORRECTION + 1), 5, ["E05"]):
+        m, link, result = one(lambda mm, card: mm.decide(card["id"], "ask", text=bad))
+        assert result == "ambiguous" and link.asked == [], f"13: HARD FAIL - a bad correction {bad!r} was asked"
+    m, link, result = one(lambda mm, card: mm.decide(card["id"], "discard", text=fixed))
+    assert result == "ambiguous" and link.asked == [], "13: HARD FAIL - a correction sent with No was asked"
+    # the page: the field, sent with Yes; /confirm takes text only as text
+    m = states.Machine()
+    m.go("READY", "listening")
+    turn = m.begin("heard the wake phrase - listening to the request")
+    pid = m.offer(turn, heard_text, 30)
+    c = jarvis_app(m).test_client()
+    base = "http://127.0.0.1:5020"
+    html = c.get("/", base_url=base).data.decode()
+    assert 'id="heard-fix"' in html and f'value="{heard_text}"' in html and 'for="heard-fix"' in html, "13: no field to correct"
+    assert 'fix.value' in html and "text: text" in html, "13: the page does not send the correction with Yes"
+    bad = c.post("/confirm", data=json.dumps({"id": pid, "decision": "ask", "text": 5}), content_type="application/json",
+                 headers={"Origin": base}, base_url=base)
+    assert bad.status_code == 400, "13: a correction that is not text is refused"
+    ok = c.post("/confirm", data=json.dumps({"id": pid, "decision": "ask", "text": fixed}), content_type="application/json",
+                headers={"Origin": base}, base_url=base)
+    assert ok.status_code == 204 and m.await_decision(pid) == "ask" and m.corrected() == fixed, "13: /confirm with the correction"
+    assert m.corrected() is None, "13: the correction is kept after it was read"
+
+
 def selftest():
     with tempfile.TemporaryDirectory() as tmp:
         route(Path(tmp))
@@ -781,6 +828,7 @@ def selftest():
         hint_order_and_budget(Path(tmp))
     with tempfile.TemporaryDirectory() as tmp:
         ui_review_route(Path(tmp))
+    correction()
     print("jarvis_guides_selftest: ok")
 
 

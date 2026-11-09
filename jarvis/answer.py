@@ -123,16 +123,19 @@ class Exchange:
             return {"discard": "what was heard was not confirmed - nothing was asked",
                     "timeout": "nobody confirmed what was heard in time - nothing was asked"}.get(
                 decision, "the confirmation was not clear - nothing was asked")
+        fixed = m.corrected() if self.confirm else None     # P29 U-016: what the person corrected it to on screen
+        question = fixed or heard
         self.recheck(turn, link, given)
         if not m.go_for(turn, "ACTIVE", ASKING) or not m.sending(turn):
             return "cancelled"
         try:
-            result = link.ask_guides(heard)
+            result = link.ask_guides(question)
         except LinkRefused as e:
             return self.problem(turn, "refused", str(e), heard)
         except LinkDown as e:
             return self.problem(turn, "clinic_down", str(e), heard)
-        if not m.show_for(turn, {**result, "heard": heard}, ANSWER_SECONDS):
+        if not m.show_for(turn, {**result, "heard": heard, "corrected": fixed if fixed and fixed != heard else None},
+                          ANSWER_SECONDS):
             return "cancelled"
         if result["outcome"] == "answer":
             c = result["citations"][0]

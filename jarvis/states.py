@@ -33,6 +33,7 @@ MEANING = {
                   "picks the patient there",
     "DEGRADED": "not available",
 }
+MAX_CORRECTION = 300      # P29 U-016: the longest correction of what was heard the page may send
 WAIT_SLICE = 1.0           # a wait wakes at least this often, so a deadline passed during sleep is seen at once
 
 
@@ -112,6 +113,7 @@ class Machine:
         self._sent = False         # the current interaction's question has gone to the clinic guides
         self._answer = None        # (what to show, expiry on self.clock) - memory only (J02)
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
+        self._corrected = None     # P29 U-016: the corrected words given with the last "ask", for the exchange
         self.paused = False
         self.access = None         # the doctor this device acts for, as the clinic says (2026-10-11), or None
         self.access_epoch = 0      # changes with every sign-in and sign-out
@@ -278,10 +280,19 @@ class Machine:
             self._move("CONFIRMING", reason)
             return pid
 
-    def decide(self, pid, decision):
+    def decide(self, pid, decision, text=None):
         """The person's choice on the page. -> "taken" only for the first "ask" or "discard" on what is waiting now,
         before its deadline; "expired" after it; "gone" when nothing waits under that id; "ambiguous" for a second
-        choice or an unknown word. A choice for another id makes what is waiting ambiguous."""
+        choice or an unknown word. A choice for another id makes what is waiting ambiguous.
+
+        P29 U-016: "ask" may carry `text`, what was heard as the person corrected it on screen - one line of at most
+        MAX_CORRECTION characters. Anything else with it (empty, too long, not text, or on another choice) is not a
+        clear choice: ambiguous, and nothing is asked."""
+        fixed = None
+        if text is not None:
+            fixed = " ".join(text.split()) if isinstance(text, str) else ""
+            if decision != "ask" or not fixed or len(fixed) > MAX_CORRECTION:
+                decision = "unclear correction"
         with self._lock:
             p = self._pending
             if p is None or p["id"] != pid:
@@ -298,6 +309,7 @@ class Machine:
                 p["decision"] = "ambiguous"
                 return "ambiguous"
             p["decision"] = decision
+            p["text"] = fixed
             return "taken"
 
     def await_decision(self, pid, within=None):
@@ -314,6 +326,7 @@ class Machine:
                     p["decision"] = "timeout"
                 if p["decision"] is not None:
                     self._pending = None
+                    self._corrected = p.get("text")
                     return p["decision"]
                 wait = min(self.slice, max(p["deadline"] - self.clock(), 0.01))
                 if stop is not None:
@@ -321,6 +334,13 @@ class Machine:
                         return None
                     wait = min(wait, max(stop - time.monotonic(), 0.01))
                 self._lock.wait(wait)
+
+    def corrected(self):
+        """The words the person corrected what was heard to, with the decision just returned; None if they did not.
+        Read once: it is not kept."""
+        with self._lock:
+            fixed, self._corrected = self._corrected, None
+            return fixed
 
     # --- reading --------------------------------------------------------------------------------------------------
     def _shown(self):

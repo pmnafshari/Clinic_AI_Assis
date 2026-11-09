@@ -108,6 +108,8 @@ PAGE = """<!doctype html>
   blockquote { margin: 12px 0; padding: 8px 14px; border-left: 4px solid var(--glow); background: rgba(255,140,40,.08); }
   .warn { color: var(--warn); font-weight: 600; }
   .heard { font-size: 20px; font-weight: 600; }
+  .fix { display: block; width: 100%; max-width: 40rem; margin: 4px 0 10px; padding: 8px 10px; font: inherit;
+         border: 1px solid #94a3b8; border-radius: 8px; }
   .choices { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; }
   .choices button { font: inherit; font-weight: 600; padding: 10px 18px; border-radius: 10px; cursor: pointer;
                     border: 2px solid var(--glow); }
@@ -173,12 +175,15 @@ PAGE = """<!doctype html>
     <div id="answer-body">{% if a and a.title %}<h3>{{ a.title }}</h3>{% endif %}{% if a and a.outcome == "confirm" %}
       <h3>Did I hear you right?</h3>
       <p class="heard">{{ a.heard }}</p>
+      <label for="heard-fix">What to ask - correct it here if I misheard</label>
+      <input id="heard-fix" class="fix" type="text" maxlength="300" value="{{ a.heard }}" autocomplete="off">
       <p class="muted">Nothing is asked until you press Yes. If you do not, it is discarded in {{ a.left or a.seconds }}
         seconds; nothing is ever sent by itself.</p>
       <div class="choices" data-id="{{ a.id }}"><button type="button" class="yes" data-decision="ask">Yes, ask this</button>
         <button type="button" class="no" data-decision="discard">No, discard</button></div>
     {% elif a %}
       {% if a.heard %}<p><strong>Heard:</strong> {{ a.heard }}</p>{% endif %}
+      {% if a.corrected %}<p><strong>You corrected it to:</strong> {{ a.corrected }}</p>{% endif %}
       {% if a.asked_as and a.asked_as != a.heard %}<p><strong>Asked as:</strong> {{ a.asked_as }}</p>{% endif %}
       {% for c in a.citations %}<blockquote>{{ c.passage }}</blockquote>
       <p class="muted">{{ c.title }}{% if c.edition %}, edition {{ c.edition }}{% endif %}, page {{ c.page }} - verified against the page</p>{% endfor %}
@@ -438,14 +443,15 @@ PAGE = """<!doctype html>
     gone: "This question is no longer waiting (cancelled, or already decided) - nothing was asked.",
     ambiguous: "More than one choice reached Jarvis, so nothing was asked. Say the wake phrase and ask again.",
   };
-  function decide(id, decision, box) {
+  function decide(id, decision, box, text) {
     const status = document.getElementById("confirm-status");
     // the buttons are about to go: the focus moves to the card's heading, where the reply will appear
     if (box.contains(document.activeElement)) document.getElementById("answer-title").focus();
     for (const b of box.querySelectorAll("button")) b.disabled = true;
     status.textContent = "Sending your choice...";
     fetch("/confirm", {method: "POST", headers: {"Content-Type": "application/json"},
-                       body: JSON.stringify({id: id, decision: decision})})
+                       body: JSON.stringify(text === undefined ? {id: id, decision: decision} :
+                                            {id: id, decision: decision, text: text})})
       .then((r) => {
         if (r.status === 204) {
           status.textContent = decision === "ask" ? "Confirmed - asking the clinic guides." :
@@ -467,7 +473,11 @@ PAGE = """<!doctype html>
     for (const [label, decision, cls] of [["Yes, ask this", "ask", "yes"], ["No, discard", "discard", "no"]]) {
       const b = line("button", label, cls);
       b.type = "button";
-      b.addEventListener("click", () => decide(id, decision, box));
+      // P29 U-016: Yes asks the words in the field - what was heard, or what the person corrected it to
+      b.addEventListener("click", () => {
+        const fix = document.getElementById("heard-fix");
+        decide(id, decision, box, decision === "ask" && fix ? fix.value : undefined);
+      });
       box.append(b);
     }
     return box;
@@ -567,13 +577,17 @@ PAGE = """<!doctype html>
       document.getElementById("confirm-status").textContent = "";
       const left = a.left || a.seconds;
       const at = new Date(Date.now() + left * 1000).toLocaleTimeString();
-      body.append(line("h3", "Did I hear you right?"), line("p", a.heard, "heard"),
+      const label = line("label", "What to ask - correct it here if I misheard"), fix = line("input", "", "fix");
+      label.htmlFor = "heard-fix";
+      fix.id = "heard-fix"; fix.type = "text"; fix.maxLength = 300; fix.autocomplete = "off"; fix.value = a.heard;
+      body.append(line("h3", "Did I hear you right?"), line("p", a.heard, "heard"), label, fix,
                   line("p", "Nothing is asked until you press Yes. If you do not, it is discarded at " + at + " (in " +
                        left + " seconds); nothing is ever sent by itself.", "muted"), choices(a.id));
       return;
     }
     document.getElementById("confirm-status").textContent = "";   // the card itself now says what became of it
     if (a.heard) body.append(line("p", "Heard: " + a.heard));
+    if (a.corrected) body.append(line("p", "You corrected it to: " + a.corrected));
     if (a.asked_as && a.asked_as !== a.heard) body.append(line("p", "Asked as: " + a.asked_as));
     const d = a.device;
     for (const c of a.citations || []) {
@@ -628,7 +642,9 @@ def create_app(machine, clinic_url=CLINIC_URL, speaker=None, access=None):
         body = request.get_json(silent=True)
         if not isinstance(body, dict) or not isinstance(body.get("id"), str) or not isinstance(body.get("decision"), str):
             abort(400)
-        result = machine.decide(body["id"], body["decision"])
+        if "text" in body and not isinstance(body["text"], str):
+            abort(400)
+        result = machine.decide(body["id"], body["decision"], body.get("text"))
         return ("", 204) if result == "taken" else (jsonify({"result": result}), 409)
 
     @app.route("/listening", methods=["POST"])
