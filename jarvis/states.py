@@ -34,6 +34,7 @@ MEANING = {
                   "picks the patient there",
     "DEGRADED": "not available",
 }
+ECHO_SECONDS = 0.8        # after Nana's own voice ends, its echo in the room is not a follow-up
 FOLLOW_UP_SECONDS = 15.0  # P29 U-015 (owner, 2026-11-09): after an answer, speech alone asks the next question this long
 MAX_CORRECTION = 300      # P29 U-016: the longest correction of what was heard the page may send
 WAIT_SLICE = 1.0           # a wait wakes at least this often, so a deadline passed during sleep is seen at once
@@ -128,6 +129,8 @@ class Machine:
         self._pending = None       # what was heard, waiting for its on-screen confirmation: {id, decision, deadline}
         self._corrected = None     # P29 U-016: the corrected words given with the last "ask", for the exchange
         self.follow_until = 0.0    # P29 U-015: until then (self.clock) speech alone starts a follow-up - no wake phrase
+        self.speaking = False      # Nana's own voice is reading an answer (demo mode) - it must not hear itself
+        self.voice_ended = -1e9    # when it last stopped (self.clock)
         self.follow_turn = 0       # the interaction a follow-up started (no wake phrase), for its question's context
         self.paused = False
         self.access = None         # the doctor this device acts for, as the clinic says (2026-10-11), or None
@@ -192,7 +195,20 @@ class Machine:
 
     def follow_up_open(self):
         with self._lock:
-            return self.state == "READY" and not self.paused and self.clock() < self.follow_until
+            return self.state == "READY" and not self.paused and not self.speaking and \
+                self.voice_ended + ECHO_SECONDS <= self.clock() < self.follow_until
+
+    def set_voice(self, on):
+        """Nana's own voice is playing (demo mode reads answers aloud). Meanwhile speech starts no follow-up - it would
+        be Nana hearing itself (the owner's presentation, 2026-11-10) - and the follow-up window counts from its end."""
+        with self._lock:
+            if on:
+                self.speaking = True
+            elif self.speaking:
+                self.speaking = False
+                self.voice_ended = self.clock()
+                if self.follow_until:
+                    self.follow_until = max(self.follow_until, self.voice_ended + ECHO_SECONDS + FOLLOW_UP_SECONDS)
 
     def is_follow_up(self, turn):
         with self._lock:

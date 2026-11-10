@@ -546,7 +546,62 @@ def wake_hits():
         assert wake.WakeModel(f"{tmp}/old.npz").hits == 2 and wake.WakeModel(f"{tmp}/new.npz").hits == 3, "17: hits read"
 
 
+def own_voice():
+    # 18. Nana does not hear itself (2026-11-10, the owner's presentation: "Which device?" three times): while its own
+    #     voice reads an answer, and a moment after, speech starts no follow-up; the 15 s count from when it ends
+    from jarvis import speech, states
+    now = [100.0]
+    m = states.Machine(clock=lambda: now[0])
+    m.go("READY", "listening")
+    t = m.begin("heard the wake phrase")
+    m.open_follow_up(t)
+    m.finish(t, "answered")
+    assert m.follow_up_open(), "18: the window opens after an answer"
+    m.set_voice(True)
+    assert not m.follow_up_open(), "18: HARD FAIL - Nana's own voice can start a follow-up"
+    now[0] += 20                                    # a long answer read aloud, past the first 15 s
+    m.set_voice(False)
+    assert not m.follow_up_open(), "18: the echo of its last word starts a follow-up"
+    now[0] += states.ECHO_SECONDS
+    assert m.follow_up_open(), "18: the 15 s count from the end of the voice"
+    now[0] += states.FOLLOW_UP_SECONDS
+    assert not m.follow_up_open(), "18: the window closes 15 s after the voice"
+
+    # the speaker says when its voice starts and ends, a stopped voice included
+    seen, done = [], __import__("threading").Event()
+
+    class Proc:
+        def wait(self):
+            done.wait(2)
+
+        def poll(self):
+            return None if not done.is_set() else 0
+
+        def terminate(self):
+            done.set()
+    sp = speech.Speaker(synth=lambda text, path: ([0.5], 0.04), play=lambda path: Proc())
+    sp.on_voice = seen.append
+    assert sp.say({"outcome": "answer", "citations": [{"passage": "P1 selects program 1.", "title": "AX-300 manual", "page": 2}], "warnings": []})
+    import time
+    for _ in range(50):
+        if sp.live():
+            break
+        time.sleep(0.02)
+    assert seen and seen[-1] is True, f"18: the voice start is not said ({seen})"
+    done.set()
+    for _ in range(50):
+        if seen[-1] is False:
+            break
+        time.sleep(0.02)
+    assert seen[-1] is False, f"18: the voice end is not said ({seen})"
+    done.clear()
+    sp.say({"outcome": "answer", "citations": [{"passage": "Again.", "title": "AX-300 manual", "page": 2}], "warnings": []})
+    sp.stop()
+    assert seen[-1] is False, "18: a stopped voice still counts as speaking"
+
+
 def selftest():
+    own_voice()
     wake_hits()
     follow_up()
     ready_only_on_real_audio()

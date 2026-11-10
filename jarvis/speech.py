@@ -108,12 +108,15 @@ class Speaker:
         self.synth, self.play, self.clock = synth, play, clock
         self.lock = threading.Lock()
         self.proc, self.now, self.gen = None, None, 0
+        self.on_voice = None     # told True when a voice starts (being made), False when it ends or is stopped
 
     def say(self, card):
         text = words(card)
         self.stop()
         if not text:
             return False
+        if self.on_voice:
+            self.on_voice(True)
         with self.lock:
             gen = self.gen
         threading.Thread(target=self._run, args=(gen, text[:MAX_CHARS]), name="jarvis-voice", daemon=True).start()
@@ -134,8 +137,11 @@ class Speaker:
             pass                                       # no voice this time; the card is on screen regardless
         finally:
             with self.lock:
-                if gen == self.gen:
+                ended = gen == self.gen
+                if ended:
                     self.proc, self.now = None, None
+            if ended and self.on_voice:
+                self.on_voice(False)
             shutil.rmtree(tmp, ignore_errors=True)
 
     def stop(self):
@@ -144,6 +150,8 @@ class Speaker:
             p, self.proc, self.now = self.proc, None, None
         if p is not None and p.poll() is None:
             p.terminate()
+        if self.on_voice:
+            self.on_voice(False)
 
     def live(self):
         """What is being said now: its text, the loudness at this moment and how far along it is - or None."""
@@ -162,6 +170,7 @@ class Speaker:
 def watch(machine, speaker, halt):
     """Reads each new card once Jarvis is back in READY; stops the voice the moment anything else happens."""
     last, version = None, None
+    speaker.on_voice = machine.set_voice          # Nana does not take its own voice for a follow-up question
     while not halt.is_set():
         snap = machine.wait_change(version, 1.0)
         version = snap["version"]

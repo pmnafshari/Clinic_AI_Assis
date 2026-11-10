@@ -258,8 +258,15 @@
 
   // --- the conversation: each interaction is what was asked, then Nana's cards --------------------------------------
   function last() { return entries.length ? entries[entries.length - 1] : null; }
+  function stable(v) {      // the same answer whatever order its fields came in (/status sorts them, the stream does not)
+    if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
+    if (v && typeof v === "object") {
+      return "{" + Object.keys(v).sort().map(function (k) { return JSON.stringify(k) + ":" + stable(v[k]); }).join(",") + "}";
+    }
+    return JSON.stringify(v);
+  }
   function cardKey(a) {     // a waiting card counts down every second: it is the same card while its id is the same
-    return WAITING[a.outcome] ? a.outcome + ":" + a.id : JSON.stringify(a);
+    return WAITING[a.outcome] ? a.outcome + ":" + a.id : stable(a);
   }
   function find(turn) {
     for (var i = entries.length - 1; i >= 0; i--) if (entries[i].turn === turn) return entries[i];

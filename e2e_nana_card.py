@@ -168,6 +168,9 @@ def main():
                     page.wait_for_url(f"**/patients/{CF}", timeout=8000)
                     page.wait_for_function("document.getElementById('nana').dataset.mode === 'on' && getComputedStyle(document.getElementById('nana-card')).opacity === '1'", timeout=5000)
                     check("Show me Marco's next appointment." in page.inner_text("#nana-log"), f"{tag} 4: the conversation kept")
+                    page.wait_for_timeout(1500)     # the status read on the new page, then the live stream
+                    n_cards = page.locator("#nana-log .nana-bot").count()
+                    check(n_cards == 1, f"{tag} 4: the answer shown once after opening the record, not again ({n_cards})")
                     check(len(live()) == 1, f"{tag} 4: one hand-over, not one per page ({len(live())})")
                     n = conn.execute("SELECT COUNT(*) FROM jarvis_delegations").fetchone()[0] - before
                     check(n == 1, f"{tag} 4: no new delegation on the next page ({n})")
