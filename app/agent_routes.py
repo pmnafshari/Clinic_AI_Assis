@@ -73,7 +73,8 @@ def command_page():
     except ValueError as e:
         return render_template(
             "agent_command.html", command=command,
-            error=_("couldn't understand that command: {why}", why=message(str(e))),
+            # P29 R-029: plain words and an example, never the model's or the validator's (F-034)
+            error=_("I could not understand that command. Say who and what to change, for example: change Mario Rossi's phone to 333 1234567."),
         )
 
     return _build_and_render(call, "agent_command.html", command=command)

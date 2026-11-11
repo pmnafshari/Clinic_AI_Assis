@@ -1510,7 +1510,7 @@ IT = {
     'Could not be read': 'Non è stato possibile leggerla',
     'could not be read': 'non è stato possibile leggerlo',
     "couldn't identify a patient in that question": 'non sono riuscito a individuare un paziente in quella domanda',
-    "couldn't understand that command: {why}": 'non ho capito quel comando: {why}',
+    "I could not understand that command. Say who and what to change, for example: change Mario Rossi's phone to 333 1234567.": 'Non ho capito quel comando. Di\' chi e cosa cambiare, per esempio: cambia il telefono di Mario Rossi in 333 1234567.',
     'Create account': "Crea l'account",
     'Created as a draft': 'Creata come bozza',
     'Criteria version {n}: a case must share {what}; the same tooth, quadrant and note words rank it higher.': 'Criteri versione {n}: un caso deve condividere {what}; lo stesso dente, quadrante e parole delle note lo fanno salire.',

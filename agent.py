@@ -35,6 +35,12 @@ _undo_lock = threading.Lock()
 # editable field -> sqlite column; the column is always taken from here,
 # never from model output
 EDITABLE_FIELDS = {"phone": "phone", "patient_name": "patient_name"}
+# P29 R-029: the model names the field as the command said it - in Italian too ("telefono"); these words are
+# that field. The column still comes only from EDITABLE_FIELDS.
+FIELD_WORDS = {"phone": "phone", "phone number": "phone", "telephone": "phone", "mobile": "phone", "cell": "phone",
+               "telefono": "phone", "numero di telefono": "phone", "numero": "phone", "cellulare": "phone",
+               "patient_name": "patient_name", "name": "patient_name", "patient name": "patient_name",
+               "nome": "patient_name", "nome del paziente": "patient_name"}
 INVOICE_HEADER = ["date", "amount", "description"]
 
 INTERPRETER_PROMPT = (
@@ -65,6 +71,7 @@ class UpdateFieldArgs(BaseModel):
     @field_validator("field")
     @classmethod
     def validate_field(cls, v):
+        v = FIELD_WORDS.get(" ".join(str(v).lower().replace("_", " ").split()), v)
         if v not in EDITABLE_FIELDS:
             raise ValueError(f"field must be one of {sorted(EDITABLE_FIELDS)}, got {v!r}")
         return v
