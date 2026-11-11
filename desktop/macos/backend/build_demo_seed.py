@@ -14,9 +14,14 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+import clinic_time  # noqa: E402
+
+# the cohort's bookings and requests start from the day the app is built: a fixed day (the seed's own 2026-10-05)
+# had passed by 2026-11-11 and the clinic refuses a request for a past date, so the build stopped
 STEPS = [
     ["seed_users.py"],
-    ["demo_seed.py"],
+    ["demo_seed.py", "--anchor", clinic_time.now().date().isoformat()],
     ["demo_inventory.py", "--apply"],
     ["demo_billing.py", "--apply"],
 ]
