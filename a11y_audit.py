@@ -45,21 +45,38 @@ CONTRAST = """
     });
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
+  // [r, g, b, alpha]; null when fully transparent
   const parse = (s) => {
+    // color-mix() comes back as color(srgb r g b [/ a]) with 0-1 parts (the avatar tints) - read it, do not skip it
+    const c = s.match(/color\\(srgb ([\\d.e-]+) ([\\d.e-]+) ([\\d.e-]+)(?: \\/ ([\\d.e-]+))?\\)/);
+    if (c) {
+      const a = c[4] === undefined ? 1 : parseFloat(c[4]);
+      return a === 0 ? null : [parseFloat(c[1]) * 255, parseFloat(c[2]) * 255, parseFloat(c[3]) * 255, a];
+    }
     const m = s.match(/rgba?\\(([^)]+)\\)/);
     if (!m) return null;
     const p = m[1].split(',').map(x => parseFloat(x));
-    if (p.length > 3 && p[3] === 0) return null;
-    return p.slice(0, 3);
+    const a = p.length > 3 ? p[3] : 1;
+    if (a === 0) return null;
+    return [p[0], p[1], p[2], a];
   };
+  const over = (top, base) => [0, 1, 2].map(i => top[i] * top[3] + base[i] * (1 - top[3]));
+  // the colour a person sees behind the element: a see-through background (rgba(255,255,255,0.08) on a dark head,
+  // P29) is laid over what is under it, not taken as solid - that read white text on navy as 1:1 (2026-11-11)
   const bgOf = (el) => {
+    const layers = [];
     let n = el;
     while (n && n !== document.documentElement) {
       const c = parse(getComputedStyle(n).backgroundColor);
-      if (c) return c;
+      if (c) {
+        layers.push(c);
+        if (c[3] >= 1) break;
+      }
       n = n.parentElement;
     }
-    return [255, 255, 255];
+    let base = [255, 255, 255];
+    for (let i = layers.length - 1; i >= 0; i--) base = over(layers[i], base);
+    return base;
   };
   const out = [];
   document.querySelectorAll('body *').forEach(el => {
@@ -71,9 +88,10 @@ CONTRAST = """
     if (cs.visibility === 'hidden' || cs.display === 'none' || parseFloat(cs.opacity) === 0) return;
     const r = el.getBoundingClientRect();
     if (r.width === 0 || r.height === 0) return;
-    const fg = parse(cs.color);
-    if (!fg) return;
+    const ink = parse(cs.color);
+    if (!ink) return;
     const bg = bgOf(el);
+    const fg = over(ink, bg);
     const l1 = lum(fg), l2 = lum(bg);
     const ratio = (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
     const size = parseFloat(cs.fontSize);

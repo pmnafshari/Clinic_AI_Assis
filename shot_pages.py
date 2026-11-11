@@ -260,6 +260,9 @@ def sign_in(page, username):
 def shoot(page, width, role, name, path, out_dir, base=STAFF_URL, full_page=True):
     page.goto(f"{base}{path}")
     page.wait_for_load_state("networkidle")
+    from populated_pages import chart_popup
+    for bad in chart_popup(page, CONTRAST):
+        CONTRAST_FAILS.append((width, role, path + " (chart popup)", bad))
     size = page.evaluate(MEASURE)
 
     shot_dir = out_dir / str(width)

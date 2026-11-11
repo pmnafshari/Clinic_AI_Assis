@@ -208,6 +208,22 @@ def start(tmp):
     return server, pages
 
 
+def chart_popup(page, contrast):
+    """NEW-07: on a record the dental chart's suggestions open by themselves for a dentist. The popup is checked on its
+    own (its contrast), then closed, so the page behind it is measured as a person sees it. -> its contrast failures"""
+    popup = page.locator("#chartSuggest")
+    if not popup.count():
+        return []
+    popup.wait_for(state="visible", timeout=5000)
+    page.wait_for_timeout(400)                      # the fade-in, or its colours are measured half-way
+    bad = page.evaluate(contrast.replace("document.querySelectorAll('body *')", "document.querySelectorAll('#chartSuggest *')"))
+    popup.locator("button[data-bs-dismiss=modal]").first.click()
+    popup.wait_for(state="hidden", timeout=5000)
+    page.keyboard.press("Shift")    # back to the keyboard: after a click the browser shows no focus ring for focus()
+    page.wait_for_timeout(300)
+    return bad
+
+
 def check(browser, widths, out_dir):
     """-> [(width, page, problem)], and the page-widths measured."""
     from a11y_audit import CONTRAST, FOCUS_TARGETS, SETTLE_MS, STYLE_OF
@@ -228,11 +244,15 @@ def check(browser, widths, out_dir):
                 for name, path, must_show in pages:
                     page.goto(f"{POPULATED_URL}{path}")
                     page.wait_for_load_state("networkidle")
+                    for bad in chart_popup(page, CONTRAST):
+                        problems.append((width, name, f"chart popup contrast {bad['ratio']}:1 (needs {bad['need']})"
+                                                      f" {bad['tag']} {bad['text']!r}"))
                     measured += 1
                     shot = Path(out_dir) / str(width) / f"populated-{name}.png"
                     shot.parent.mkdir(parents=True, exist_ok=True)
                     page.screenshot(path=str(shot), full_page=True)
-                    body = page.inner_text("main")
+                    # the record's tabs (2026-10-30): what a tab holds is on the page even while another tab shows
+                    body = page.locator("main").text_content()
                     for words in must_show:
                         if words not in body:
                             problems.append((width, name, f"empty: {words!r} not on the page"))
