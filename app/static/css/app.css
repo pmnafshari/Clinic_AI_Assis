@@ -1854,6 +1854,10 @@ textarea[data-grow] { resize: vertical; overflow: hidden; min-height: 2.25rem; }
 .btn-check:focus-visible + .tc-chip { box-shadow: var(--ds-focus-ring); }
 .tc-form fieldset[disabled] { opacity: 0.55; }
 .tc-decide { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+/* the chart popup's Approve and Refuse on its light rows read 4.2:1 in Bootstrap's own green and red; the darker
+   shades read over 4.5:1 (shots, 2026-11-11) */
+#chartSuggest .btn-outline-success { --bs-btn-color: #146c43; --bs-btn-border-color: #146c43; }
+#chartSuggest .btn-outline-danger { --bs-btn-color: #b02a37; --bs-btn-border-color: #b02a37; }
 
 /* Owner rules, 2026-11-08, for every page:
    1. one size of button - the small and the large are the same as the rest;
