@@ -2617,6 +2617,7 @@ IT = {
     'This patient has not agreed to be contacted.': 'Questo paziente non ha accettato di essere contattato.',
     'To contact': 'Da contattare',
     'Win back': 'Ricontattare',
+    'Phone calls and contacts': 'Telefonate e contatti',
     # Nana's card on the doctor's pages (owner, 2026-11-09)
     'Conversation with Nana': 'Conversazione con Nana',
     'Nana, the voice assistant': "Nana, l'assistente vocale",

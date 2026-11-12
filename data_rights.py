@@ -29,7 +29,7 @@ KINDS = ("access", "export", "amend", "erasure")
 # ones the copy will hold. each section is the export keys it covers
 SECTIONS = {"details": ("patient",), "visits": ("visits", "dental_chart"), "appointments": ("appointments", "services"),
             "billing": ("invoices", "billing", "payments"), "consent": ("consent",), "requests": ("requests",),
-            "summary": ("next_visit_summary",), "files": ()}
+            "summary": ("next_visit_summary",), "files": (), "contacts": ("calls", "outreach")}
 
 SCHEMA = """
     CREATE TABLE IF NOT EXISTS data_requests (
@@ -217,7 +217,19 @@ def _patient_data(conn, pid):
         "dental_chart": _chart(conn, pid),
         # E-002: the services the patient was referred to
         "services": _services(conn, pid),
+        # the phone calls that identified the patient and the clinic's win-back contacts (2026-11-12): when, how long,
+        # how they ended - never the call's provider reference or a codice fiscale typed in
+        "calls": _if_table(conn, "call_sessions", "SELECT started_at, ended_at, lang, end_reason FROM call_sessions"
+                                                  " WHERE patient_id = ? ORDER BY id", pid),
+        "outreach": _if_table(conn, "outreach_contacts", "SELECT at, outcome, note, by_user FROM outreach_contacts"
+                                                         " WHERE patient_id = ? ORDER BY id", pid),
     }
+
+
+def _if_table(conn, table, sql, pid):
+    if conn.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)).fetchone() is None:
+        return []
+    return _rows(conn, sql, pid)
 
 
 def _services(conn, pid):
@@ -381,6 +393,30 @@ def selftest():
         for withheld in ("billing", "invoices", "payments", "patient", "appointments", "consent"):
             assert withheld not in data, f"6: HARD FAIL - {withheld} is in a copy that withheld it"
         assert names == ["data.json"], f"6: files went into a copy that did not ask for them: {names}"
+
+        # 7. phone calls and the clinic's contacts are the patient's data too (2026-11-12): the calls that identified
+        # them (when, how long, how they ended - never a codice fiscale typed in) and the win-back contacts; another
+        # patient's are not there, and a copy without the section holds none of them
+        for who, ref in ((pid, "call-dora"), (other, "call-otto")):
+            conn.execute("INSERT INTO call_sessions (call_ref, lang, stage, patient_id, pending_cf, started_at, last_event_at,"
+                         " ended_at, end_reason) VALUES (?, 'it', 'ended', ?, NULL, '2026-09-01T08:00:00+00:00',"
+                         " '2026-09-01T08:03:00+00:00', '2026-09-01T08:03:00+00:00', 'handoff')", (ref, who))
+            conn.execute("INSERT INTO outreach_contacts (patient_id, outcome, note, by_user, at) VALUES (?, 'reached',"
+                         " ?, 'desk', '2026-09-02T09:00:00+00:00')", (who, f"note for {ref}"))
+        conn.execute("INSERT INTO call_sessions (call_ref, lang, stage, pending_cf, started_at, last_event_at)"
+                     " VALUES ('call-live', 'it', 'need_pin', 'ZZDR800101010101', '2026-09-03T08:00:00+00:00',"
+                     " '2026-09-03T08:00:30+00:00')")
+        conn.commit()
+        assert "contacts" in SECTIONS, "7: no section for phone calls and contacts"
+        data = patient_data(conn, pid)
+        assert [c["ended_at"] for c in data["calls"]] == ["2026-09-01T08:03:00+00:00"] and \
+            data["calls"][0]["end_reason"] == "handoff", f"7: the calls {data.get('calls')}"
+        assert [o["note"] for o in data["outreach"]] == ["note for call-dora"], f"7: contacts {data.get('outreach')}"
+        blob = json.dumps(data)
+        assert "call-otto" not in blob and "call-live" not in blob and "pending_cf" not in blob, \
+            "7: HARD FAIL - another caller's call, or a typed codice fiscale, is in the copy"
+        assert "calls" not in patient_data(conn, pid, ["visits"]), "7: calls in a copy that did not ask for them"
+        assert set(patient_data(conn, pid, ["contacts"])) == {"notice", "exported_at", "calls", "outreach", "sections"}
 
     print("selftest ok")
 

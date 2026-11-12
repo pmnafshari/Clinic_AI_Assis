@@ -17,7 +17,8 @@ data_requests_bp = Blueprint("data_requests", __name__)
 # P29 E-005: how each part of a copy is named on the page
 SECTION_LABELS = {"details": N_("Personal details"), "visits": N_("Visits and notes"), "appointments": N_("Appointments"),
                   "billing": N_("Invoices and payments"), "consent": N_("Consents"), "requests": N_("Earlier data requests"),
-                  "summary": N_("Approved visit summary"), "files": N_("Files and documents")}
+                  "summary": N_("Approved visit summary"), "files": N_("Files and documents"),
+                  "contacts": N_("Phone calls and contacts")}
 
 
 def _sections(form):

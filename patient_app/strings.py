@@ -423,6 +423,7 @@ STRINGS = {
     "rights_section_requests": {"it": "Richieste precedenti", "en": "Earlier data requests"},
     "rights_section_summary": {"it": "Riepilogo approvato della visita", "en": "Approved visit summary"},
     "rights_section_files": {"it": "File e documenti", "en": "Files and documents"},
+    "rights_section_contacts": {"it": "Telefonate e contatti con lo studio", "en": "Phone calls and contacts with the clinic"},
     "rights_detail_label": {"it": "Dettagli (facoltativo)", "en": "Details (optional)"},
     "rights_submit": {"it": "Invia la richiesta", "en": "Send request"},
     "rights_status_open": {"it": "In attesa", "en": "Waiting for review"},

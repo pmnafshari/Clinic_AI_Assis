@@ -99,7 +99,7 @@
       <fieldset class="mb-2">
         <legend class="form-label small">{{ t('rights_sections', lang) }}</legend>
         <input type="hidden" name="sections_shown" value="1">
-        {% for sec in ('details', 'visits', 'appointments', 'billing', 'consent', 'requests', 'summary', 'files') %}
+        {% for sec in ('details', 'visits', 'appointments', 'billing', 'consent', 'requests', 'summary', 'files', 'contacts') %}
         <div class="form-check">
           <input class="form-check-input" type="checkbox" name="section" value="{{ sec }}" id="section-{{ sec }}" checked>
           <label class="form-check-label" for="section-{{ sec }}">{{ t('rights_section_' ~ sec, lang) }}</label>
